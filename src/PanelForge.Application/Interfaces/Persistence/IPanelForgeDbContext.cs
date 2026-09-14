@@ -1,0 +1,23 @@
+using Microsoft.EntityFrameworkCore;
+using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Content;
+
+namespace PanelForge.Application.Interfaces.Persistence;
+
+public interface IPanelForgeDbContext
+{
+    DbSet<User> Users { get; }
+    DbSet<StudioWorkspace> StudioWorkspaces { get; }
+    DbSet<WorkspaceMember> WorkspaceMembers { get; }
+    DbSet<ExternalPreviewLink> ExternalPreviewLinks { get; }
+
+    DbSet<Series> Series { get; }
+    DbSet<Chapter> Chapters { get; }
+    DbSet<Scene> Scenes { get; }
+    DbSet<ScriptLine> ScriptLines { get; }
+    DbSet<Page> Pages { get; }
+    DbSet<Panel> Panels { get; }
+    DbSet<Element> Elements { get; }
+
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+}

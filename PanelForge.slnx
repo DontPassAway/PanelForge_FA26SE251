@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PanelForge.API/PanelForge.API.csproj" />
+    <Project Path="src/PanelForge.Application/PanelForge.Application.csproj" />
+    <Project Path="src/PanelForge.Domain/PanelForge.Domain.csproj" />
+    <Project Path="src/PanelForge.Infrastructure/PanelForge.Infrastructure.csproj" />
+  </Folder>
+</Solution>
