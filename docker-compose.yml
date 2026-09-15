@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  postgres-db:
+    image: postgres:17-alpine
+    container_name: panelforge_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: panelforge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+    ports:
+      - "5432:5432"
+    volumes:
+      # Đổi tên ở đây
+      - panelforge_data:/var/lib/postgresql/data
+
+  panelforge-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: panelforge_api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres-db;Port=5432;Database=panelforge;Username=postgres;Password=12345
+    ports:
+      - "7274:8080"
+    depends_on:
+      - postgres-db
+
+volumes:
+  # Và đổi tên ở đây
+  panelforge_data:

@@ -5,4 +5,7 @@
     <Project Path="src/PanelForge.Domain/PanelForge.Domain.csproj" />
     <Project Path="src/PanelForge.Infrastructure/PanelForge.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/PanelForge.UnitTests/PanelForge.UnitTests.csproj" Id="b78d2b63-ec10-4bf4-a721-b0be159f94dc" />
+  </Folder>
 </Solution>
