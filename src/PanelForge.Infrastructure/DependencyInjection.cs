@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using PanelForge.Application.Interfaces;
 using PanelForge.Application.Interfaces.Authentication;
 using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Services;
 using PanelForge.Infrastructure.Authentication;
 using PanelForge.Infrastructure.Firebase;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 
 namespace PanelForge.Infrastructure;
 
@@ -39,6 +42,9 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IAuthService, AuthService>();
 
         services.AddFirebaseServices(configuration);
 

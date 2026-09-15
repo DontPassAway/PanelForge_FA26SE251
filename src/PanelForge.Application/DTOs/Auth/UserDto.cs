@@ -6,5 +6,7 @@ public record UserDto(
     string FullName,
     string? PhoneNumber,
     string? AvatarUrl,
-    bool IsActive
+    bool IsActive,
+    bool IsEmailConfirmed = false,
+    bool TwoFactorEnabled = false
 );
