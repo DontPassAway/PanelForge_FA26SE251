@@ -2,7 +2,7 @@ name: PanelForge CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "test", "test-lan-2" ] 
+    branches: [ "main", "test-feature" ] 
   pull_request:
     branches: [ "main" ]
 
