@@ -13,6 +13,16 @@ public class User : BaseEntity
     public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public bool IsActive { get; private set; } = true;
 
+    public bool IsEmailConfirmed { get; private set; } = false;
+    public string? EmailVerificationToken { get; private set; }
+    public DateTime? EmailVerificationTokenExpiresAt { get; private set; }
+
+    public string? PasswordResetToken { get; private set; }
+    public DateTime? PasswordResetTokenExpiresAt { get; private set; }
+
+    public bool TwoFactorEnabled { get; private set; } = false;
+    public string? TwoFactorSecret { get; private set; }
+
     public ICollection<StudioWorkspace> OwnedWorkspaces { get; private set; } = [];
     public ICollection<WorkspaceMember> WorkspaceMemberships { get; private set; } = [];
     public ICollection<ExternalPreviewLink> CreatedPreviewLinks { get; private set; } = [];
@@ -53,6 +63,55 @@ public class User : BaseEntity
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
         PasswordHash = passwordHash;
+    }
+
+    public void SetEmailVerificationToken(string token, DateTime expiresAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        EmailVerificationToken = token.Trim();
+        EmailVerificationTokenExpiresAt = expiresAt;
+    }
+
+    public void ConfirmEmail()
+    {
+        IsEmailConfirmed = true;
+        EmailVerificationToken = null;
+        EmailVerificationTokenExpiresAt = null;
+    }
+
+    public void SetPasswordResetToken(string token, DateTime expiresAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        PasswordResetToken = token.Trim();
+        PasswordResetTokenExpiresAt = expiresAt;
+    }
+
+    public void ResetPassword(string newPasswordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPasswordHash);
+        PasswordHash = newPasswordHash;
+        PasswordResetToken = null;
+        PasswordResetTokenExpiresAt = null;
+    }
+
+    public void SetTwoFactorSecret(string secret)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(secret);
+        TwoFactorSecret = secret.Trim();
+    }
+
+    public void EnableTwoFactor()
+    {
+        if (string.IsNullOrWhiteSpace(TwoFactorSecret))
+            throw new InvalidOperationException("Cannot enable 2FA without setting a secret key first.");
+
+        TwoFactorEnabled = true;
+    }
+
+    public void DisableTwoFactor()
+    {
+        TwoFactorEnabled = false;
+        TwoFactorSecret = null;
     }
 
     public void LinkFirebase(string firebaseUid)

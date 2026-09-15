@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using PanelForge.Application.Services;
 
 namespace PanelForge.Application;
 
@@ -7,7 +6,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddScoped<IAuthService, AuthService>();
+        // Các dịch vụ thuộc tầng Application sẽ được đăng ký tại đây
         return services;
     }
 }

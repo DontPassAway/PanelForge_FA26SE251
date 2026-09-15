@@ -58,6 +58,36 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasDefaultValue(true)
                .IsRequired();
 
+        builder.Property(u => u.IsEmailConfirmed)
+               .HasColumnName("is_email_confirmed")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(u => u.EmailVerificationToken)
+               .HasColumnName("email_verification_token")
+               .HasColumnType("varchar(255)");
+
+        builder.Property(u => u.EmailVerificationTokenExpiresAt)
+               .HasColumnName("email_verification_token_expires_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(u => u.PasswordResetToken)
+               .HasColumnName("password_reset_token")
+               .HasColumnType("varchar(255)");
+
+        builder.Property(u => u.PasswordResetTokenExpiresAt)
+               .HasColumnName("password_reset_token_expires_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(u => u.TwoFactorEnabled)
+               .HasColumnName("two_factor_enabled")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(u => u.TwoFactorSecret)
+               .HasColumnName("two_factor_secret")
+               .HasColumnType("varchar(255)");
+
         builder.HasMany(u => u.OwnedWorkspaces)
                .WithOne(w => w.Owner)
                .HasForeignKey(w => w.OwnerId)
