@@ -1,3 +1,7 @@
+﻿using System.IO;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
+
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -10,10 +14,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-var jwtSecret = builder.Configuration["JwtSettings:Secret"]
-    ?? throw new InvalidOperationException("JwtSettings:Secret is not configured.");
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
-var jwtAudience = builder.Configuration["JwtSettings:Audience"];
+
+var firebaseConfig = builder.Configuration.GetSection("Firebase");
+var projectId = firebaseConfig["ProjectId"] ?? throw new InvalidOperationException("Firebase:ProjectId is missing in configuration.");
+var keyPath = firebaseConfig["ServiceAccountKeyPath"];
+
 
 builder.Services.AddAuthentication(options =>
 {
@@ -22,20 +27,18 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
+
+    options.Authority = $"https://securetoken.google.com/{projectId}";
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-        ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
-        ValidIssuer = jwtIssuer,
-        ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
-        ValidAudience = jwtAudience,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero
+        ValidateIssuer = true,
+        ValidIssuer = $"https://securetoken.google.com/{projectId}",
+        ValidateAudience = true,
+        ValidAudience = projectId,
+        ValidateLifetime = true
     };
 });
+
 
 builder.Services.AddAuthorization();
 
@@ -56,7 +59,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter JWT Bearer token"
+        Description = "Enter Firebase JWT Bearer token"
     });
 
     options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
@@ -69,6 +72,35 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 builder.Services.AddControllers();
+
+
+if (!string.IsNullOrEmpty(keyPath))
+{
+    var fullKeyPath = Path.Combine(builder.Environment.ContentRootPath, keyPath);
+    if (File.Exists(fullKeyPath))
+    {
+        if (FirebaseApp.DefaultInstance == null)
+        {
+            using (var stream = new FileStream(fullKeyPath, FileMode.Open, FileAccess.Read))
+            {
+                FirebaseApp.Create(new AppOptions
+                {
+                    Credential = GoogleCredential.FromStream(stream),
+                    ProjectId = projectId
+                });
+            }
+            Console.WriteLine("--> Firebase đã được khởi tạo thành công!");
+        }
+        else
+        {
+            Console.WriteLine("--> Firebase đã tồn tại, tái sử dụng instance cũ.");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"--> [CẢNH BÁO] Không tìm thấy file Firebase key tại: {fullKeyPath}");
+    }
+}
 
 var app = builder.Build();
 
