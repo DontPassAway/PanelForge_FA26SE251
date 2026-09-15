@@ -3,10 +3,12 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using PanelForge.Application.DTOs.Auth;
+using PanelForge.Application.Interfaces; 
 using PanelForge.Application.Interfaces.Authentication;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Application.Services;
 using PanelForge.Domain.Entities.Auth;
+using PanelForge.Infrastructure.Services; 
 using Xunit;
 
 namespace PanelForge.UnitTests;
@@ -16,12 +18,14 @@ public class AuthServiceTests
     private readonly Mock<IPasswordHasher> _passwordHasherMock;
     private readonly Mock<IJwtTokenGenerator> _jwtTokenGeneratorMock;
     private readonly Mock<IPanelForgeDbContext> _dbContextMock;
+    private readonly Mock<IEmailService> _emailServiceMock; // Khai báo thêm Mock cho EmailService
 
     public AuthServiceTests()
     {
         _passwordHasherMock = new Mock<IPasswordHasher>();
         _jwtTokenGeneratorMock = new Mock<IJwtTokenGenerator>();
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        _emailServiceMock = new Mock<IEmailService>(); // Khởi tạo Mock
     }
 
     // Helper tạo Mock DbSet hỗ trợ truy vấn bất đồng bộ EF Core
@@ -57,7 +61,8 @@ public class AuthServiceTests
 
         _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
 
-        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+        // Truyền thêm _emailServiceMock.Object vào constructor
+        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object, _emailServiceMock.Object);
         var request = new RegisterRequest("test@example.com", "Password123!", "New User");
 
         // Act
@@ -65,7 +70,7 @@ public class AuthServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Email is already registered.");
+            .WithMessage("Email đã được đăng ký trong hệ thống.");
     }
 
     [Fact]
@@ -86,7 +91,8 @@ public class AuthServiceTests
         _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>()))
                               .Returns(("fake_jwt_token", fakeExpiry));
 
-        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+        // Truyền thêm _emailServiceMock.Object vào constructor
+        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object, _emailServiceMock.Object);
         var request = new RegisterRequest("tam@example.com", "Password123!", "Bui Ngoc Tam", "0123456789");
 
         // Act
@@ -101,6 +107,8 @@ public class AuthServiceTests
 
         usersList.Should().ContainSingle(u => u.Email == "tam@example.com");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        // Verify email được gọi 1 lần
+        _emailServiceMock.Verify(e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -110,7 +118,8 @@ public class AuthServiceTests
         var usersDbSet = CreateDbSetMock(new List<User>());
         _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
 
-        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+        // Truyền thêm _emailServiceMock.Object vào constructor
+        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object, _emailServiceMock.Object);
         var request = new LoginRequest("notfound@example.com", "Password123!");
 
         // Act
@@ -118,7 +127,7 @@ public class AuthServiceTests
 
         // Assert
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Invalid email or password.");
+            .WithMessage("Email hoặc mật khẩu không chính xác.");
     }
 
     [Fact]
@@ -132,7 +141,8 @@ public class AuthServiceTests
         _passwordHasherMock.Setup(h => h.VerifyPassword("WrongPassword", "hashed_password"))
                            .Returns(false);
 
-        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+        // Truyền thêm _emailServiceMock.Object vào constructor
+        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object, _emailServiceMock.Object);
         var request = new LoginRequest("tam@example.com", "WrongPassword");
 
         // Act
@@ -140,7 +150,7 @@ public class AuthServiceTests
 
         // Assert
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Invalid email or password.");
+            .WithMessage("Email hoặc mật khẩu không chính xác.");
     }
 
     [Fact]
@@ -158,7 +168,8 @@ public class AuthServiceTests
         _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user))
                               .Returns(("valid_jwt_token", fakeExpiry));
 
-        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+        // Truyền thêm _emailServiceMock.Object vào constructor
+        var service = new AuthService(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object, _emailServiceMock.Object);
         var request = new LoginRequest("tam@example.com", "CorrectPassword");
 
         // Act

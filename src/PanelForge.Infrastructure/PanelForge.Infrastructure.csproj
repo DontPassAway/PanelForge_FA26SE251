@@ -6,14 +6,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
-    <PackageReference Include="FirebaseAdmin" Version="3.1.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.8" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
-  </ItemGroup>
+  <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+  <PackageReference Include="FirebaseAdmin" Version="3.6.0" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8" />
+  <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.8" />
+  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+  <PackageReference Include="Otp.NET" Version="1.4.1" />
+</ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
