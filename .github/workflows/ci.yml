@@ -2,14 +2,31 @@ name: PanelForge CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "test-feature" ] 
+    branches: [ "main", "test-feature" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
   build-and-test:
-    name: Build, Test & Dockerize
+    name: Build, Test & Database Integration
     runs-on: ubuntu-latest
+
+    # Khởi tạo PostgreSQL Service ảo chạy ngầm trong GitHub Actions
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: panelforge_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password123
+        ports:
+          - 5432:5432
+        # Cấu hình kiểm tra sức khỏe (Health check) để đảm bảo database đã sẵn sàng nhận kết nối trước khi chạy test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - name: Check out code
