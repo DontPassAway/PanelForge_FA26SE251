@@ -1,11 +1,11 @@
-﻿using System.IO;
+using System.IO;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
 
@@ -20,6 +20,10 @@ var projectId = firebaseConfig["ProjectId"] ?? throw new InvalidOperationExcepti
 var keyPath = firebaseConfig["ServiceAccountKeyPath"];
 
 
+var jwtSecret = builder.Configuration["JwtSettings:Secret"];
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
+var jwtAudience = builder.Configuration["JwtSettings:Audience"];
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -27,20 +31,42 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
 
-    options.Authority = $"https://securetoken.google.com/{projectId}";
+    var signingKeys = new List<SecurityKey>();
+    if (!string.IsNullOrEmpty(jwtSecret))
+    {
+        signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)));
+    }
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidIssuer = $"https://securetoken.google.com/{projectId}",
-        ValidateAudience = true,
-        ValidAudience = projectId,
-        ValidateLifetime = true
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKeys = signingKeys,
+        ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
+        ValidIssuer = jwtIssuer,
+        ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
+        ValidAudience = jwtAudience,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero,
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+        NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier
     };
+
+    if (!string.IsNullOrWhiteSpace(projectId) && !projectId.Equals("YOUR_FIREBASE_PROJECT_ID", StringComparison.OrdinalIgnoreCase))
+    {
+        options.Authority = $"https://securetoken.google.com/{projectId}";
+    }
 });
 
-
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(PanelForge.Domain.Enums.SystemRole.Admin.ToString()));
+    options.AddPolicy("StaffOnly", policy => policy.RequireRole(
+        PanelForge.Domain.Enums.SystemRole.Admin.ToString(),
+        PanelForge.Domain.Enums.SystemRole.Moderator.ToString()));
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -59,14 +85,21 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter Firebase JWT Bearer token"
+        Description = "Enter JWT Bearer token"
     });
 
-    options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecuritySchemeReference("Bearer"),
-            new List<string>()
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
         }
     });
 });

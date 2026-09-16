@@ -66,12 +66,16 @@ public class AuthController : ControllerBase
             ?? User.FindFirstValue("email");
         var name = User.FindFirstValue(ClaimTypes.Name)
             ?? User.FindFirstValue("name");
+        var role = User.FindFirstValue(ClaimTypes.Role)
+            ?? User.FindFirstValue("role")
+            ?? "User";
 
         return Ok(new
         {
             Id = userId,
             Email = email,
-            FullName = name
+            FullName = name,
+            Role = role
         });
     }
 
