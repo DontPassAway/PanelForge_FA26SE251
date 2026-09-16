@@ -1,4 +1,6 @@
+﻿using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using PanelForge.Application.Features.Elements.AddElement;
 
 namespace PanelForge.Application;
 
@@ -6,7 +8,11 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // Các dịch vụ thuộc tầng Application sẽ được đăng ký tại đây
+        // Đăng ký MediatR — scan toàn bộ assembly Application
+        // để tìm tất cả IRequestHandler<TCommand, TResult>
+        services.AddMediatR(cfg =>
+            cfg.RegisterServicesFromAssemblyContaining<AddElementCommandHandler>());
+
         return services;
     }
 }
