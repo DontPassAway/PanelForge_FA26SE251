@@ -75,6 +75,8 @@ public static class DependencyInjection
 
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
+        services.AddScoped<IWorkspaceService, WorkspaceService>();
 
         services.AddFirebaseServices(configuration);
 

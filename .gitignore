@@ -431,3 +431,4 @@ FodyWeavers.xsd
 # Ignore ASP.NET Core environment specific settings
 appsettings.json
 appsettings.*.json
+**/firebase-key.json

@@ -8,5 +8,6 @@ public record UserDto(
     string? AvatarUrl,
     bool IsActive,
     bool IsEmailConfirmed = false,
-    bool TwoFactorEnabled = false
+    bool TwoFactorEnabled = false,
+    string Role = "User"
 );

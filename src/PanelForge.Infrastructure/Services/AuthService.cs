@@ -454,7 +454,8 @@ public class AuthService : IAuthService
             user.AvatarUrl,
             user.IsActive,
             user.IsEmailConfirmed,
-            user.TwoFactorEnabled
+            user.TwoFactorEnabled,
+            user.Role.ToString()
         );
     }
 
