@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Auth;
 
@@ -12,6 +13,7 @@ public class User : BaseEntity
     public string? AvatarUrl { get; private set; }
     public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public bool IsActive { get; private set; } = true;
+    public SystemRole Role { get; private set; } = SystemRole.User;
 
     public bool IsEmailConfirmed { get; private set; } = false;
     public string? EmailVerificationToken { get; private set; }
@@ -35,7 +37,8 @@ public class User : BaseEntity
         string? passwordHash = null,
         string? firebaseUid = null,
         string? phoneNumber = null,
-        string? avatarUrl = null)
+        string? avatarUrl = null,
+        SystemRole role = SystemRole.User)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(fullName);
@@ -47,7 +50,8 @@ public class User : BaseEntity
             PasswordHash = passwordHash,
             FirebaseUid = firebaseUid?.Trim(),
             PhoneNumber = phoneNumber?.Trim(),
-            AvatarUrl = avatarUrl?.Trim()
+            AvatarUrl = avatarUrl?.Trim(),
+            Role = role
         };
     }
 
@@ -119,6 +123,8 @@ public class User : BaseEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(firebaseUid);
         FirebaseUid = firebaseUid.Trim();
     }
+
+    public void AssignSystemRole(SystemRole newRole) => Role = newRole;
 
     public void Deactivate() => IsActive = false;
     public void Activate()   => IsActive = true;

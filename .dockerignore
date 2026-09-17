@@ -1,0 +1,12 @@
+**/.git
+**/.github
+**/.vs
+**/.idea
+**/.vscode
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/*.suo
+**/Dockerfile*
+**/*.md

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Persistence.Configurations.Auth;
 
@@ -56,6 +57,15 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsActive)
                .HasColumnName("is_active")
                .HasDefaultValue(true)
+               .IsRequired();
+
+        builder.Property(u => u.Role)
+               .HasColumnName("role")
+               .HasColumnType("varchar(30)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<SystemRole>(v))
+               .HasDefaultValue(SystemRole.User)
                .IsRequired();
 
         builder.Property(u => u.IsEmailConfirmed)
