@@ -53,17 +53,20 @@ public sealed class Page : AggregateRoot
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(heightPx);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(dpi);
 
-        return new Page
-        {
-            Id           = Guid.NewGuid(),
-            ChapterId    = chapterId,
-            SceneId      = sceneId,
-            PageNumber   = pageNumber,
-            LayoutFormat = layoutFormat,
-            WidthPx      = widthPx,
-            HeightPx     = heightPx,
-            Dpi          = dpi
-        };
+        var page = new Page();
+        page.RaiseEvent(new PageCreatedEvent(
+            EventId:      Guid.NewGuid(),
+            OccurredAt:   DateTimeOffset.UtcNow,
+            PageId:       Guid.NewGuid(),
+            ChapterId:    chapterId,
+            PageNumber:   pageNumber,
+            LayoutFormat: layoutFormat,
+            WidthPx:      widthPx,
+            HeightPx:     heightPx,
+            Dpi:          dpi,
+            SceneId:      sceneId
+        ));
+        return page;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -169,11 +172,39 @@ public sealed class Page : AggregateRoot
     {
         switch (domainEvent)
         {
-            case ElementAddedEvent e:   Apply(e); break;
-            case ElementMovedEvent e:   Apply(e); break;
-            case ElementRemovedEvent e: Apply(e); break;
+            case PageCreatedEvent e:       Apply(e); break;
+            case PageCanvasUpdatedEvent e: Apply(e); break;
+            case PageReorderedEvent e:     Apply(e); break;
+            case ElementAddedEvent e:      Apply(e); break;
+            case ElementMovedEvent e:      Apply(e); break;
+            case ElementRemovedEvent e:    Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
+    }
+
+    private void Apply(PageCreatedEvent e)
+    {
+        Id           = e.PageId;
+        ChapterId    = e.ChapterId;
+        PageNumber   = e.PageNumber;
+        LayoutFormat = e.LayoutFormat;
+        WidthPx      = e.WidthPx;
+        HeightPx     = e.HeightPx;
+        Dpi          = e.Dpi;
+        SceneId      = e.SceneId;
+    }
+
+    private void Apply(PageCanvasUpdatedEvent e)
+    {
+        WidthPx      = e.WidthPx;
+        HeightPx     = e.HeightPx;
+        Dpi          = e.Dpi;
+        LayoutFormat = e.LayoutFormat;
+    }
+
+    private void Apply(PageReorderedEvent e)
+    {
+        PageNumber = e.NewPageNumber;
     }
 
     private void Apply(ElementAddedEvent e)
@@ -214,10 +245,19 @@ public sealed class Page : AggregateRoot
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(widthPx);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(heightPx);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(dpi);
-        WidthPx      = widthPx;
-        HeightPx     = heightPx;
-        Dpi          = dpi;
-        LayoutFormat = layoutFormat;
+
+        if (WidthPx == widthPx && HeightPx == heightPx && Dpi == dpi && LayoutFormat == layoutFormat)
+            return;
+
+        RaiseEvent(new PageCanvasUpdatedEvent(
+            EventId:      Guid.NewGuid(),
+            OccurredAt:   DateTimeOffset.UtcNow,
+            PageId:       Id,
+            WidthPx:      widthPx,
+            HeightPx:     heightPx,
+            Dpi:          dpi,
+            LayoutFormat: layoutFormat
+        ));
     }
 
     public void AssignToScene(Guid? sceneId) => SceneId = sceneId;
@@ -225,7 +265,14 @@ public sealed class Page : AggregateRoot
     public void Reorder(int newPageNumber)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(newPageNumber);
-        PageNumber = newPageNumber;
+        if (PageNumber == newPageNumber) return;
+
+        RaiseEvent(new PageReorderedEvent(
+            EventId:       Guid.NewGuid(),
+            OccurredAt:    DateTimeOffset.UtcNow,
+            PageId:        Id,
+            NewPageNumber: newPageNumber
+        ));
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────

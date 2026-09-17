@@ -1,4 +1,4 @@
-﻿using Marten;
+using Marten;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,6 +52,9 @@ public static class DependencyInjection
             // Đăng ký Domain Events để Marten biết cách serialize/deserialize JSON
             opts.Events.AddEventTypes(new[]
             {
+                typeof(PageCreatedEvent),
+                typeof(PageCanvasUpdatedEvent),
+                typeof(PageReorderedEvent),
                 typeof(ElementAddedEvent),
                 typeof(ElementMovedEvent),
                 typeof(ElementRemovedEvent)

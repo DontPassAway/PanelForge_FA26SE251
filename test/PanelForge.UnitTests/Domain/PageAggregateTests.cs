@@ -10,17 +10,19 @@ public class PageAggregateTests
 {
     private static Page CreateTestPage()
     {
-        return Page.Create(
+        var page = Page.Create(
             chapterId: Guid.NewGuid(),
             pageNumber: 1,
             layoutFormat: LayoutFormat.WebtoonLongstrip,
             widthPx: 800,
             heightPx: 1200,
             dpi: 300);
+        page.ClearUncommittedEvents();
+        return page;
     }
 
     [Fact]
-    public void Create_ValidParameters_ShouldInstantiatePage()
+    public void Create_ValidParameters_ShouldInstantiatePageAndRaisePageCreatedEvent()
     {
         // Arrange & Act
         var chapterId = Guid.NewGuid();
@@ -36,7 +38,14 @@ public class PageAggregateTests
         page.HeightPx.Should().Be(1800);
         page.Dpi.Should().Be(350);
         page.Elements.Should().BeEmpty();
-        page.UncommittedEvents.Should().BeEmpty();
+
+        // Event Sourcing check
+        page.UncommittedEvents.Should().HaveCount(1);
+        var createdEvent = page.UncommittedEvents[0].Should().BeOfType<PageCreatedEvent>().Subject;
+        createdEvent.PageId.Should().Be(page.Id);
+        createdEvent.ChapterId.Should().Be(chapterId);
+        createdEvent.PageNumber.Should().Be(1);
+        createdEvent.LayoutFormat.Should().Be(LayoutFormat.StandardPage);
     }
 
     [Theory]
@@ -281,4 +290,72 @@ public class PageAggregateTests
         reconstructed.Content.Should().Be("Original text");
         reconstructed.IsRemoved.Should().BeFalse();
     }
+
+    [Fact]
+    public void UpdateCanvasSettings_ValidInput_ShouldRaisePageCanvasUpdatedEvent()
+    {
+        // Arrange
+        var page = CreateTestPage();
+
+        // Act
+        page.UpdateCanvasSettings(1600, 2400, 600, LayoutFormat.WebtoonLongstrip);
+
+        // Assert
+        page.UncommittedEvents.Should().HaveCount(1);
+        var @event = page.UncommittedEvents[0].Should().BeOfType<PageCanvasUpdatedEvent>().Subject;
+        @event.PageId.Should().Be(page.Id);
+        @event.WidthPx.Should().Be(1600);
+        @event.HeightPx.Should().Be(2400);
+        @event.Dpi.Should().Be(600);
+        @event.LayoutFormat.Should().Be(LayoutFormat.WebtoonLongstrip);
+
+        page.WidthPx.Should().Be(1600);
+        page.HeightPx.Should().Be(2400);
+        page.Dpi.Should().Be(600);
+        page.LayoutFormat.Should().Be(LayoutFormat.WebtoonLongstrip);
+    }
+
+    [Fact]
+    public void UpdateCanvasSettings_SameInput_ShouldNotRaiseEvent()
+    {
+        // Arrange
+        var page = CreateTestPage();
+
+        // Act
+        page.UpdateCanvasSettings(page.WidthPx, page.HeightPx, page.Dpi, page.LayoutFormat);
+
+        // Assert
+        page.UncommittedEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Reorder_ValidInput_ShouldRaisePageReorderedEvent()
+    {
+        // Arrange
+        var page = CreateTestPage();
+
+        // Act
+        page.Reorder(5);
+
+        // Assert
+        page.UncommittedEvents.Should().HaveCount(1);
+        var @event = page.UncommittedEvents[0].Should().BeOfType<PageReorderedEvent>().Subject;
+        @event.PageId.Should().Be(page.Id);
+        @event.NewPageNumber.Should().Be(5);
+        page.PageNumber.Should().Be(5);
+    }
+
+    [Fact]
+    public void Reorder_SamePageNumber_ShouldNotRaiseEvent()
+    {
+        // Arrange
+        var page = CreateTestPage();
+
+        // Act
+        page.Reorder(page.PageNumber);
+
+        // Assert
+        page.UncommittedEvents.Should().BeEmpty();
+    }
 }
+
