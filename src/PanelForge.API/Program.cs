@@ -57,6 +57,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    // ... (Code cấu hình Swagger giữ nguyên)
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title       = "PanelForge API",
@@ -92,6 +93,18 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddControllers();
 
+// [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000") // URL của Frontend
+              .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
+              .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
+              .AllowCredentials();                  // Cần thiết nếu bạn dùng Cookie hoặc xác thực đặc thù
+    });
+});
+
 var app = builder.Build();
 
 app.UseSwagger();
@@ -102,6 +115,10 @@ app.UseSwaggerUI(options =>
 });
 
 app.UseHttpsRedirection();
+
+// [THÊM MỚI] 2. Kích hoạt middleware CORS (Phải đặt TRƯỚC UseAuthentication)
+app.UseCors("AllowFrontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 

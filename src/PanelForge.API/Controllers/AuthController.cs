@@ -134,8 +134,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            await _authService.VerifyEmailAsync(request, cancellationToken);
-            return Ok(new { message = "Xác thực tài khoản email thành công." });
+            var response = await _authService.VerifyEmailAsync(request, cancellationToken);
+            return Ok(response);
         }
         catch (ArgumentException ex)
         {

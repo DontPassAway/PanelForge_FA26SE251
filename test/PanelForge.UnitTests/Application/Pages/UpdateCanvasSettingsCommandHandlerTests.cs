@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Pages.UpdateCanvasSettings;
 using PanelForge.Application.Interfaces;
@@ -27,7 +27,7 @@ public class UpdateCanvasSettingsCommandHandlerTests
     public async Task Handle_WhenPageExists_ShouldUpdateSettingsInMartenAndEfCore()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>()))
                            .ReturnsAsync(page);
 

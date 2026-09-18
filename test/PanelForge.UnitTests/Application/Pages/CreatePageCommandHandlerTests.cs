@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Pages.CreatePage;
 using PanelForge.Application.Interfaces;
@@ -94,7 +94,7 @@ public class CreatePageCommandHandlerTests
         var chapter = Chapter.Create(Guid.NewGuid(), 1, "Chapter 1");
         typeof(Chapter).GetProperty("Id")!.SetValue(chapter, chapterId);
 
-        var existingPage = Page.Create(chapterId, 1, PanelForge.Domain.Enums.LayoutFormat.StandardPage, 1200, 1800, 300);
+        var existingPage = Page.CreateNew(chapterId, 1, PanelForge.Domain.Enums.LayoutFormat.StandardPage, 1200, 1800, 300);
 
         var chaptersDbSet = DbSetMockHelper.CreateDbSetMock(new List<Chapter> { chapter });
         var pagesDbSet = DbSetMockHelper.CreateDbSetMock(new List<Page> { existingPage });

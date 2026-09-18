@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Elements.AddElement;
 using PanelForge.Application.Interfaces;
@@ -23,7 +23,7 @@ public class AddElementCommandHandlerTests
     public async Task Handle_WhenPageExists_ShouldAddElement_SavePage_AndReturnSuccess()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>()))
                            .ReturnsAsync(page);
 
@@ -79,7 +79,7 @@ public class AddElementCommandHandlerTests
     public async Task Handle_WhenInvalidDimension_ShouldReturnFailure_WithoutSaving()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>()))
                            .ReturnsAsync(page);
 

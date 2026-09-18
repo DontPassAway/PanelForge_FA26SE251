@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Events;
@@ -10,7 +10,7 @@ public class PageAggregateTests
 {
     private static Page CreateTestPage()
     {
-        var page = Page.Create(
+        var page = Page.CreateNew(
             chapterId: Guid.NewGuid(),
             pageNumber: 1,
             layoutFormat: LayoutFormat.WebtoonLongstrip,
@@ -26,7 +26,7 @@ public class PageAggregateTests
     {
         // Arrange & Act
         var chapterId = Guid.NewGuid();
-        var page = Page.Create(chapterId, 1, LayoutFormat.StandardPage, 1200, 1800, 350);
+        var page = Page.CreateNew(chapterId, 1, LayoutFormat.StandardPage, 1200, 1800, 350);
 
         // Assert
         page.Should().NotBeNull();
@@ -57,7 +57,7 @@ public class PageAggregateTests
         int pageNumber, int width, int height, int dpi)
     {
         // Act
-        Action act = () => Page.Create(Guid.NewGuid(), pageNumber, LayoutFormat.StandardPage, width, height, dpi);
+        Action act = () => Page.CreateNew(Guid.NewGuid(), pageNumber, LayoutFormat.StandardPage, width, height, dpi);
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>();

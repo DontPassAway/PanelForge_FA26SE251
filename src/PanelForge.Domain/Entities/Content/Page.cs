@@ -1,4 +1,4 @@
-using PanelForge.Domain.Common;
+﻿using PanelForge.Domain.Common;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Events;
 
@@ -39,7 +39,7 @@ public sealed class Page : AggregateRoot
     private Page() { }
 
     // ── Factory method ──────────────────────────────────────────────────────
-    public static Page Create(
+    public static Page CreateNew(
         Guid chapterId,
         int pageNumber,
         LayoutFormat layoutFormat,

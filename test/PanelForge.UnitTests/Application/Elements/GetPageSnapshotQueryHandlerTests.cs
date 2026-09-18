@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Elements.GetPageSnapshot;
 using PanelForge.Application.Interfaces;
@@ -23,7 +23,7 @@ public class GetPageSnapshotQueryHandlerTests
     public async Task Handle_WhenPageExists_ShouldReturnOnlyActiveElementsByDefault()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         var userId = Guid.NewGuid();
 
         page.AddElement("DialogueBalloon", 10, 10, 100, 50, 1, userId, "Active 1");
@@ -55,7 +55,7 @@ public class GetPageSnapshotQueryHandlerTests
     public async Task Handle_WhenIncludeRemovedIsTrue_ShouldReturnAllElements()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         var userId = Guid.NewGuid();
         page.AddElement("DialogueBalloon", 10, 10, 100, 50, 1, userId);
         var elementId = page.Elements.Keys.First();

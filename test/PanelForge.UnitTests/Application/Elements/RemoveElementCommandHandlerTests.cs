@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Elements.RemoveElement;
 using PanelForge.Application.Interfaces;
@@ -23,7 +23,7 @@ public class RemoveElementCommandHandlerTests
     public async Task Handle_WhenValid_ShouldRemoveElement_AndSave()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         var userId = Guid.NewGuid();
         page.AddElement("NarrationBox", 10, 20, 50, 50, 1, userId);
         var elementId = page.Elements.Keys.First();
