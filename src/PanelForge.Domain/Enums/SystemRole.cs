@@ -2,7 +2,13 @@ namespace PanelForge.Domain.Enums;
 
 public enum SystemRole
 {
+    User,
     Admin,
     Moderator,
-    User
+    Producer,
+    Writer,
+    Artist,
+    Letterer,
+    Editor,
+    Reader
 }

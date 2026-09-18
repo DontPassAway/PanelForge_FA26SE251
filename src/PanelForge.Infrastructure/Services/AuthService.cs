@@ -54,7 +54,7 @@ public class AuthService : IAuthService
 
         // Tạo mã OTP 6 số để xác thực email
         var verificationOtp = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-        user.SetEmailVerificationToken(verificationOtp, DateTime.UtcNow.AddHours(24));
+        user.SetEmailVerificationToken(verificationOtp, DateTime.UtcNow.AddMinutes(15));
 
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -62,13 +62,11 @@ public class AuthService : IAuthService
         // Gửi email xác thực
         await _emailService.SendEmailVerificationAsync(user.Email, verificationOtp, user.FullName, cancellationToken);
 
-        var (token, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
-
         return new AuthResponse(
-            Token: token,
-            ExpiresAt: expiresAt,
+            Token: null,
+            ExpiresAt: null,
             User: MapUserDto(user),
-            Message: "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để xác thực tài khoản."
+            Message: "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để lấy mã PIN xác thực."
         );
     }
 
@@ -88,6 +86,11 @@ public class AuthService : IAuthService
         if (!isValidPassword)
         {
             throw new UnauthorizedAccessException("Email hoặc mật khẩu không chính xác.");
+        }
+
+        if (!user.IsEmailConfirmed)
+        {
+            throw new UnauthorizedAccessException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email và nhập mã PIN để xác thực.");
         }
 
         // Nếu người dùng đã bật bảo mật 2FA
@@ -193,7 +196,7 @@ public class AuthService : IAuthService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken = default)
+    public async Task<AuthResponse> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
@@ -207,7 +210,13 @@ public class AuthService : IAuthService
 
         if (user.IsEmailConfirmed)
         {
-            return; // Đã xác thực trước đó
+            var (existingToken, existingExpiresAt) = _jwtTokenGenerator.GenerateToken(user);
+            return new AuthResponse(
+                Token: existingToken,
+                ExpiresAt: existingExpiresAt,
+                User: MapUserDto(user),
+                Message: "Tài khoản đã được xác thực từ trước."
+            );
         }
 
         if (string.IsNullOrEmpty(user.EmailVerificationToken) || !string.Equals(user.EmailVerificationToken, request.Token.Trim(), StringComparison.Ordinal))
@@ -222,6 +231,15 @@ public class AuthService : IAuthService
 
         user.ConfirmEmail();
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var (token, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
+
+        return new AuthResponse(
+            Token: token,
+            ExpiresAt: expiresAt,
+            User: MapUserDto(user),
+            Message: "Xác thực tài khoản thành công!"
+        );
     }
 
     public async Task ResendVerificationEmailAsync(ResendVerificationRequest request, CancellationToken cancellationToken = default)
@@ -242,7 +260,7 @@ public class AuthService : IAuthService
         }
 
         var verificationOtp = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-        user.SetEmailVerificationToken(verificationOtp, DateTime.UtcNow.AddHours(24));
+        user.SetEmailVerificationToken(verificationOtp, DateTime.UtcNow.AddMinutes(15));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _emailService.SendEmailVerificationAsync(user.Email, verificationOtp, user.FullName, cancellationToken);

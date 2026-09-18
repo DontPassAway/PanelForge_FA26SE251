@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Elements.MoveElement;
 using PanelForge.Application.Interfaces;
@@ -23,7 +23,7 @@ public class MoveElementCommandHandlerTests
     public async Task Handle_WhenValid_ShouldMoveElement_AndSave()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         var userId = Guid.NewGuid();
         page.AddElement("SoundEffect", 10, 20, 50, 50, 1, userId);
         var elementId = page.Elements.Keys.First();
@@ -54,7 +54,7 @@ public class MoveElementCommandHandlerTests
     public async Task Handle_WhenVersionMismatch_ShouldReturnFailure_OptimisticConcurrency()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         var userId = Guid.NewGuid();
         page.AddElement("SoundEffect", 10, 20, 50, 50, 1, userId);
         var elementId = page.Elements.Keys.First();
@@ -82,7 +82,7 @@ public class MoveElementCommandHandlerTests
     public async Task Handle_WhenElementNotFound_ShouldReturnFailure()
     {
         // Arrange
-        var page = Page.Create(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>()))
                            .ReturnsAsync(page);
 

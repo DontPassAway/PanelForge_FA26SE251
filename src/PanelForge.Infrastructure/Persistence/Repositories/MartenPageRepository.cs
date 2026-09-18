@@ -1,4 +1,4 @@
-﻿using Marten;
+using Marten;
 using Marten.Events;
 using PanelForge.Application.Interfaces;
 using PanelForge.Domain.Entities.Content;
@@ -6,14 +6,15 @@ using PanelForge.Domain.Entities.Content;
 namespace PanelForge.Infrastructure.Repositories;
 
 /// <summary>
-/// Marten-based implementation của IPageRepository.
+/// Marten-based implementation c?a IPageRepository.
 ///
-/// Cách Marten hoạt động:
-///   - Mỗi Page có một "stream" riêng trong PostgreSQL table "mt_events"
+/// C�ch Marten ho?t d?ng:
+///   - M?i Page c� m?t "stream" ri�ng trong PostgreSQL table "mt_events"
 ///   - Stream key = pageId (Guid)
-///   - Events được serialized thành JSON và append vào stream
-///   - Khi FetchForWritingAsync(), Marten replay tất cả events
-///     và gọi page.Apply(event) để rebuild state in-memory
+///   - Events du?c serialized th�nh JSON v� append v�o stream
+///   - Khi FetchForWritingAsync(), Marten replay t?t c? events
+///     v� g?i page.Apply(event) d? rebuild state in-memory
+///     d?ng th?i lock stream d? tr�nh race condition
 /// </summary>
 public sealed class MartenPageRepository : IPageRepository
 {
@@ -25,22 +26,24 @@ public sealed class MartenPageRepository : IPageRepository
     }
 
     /// <summary>
-    /// Load Page bằng Marten Event Sourcing:
+    /// Load Page b?ng Marten Event Sourcing (read-only path):
     ///   1. Query: SELECT * FROM mt_events WHERE stream_id = pageId ORDER BY version
-    ///   2. Instantiate Page() rỗng
-    ///   3. Gọi page.Apply(event) theo thứ tự cho từng event
-    ///   4. Trả về Page với đầy đủ state hiện tại
+    ///   2. Instantiate Page() r?ng
+    ///   3. G?i page.Apply(event) theo th? t? cho t?ng event
+    ///   4. Tr? v? Page v?i d?y d? state hi?n t?i
+    ///
+    /// NOTE: D�ng AggregateStreamAsync cho read path (GetElements, GetPage, v.v.)
     /// </summary>
     public async Task<Page?> GetAsync(Guid pageId, CancellationToken ct = default)
     {
-        // AggregateStreamAsync: Marten replay tất cả events trong stream và
-        // instantiate aggregate bằng cách gọi Apply() cho từng event theo thứ tự
+        // AggregateStreamAsync: Marten replay t?t c? events trong stream v�
+        // instantiate aggregate b?ng c�ch g?i Apply() cho t?ng event theo th? t?
         var page = await _session.Events.AggregateStreamAsync<Page>(pageId, token: ct);
 
         if (page is null)
             return null;
 
-        // Lấy version hiện tại từ stream metadata
+        // L?y version hi?n t?i t? stream metadata
         var state = await _session.Events.FetchStreamStateAsync(pageId, ct);
         if (state is not null)
             page.SetVersion(state.Version);
@@ -49,8 +52,13 @@ public sealed class MartenPageRepository : IPageRepository
     }
 
     /// <summary>
-    /// Lưu uncommitted events từ Page vào Marten stream.
-    /// KHÔNG UPDATE bất kỳ row nào — chỉ APPEND events mới vào mt_events.
+    /// Luu uncommitted events t? Page v�o Marten stream.
+    /// KH�NG UPDATE b?t k? row n�o � ch? APPEND events m?i v�o mt_events.
+    ///
+    /// Strategy:
+    ///   - Version == -1 (chua bao gi? persist) ? StartStream (t?o stream m?i)
+    ///   - Version >= 0 (d� t?n t?i trong DB)   ? FetchForWriting + Append
+    ///     (d�ng IEventStream d? tr�nh session tracking conflicts)
     /// </summary>
     public async Task SaveAsync(Page page, CancellationToken ct = default)
     {
@@ -61,19 +69,24 @@ public sealed class MartenPageRepository : IPageRepository
 
         if (page.Version < 0)
         {
-            // Stream mới — khởi tạo lần đầu
+            // Stream m?i � kh?i t?o l?n d?u
+            // StartStream s? fail v?i concurrency error n?u stream d� t?n t?i
             _session.Events.StartStream<Page>(page.Id, events);
         }
         else
         {
-            // Append vào stream đã có, với Optimistic Concurrency check
-            _session.Events.Append(page.Id, page.Version, events);
+            // D�ng FetchForWriting d? load stream d�ng c�ch cho write path.
+            // FetchForWriting tr? v? IEventStream<Page> d� tracked b?i session,
+            // tr�nh conflict v?i AggregateStreamAsync d� ch?y tru?c d� trong GetAsync.
+            // AppendOptimistic s? check version t? d?ng.
+            var stream = await _session.Events.FetchForWriting<Page>(page.Id, ct);
+            stream.AppendMany(events);
         }
 
-        // INSERT INTO mt_events (...) — DUY NHẤT thao tác SQL xảy ra
+        // INSERT INTO mt_events (...) � DUY NH?T thao t�c SQL x?y ra
         await _session.SaveChangesAsync(ct);
 
-        // Xóa buffer — đã persist thành công
+        // X�a buffer � d� persist th�nh c�ng
         page.ClearUncommittedEvents();
     }
 }

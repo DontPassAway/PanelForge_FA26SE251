@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.DTOs.Content;
@@ -63,7 +63,7 @@ public sealed class CreatePageCommandHandler
         Page page;
         try
         {
-            page = Page.Create(
+            page = Page.CreateNew(
                 chapterId:    command.ChapterId,
                 pageNumber:   pageNumber,
                 layoutFormat: layoutFormat,

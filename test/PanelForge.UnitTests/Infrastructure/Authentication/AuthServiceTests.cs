@@ -72,10 +72,6 @@ public class AuthServiceTests
         _passwordHasherMock.Setup(h => h.HashPassword("Password123!"))
                            .Returns("hashed_secure_password");
 
-        var fakeExpiry = DateTime.UtcNow.AddHours(1);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>()))
-                              .Returns(("fake_jwt_token", fakeExpiry));
-
         _emailServiceMock.Setup(e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                          .Returns(Task.CompletedTask);
 
@@ -85,11 +81,13 @@ public class AuthServiceTests
         var result = await _service.RegisterAsync(request);
 
         // Assert
+        // Registration no longer returns a JWT token; the user must verify their email first.
         result.Should().NotBeNull();
-        result.Token.Should().Be("fake_jwt_token");
-        result.ExpiresAt.Should().Be(fakeExpiry);
+        result.Token.Should().BeNull();
+        result.ExpiresAt.Should().BeNull();
         result.User!.Email.Should().Be("tam@example.com");
         result.User.FullName.Should().Be("Bui Ngoc Tam");
+        result.Message.Should().Contain("xác thực");
 
         usersList.Should().ContainSingle(u => u.Email == "tam@example.com");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -158,6 +156,7 @@ public class AuthServiceTests
     {
         // Arrange
         var user = User.Create("tam@example.com", "Bui Ngoc Tam", "hashed_password");
+        user.ConfirmEmail(); // Email must be confirmed before login is allowed
         SetupUsers(new List<User> { user });
 
         _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
@@ -183,6 +182,7 @@ public class AuthServiceTests
     {
         // Arrange
         var user = User.Create("2fa@example.com", "2FA User", "hashed_password");
+        user.ConfirmEmail(); // Email must be confirmed before login is allowed
         user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
         user.EnableTwoFactor();
         SetupUsers(new List<User> { user });
