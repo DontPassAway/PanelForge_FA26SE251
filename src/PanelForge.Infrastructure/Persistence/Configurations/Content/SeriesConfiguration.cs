@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Persistence.Configurations.Content;
@@ -47,6 +48,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        builder.Property(s => s.PipelineDefinitionId)
+               .HasColumnName("pipeline_definition_id")
+               .HasColumnType("uuid");
+
         builder.HasMany(s => s.Chapters)
                .WithOne(c => c.Series)
                .HasForeignKey(c => c.SeriesId)
@@ -56,5 +61,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .WithOne(b => b.Series)
                .HasForeignKey<SeriesBible>(b => b.SeriesId)
                .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(s => s.PipelineDefinition)
+               .WithOne(p => p.Series)
+               .HasForeignKey<PipelineDefinition>(p => p.SeriesId)
+               .OnDelete(DeleteBehavior.SetNull);
     }
 }
