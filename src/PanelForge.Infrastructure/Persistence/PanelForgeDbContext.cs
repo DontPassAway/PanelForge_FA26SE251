@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workflow;
 
 namespace PanelForge.Infrastructure.Persistence;
 
@@ -15,6 +17,13 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ExternalPreviewLink> ExternalPreviewLinks => Set<ExternalPreviewLink>();
 
     public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();
+    public DbSet<BibleEntry> BibleEntries => Set<BibleEntry>();
+    public DbSet<BibleEntryRevision> BibleEntryRevisions => Set<BibleEntryRevision>();
+    public DbSet<PipelineDefinition> PipelineDefinitions => Set<PipelineDefinition>();
+    public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
+    public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
+    public DbSet<WorkflowTransitionLog> WorkflowTransitionLogs => Set<WorkflowTransitionLog>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();

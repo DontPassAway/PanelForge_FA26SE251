@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Workflow;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -11,6 +12,7 @@ public class Panel : BaseEntity
     public Guid? CurrentStageId { get; private set; }
 
     public Page Page { get; private set; } = default!;
+    public PipelineStage? CurrentStage { get; private set; }
     public ICollection<Element> Elements { get; private set; } = [];
 
     private Panel() { }

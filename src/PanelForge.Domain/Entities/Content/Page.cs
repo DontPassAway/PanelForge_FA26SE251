@@ -1,4 +1,5 @@
-﻿using PanelForge.Domain.Common;
+using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Events;
 
@@ -29,11 +30,15 @@ public sealed class Page : AggregateRoot
     public int WidthPx { get; private set; }
     public int HeightPx { get; private set; }
     public int Dpi { get; private set; }
+    public Guid? CurrentStageId { get; private set; }
 
     // ── EF Core Navigation Properties (cho relational queries) ───────────────
     public Chapter Chapter { get; private set; } = default!;
     public Scene? Scene { get; private set; }
+    public PipelineStage? CurrentStage { get; private set; }
     public ICollection<Panel> Panels { get; private set; } = [];
+
+    public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
 
     // Constructor rỗng bắt buộc để Marten instantiate khi replay stream
     private Page() { }
