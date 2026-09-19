@@ -1,5 +1,6 @@
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
@@ -13,6 +14,7 @@ public class Series : BaseEntity
     public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public StudioWorkspace Workspace { get; private set; } = default!;
+    public SeriesBible? Bible { get; private set; }
     public ICollection<Chapter> Chapters { get; private set; } = [];
 
     private Series() { }
@@ -40,5 +42,11 @@ public class Series : BaseEntity
         Title = title.Trim();
         Synopsis = synopsis?.Trim();
         ReadingDirection = readingDirection;
+    }
+
+    public void AttachBible(SeriesBible bible)
+    {
+        ArgumentNullException.ThrowIfNull(bible);
+        Bible = bible;
     }
 }

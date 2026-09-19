@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -49,6 +50,11 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
         builder.HasMany(s => s.Chapters)
                .WithOne(c => c.Series)
                .HasForeignKey(c => c.SeriesId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(s => s.Bible)
+               .WithOne(b => b.Series)
+               .HasForeignKey<SeriesBible>(b => b.SeriesId)
                .OnDelete(DeleteBehavior.Cascade);
     }
 }

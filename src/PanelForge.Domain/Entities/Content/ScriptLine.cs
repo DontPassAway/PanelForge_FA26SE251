@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Bible;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -11,6 +12,7 @@ public class ScriptLine : BaseEntity
     public string? StageDirection { get; private set; }
 
     public Scene Scene { get; private set; } = default!;
+    public BibleEntry? SpeakerCharacter { get; private set; }
     public ICollection<Element> BoundElements { get; private set; } = [];
 
     private ScriptLine() { }
