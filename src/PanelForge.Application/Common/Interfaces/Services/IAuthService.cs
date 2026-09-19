@@ -14,7 +14,7 @@ public interface IAuthService
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 
     // Xác thực tài khoản
-    Task VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken = default);
+    Task<AuthResponse> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken = default);
     Task ResendVerificationEmailAsync(ResendVerificationRequest request, CancellationToken cancellationToken = default);
 
     // Đăng nhập Social (Firebase)

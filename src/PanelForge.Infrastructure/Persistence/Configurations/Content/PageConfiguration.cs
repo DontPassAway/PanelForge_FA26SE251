@@ -59,9 +59,25 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .HasDefaultValue(300)
                .IsRequired();
 
+        // Bỏ qua các thuộc tính Event Sourcing (chỉ phục vụ Marten, không lưu vào bảng pages)
+        builder.Ignore(p => p.Version);
+        builder.Ignore(p => p.UncommittedEvents);
+        builder.Ignore(p => p.Elements);
+
+        // EF Core Navigation
+        builder.HasOne(p => p.Chapter)
+               .WithMany(c => c.Pages)
+               .HasForeignKey(p => p.ChapterId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.Scene)
+               .WithMany(s => s.Pages)
+               .HasForeignKey(p => p.SceneId)
+               .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasMany(p => p.Panels)
-               .WithOne(pa => pa.Page)
-               .HasForeignKey(pa => pa.PageId)
+               .WithOne(p => p.Page)
+               .HasForeignKey(p => p.PageId)
                .OnDelete(DeleteBehavior.Cascade);
     }
 }
