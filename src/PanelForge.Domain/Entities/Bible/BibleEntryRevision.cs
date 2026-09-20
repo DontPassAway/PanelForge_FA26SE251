@@ -15,7 +15,6 @@ public class BibleEntryRevision : BaseEntity
     public Guid? AuthorId { get; private set; }
     public string ContentHash { get; private set; } = default!;
     public Guid? AssociatedChapterId { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public BibleEntry BibleEntry { get; private set; } = default!;
 

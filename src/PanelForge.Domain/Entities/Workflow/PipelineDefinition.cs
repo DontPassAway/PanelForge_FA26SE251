@@ -16,8 +16,6 @@ public class PipelineDefinition : BaseEntity
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
     public bool IsDefault { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; private set; } = DateTime.UtcNow;
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public Series? Series { get; private set; }

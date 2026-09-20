@@ -13,7 +13,6 @@ public class Series : BaseEntity
     public string Title { get; private set; } = default!;
     public string? Synopsis { get; private set; }
     public ReadingDirection ReadingDirection { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }

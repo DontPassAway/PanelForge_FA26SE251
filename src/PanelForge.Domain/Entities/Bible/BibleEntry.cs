@@ -19,8 +19,6 @@ public class BibleEntry : BaseEntity
     public BiblePriority Priority { get; private set; } = BiblePriority.Standard;
     public bool StrictCheck { get; private set; } = true;
     public bool IsActive { get; private set; } = true;
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; private set; } = DateTime.UtcNow;
 
     public SeriesBible SeriesBible { get; private set; } = default!;
     public ICollection<BibleEntryRevision> Revisions { get; private set; } = [];

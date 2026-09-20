@@ -23,6 +23,7 @@ public static class DbSetMockHelper
         dbSetMock.As<IQueryable<T>>().Setup(m => m.GetEnumerator()).Returns(queryable.GetEnumerator());
 
         dbSetMock.Setup(d => d.Add(It.IsAny<T>())).Callback<T>(sourceList.Add);
+        dbSetMock.Setup(d => d.Remove(It.IsAny<T>())).Callback<T>(e => sourceList.Remove(e));
 
         return dbSetMock.Object;
     }

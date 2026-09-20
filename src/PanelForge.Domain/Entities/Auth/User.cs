@@ -12,7 +12,6 @@ public class User : BaseEntity
     public string FullName { get; private set; } = default!;
     public string? PhoneNumber { get; private set; }
     public string? AvatarUrl { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public bool IsActive { get; private set; } = true;
     public SystemRole Role { get; private set; } = SystemRole.User;
 

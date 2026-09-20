@@ -10,7 +10,6 @@ public class ExternalPreviewLink : BaseEntity
     public DateTime ExpiresAt { get; private set; }
     public bool IsRevoked { get; private set; }
     public Guid CreatedByUserId { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public User CreatedByUser { get; private set; } = default!;
 

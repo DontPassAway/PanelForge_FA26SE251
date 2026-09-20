@@ -17,8 +17,6 @@ public class SeriesBible : BaseEntity
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
     public int Version { get; private set; } = 1;
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; private set; } = DateTime.UtcNow;
 
     public Series Series { get; private set; } = default!;
     public StudioWorkspace Workspace { get; private set; } = default!;

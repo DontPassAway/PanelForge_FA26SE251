@@ -9,7 +9,6 @@ public class StudioWorkspace : BaseEntity
     public Guid OwnerId { get; private set; }
     public long StorageQuotaBytes { get; private set; }
     public long UsedStorageBytes { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public User Owner { get; private set; } = default!;
     public ICollection<WorkspaceMember> Members { get; private set; } = [];

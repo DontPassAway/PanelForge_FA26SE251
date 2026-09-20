@@ -15,7 +15,6 @@ public class WorkflowTransitionLog : BaseEntity
     public Guid ToStageId { get; private set; }
     public Guid TriggeredByUserId { get; private set; }
     public string? Comment { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public PipelineStage? FromStage { get; private set; }
     public PipelineStage ToStage { get; private set; } = default!;

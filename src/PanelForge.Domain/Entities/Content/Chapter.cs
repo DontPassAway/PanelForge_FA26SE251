@@ -10,7 +10,6 @@ public class Chapter : BaseEntity
     public string? Title { get; private set; }
     public DateOnly? TargetReleaseDate { get; private set; }
     public long VersionVector { get; private set; } = 0;
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
     public Series Series { get; private set; } = default!;
     public ICollection<Scene> Scenes { get; private set; } = [];

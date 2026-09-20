@@ -31,9 +31,6 @@ public class Assignment : BaseEntity
     public DateTime? CompletedAt { get; private set; }
     public string? LastFeedbackComment { get; private set; }
 
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; private set; } = DateTime.UtcNow;
-
     public Series Series { get; private set; } = default!;
     public Chapter Chapter { get; private set; } = default!;
     public PipelineStage Stage { get; private set; } = default!;
