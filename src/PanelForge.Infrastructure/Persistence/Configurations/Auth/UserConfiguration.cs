@@ -117,5 +117,13 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .WithOne(a => a.Assignee)
                .HasForeignKey(a => a.AssigneeUserId)
                .OnDelete(DeleteBehavior.Restrict);
+
+        // Bỏ qua các thuộc tính Soft-delete và Audit của BaseEntity do bảng users trong PostgreSQL không có các cột này
+        builder.Ignore(u => u.IsDeleted);
+        builder.Ignore(u => u.DeletedAt);
+        builder.Ignore(u => u.DeletedBy);
+        builder.Ignore(u => u.CreatedBy);
+        builder.Ignore(u => u.UpdatedAt);
+        builder.Ignore(u => u.UpdatedBy);
     }
 }

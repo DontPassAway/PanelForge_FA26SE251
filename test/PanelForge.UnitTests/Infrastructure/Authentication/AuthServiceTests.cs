@@ -196,7 +196,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldRequireTwoFactor()
+    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactor()
     {
         // Arrange
         var user = User.Create("2fa@example.com", "2FA User", "hashed_password");
@@ -208,15 +208,18 @@ public class AuthServiceTests
         _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
                            .Returns(true);
 
+        var fakeExpiry = DateTime.UtcNow.AddHours(24);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user))
+                              .Returns(("frictionless_jwt_token", fakeExpiry));
+
         var request = new LoginRequest("2fa@example.com", "CorrectPassword");
 
         // Act
         var result = await _service.LoginAsync(request);
 
         // Assert
-        result.RequiresTwoFactor.Should().BeTrue();
-        result.TwoFactorEmail.Should().Be("2fa@example.com");
-        result.Token.Should().BeNull();
+        result.Token.Should().Be("frictionless_jwt_token");
+        result.RequiresTwoFactor.Should().BeFalse();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -500,19 +503,14 @@ public class AuthServiceTests
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_AndValidRememberDeviceTokenProvided_ShouldSkipTwoFactorAndReturnToken()
+    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactorChallenge()
     {
-        // Arrange
+        // Arrange: Nguyên tắc Đăng nhập không rào cản (Frictionless Login)
         var user = User.Create("user@example.com", "Test User", "hashed_pwd");
         user.ConfirmEmail();
         user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
         user.EnableTwoFactor();
         SetupUsers(new List<User> { user });
-
-        var plainToken = "valid-32-byte-hex-token-string-test-123";
-        var tokenHash = HashToken(plainToken);
-        var device = UserRememberedDevice.Create(user.Id, tokenHash, DateTime.UtcNow.AddDays(30), "Work Laptop");
-        _rememberedDevices.Add(device);
 
         _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
         _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("mock-jwt-token", DateTime.UtcNow.AddDays(7)));
@@ -520,64 +518,13 @@ public class AuthServiceTests
         var request = new LoginRequest("user@example.com", "Password123!");
 
         // Act
-        var result = await _service.LoginAsync(request, rememberDeviceToken: plainToken);
+        var result = await _service.LoginAsync(request);
 
-        // Assert
+        // Assert: Luôn xả thẳng token, không yêu cầu 2FA
         result.Should().NotBeNull();
         result.RequiresTwoFactor.Should().BeFalse();
         result.Token.Should().Be("mock-jwt-token");
-        result.Message.Should().Contain("Thiết bị tin cậy");
-    }
-
-    [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_AndExpiredRememberDeviceTokenProvided_ShouldRequireTwoFactor()
-    {
-        // Arrange
-        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
-        user.ConfirmEmail();
-        user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
-        user.EnableTwoFactor();
-        SetupUsers(new List<User> { user });
-
-        var plainToken = "expired-token";
-        var tokenHash = HashToken(plainToken);
-        var expiredDevice = UserRememberedDevice.Create(user.Id, tokenHash, DateTime.UtcNow.AddDays(-1), "Old Phone");
-        _rememberedDevices.Add(expiredDevice);
-
-        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
-
-        var request = new LoginRequest("user@example.com", "Password123!");
-
-        // Act
-        var result = await _service.LoginAsync(request, rememberDeviceToken: plainToken);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.RequiresTwoFactor.Should().BeTrue();
-        result.Token.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_AndInvalidTokenProvided_ShouldRequireTwoFactor()
-    {
-        // Arrange
-        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
-        user.ConfirmEmail();
-        user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
-        user.EnableTwoFactor();
-        SetupUsers(new List<User> { user });
-
-        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
-
-        var request = new LoginRequest("user@example.com", "Password123!", RememberDeviceToken: "non-existent-token");
-
-        // Act
-        var result = await _service.LoginAsync(request);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.RequiresTwoFactor.Should().BeTrue();
-        result.Token.Should().BeNull();
+        result.Message.Should().Be("Đăng nhập thành công.");
     }
 
     [Fact]

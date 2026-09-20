@@ -70,5 +70,13 @@ internal sealed class SeriesBibleConfiguration : IEntityTypeConfiguration<Series
                .WithOne(e => e.SeriesBible)
                .HasForeignKey(e => e.SeriesBibleId)
                .OnDelete(DeleteBehavior.Cascade);
+
+        // Bỏ qua các helper properties tính toán ở runtime, tránh để EF Core nhầm lẫn thành Navigation Relationships
+        builder.Ignore(b => b.Characters);
+        builder.Ignore(b => b.Locations);
+        builder.Ignore(b => b.Props);
+        builder.Ignore(b => b.Terminology);
+        builder.Ignore(b => b.StyleRules);
+        builder.Ignore(b => b.PlotFacts);
     }
 }

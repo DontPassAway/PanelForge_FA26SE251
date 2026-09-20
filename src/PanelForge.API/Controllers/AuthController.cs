@@ -40,11 +40,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var rememberDeviceToken = Request.Cookies["pf_remember_device"]
-                ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault()
-                ?? request.RememberDeviceToken;
-
-            var response = await _authService.LoginAsync(request, rememberDeviceToken, cancellationToken);
+            var response = await _authService.LoginAsync(request, cancellationToken: cancellationToken);
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)

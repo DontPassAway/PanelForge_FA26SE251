@@ -77,16 +77,20 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PanelForgeDbContext).Assembly);
 
-        // 3. Tự động áp dụng Global Query Filter cho tất cả các Entity kế thừa ISoftDelete
+        // 3. Tự động áp dụng Global Query Filter cho tất cả các Entity kế thừa ISoftDelete (chỉ khi IsDeleted thực sự được map vào bảng DB)
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (typeof(ISoftDelete).IsAssignableFrom(entityType.ClrType))
             {
-                var method = typeof(PanelForgeDbContext)
-                    .GetMethod(nameof(ConfigureSoftDeleteFilter), BindingFlags.NonPublic | BindingFlags.Static)?
-                    .MakeGenericMethod(entityType.ClrType);
+                var isDeletedProperty = entityType.FindProperty(nameof(ISoftDelete.IsDeleted));
+                if (isDeletedProperty != null)
+                {
+                    var method = typeof(PanelForgeDbContext)
+                        .GetMethod(nameof(ConfigureSoftDeleteFilter), BindingFlags.NonPublic | BindingFlags.Static)?
+                        .MakeGenericMethod(entityType.ClrType);
 
-                method?.Invoke(null, [modelBuilder]);
+                    method?.Invoke(null, [modelBuilder]);
+                }
             }
         }
     }

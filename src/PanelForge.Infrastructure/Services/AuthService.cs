@@ -93,39 +93,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email và nhập mã PIN để xác thực.");
         }
 
-        // Nếu người dùng đã bật bảo mật 2FA
-        if (user.TwoFactorEnabled)
-        {
-            var rawToken = rememberDeviceToken ?? request.RememberDeviceToken;
-            if (!string.IsNullOrWhiteSpace(rawToken))
-            {
-                var tokenHash = ComputeTokenHash(rawToken.Trim());
-                var rememberedDevice = await _dbContext.UserRememberedDevices
-                    .FirstOrDefaultAsync(d => d.UserId == user.Id && d.TokenHash == tokenHash, cancellationToken);
-
-                if (rememberedDevice is not null && !rememberedDevice.IsExpired)
-                {
-                    // Thiết bị đã được ghi nhớ hợp lệ trong vòng 30 ngày -> Bỏ qua thử thách 2FA, cấp JWT trực tiếp
-                    var (trustedToken, trustedExpiresAt) = _jwtTokenGenerator.GenerateToken(user);
-                    return new AuthResponse(
-                        Token: trustedToken,
-                        ExpiresAt: trustedExpiresAt,
-                        User: MapUserDto(user),
-                        Message: "Đăng nhập thành công (Thiết bị tin cậy được ghi nhớ)."
-                    );
-                }
-            }
-
-            return new AuthResponse(
-                Token: null,
-                ExpiresAt: null,
-                User: null,
-                RequiresTwoFactor: true,
-                TwoFactorEmail: user.Email,
-                Message: "Yêu cầu xác thực 2FA. Vui lòng nhập mã OTP 6 chữ số từ ứng dụng Authenticator."
-            );
-        }
-
+        // Đăng nhập không rào cản: Cấp thẳng JWT Token nếu đúng Email & Mật khẩu
         var (token, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
 
         return new AuthResponse(
@@ -160,6 +128,29 @@ public class AuthService : IAuthService
         if (_passwordHasher.VerifyPassword(request.NewPassword, user.PasswordHash))
         {
             throw new InvalidOperationException("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
+        }
+
+        // Chốt chặn bảo mật 2FA (Step-up Authentication) khi Đổi mật khẩu
+        if (user.TwoFactorEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(request.OtpCode))
+            {
+                throw new UnauthorizedAccessException("Tài khoản đã kích hoạt 2FA. Vui lòng cung cấp mã OTP 6 chữ số từ ứng dụng Google Authenticator.");
+            }
+
+            if (string.IsNullOrEmpty(user.TwoFactorSecret))
+            {
+                throw new InvalidOperationException("Chưa cấu hình khóa bí mật 2FA cho tài khoản này.");
+            }
+
+            var secretBytes = Base32Encoding.ToBytes(user.TwoFactorSecret);
+            var totp = new Totp(secretBytes);
+            var isOtpValid = totp.VerifyTotp(request.OtpCode.Trim(), out _, new VerificationWindow(previous: 1, future: 1));
+
+            if (!isOtpValid)
+            {
+                throw new UnauthorizedAccessException("Mã xác thực 2FA không chính xác hoặc đã hết hạn.");
+            }
         }
 
         var newPasswordHash = _passwordHasher.HashPassword(request.NewPassword);
