@@ -6,7 +6,7 @@ public interface IAuthService
 {
     // Authentication cơ bản
     Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default);
-    Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
+    Task<AuthResponse> LoginAsync(LoginRequest request, string? rememberDeviceToken = null, CancellationToken cancellationToken = default);
 
     // Quản lý mật khẩu
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
@@ -23,4 +23,5 @@ public interface IAuthService
     // Bảo mật 2FA (Two-Factor Authentication)
     Task<EnableTwoFactorResponse> EnableTwoFactorAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<AuthResponse> VerifyTwoFactorAsync(Guid? currentUserId, VerifyTwoFactorRequest request, CancellationToken cancellationToken = default);
+    Task ForgetDeviceAsync(string? rememberDeviceToken, Guid? currentUserId = null, CancellationToken cancellationToken = default);
 }

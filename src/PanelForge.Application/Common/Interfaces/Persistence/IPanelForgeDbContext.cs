@@ -12,6 +12,7 @@ public interface IPanelForgeDbContext
     DbSet<StudioWorkspace> StudioWorkspaces { get; }
     DbSet<WorkspaceMember> WorkspaceMembers { get; }
     DbSet<ExternalPreviewLink> ExternalPreviewLinks { get; }
+    DbSet<UserRememberedDevice> UserRememberedDevices { get; }
 
     DbSet<Series> Series { get; }
     DbSet<SeriesBible> SeriesBibles { get; }

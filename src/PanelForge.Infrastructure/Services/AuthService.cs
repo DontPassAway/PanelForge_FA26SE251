@@ -70,7 +70,7 @@ public class AuthService : IAuthService
         );
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    public async Task<AuthResponse> LoginAsync(LoginRequest request, string? rememberDeviceToken = null, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
@@ -96,6 +96,26 @@ public class AuthService : IAuthService
         // Nếu người dùng đã bật bảo mật 2FA
         if (user.TwoFactorEnabled)
         {
+            var rawToken = rememberDeviceToken ?? request.RememberDeviceToken;
+            if (!string.IsNullOrWhiteSpace(rawToken))
+            {
+                var tokenHash = ComputeTokenHash(rawToken.Trim());
+                var rememberedDevice = await _dbContext.UserRememberedDevices
+                    .FirstOrDefaultAsync(d => d.UserId == user.Id && d.TokenHash == tokenHash, cancellationToken);
+
+                if (rememberedDevice is not null && !rememberedDevice.IsExpired)
+                {
+                    // Thiết bị đã được ghi nhớ hợp lệ trong vòng 30 ngày -> Bỏ qua thử thách 2FA, cấp JWT trực tiếp
+                    var (trustedToken, trustedExpiresAt) = _jwtTokenGenerator.GenerateToken(user);
+                    return new AuthResponse(
+                        Token: trustedToken,
+                        ExpiresAt: trustedExpiresAt,
+                        User: MapUserDto(user),
+                        Message: "Đăng nhập thành công (Thiết bị tin cậy được ghi nhớ)."
+                    );
+                }
+            }
+
             return new AuthResponse(
                 Token: null,
                 ExpiresAt: null,
@@ -453,11 +473,33 @@ public class AuthService : IAuthService
 
             var (jwtToken, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
 
+            string? plainRememberToken = null;
+            if (request.RememberDevice)
+            {
+                // Sinh token 32 bytes ngẫu nhiên (dạng hex 64 ký tự)
+                var randomBytes = RandomNumberGenerator.GetBytes(32);
+                plainRememberToken = Convert.ToHexString(randomBytes).ToLowerInvariant();
+                var tokenHash = ComputeTokenHash(plainRememberToken);
+
+                var device = UserRememberedDevice.Create(
+                    userId: user.Id,
+                    tokenHash: tokenHash,
+                    expiresAt: DateTime.UtcNow.AddDays(30),
+                    deviceName: request.DeviceName
+                );
+
+                _dbContext.UserRememberedDevices.Add(device);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             return new AuthResponse(
                 Token: jwtToken,
                 ExpiresAt: expiresAt,
                 User: MapUserDto(user),
-                Message: "Xác thực 2FA và đăng nhập thành công."
+                Message: request.RememberDevice
+                    ? "Xác thực 2FA thành công. Thiết bị này đã được ghi nhớ trong 30 ngày."
+                    : "Xác thực 2FA và đăng nhập thành công.",
+                RememberDeviceToken: plainRememberToken
             );
         }
     }
@@ -491,5 +533,42 @@ public class AuthService : IAuthService
             sb.Append(key.AsSpan(currentPosition));
         }
         return sb.ToString().ToLowerInvariant();
+    }
+
+    public async Task ForgetDeviceAsync(string? rememberDeviceToken, Guid? currentUserId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rememberDeviceToken) && !currentUserId.HasValue)
+        {
+            return;
+        }
+
+        IQueryable<UserRememberedDevice> query = _dbContext.UserRememberedDevices;
+
+        if (!string.IsNullOrWhiteSpace(rememberDeviceToken))
+        {
+            var tokenHash = ComputeTokenHash(rememberDeviceToken.Trim());
+            query = query.Where(d => d.TokenHash == tokenHash);
+        }
+
+        if (currentUserId.HasValue)
+        {
+            query = query.Where(d => d.UserId == currentUserId.Value);
+        }
+
+        var devices = await query.ToListAsync(cancellationToken);
+        if (devices.Count > 0)
+        {
+            foreach (var dev in devices)
+            {
+                _dbContext.UserRememberedDevices.Remove(dev);
+            }
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static string ComputeTokenHash(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

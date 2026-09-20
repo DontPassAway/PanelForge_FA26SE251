@@ -40,7 +40,11 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var response = await _authService.LoginAsync(request, cancellationToken);
+            var rememberDeviceToken = Request.Cookies["pf_remember_device"]
+                ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault()
+                ?? request.RememberDeviceToken;
+
+            var response = await _authService.LoginAsync(request, rememberDeviceToken, cancellationToken);
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
@@ -209,6 +213,18 @@ public class AuthController : ControllerBase
         try
         {
             var response = await _authService.VerifyTwoFactorAsync(userId, request, cancellationToken);
+
+            if (!string.IsNullOrEmpty(response.RememberDeviceToken))
+            {
+                Response.Cookies.Append("pf_remember_device", response.RememberDeviceToken, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = Request.IsHttps,
+                    SameSite = SameSiteMode.Lax,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
+            }
+
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
@@ -223,5 +239,25 @@ public class AuthController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("forget-device")]
+    public async Task<IActionResult> ForgetDevice(CancellationToken cancellationToken)
+    {
+        var rememberDeviceToken = Request.Cookies["pf_remember_device"]
+            ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault();
+
+        Guid? userId = null;
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (Guid.TryParse(userIdStr, out var parsedGuid))
+        {
+            userId = parsedGuid;
+        }
+
+        await _authService.ForgetDeviceAsync(rememberDeviceToken, userId, cancellationToken);
+
+        Response.Cookies.Delete("pf_remember_device");
+
+        return Ok(new { message = "Thiết bị này đã được xóa khỏi danh sách thiết bị tin cậy." });
     }
 }
