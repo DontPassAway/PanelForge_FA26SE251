@@ -112,5 +112,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .WithOne(l => l.CreatedByUser)
                .HasForeignKey(l => l.CreatedByUserId)
                .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(u => u.AssignedTasks)
+               .WithOne(a => a.Assignee)
+               .HasForeignKey(a => a.AssigneeUserId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }

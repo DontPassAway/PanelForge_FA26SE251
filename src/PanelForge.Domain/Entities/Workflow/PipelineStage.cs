@@ -22,6 +22,7 @@ public class PipelineStage : BaseEntity
     public PipelineDefinition PipelineDefinition { get; private set; } = default!;
     public ICollection<StageTransition> OutgoingTransitions { get; private set; } = [];
     public ICollection<StageTransition> IncomingTransitions { get; private set; } = [];
+    public ICollection<Assignment> Assignments { get; private set; } = [];
 
     private PipelineStage() { }
 

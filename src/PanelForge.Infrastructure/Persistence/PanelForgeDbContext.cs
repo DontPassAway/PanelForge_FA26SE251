@@ -24,6 +24,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
     public DbSet<WorkflowTransitionLog> WorkflowTransitionLogs => Set<WorkflowTransitionLog>();
+    public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
