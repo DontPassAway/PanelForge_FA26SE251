@@ -1,5 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using Moq;
+using OtpNet;
 using PanelForge.Application.DTOs.Auth;
 using PanelForge.Application.Interfaces;
 using PanelForge.Application.Interfaces.Authentication;
@@ -26,6 +29,8 @@ public class AuthServiceTests
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _emailServiceMock = new Mock<IEmailService>();
 
+        SetupRememberedDevices(_rememberedDevices);
+
         _service = new AuthService(
             _dbContextMock.Object,
             _passwordHasherMock.Object,
@@ -33,12 +38,25 @@ public class AuthServiceTests
             _emailServiceMock.Object);
     }
 
+    private readonly List<UserRememberedDevice> _rememberedDevices = new();
+
     private void SetupUsers(List<User> users)
     {
         var dbSet = DbSetMockHelper.CreateDbSetMock(users);
         _dbContextMock.Setup(db => db.Users).Returns(dbSet);
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()))
                       .ReturnsAsync(1);
+    }
+
+    private void SetupRememberedDevices(List<UserRememberedDevice> devices)
+    {
+        var dbSet = DbSetMockHelper.CreateDbSetMock(devices);
+        _dbContextMock.Setup(db => db.UserRememberedDevices).Returns(dbSet);
+    }
+
+    private static string HashToken(string token)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -178,7 +196,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldRequireTwoFactor()
+    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactor()
     {
         // Arrange
         var user = User.Create("2fa@example.com", "2FA User", "hashed_password");
@@ -190,15 +208,18 @@ public class AuthServiceTests
         _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
                            .Returns(true);
 
+        var fakeExpiry = DateTime.UtcNow.AddHours(24);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user))
+                              .Returns(("frictionless_jwt_token", fakeExpiry));
+
         var request = new LoginRequest("2fa@example.com", "CorrectPassword");
 
         // Act
         var result = await _service.LoginAsync(request);
 
         // Assert
-        result.RequiresTwoFactor.Should().BeTrue();
-        result.TwoFactorEmail.Should().Be("2fa@example.com");
-        result.Token.Should().BeNull();
+        result.Token.Should().Be("frictionless_jwt_token");
+        result.RequiresTwoFactor.Should().BeFalse();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -474,6 +495,129 @@ public class AuthServiceTests
         result.AuthenticatorUri.Should().Contain("otpauth://totp/PanelForge");
         result.FormattedKey.Should().NotBeNullOrEmpty();
         user.TwoFactorSecret.Should().Be(result.SharedKey);
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 2FA REMEMBER DEVICE (30 DAYS) TESTS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactorChallenge()
+    {
+        // Arrange: Nguyên tắc Đăng nhập không rào cản (Frictionless Login)
+        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
+        user.ConfirmEmail();
+        user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
+        user.EnableTwoFactor();
+        SetupUsers(new List<User> { user });
+
+        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("mock-jwt-token", DateTime.UtcNow.AddDays(7)));
+
+        var request = new LoginRequest("user@example.com", "Password123!");
+
+        // Act
+        var result = await _service.LoginAsync(request);
+
+        // Assert: Luôn xả thẳng token, không yêu cầu 2FA
+        result.Should().NotBeNull();
+        result.RequiresTwoFactor.Should().BeFalse();
+        result.Token.Should().Be("mock-jwt-token");
+        result.Message.Should().Be("Đăng nhập thành công.");
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactorAsync_WhenRememberDeviceIsTrue_ShouldSaveDeviceAndReturnPlainToken()
+    {
+        // Arrange
+        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
+        user.ConfirmEmail();
+
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        var base32Secret = Base32Encoding.ToString(secretBytes);
+        user.SetTwoFactorSecret(base32Secret);
+        user.EnableTwoFactor();
+        SetupUsers(new List<User> { user });
+
+        var totp = new Totp(secretBytes);
+        var currentCode = totp.ComputeTotp();
+
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+
+        var request = new VerifyTwoFactorRequest(
+            Code: currentCode,
+            Email: user.Email,
+            RememberDevice: true,
+            DeviceName: "Office Desktop"
+        );
+
+        // Act
+        var result = await _service.VerifyTwoFactorAsync(currentUserId: null, request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Token.Should().Be("jwt-2fa-token");
+        result.RememberDeviceToken.Should().NotBeNullOrEmpty();
+        result.Message.Should().Contain("ghi nhớ trong 30 ngày");
+
+        _rememberedDevices.Count.Should().Be(1);
+        var savedDevice = _rememberedDevices[0];
+        savedDevice.UserId.Should().Be(user.Id);
+        savedDevice.DeviceName.Should().Be("Office Desktop");
+        savedDevice.TokenHash.Should().Be(HashToken(result.RememberDeviceToken!));
+        savedDevice.ExpiresAt.Should().BeAfter(DateTime.UtcNow.AddDays(29));
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactorAsync_WhenRememberDeviceIsFalse_ShouldNotSaveDevice()
+    {
+        // Arrange
+        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
+        user.ConfirmEmail();
+
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        var base32Secret = Base32Encoding.ToString(secretBytes);
+        user.SetTwoFactorSecret(base32Secret);
+        user.EnableTwoFactor();
+        SetupUsers(new List<User> { user });
+
+        var totp = new Totp(secretBytes);
+        var currentCode = totp.ComputeTotp();
+
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+
+        var request = new VerifyTwoFactorRequest(
+            Code: currentCode,
+            Email: user.Email,
+            RememberDevice: false
+        );
+
+        // Act
+        var result = await _service.VerifyTwoFactorAsync(currentUserId: null, request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Token.Should().Be("jwt-2fa-token");
+        result.RememberDeviceToken.Should().BeNull();
+        _rememberedDevices.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ForgetDeviceAsync_WhenTokenProvided_ShouldRemoveDevice()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var plainToken = "token-to-revoke-12345";
+        var tokenHash = HashToken(plainToken);
+        var device = UserRememberedDevice.Create(userId, tokenHash, DateTime.UtcNow.AddDays(30), "Old Device");
+        _rememberedDevices.Add(device);
+
+        // Act
+        await _service.ForgetDeviceAsync(plainToken, userId);
+
+        // Assert
+        _rememberedDevices.Count.Should().Be(0);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
@@ -16,6 +17,7 @@ public class Element : BaseEntity
 
     public Panel Panel { get; private set; } = default!;
     public ScriptLine? ScriptLine { get; private set; }
+    public BibleEntry? SpeakerCharacter { get; private set; }
 
     private Element() { }
 

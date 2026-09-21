@@ -59,6 +59,10 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .HasDefaultValue(300)
                .IsRequired();
 
+        builder.Property(p => p.CurrentStageId)
+               .HasColumnName("current_stage_id")
+               .HasColumnType("uuid");
+
         // Bỏ qua các thuộc tính Event Sourcing (chỉ phục vụ Marten, không lưu vào bảng pages)
         builder.Ignore(p => p.Version);
         builder.Ignore(p => p.UncommittedEvents);
@@ -79,5 +83,10 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .WithOne(p => p.Page)
                .HasForeignKey(p => p.PageId)
                .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.CurrentStage)
+               .WithMany()
+               .HasForeignKey(p => p.CurrentStageId)
+               .OnDelete(DeleteBehavior.SetNull);
     }
 }

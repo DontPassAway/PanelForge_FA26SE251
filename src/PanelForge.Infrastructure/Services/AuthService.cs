@@ -70,7 +70,7 @@ public class AuthService : IAuthService
         );
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    public async Task<AuthResponse> LoginAsync(LoginRequest request, string? rememberDeviceToken = null, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
@@ -93,19 +93,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email và nhập mã PIN để xác thực.");
         }
 
-        // Nếu người dùng đã bật bảo mật 2FA
-        if (user.TwoFactorEnabled)
-        {
-            return new AuthResponse(
-                Token: null,
-                ExpiresAt: null,
-                User: null,
-                RequiresTwoFactor: true,
-                TwoFactorEmail: user.Email,
-                Message: "Yêu cầu xác thực 2FA. Vui lòng nhập mã OTP 6 chữ số từ ứng dụng Authenticator."
-            );
-        }
-
+        // Đăng nhập không rào cản: Cấp thẳng JWT Token nếu đúng Email & Mật khẩu
         var (token, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
 
         return new AuthResponse(
@@ -140,6 +128,29 @@ public class AuthService : IAuthService
         if (_passwordHasher.VerifyPassword(request.NewPassword, user.PasswordHash))
         {
             throw new InvalidOperationException("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
+        }
+
+        // Chốt chặn bảo mật 2FA (Step-up Authentication) khi Đổi mật khẩu
+        if (user.TwoFactorEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(request.OtpCode))
+            {
+                throw new UnauthorizedAccessException("Tài khoản đã kích hoạt 2FA. Vui lòng cung cấp mã OTP 6 chữ số từ ứng dụng Google Authenticator.");
+            }
+
+            if (string.IsNullOrEmpty(user.TwoFactorSecret))
+            {
+                throw new InvalidOperationException("Chưa cấu hình khóa bí mật 2FA cho tài khoản này.");
+            }
+
+            var secretBytes = Base32Encoding.ToBytes(user.TwoFactorSecret);
+            var totp = new Totp(secretBytes);
+            var isOtpValid = totp.VerifyTotp(request.OtpCode.Trim(), out _, new VerificationWindow(previous: 1, future: 1));
+
+            if (!isOtpValid)
+            {
+                throw new UnauthorizedAccessException("Mã xác thực 2FA không chính xác hoặc đã hết hạn.");
+            }
         }
 
         var newPasswordHash = _passwordHasher.HashPassword(request.NewPassword);
@@ -453,11 +464,33 @@ public class AuthService : IAuthService
 
             var (jwtToken, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
 
+            string? plainRememberToken = null;
+            if (request.RememberDevice)
+            {
+                // Sinh token 32 bytes ngẫu nhiên (dạng hex 64 ký tự)
+                var randomBytes = RandomNumberGenerator.GetBytes(32);
+                plainRememberToken = Convert.ToHexString(randomBytes).ToLowerInvariant();
+                var tokenHash = ComputeTokenHash(plainRememberToken);
+
+                var device = UserRememberedDevice.Create(
+                    userId: user.Id,
+                    tokenHash: tokenHash,
+                    expiresAt: DateTime.UtcNow.AddDays(30),
+                    deviceName: request.DeviceName
+                );
+
+                _dbContext.UserRememberedDevices.Add(device);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             return new AuthResponse(
                 Token: jwtToken,
                 ExpiresAt: expiresAt,
                 User: MapUserDto(user),
-                Message: "Xác thực 2FA và đăng nhập thành công."
+                Message: request.RememberDevice
+                    ? "Xác thực 2FA thành công. Thiết bị này đã được ghi nhớ trong 30 ngày."
+                    : "Xác thực 2FA và đăng nhập thành công.",
+                RememberDeviceToken: plainRememberToken
             );
         }
     }
@@ -491,5 +524,42 @@ public class AuthService : IAuthService
             sb.Append(key.AsSpan(currentPosition));
         }
         return sb.ToString().ToLowerInvariant();
+    }
+
+    public async Task ForgetDeviceAsync(string? rememberDeviceToken, Guid? currentUserId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rememberDeviceToken) && !currentUserId.HasValue)
+        {
+            return;
+        }
+
+        IQueryable<UserRememberedDevice> query = _dbContext.UserRememberedDevices;
+
+        if (!string.IsNullOrWhiteSpace(rememberDeviceToken))
+        {
+            var tokenHash = ComputeTokenHash(rememberDeviceToken.Trim());
+            query = query.Where(d => d.TokenHash == tokenHash);
+        }
+
+        if (currentUserId.HasValue)
+        {
+            query = query.Where(d => d.UserId == currentUserId.Value);
+        }
+
+        var devices = await query.ToListAsync(cancellationToken);
+        if (devices.Count > 0)
+        {
+            foreach (var dev in devices)
+            {
+                _dbContext.UserRememberedDevices.Remove(dev);
+            }
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static string ComputeTokenHash(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

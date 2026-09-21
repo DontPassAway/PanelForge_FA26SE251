@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Auth;
@@ -11,7 +12,6 @@ public class User : BaseEntity
     public string FullName { get; private set; } = default!;
     public string? PhoneNumber { get; private set; }
     public string? AvatarUrl { get; private set; }
-    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public bool IsActive { get; private set; } = true;
     public SystemRole Role { get; private set; } = SystemRole.User;
 
@@ -28,6 +28,7 @@ public class User : BaseEntity
     public ICollection<StudioWorkspace> OwnedWorkspaces { get; private set; } = [];
     public ICollection<WorkspaceMember> WorkspaceMemberships { get; private set; } = [];
     public ICollection<ExternalPreviewLink> CreatedPreviewLinks { get; private set; } = [];
+    public ICollection<Assignment> AssignedTasks { get; private set; } = [];
 
     private User() { }
 

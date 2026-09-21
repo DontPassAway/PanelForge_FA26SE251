@@ -6,5 +6,6 @@ public record AuthResponse(
     UserDto? User = null,
     bool RequiresTwoFactor = false,
     string? TwoFactorEmail = null,
-    string? Message = null
+    string? Message = null,
+    string? RememberDeviceToken = null
 );

@@ -1,16 +1,10 @@
-﻿namespace PanelForge.Domain.Common;
+namespace PanelForge.Domain.Common;
 
 /// <summary>
-/// Base class cho tất cả Aggregate Roots trong hệ thống Event Sourcing.
-///
-/// Cách hoạt động:
-///   1. Command gọi method trên Aggregate (ví dụ: page.AddElement(...))
-///   2. Method đó gọi RaiseEvent(new SomeEvent(...))
-///   3. RaiseEvent tự động gọi Apply(event) để cập nhật state in-memory
-///   4. Event được thêm vào _uncommittedEvents
-///   5. Repository lấy _uncommittedEvents rồi append vào Event Store (Marten)
+/// Base class cho tất cả Aggregate Roots trong hệ thống Event Sourcing,
+/// đồng thời hỗ trợ Audit Timestamps và Soft-delete.
 /// </summary>
-public abstract class AggregateRoot
+public abstract class AggregateRoot : IAuditableEntity, ISoftDelete
 {
     // ── Identity & Versioning ───────────────────────────────────────────────
     public Guid Id { get; protected set; } = Guid.NewGuid();
@@ -20,6 +14,17 @@ public abstract class AggregateRoot
     /// Marten tự quản lý giá trị này khi load stream.
     /// </summary>
     public long Version { get; private set; } = -1; // -1 = chưa persisted
+
+    // ── Audit fields ────────────────────────────────────────────────────────
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? CreatedBy { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    // ── Soft-delete fields ──────────────────────────────────────────────────
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
 
     // ── Event buffer (chưa được lưu vào Event Store) ────────────────────────
     private readonly List<IDomainEvent> _uncommittedEvents = new();

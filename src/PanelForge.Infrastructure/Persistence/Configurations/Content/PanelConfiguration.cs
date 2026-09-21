@@ -45,6 +45,11 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");
 
+        builder.HasOne(p => p.CurrentStage)
+               .WithMany()
+               .HasForeignKey(p => p.CurrentStageId)
+               .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasMany(p => p.Elements)
                .WithOne(e => e.Panel)
                .HasForeignKey(e => e.PanelId)

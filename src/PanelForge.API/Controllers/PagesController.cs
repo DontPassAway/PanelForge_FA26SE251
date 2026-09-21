@@ -1,10 +1,13 @@
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.DTOs.Content;
 using PanelForge.Application.Features.Pages.CreatePage;
 using PanelForge.Application.Features.Pages.DeletePage;
 using PanelForge.Application.Features.Pages.GetPageById;
+using PanelForge.Application.Features.Pages.GetPageHierarchy;
 using PanelForge.Application.Features.Pages.GetPagesByChapter;
+using PanelForge.Application.Features.Pages.ReorderPage;
 using PanelForge.Application.Features.Pages.UpdateCanvasSettings;
 
 namespace PanelForge.API.Controllers;
@@ -17,6 +20,12 @@ public sealed class PagesController : ControllerBase
     public PagesController(IMediator mediator)
     {
         _mediator = mediator;
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(claim, out var userId) ? userId : Guid.Empty;
     }
 
     /// <summary>
@@ -101,6 +110,53 @@ public sealed class PagesController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/pages/{pageId}/hierarchy
+    /// Lấy toàn bộ cấu trúc phân cấp của trang bao gồm Panels và Elements bên trong.
+    /// </summary>
+    [HttpGet("api/pages/{pageId:guid}/hierarchy")]
+    [ProducesResponseType(typeof(PageContentHierarchyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPageHierarchy(
+        [FromRoute] Guid pageId,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetPageHierarchyQuery(pageId);
+        var result = await _mediator.Send(query, cancellationToken);
+
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/reorder
+    /// Cập nhật đổi thứ tự trang trong chương.
+    /// </summary>
+    [HttpPut("api/pages/{pageId:guid}/reorder")]
+    [ProducesResponseType(typeof(PageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReorderPage(
+        [FromRoute] Guid pageId,
+        [FromBody] ReorderPageRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new ReorderPageCommand(pageId, body.NewPageNumber, GetCurrentUserId());
+        var result = await _mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorMessage?.Contains("không tồn tại") == true)
+                return NotFound(new { error = result.ErrorMessage });
+
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// PUT /api/pages/{pageId}/canvas-settings
     /// Cập nhật thông số khổ giấy / canvas của trang.
     /// </summary>
@@ -136,7 +192,7 @@ public sealed class PagesController : ControllerBase
 
     /// <summary>
     /// DELETE /api/pages/{pageId}
-    /// Xóa một trang truyện khỏi chương.
+    /// Xóa mềm một trang truyện khỏi chương (Soft-delete).
     /// </summary>
     [HttpDelete("api/pages/{pageId:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]

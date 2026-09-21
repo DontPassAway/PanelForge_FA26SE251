@@ -8,5 +8,7 @@ public record LoginRequest(
     string Email,
 
     [Required(ErrorMessage = "Mật khẩu là bắt buộc.")]
-    string Password
+    string Password,
+
+    string? RememberDeviceToken = null
 );
