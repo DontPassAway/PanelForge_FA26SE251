@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using FirebaseAdmin.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -93,7 +93,39 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email và nhập mã PIN để xác thực.");
         }
 
-        // Đăng nhập không rào cản: Cấp thẳng JWT Token nếu đúng Email & Mật khẩu
+        // Nếu người dùng đã bật bảo mật 2FA
+        if (user.TwoFactorEnabled)
+        {
+            var rawToken = rememberDeviceToken ?? request.RememberDeviceToken;
+            if (!string.IsNullOrWhiteSpace(rawToken))
+            {
+                var tokenHash = ComputeTokenHash(rawToken.Trim());
+                var rememberedDevice = await _dbContext.UserRememberedDevices
+                    .FirstOrDefaultAsync(d => d.UserId == user.Id && d.TokenHash == tokenHash, cancellationToken);
+
+                if (rememberedDevice is not null && !rememberedDevice.IsExpired)
+                {
+                    // Thiết bị đã được ghi nhớ hợp lệ trong vòng 30 ngày -> Bỏ qua thử thách 2FA, cấp JWT trực tiếp
+                    var (trustedToken, trustedExpiresAt) = _jwtTokenGenerator.GenerateToken(user);
+                    return new AuthResponse(
+                        Token: trustedToken,
+                        ExpiresAt: trustedExpiresAt,
+                        User: MapUserDto(user),
+                        Message: "Đăng nhập thành công (Thiết bị tin cậy được ghi nhớ)."
+                    );
+                }
+            }
+
+            return new AuthResponse(
+                Token: null,
+                ExpiresAt: null,
+                User: null,
+                RequiresTwoFactor: true,
+                TwoFactorEmail: user.Email,
+                Message: "Yêu cầu xác thực 2FA. Vui lòng nhập mã OTP 6 chữ số từ ứng dụng Authenticator."
+            );
+        }
+
         var (token, expiresAt) = _jwtTokenGenerator.GenerateToken(user);
 
         return new AuthResponse(
@@ -102,6 +134,32 @@ public class AuthService : IAuthService
             User: MapUserDto(user),
             Message: "Đăng nhập thành công."
         );
+    }
+
+    public async Task SendChangePasswordOtpAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null || !user.IsActive)
+        {
+            throw new UnauthorizedAccessException("Người dùng không tồn tại hoặc đã bị vô hiệu hóa.");
+        }
+
+        var changePasswordOtp = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+        user.SetPasswordResetToken(changePasswordOtp, DateTime.UtcNow.AddMinutes(15));
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var subject = "[PanelForge] Mã xác thực OTP thay đổi mật khẩu";
+        var body = $@"
+            <h3>Xin chào {user.FullName},</h3>
+            <p>Chúng tôi nhận được yêu cầu thay đổi mật khẩu cho tài khoản PanelForge của bạn.</p>
+            <p>Mã OTP xác thực thay đổi mật khẩu là: <strong><span style='font-size: 24px; color: #F97316;'>{changePasswordOtp}</span></strong></p>
+            <p>Mã này có hiệu lực trong vòng 15 phút. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+
+        await _emailService.SendEmailAsync(user.Email, subject, body, cancellationToken);
     }
 
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default)
@@ -130,6 +188,19 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
         }
 
+        // Kiểm tra mã OTP gửi về Email
+        if (string.IsNullOrWhiteSpace(request.EmailOtp) ||
+            string.IsNullOrEmpty(user.PasswordResetToken) ||
+            !string.Equals(user.PasswordResetToken, request.EmailOtp.Trim(), StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException("Mã OTP xác thực qua email không chính xác.");
+        }
+
+        if (!user.PasswordResetTokenExpiresAt.HasValue || user.PasswordResetTokenExpiresAt.Value < DateTime.UtcNow)
+        {
+            throw new UnauthorizedAccessException("Mã OTP xác thực qua email đã hết hạn. Vui lòng yêu cầu mã mới.");
+        }
+
         // Chốt chặn bảo mật 2FA (Step-up Authentication) khi Đổi mật khẩu
         if (user.TwoFactorEnabled)
         {
@@ -154,7 +225,7 @@ public class AuthService : IAuthService
         }
 
         var newPasswordHash = _passwordHasher.HashPassword(request.NewPassword);
-        user.UpdatePassword(newPasswordHash);
+        user.ResetPassword(newPasswordHash);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

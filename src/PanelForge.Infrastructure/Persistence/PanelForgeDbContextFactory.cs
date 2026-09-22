@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+ï»¿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
@@ -19,8 +19,7 @@ public sealed class PanelForgeDbContextFactory : IDesignTimeDbContextFactory<Pan
 
         var optionsBuilder = new DbContextOptionsBuilder<PanelForgeDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsql =>
-            npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName))
-            .UseSnakeCaseNamingConvention(); // B?t bu?c ph?i có dòng này ?? design-time sinh code chu?n snake_case
+            npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName));
 
         return new PanelForgeDbContext(optionsBuilder.Options);
     }

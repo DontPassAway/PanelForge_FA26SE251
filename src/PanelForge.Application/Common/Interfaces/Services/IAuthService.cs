@@ -1,4 +1,4 @@
-using PanelForge.Application.DTOs.Auth;
+﻿using PanelForge.Application.DTOs.Auth;
 
 namespace PanelForge.Application.Services;
 
@@ -9,6 +9,7 @@ public interface IAuthService
     Task<AuthResponse> LoginAsync(LoginRequest request, string? rememberDeviceToken = null, CancellationToken cancellationToken = default);
 
     // Quản lý mật khẩu
+    Task SendChangePasswordOtpAsync(Guid userId, CancellationToken cancellationToken = default);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
     Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
