@@ -19,7 +19,8 @@ public sealed class PanelForgeDbContextFactory : IDesignTimeDbContextFactory<Pan
 
         var optionsBuilder = new DbContextOptionsBuilder<PanelForgeDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsql =>
-            npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName));
+            npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName))
+            .UseSnakeCaseNamingConvention(); // B?t bu?c ph?i có dòng này ?? design-time sinh code chu?n snake_case
 
         return new PanelForgeDbContext(optionsBuilder.Options);
     }
