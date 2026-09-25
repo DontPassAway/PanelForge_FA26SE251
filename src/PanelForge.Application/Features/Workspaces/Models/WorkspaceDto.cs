@@ -13,5 +13,6 @@ public record WorkspaceDto(
     DateTime CreatedAt,
     bool IsOwner,
     WorkspaceRole? CurrentUserRole,
-    int MemberCount
+    int MemberCount,
+    int PendingTasks = 0
 );

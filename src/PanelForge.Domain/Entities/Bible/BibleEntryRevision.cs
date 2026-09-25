@@ -15,6 +15,8 @@ public class BibleEntryRevision : BaseEntity
     public Guid? AuthorId { get; private set; }
     public string ContentHash { get; private set; } = default!;
     public Guid? AssociatedChapterId { get; private set; }
+    public int EffectiveFromChapterNumber { get; private set; } = 1;
+    public bool IsInitialVersion { get; private set; } = false;
 
     public BibleEntry BibleEntry { get; private set; } = default!;
 
@@ -27,7 +29,9 @@ public class BibleEntryRevision : BaseEntity
         string snapshotJson,
         string contentHash,
         Guid? authorId = null,
-        Guid? associatedChapterId = null)
+        Guid? associatedChapterId = null,
+        int effectiveFromChapterNumber = 1,
+        bool isInitialVersion = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
@@ -42,6 +46,8 @@ public class BibleEntryRevision : BaseEntity
             ContentHash = contentHash.Trim(),
             AuthorId = authorId,
             AssociatedChapterId = associatedChapterId,
+            EffectiveFromChapterNumber = Math.Max(1, effectiveFromChapterNumber),
+            IsInitialVersion = isInitialVersion,
             CreatedAt = DateTime.UtcNow
         };
     }

@@ -124,20 +124,20 @@ public class PipelineDefinition : BaseEntity
 
         // 1. Khởi tạo 8 Stages
         var sScript = pipeline.AddStage("Script", "script", 1, "#6B7280", WorkspaceRole.Writer, isApprovalGate: false, isInitial: true);
-        var sThumbnail = pipeline.AddStage("Thumbnail", "thumbnail", 2, "#8B5CF6", WorkspaceRole.Penciler);
-        var sPencil = pipeline.AddStage("Pencil", "pencil", 3, "#3B82F6", WorkspaceRole.Penciler);
-        var sInk = pipeline.AddStage("Ink", "ink", 4, "#10B981", WorkspaceRole.Inker);
-        var sColor = pipeline.AddStage("Color", "color", 5, "#F59E0B", WorkspaceRole.Colorist);
+        var sThumbnail = pipeline.AddStage("Thumbnail", "thumbnail", 2, "#8B5CF6", WorkspaceRole.Artist);
+        var sPencil = pipeline.AddStage("Pencil", "pencil", 3, "#3B82F6", WorkspaceRole.Artist);
+        var sInk = pipeline.AddStage("Ink", "ink", 4, "#10B981", WorkspaceRole.Artist);
+        var sColor = pipeline.AddStage("Color", "color", 5, "#F59E0B", WorkspaceRole.Artist);
         var sLetter = pipeline.AddStage("Letter", "letter", 6, "#EC4899", WorkspaceRole.Letterer);
-        var sReview = pipeline.AddStage("Review", "review", 7, "#EF4444", WorkspaceRole.Reviewer, isApprovalGate: true);
+        var sReview = pipeline.AddStage("Review", "review", 7, "#EF4444", WorkspaceRole.Editor, isApprovalGate: true);
         var sApproved = pipeline.AddStage("Approved", "approved", 8, "#059669", WorkspaceRole.Editor, isApprovalGate: false, isInitial: false, isTerminal: true);
 
         // 2. Thiết lập các bước chuyển tiếp hợp lệ (Forward Transitions)
         pipeline.AddTransition(sScript.Id, sThumbnail.Id, "Script Completed", WorkspaceRole.Writer);
-        pipeline.AddTransition(sThumbnail.Id, sPencil.Id, "Layout Confirmed", WorkspaceRole.Penciler);
-        pipeline.AddTransition(sPencil.Id, sInk.Id, "Pencils Finished", WorkspaceRole.Penciler);
-        pipeline.AddTransition(sInk.Id, sColor.Id, "Inks Finished", WorkspaceRole.Inker);
-        pipeline.AddTransition(sColor.Id, sLetter.Id, "Flats & Colors Finished", WorkspaceRole.Colorist);
+        pipeline.AddTransition(sThumbnail.Id, sPencil.Id, "Layout Confirmed", WorkspaceRole.Artist);
+        pipeline.AddTransition(sPencil.Id, sInk.Id, "Pencils Finished", WorkspaceRole.Artist);
+        pipeline.AddTransition(sInk.Id, sColor.Id, "Inks Finished", WorkspaceRole.Artist);
+        pipeline.AddTransition(sColor.Id, sLetter.Id, "Flats & Colors Finished", WorkspaceRole.Artist);
         pipeline.AddTransition(sLetter.Id, sReview.Id, "Lettering Complete, Submit for Review", WorkspaceRole.Letterer);
 
         // 3. Thiết lập Guarded Approval Transition (Chỉ Editor hoặc Producer mới được duyệt)

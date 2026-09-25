@@ -56,6 +56,20 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("associated_chapter_id")
                .HasColumnType("uuid");
 
+        builder.Property(r => r.EffectiveFromChapterNumber)
+               .HasColumnName("effective_from_chapter_number")
+               .HasColumnType("integer")
+               .HasDefaultValue(1)
+               .IsRequired();
+        builder.HasIndex(r => r.EffectiveFromChapterNumber)
+               .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
+
+        builder.Property(r => r.IsInitialVersion)
+               .HasColumnName("is_initial_version")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
         builder.Property(r => r.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

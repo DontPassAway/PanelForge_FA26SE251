@@ -18,8 +18,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<ExternalPreviewLink> ExternalPreviewLinks => Set<ExternalPreviewLink>();
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
+    public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesPreset> SeriesPresets => Set<SeriesPreset>();
     public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();
     public DbSet<BibleEntry> BibleEntries => Set<BibleEntry>();
     public DbSet<BibleEntryRevision> BibleEntryRevisions => Set<BibleEntryRevision>();
@@ -67,6 +70,44 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
                     auditableEntity.UpdatedAt = now;
                 }
             }
+        }
+
+        // 3. Tự động ghi vết kiểm toán hệ thống (Audit Trail - BR-18, UC-15)
+        var auditEntries = new List<AuditLog>();
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.Entity is AuditLog || entry.State == EntityState.Detached || entry.State == EntityState.Unchanged)
+                continue;
+
+            var entityName = entry.Entity.GetType().Name;
+            var action = entry.State switch
+            {
+                EntityState.Added => "CREATE",
+                EntityState.Modified => "UPDATE",
+                EntityState.Deleted => "DELETE",
+                _ => entry.State.ToString()
+            };
+
+            var idProp = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "Id");
+            var entityId = idProp?.CurrentValue?.ToString();
+
+            Guid? wsId = null;
+            var wsProp = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "WorkspaceId");
+            if (wsProp?.CurrentValue is Guid g) wsId = g;
+
+            var log = AuditLog.Create(
+                action: $"{action}_{entityName.ToUpperInvariant()}",
+                entityName: entityName,
+                entityId: entityId,
+                workspaceId: wsId,
+                details: $"Audit Trail: {action} {entityName} (ID: {entityId})"
+            );
+            auditEntries.Add(log);
+        }
+
+        if (auditEntries.Count > 0)
+        {
+            AuditLogs.AddRange(auditEntries);
         }
 
         return await base.SaveChangesAsync(cancellationToken);

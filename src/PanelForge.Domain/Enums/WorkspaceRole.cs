@@ -4,10 +4,7 @@ public enum WorkspaceRole
 {
     Producer,
     Writer,
-    Penciler,
-    Inker,
-    Colorist,
+    Artist,
     Letterer,
-    Editor,
-    Reviewer
+    Editor
 }

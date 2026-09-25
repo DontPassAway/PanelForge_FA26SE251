@@ -74,9 +74,8 @@ public class WorkflowStateMachineTests
         var sApproved = pipeline.Stages.First(s => s.Slug == "approved");
 
         // Act & Assert
-        // Penciler/Inker/Letterer CANNOT approve submission
-        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Penciler).Should().BeFalse();
-        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Inker).Should().BeFalse();
+        // Artist/Letterer CANNOT approve submission
+        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Artist).Should().BeFalse();
         pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Letterer).Should().BeFalse();
     }
 
@@ -164,7 +163,7 @@ public class WorkflowStateMachineTests
             fromStageId,
             toStageId,
             userId,
-            "Inks approved by Lead Inker");
+            "Inks approved by Editor");
 
         // Assert
         log.EntityId.Should().Be(panelId);
@@ -172,6 +171,6 @@ public class WorkflowStateMachineTests
         log.FromStageId.Should().Be(fromStageId);
         log.ToStageId.Should().Be(toStageId);
         log.TriggeredByUserId.Should().Be(userId);
-        log.Comment.Should().Be("Inks approved by Lead Inker");
+        log.Comment.Should().Be("Inks approved by Editor");
     }
 }
