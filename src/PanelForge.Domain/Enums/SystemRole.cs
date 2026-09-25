@@ -12,5 +12,6 @@ namespace PanelForge.Domain.Enums;
 public enum SystemRole
 {
     User,
-    Admin
+    Admin,
+    Producer
 }

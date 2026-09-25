@@ -5,5 +5,5 @@ namespace PanelForge.Application.DTOs.Auth;
 
 public record AssignRoleRequest(
     [Required(ErrorMessage = "UserId là bắt buộc.")] Guid UserId,
-    [Required(ErrorMessage = "Role là bắt buộc.")] SystemRole NewRole
+    [Required(ErrorMessage = "Role là bắt buộc.")] string NewRole
 );

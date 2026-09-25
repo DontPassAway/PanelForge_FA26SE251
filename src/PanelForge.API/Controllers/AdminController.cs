@@ -63,6 +63,7 @@ public class AdminController : ControllerBase
                 u.FullName,
                 u.PhoneNumber,
                 Role = u.Role.ToString(),
+                u.CanCreateStudio,
                 u.IsActive,
                 u.IsEmailConfirmed,
                 u.TwoFactorEnabled,
@@ -79,8 +80,13 @@ public class AdminController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// POST /api/admin/assign-producer (và POST /api/admin/assign-role)
+    /// Gán vai trò Producer / SystemRole trực tiếp trong Database cho tài khoản.
+    /// </summary>
+    [HttpPost("assign-producer")]
     [HttpPost("assign-role")]
-    public async Task<IActionResult> AssignRole(
+    public async Task<IActionResult> AssignProducer(
         [FromBody] AssignRoleRequest request,
         CancellationToken cancellationToken)
     {
@@ -92,15 +98,48 @@ public class AdminController : ControllerBase
             return NotFound(new { message = "Không tìm thấy người dùng." });
         }
 
-        user.AssignSystemRole(request.NewRole);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var rawRole = request.NewRole?.Trim() ?? string.Empty;
 
-        return Ok(new
+        if (string.Equals(rawRole, "Producer", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(rawRole, "GrantProducer", StringComparison.OrdinalIgnoreCase))
         {
-            message = $"Đã cập nhật vai trò của người dùng {user.Email} thành {request.NewRole}.",
-            userId = user.Id,
-            newRole = user.Role.ToString()
-        });
+            if (user.Role == SystemRole.Admin)
+            {
+                return BadRequest(new { message = "Không thể cấp quyền Producer cho tài khoản Administrator (BR-07, BR-22)." });
+            }
+
+            user.AssignSystemRole(SystemRole.Producer);
+            user.GrantStudioCreation();
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                message = $"Đã gán vai trò Producer thành công cho tài khoản {user.Email}.",
+                userId = user.Id,
+                newRole = "Producer",
+                canCreateStudio = user.CanCreateStudio
+            });
+        }
+
+        if (Enum.TryParse<SystemRole>(rawRole, true, out var parsedSystemRole))
+        {
+            user.AssignSystemRole(parsedSystemRole);
+            if (parsedSystemRole == SystemRole.User)
+            {
+                user.RevokeStudioCreation();
+            }
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                message = $"Đã cập nhật vai trò của người dùng {user.Email} thành {parsedSystemRole}.",
+                userId = user.Id,
+                newRole = parsedSystemRole.ToString(),
+                canCreateStudio = user.CanCreateStudio
+            });
+        }
+
+        return BadRequest(new { message = $"Vai trò '{request.NewRole}' không hợp lệ. Hợp lệ: Producer, Admin, User." });
     }
 
     /// <summary>
