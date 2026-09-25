@@ -1,15 +1,16 @@
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.Application.Features.ConsistencyRules.Commands;
+using PanelForge.Application.Features.ConsistencyRules.Queries;
 using PanelForge.Application.Features.Series.Commands.CreateSeries;
 using PanelForge.Application.Features.Series.Commands.DeleteSeries;
 using PanelForge.Application.Features.Series.Commands.UpdateSeries;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
-using PanelForge.Application.Features.SeriesPresets.Commands;
-using PanelForge.Application.Features.SeriesPresets.Models;
-using PanelForge.Application.Features.SeriesPresets.Queries;
+using PanelForge.Application.Features.TypographyPresets.Commands;
+using PanelForge.Application.Features.TypographyPresets.Queries;
 
 namespace PanelForge.API.Controllers;
 
@@ -30,9 +31,9 @@ public sealed class SeriesController : ControllerBase
     }
 
     /// <summary>
-    /// <summary>
     /// POST /api/workspaces/{workspaceId}/series
-    /// Tạo dự án truyện tranh mới trong Workspace (UC-03).
+    /// Tạo dự án truyện tranh mới trong Workspace (UC-03). 
+    /// Task 7: Clones stages from PipelineTemplate (DB-backed).
     /// </summary>
     [HttpPost("api/workspaces/{workspaceId:guid}/series")]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status201Created)]
@@ -49,7 +50,7 @@ public sealed class SeriesController : ControllerBase
             Title: body.Title,
             Synopsis: body.Synopsis,
             ReadingDirection: body.ReadingDirection,
-            PipelineDefinitionId: body.PipelineDefinitionId,
+            PipelineTemplateId: body.PipelineDefinitionId,  // now maps to template
             Genre: body.Genre,
             Format: body.Format,
             ReleaseScheduleJson: body.ReleaseScheduleJson
@@ -69,7 +70,6 @@ public sealed class SeriesController : ControllerBase
 
     /// <summary>
     /// GET /api/workspaces/{workspaceId}/series
-    /// Lấy danh sách Series trong Workspace, hỗ trợ tìm kiếm.
     /// </summary>
     [HttpGet("api/workspaces/{workspaceId:guid}/series")]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesDto>), StatusCodes.Status200OK)]
@@ -85,7 +85,6 @@ public sealed class SeriesController : ControllerBase
 
     /// <summary>
     /// GET /api/series/{seriesId}
-    /// Lấy thông tin chi tiết của một Series kèm danh sách Chapter.
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}")]
     [ProducesResponseType(typeof(SeriesDetailDto), StatusCodes.Status200OK)]
@@ -105,7 +104,6 @@ public sealed class SeriesController : ControllerBase
 
     /// <summary>
     /// PUT /api/series/{seriesId}
-    /// Cập nhật thông tin Series (UC-03).
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}")]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status200OK)]
@@ -141,39 +139,7 @@ public sealed class SeriesController : ControllerBase
     }
 
     /// <summary>
-    /// GET /api/series/{seriesId}/presets
-    /// Lấy cấu hình Typography Presets và Consistency Rules của Series (NFR-08).
-    /// </summary>
-    [HttpGet("api/series/{seriesId:guid}/presets")]
-    [ProducesResponseType(typeof(SeriesPresetDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetSeriesPresets(
-        [FromRoute] Guid seriesId,
-        CancellationToken cancellationToken)
-    {
-        var query = new GetSeriesPresetQuery(seriesId);
-        var result = await _mediator.Send(query, cancellationToken);
-        return Ok(result.Value);
-    }
-
-    /// <summary>
-    /// PUT /api/series/{seriesId}/presets
-    /// Cập nhật Typography Presets và Consistency Rules qua giao diện (CF1 Step 7, NFR-08).
-    /// </summary>
-    [HttpPut("api/series/{seriesId:guid}/presets")]
-    [ProducesResponseType(typeof(SeriesPresetDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpdateSeriesPresets(
-        [FromRoute] Guid seriesId,
-        [FromBody] UpdateSeriesPresetRequest body,
-        CancellationToken cancellationToken)
-    {
-        var command = new UpdateSeriesPresetCommand(seriesId, body.TypographyPresetsJson, body.ConsistencyRulesJson);
-        var result = await _mediator.Send(command, cancellationToken);
-        return Ok(result.Value);
-    }
-
-    /// <summary>
     /// DELETE /api/series/{seriesId}
-    /// Xóa mềm một Series (Soft-delete).
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -189,5 +155,180 @@ public sealed class SeriesController : ControllerBase
             return NotFound(new { error = result.ErrorMessage });
 
         return Ok(new { message = $"Series {seriesId} đã được xóa thành công." });
+    }
+
+    // ─── Task 8: Typography Presets (replaces old SeriesPreset JSON endpoint) ──
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/presets
+    /// Lấy danh sách TypographyPresets của Series (Task 8, NFR-08).
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/presets")]
+    [ProducesResponseType(typeof(IReadOnlyList<TypographyPresetDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTypographyPresets(
+        [FromRoute] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetTypographyPresetsQuery(seriesId), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/presets
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/presets")]
+    [ProducesResponseType(typeof(TypographyPresetDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateTypographyPreset(
+        [FromRoute] Guid seriesId,
+        [FromBody] CreateTypographyPresetRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new CreateTypographyPresetCommand(
+            SeriesId: seriesId,
+            RequestingUserId: GetCurrentUserId(),
+            Name: body.Name,
+            FontFamily: body.FontFamily,
+            FontSize: body.FontSize,
+            FontWeight: body.FontWeight,
+            FontStyle: body.FontStyle,
+            LineHeight: body.LineHeight,
+            LetterSpacing: body.LetterSpacing,
+            TextAlign: body.TextAlign,
+            UsageType: body.UsageType,
+            IsDefault: body.IsDefault
+        );
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/presets/{presetId}
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/presets/{presetId:guid}")]
+    [ProducesResponseType(typeof(TypographyPresetDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateTypographyPreset(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid presetId,
+        [FromBody] UpdateTypographyPresetRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateTypographyPresetCommand(
+            PresetId: presetId,
+            SeriesId: seriesId,
+            RequestingUserId: GetCurrentUserId(),
+            Name: body.Name,
+            FontFamily: body.FontFamily,
+            FontSize: body.FontSize,
+            FontWeight: body.FontWeight,
+            FontStyle: body.FontStyle,
+            LineHeight: body.LineHeight,
+            LetterSpacing: body.LetterSpacing,
+            TextAlign: body.TextAlign,
+            UsageType: body.UsageType,
+            IsDefault: body.IsDefault
+        );
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// DELETE /api/series/{seriesId}/presets/{presetId}
+    /// </summary>
+    [HttpDelete("api/series/{seriesId:guid}/presets/{presetId:guid}")]
+    public async Task<IActionResult> DeleteTypographyPreset(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid presetId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new DeleteTypographyPresetCommand(presetId, seriesId, GetCurrentUserId()), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return Ok(new { message = result.Value });
+    }
+
+    // ─── Task 9: Consistency Rules (replaces old SeriesPreset JSON endpoint) ───
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/consistency-rules
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/consistency-rules")]
+    [ProducesResponseType(typeof(IReadOnlyList<ConsistencyRuleDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetConsistencyRules(
+        [FromRoute] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetConsistencyRulesQuery(seriesId), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/consistency-rules
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/consistency-rules")]
+    [ProducesResponseType(typeof(ConsistencyRuleDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateConsistencyRule(
+        [FromRoute] Guid seriesId,
+        [FromBody] CreateConsistencyRuleRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new CreateConsistencyRuleCommand(
+            SeriesId: seriesId,
+            RequestingUserId: GetCurrentUserId(),
+            Name: body.Name,
+            RuleType: body.RuleType,
+            Description: body.Description,
+            IsEnabled: body.IsEnabled,
+            Pattern: body.Pattern,
+            Severity: body.Severity,
+            ConfigurationJson: body.ConfigurationJson
+        );
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/consistency-rules/{ruleId}
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
+    [ProducesResponseType(typeof(ConsistencyRuleDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateConsistencyRule(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid ruleId,
+        [FromBody] UpdateConsistencyRuleRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateConsistencyRuleCommand(
+            RuleId: ruleId,
+            SeriesId: seriesId,
+            RequestingUserId: GetCurrentUserId(),
+            Name: body.Name,
+            RuleType: body.RuleType,
+            Description: body.Description,
+            IsEnabled: body.IsEnabled,
+            Pattern: body.Pattern,
+            Severity: body.Severity,
+            ConfigurationJson: body.ConfigurationJson
+        );
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// DELETE /api/series/{seriesId}/consistency-rules/{ruleId}
+    /// </summary>
+    [HttpDelete("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
+    public async Task<IActionResult> DeleteConsistencyRule(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid ruleId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new DeleteConsistencyRuleCommand(ruleId, seriesId, GetCurrentUserId()), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { error = result.ErrorMessage });
+        return Ok(new { message = result.Value });
     }
 }

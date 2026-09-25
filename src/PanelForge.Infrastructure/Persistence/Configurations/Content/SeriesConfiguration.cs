@@ -83,9 +83,16 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasForeignKey<PipelineDefinition>(p => p.SeriesId)
                .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasOne(s => s.Preset)
+        // Task 8: Typography Presets — 1:N
+        builder.HasMany(s => s.TypographyPresets)
                .WithOne(p => p.Series)
-               .HasForeignKey<SeriesPreset>(p => p.SeriesId)
+               .HasForeignKey(p => p.SeriesId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        // Task 9: Consistency Rules — 1:N
+        builder.HasMany(s => s.ConsistencyRules)
+               .WithOne(r => r.Series)
+               .HasForeignKey(r => r.SeriesId)
                .OnDelete(DeleteBehavior.Cascade);
     }
 }

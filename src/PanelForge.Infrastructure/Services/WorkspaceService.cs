@@ -32,10 +32,18 @@ public class WorkspaceService : IWorkspaceService
             throw new UnauthorizedAccessException("Người dùng không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
+        // BR-22: Chỉ User với CanCreateStudio = true mới được tạo Workspace.
+        // Administrator không tạo Studio content (BR-07).
+        if (!owner.CanCreateStudio)
+        {
+            throw new UnauthorizedAccessException(
+                "Bạn không có quyền tạo Studio. Vui lòng yêu cầu Administrator cấp quyền CanCreateStudio.");
+        }
+
         var workspace = StudioWorkspace.Create(request.Name, ownerId, request.StorageQuotaBytes);
         _dbContext.StudioWorkspaces.Add(workspace);
 
-        // Tự động thêm Owner làm thành viên với vai trò Producer
+        // Tự động thêm Owner làm thành viên với vai trò Producer (BR-22, atomically)
         var ownerMember = WorkspaceMember.Create(workspace.Id, ownerId, WorkspaceRole.Producer);
         _dbContext.WorkspaceMembers.Add(ownerMember);
 
@@ -55,6 +63,7 @@ public class WorkspaceService : IWorkspaceService
             MemberCount: 1
         );
     }
+
 
     public async Task<IEnumerable<WorkspaceDto>> GetUserWorkspacesAsync(Guid userId, CancellationToken cancellationToken = default)
     {

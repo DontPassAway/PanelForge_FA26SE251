@@ -1,7 +1,9 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.DTOs.Auth;
+using PanelForge.Application.Features.Auth.Queries;
 using PanelForge.Application.Services;
 
 namespace PanelForge.API.Controllers;
@@ -11,10 +13,12 @@ namespace PanelForge.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IMediator _mediator;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IMediator mediator)
     {
         _authService = authService;
+        _mediator = mediator;
     }
 
     [HttpPost("register")]
@@ -284,5 +288,26 @@ public class AuthController : ControllerBase
         Response.Cookies.Delete("pf_remember_device");
 
         return Ok(new { message = "Thiết bị này đã được xóa khỏi danh sách thiết bị tin cậy." });
+    }
+
+    /// <summary>
+    /// GET /api/auth/me/landing-context
+    /// BR-23: Returns the authenticated user's system role, CanCreateStudio, workspace memberships
+    /// and a suggested landing screen (AdminDashboard|YourWorkspaces|StudioCreation|PublicCatalog).
+    /// UserId is always resolved from the JWT token, never from the request body.
+    /// </summary>
+    [Authorize]
+    [HttpGet("me/landing-context")]
+    public async Task<IActionResult> GetLandingContext(CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+
+        var result = await _mediator.Send(new GetLandingContextQuery(userId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
     }
 }

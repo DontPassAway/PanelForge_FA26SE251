@@ -98,6 +98,12 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasColumnName("two_factor_secret")
                .HasColumnType("varchar(255)");
 
+        // BR-22: Studio creation permission flag (Admin-granted)
+        builder.Property(u => u.CanCreateStudio)
+               .HasColumnName("can_create_studio")
+               .HasDefaultValue(false)
+               .IsRequired();
+
         builder.HasMany(u => u.OwnedWorkspaces)
                .WithOne(w => w.Owner)
                .HasForeignKey(w => w.OwnerId)
