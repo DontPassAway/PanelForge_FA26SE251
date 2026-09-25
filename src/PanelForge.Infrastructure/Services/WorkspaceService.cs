@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.DTOs.Workspaces;
 using PanelForge.Application.Interfaces;
+using PanelForge.Application.Interfaces.Authentication;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Enums;
@@ -11,13 +12,16 @@ public class WorkspaceService : IWorkspaceService
 {
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IWorkspaceAuthorizationService _authorizationService;
+    private readonly IPasswordHasher _passwordHasher;
 
     public WorkspaceService(
         IPanelForgeDbContext dbContext,
-        IWorkspaceAuthorizationService authorizationService)
+        IWorkspaceAuthorizationService authorizationService,
+        IPasswordHasher passwordHasher)
     {
         _dbContext = dbContext;
         _authorizationService = authorizationService;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<WorkspaceDto> CreateWorkspaceAsync(Guid ownerId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
@@ -56,16 +60,24 @@ public class WorkspaceService : IWorkspaceService
     {
         var workspaces = await _dbContext.StudioWorkspaces
             .Include(w => w.Owner)
-            .Include(w => w.Members)
-            .Where(w => w.OwnerId == userId || w.Members.Any(m => m.UserId == userId))
+            .Include(w => w.Members.Where(m => !m.IsDeleted))
+            .Where(w => !w.IsDeleted && (w.OwnerId == userId || w.Members.Any(m => m.UserId == userId && !m.IsDeleted)))
             .OrderByDescending(w => w.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        var workspaceIds = workspaces.Select(w => w.Id).ToList();
+        var pendingTasksCount = await _dbContext.Assignments
+            .Where(a => !a.IsDeleted && a.AssigneeUserId == userId && a.Status != AssignmentStatus.Approved && workspaceIds.Contains(a.Series.WorkspaceId))
+            .GroupBy(a => a.Series.WorkspaceId)
+            .Select(g => new { WorkspaceId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.WorkspaceId, x => x.Count, cancellationToken);
 
         return workspaces.Select(w =>
         {
             var isOwner = w.OwnerId == userId;
             var currentMember = w.Members.FirstOrDefault(m => m.UserId == userId);
             var role = isOwner ? WorkspaceRole.Producer : currentMember?.Role;
+            var pendingCount = pendingTasksCount.TryGetValue(w.Id, out var count) ? count : 0;
 
             return new WorkspaceDto(
                 Id: w.Id,
@@ -78,7 +90,8 @@ public class WorkspaceService : IWorkspaceService
                 CreatedAt: w.CreatedAt,
                 IsOwner: isOwner,
                 CurrentUserRole: role,
-                MemberCount: w.Members.Count
+                MemberCount: w.Members.Count(m => !m.IsDeleted),
+                PendingTasks: pendingCount
             );
         });
     }
@@ -87,8 +100,8 @@ public class WorkspaceService : IWorkspaceService
     {
         var workspace = await _dbContext.StudioWorkspaces
             .Include(w => w.Owner)
-            .Include(w => w.Members)
-            .FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
+            .Include(w => w.Members.Where(m => !m.IsDeleted))
+            .FirstOrDefaultAsync(w => w.Id == workspaceId && !w.IsDeleted, cancellationToken);
 
         if (workspace is null)
         {
@@ -100,6 +113,9 @@ public class WorkspaceService : IWorkspaceService
         {
             throw new UnauthorizedAccessException("Bạn không có quyền truy cập Workspace này.");
         }
+
+        var pendingCount = await _dbContext.Assignments
+            .CountAsync(a => !a.IsDeleted && a.AssigneeUserId == userId && a.Status != AssignmentStatus.Approved && a.Series.WorkspaceId == workspaceId, cancellationToken);
 
         var isOwner = workspace.OwnerId == userId;
         var currentMember = workspace.Members.FirstOrDefault(m => m.UserId == userId);
@@ -116,7 +132,8 @@ public class WorkspaceService : IWorkspaceService
             CreatedAt: workspace.CreatedAt,
             IsOwner: isOwner,
             CurrentUserRole: role,
-            MemberCount: workspace.Members.Count
+            MemberCount: workspace.Members.Count(m => !m.IsDeleted),
+            PendingTasks: pendingCount
         );
     }
 
@@ -239,9 +256,22 @@ public class WorkspaceService : IWorkspaceService
         var targetUser = await _dbContext.Users
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
-        if (targetUser is null || !targetUser.IsActive)
+        if (targetUser is null)
         {
-            throw new ArgumentException($"Không tìm thấy tài khoản người dùng hoạt động với email '{request.Email}'.");
+            var defaultName = normalizedEmail.Split('@')[0];
+            var passwordHash = _passwordHasher.HashPassword("PanelForge@2026");
+            targetUser = User.Create(
+                email: normalizedEmail,
+                fullName: defaultName,
+                passwordHash: passwordHash,
+                role: SystemRole.User);
+            targetUser.ConfirmEmail();
+            _dbContext.Users.Add(targetUser);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else if (!targetUser.IsActive)
+        {
+            throw new ArgumentException($"Tài khoản người dùng với email '{request.Email}' hiện đang bị vô hiệu hóa.");
         }
 
         var isAlreadyMember = await _dbContext.WorkspaceMembers

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Moq;
@@ -196,7 +196,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactor()
+    public async Task LoginAsync_WhenTwoFactorEnabled_AndNoRememberToken_ShouldRequireTwoFactor()
     {
         // Arrange
         var user = User.Create("2fa@example.com", "2FA User", "hashed_password");
@@ -208,18 +208,15 @@ public class AuthServiceTests
         _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
                            .Returns(true);
 
-        var fakeExpiry = DateTime.UtcNow.AddHours(24);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user))
-                              .Returns(("frictionless_jwt_token", fakeExpiry));
-
         var request = new LoginRequest("2fa@example.com", "CorrectPassword");
 
         // Act
         var result = await _service.LoginAsync(request);
 
         // Assert
-        result.Token.Should().Be("frictionless_jwt_token");
-        result.RequiresTwoFactor.Should().BeFalse();
+        result.Token.Should().BeNull();
+        result.RequiresTwoFactor.Should().BeTrue();
+        result.TwoFactorEmail.Should().Be("2fa@example.com");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -231,6 +228,7 @@ public class AuthServiceTests
     {
         // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
 
         _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash"))
@@ -244,7 +242,8 @@ public class AuthServiceTests
         {
             CurrentPassword = "OldPassword123!",
             NewPassword = "NewPassword123!",
-            ConfirmPassword = "NewPassword123!"
+            ConfirmPassword = "NewPassword123!",
+            EmailOtp = "123456"
         };
 
         // Act
@@ -503,28 +502,33 @@ public class AuthServiceTests
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_ShouldIssueTokenDirectlyWithoutTwoFactorChallenge()
+    public async Task LoginAsync_WhenTwoFactorEnabled_AndDeviceRemembered_ShouldIssueTokenDirectly()
     {
-        // Arrange: Nguyên tắc Đăng nhập không rào cản (Frictionless Login)
+        // Arrange
         var user = User.Create("user@example.com", "Test User", "hashed_pwd");
         user.ConfirmEmail();
         user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
         user.EnableTwoFactor();
         SetupUsers(new List<User> { user });
 
-        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("mock-jwt-token", DateTime.UtcNow.AddDays(7)));
+        var plainToken = "sample_remember_device_token";
+        var tokenHash = HashToken(plainToken);
+        var device = UserRememberedDevice.Create(user.Id, tokenHash, DateTime.UtcNow.AddDays(30), "My PC");
+        SetupRememberedDevices(new List<UserRememberedDevice> { device });
 
-        var request = new LoginRequest("user@example.com", "Password123!");
+        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("trusted-jwt-token", DateTime.UtcNow.AddDays(7)));
+
+        var request = new LoginRequest("user@example.com", "Password123!", RememberDeviceToken: plainToken);
 
         // Act
         var result = await _service.LoginAsync(request);
 
-        // Assert: Luôn xả thẳng token, không yêu cầu 2FA
+        // Assert
         result.Should().NotBeNull();
         result.RequiresTwoFactor.Should().BeFalse();
-        result.Token.Should().Be("mock-jwt-token");
-        result.Message.Should().Be("Đăng nhập thành công.");
+        result.Token.Should().Be("trusted-jwt-token");
+        result.Message.Should().Contain("Thiết bị tin cậy");
     }
 
     [Fact]

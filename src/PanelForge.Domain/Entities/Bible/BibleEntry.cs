@@ -87,12 +87,14 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddRevision(
+    public BibleEntryRevision AddRevision(
         string summary,
         string snapshotJson,
         string contentHash,
         Guid? authorId = null,
-        Guid? associatedChapterId = null)
+        Guid? associatedChapterId = null,
+        int effectiveFromChapterNumber = 1,
+        bool isInitialVersion = false)
     {
         var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
         var revision = BibleEntryRevision.Create(
@@ -102,9 +104,12 @@ public class BibleEntry : BaseEntity
             snapshotJson,
             contentHash,
             authorId,
-            associatedChapterId);
+            associatedChapterId,
+            effectiveFromChapterNumber,
+            isInitialVersion);
 
         Revisions.Add(revision);
         UpdatedAt = DateTime.UtcNow;
+        return revision;
     }
 }

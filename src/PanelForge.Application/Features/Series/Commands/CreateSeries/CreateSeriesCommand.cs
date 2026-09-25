@@ -7,6 +7,8 @@ using PanelForge.Domain.Entities.Bible;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 using PanelForge.Domain.Enums;
 
+using PanelForge.Domain.Entities.Content;
+
 namespace PanelForge.Application.Features.Series.Commands.CreateSeries;
 
 public sealed record CreateSeriesCommand(
@@ -15,7 +17,10 @@ public sealed record CreateSeriesCommand(
     string Title,
     string? Synopsis,
     ReadingDirection ReadingDirection,
-    Guid? PipelineDefinitionId
+    Guid? PipelineDefinitionId,
+    string Genre = "Action",
+    string Format = "Manga",
+    string? ReleaseScheduleJson = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCommand, Result<SeriesDto>>
@@ -44,7 +49,10 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
                 workspaceId: command.WorkspaceId,
                 title: command.Title,
                 readingDirection: command.ReadingDirection,
-                synopsis: command.Synopsis
+                synopsis: command.Synopsis,
+                genre: command.Genre,
+                format: command.Format,
+                releaseScheduleJson: command.ReleaseScheduleJson
             );
 
             series.CreatedBy = command.UserId.ToString();
@@ -59,12 +67,17 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             return Result<SeriesDto>.Failure(ex.Message);
         }
 
-        // 3. Khởi tạo mặc định SeriesBible cho bộ truyện mới
+        // 3. Khởi tạo mặc định SeriesBible cho bộ truyện mới (CF1 Step 6)
         var bible = SeriesBible.Create(series.Id, command.WorkspaceId, $"{series.Title} - Bible");
         series.AttachBible(bible);
 
+        // 4. Khởi tạo mặc định Typography Presets & Consistency Rules (CF1 Step 7, NFR-08)
+        var preset = SeriesPreset.Create(series.Id);
+        series.AttachPreset(preset);
+
         _dbContext.Series.Add(series);
         _dbContext.SeriesBibles.Add(bible);
+        _dbContext.SeriesPresets?.Add(preset);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -75,6 +88,9 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             Synopsis: series.Synopsis,
             ReadingDirection: series.ReadingDirection,
             PipelineDefinitionId: series.PipelineDefinitionId,
+            Genre: series.Genre,
+            Format: series.Format,
+            ReleaseScheduleJson: series.ReleaseScheduleJson,
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,

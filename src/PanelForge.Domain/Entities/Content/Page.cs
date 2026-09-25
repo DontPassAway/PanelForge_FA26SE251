@@ -41,7 +41,7 @@ public sealed class Page : AggregateRoot
     public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
 
     // Constructor rỗng bắt buộc để Marten instantiate khi replay stream
-    private Page() { }
+    internal Page() { }
 
     // ── Factory method ──────────────────────────────────────────────────────
     public static Page CreateNew(
@@ -187,7 +187,7 @@ public sealed class Page : AggregateRoot
         }
     }
 
-    private void Apply(PageCreatedEvent e)
+    internal void Apply(PageCreatedEvent e)
     {
         Id           = e.PageId;
         ChapterId    = e.ChapterId;
@@ -199,7 +199,7 @@ public sealed class Page : AggregateRoot
         SceneId      = e.SceneId;
     }
 
-    private void Apply(PageCanvasUpdatedEvent e)
+    internal void Apply(PageCanvasUpdatedEvent e)
     {
         WidthPx      = e.WidthPx;
         HeightPx     = e.HeightPx;
@@ -207,12 +207,12 @@ public sealed class Page : AggregateRoot
         LayoutFormat = e.LayoutFormat;
     }
 
-    private void Apply(PageReorderedEvent e)
+    internal void Apply(PageReorderedEvent e)
     {
         PageNumber = e.NewPageNumber;
     }
 
-    private void Apply(ElementAddedEvent e)
+    internal void Apply(ElementAddedEvent e)
     {
         _elements[e.ElementId] = new ElementState
         {
@@ -229,7 +229,7 @@ public sealed class Page : AggregateRoot
         };
     }
 
-    private void Apply(ElementMovedEvent e)
+    internal void Apply(ElementMovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.X      = e.NewX;
@@ -238,7 +238,7 @@ public sealed class Page : AggregateRoot
         element.Height = e.NewHeight;
     }
 
-    private void Apply(ElementRemovedEvent e)
+    internal void Apply(ElementRemovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.IsRemoved = true; // Soft Delete — record vẫn tồn tại trong stream

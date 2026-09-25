@@ -133,7 +133,8 @@ public class StudioWorkspaceTests
         // Assert
         user.Role.Should().Be(SystemRole.Admin);
 
-        user.AssignSystemRole(SystemRole.Moderator);
-        user.Role.Should().Be(SystemRole.Moderator);
+        // Gán lại về User (platform default)
+        user.AssignSystemRole(SystemRole.User);
+        user.Role.Should().Be(SystemRole.User);
     }
 }

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.DTOs.Auth;
@@ -40,7 +40,11 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var response = await _authService.LoginAsync(request, cancellationToken: cancellationToken);
+            var rememberDeviceToken = Request.Cookies["pf_remember_device"]
+                ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault()
+                ?? request.RememberDeviceToken;
+
+            var response = await _authService.LoginAsync(request, rememberDeviceToken, cancellationToken: cancellationToken);
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
@@ -77,6 +81,31 @@ public class AuthController : ControllerBase
             FullName = name,
             Role = role
         });
+    }
+
+    [Authorize]
+    [HttpPost("send-change-password-otp")]
+    public async Task<IActionResult> SendChangePasswordOtp(CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!Guid.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+        }
+
+        try
+        {
+            await _authService.SendChangePasswordOtpAsync(userId, cancellationToken);
+            return Ok(new { message = "Mã xác thực OTP đã được gửi đến email của bạn." });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [Authorize]

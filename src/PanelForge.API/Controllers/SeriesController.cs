@@ -7,6 +7,9 @@ using PanelForge.Application.Features.Series.Commands.UpdateSeries;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
+using PanelForge.Application.Features.SeriesPresets.Commands;
+using PanelForge.Application.Features.SeriesPresets.Models;
+using PanelForge.Application.Features.SeriesPresets.Queries;
 
 namespace PanelForge.API.Controllers;
 
@@ -27,8 +30,9 @@ public sealed class SeriesController : ControllerBase
     }
 
     /// <summary>
+    /// <summary>
     /// POST /api/workspaces/{workspaceId}/series
-    /// Tạo dự án truyện tranh mới trong Workspace.
+    /// Tạo dự án truyện tranh mới trong Workspace (UC-03).
     /// </summary>
     [HttpPost("api/workspaces/{workspaceId:guid}/series")]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status201Created)]
@@ -45,7 +49,10 @@ public sealed class SeriesController : ControllerBase
             Title: body.Title,
             Synopsis: body.Synopsis,
             ReadingDirection: body.ReadingDirection,
-            PipelineDefinitionId: body.PipelineDefinitionId
+            PipelineDefinitionId: body.PipelineDefinitionId,
+            Genre: body.Genre,
+            Format: body.Format,
+            ReleaseScheduleJson: body.ReleaseScheduleJson
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -98,7 +105,7 @@ public sealed class SeriesController : ControllerBase
 
     /// <summary>
     /// PUT /api/series/{seriesId}
-    /// Cập nhật thông tin Series.
+    /// Cập nhật thông tin Series (UC-03).
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}")]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status200OK)]
@@ -115,7 +122,10 @@ public sealed class SeriesController : ControllerBase
             Title: body.Title,
             Synopsis: body.Synopsis,
             ReadingDirection: body.ReadingDirection,
-            PipelineDefinitionId: body.PipelineDefinitionId
+            PipelineDefinitionId: body.PipelineDefinitionId,
+            Genre: body.Genre,
+            Format: body.Format,
+            ReleaseScheduleJson: body.ReleaseScheduleJson
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -127,6 +137,37 @@ public sealed class SeriesController : ControllerBase
             return BadRequest(new { error = result.ErrorMessage });
         }
 
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/presets
+    /// Lấy cấu hình Typography Presets và Consistency Rules của Series (NFR-08).
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/presets")]
+    [ProducesResponseType(typeof(SeriesPresetDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSeriesPresets(
+        [FromRoute] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetSeriesPresetQuery(seriesId);
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/presets
+    /// Cập nhật Typography Presets và Consistency Rules qua giao diện (CF1 Step 7, NFR-08).
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/presets")]
+    [ProducesResponseType(typeof(SeriesPresetDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateSeriesPresets(
+        [FromRoute] Guid seriesId,
+        [FromBody] UpdateSeriesPresetRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateSeriesPresetCommand(seriesId, body.TypographyPresetsJson, body.ConsistencyRulesJson);
+        var result = await _mediator.Send(command, cancellationToken);
         return Ok(result.Value);
     }
 

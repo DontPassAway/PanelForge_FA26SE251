@@ -13,7 +13,10 @@ public sealed record UpdateSeriesCommand(
     string Title,
     string? Synopsis,
     ReadingDirection ReadingDirection,
-    Guid? PipelineDefinitionId
+    Guid? PipelineDefinitionId,
+    string? Genre = null,
+    string? Format = null,
+    string? ReleaseScheduleJson = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCommand, Result<SeriesDto>>
@@ -36,7 +39,14 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
 
         try
         {
-            series.UpdateDetails(command.Title, command.Synopsis, command.ReadingDirection);
+            series.UpdateDetails(
+                command.Title,
+                command.Synopsis,
+                command.ReadingDirection,
+                command.Genre,
+                command.Format,
+                command.ReleaseScheduleJson
+            );
             series.SetPipelineDefinition(command.PipelineDefinitionId);
             series.UpdatedBy = command.UserId.ToString();
         }
@@ -54,6 +64,9 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             Synopsis: series.Synopsis,
             ReadingDirection: series.ReadingDirection,
             PipelineDefinitionId: series.PipelineDefinitionId,
+            Genre: series.Genre,
+            Format: series.Format,
+            ReleaseScheduleJson: series.ReleaseScheduleJson,
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,

@@ -1,3 +1,5 @@
+
+using JasperFx;
 using Marten;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +12,7 @@ using PanelForge.Domain.Events;
 using PanelForge.Infrastructure.Authentication;
 using PanelForge.Infrastructure.Firebase;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Persistence.Projections;
 using PanelForge.Infrastructure.Repositories;
 using PanelForge.Infrastructure.Services;
 using Weasel.Core;
@@ -45,7 +48,7 @@ public static class DependencyInjection
             provider => provider.GetRequiredService<PanelForgeDbContext>());
 
         // ── Marten Event Store (Page aggregate + Event Sourcing) ───────────────
-        services.AddMarten(opts =>
+        services.AddMarten((StoreOptions opts) =>
         {
             opts.Connection(connectionString);
 
@@ -59,6 +62,9 @@ public static class DependencyInjection
                 typeof(ElementMovedEvent),
                 typeof(ElementRemovedEvent)
             });
+
+            // Đăng ký PageProjection tường minh (SingleStreamProjection)
+            opts.Projections.Add<PageProjection>(JasperFx.Events.Projections.ProjectionLifecycle.Live);
 
             // Development: tự tạo schema nếu chưa có (mt_events table, ...)
             opts.AutoCreateSchemaObjects = AutoCreate.All;

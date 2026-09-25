@@ -91,17 +91,21 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000") // URL của Frontend
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Cho phép cả React và Vite
               .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
               .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
-              .AllowCredentials();                  // Cần thiết nếu bạn dùng Cookie hoặc xác thực đặc thù
+              .AllowCredentials();                  // Cần thiết nếu dùng Cookie hoặc xác thực đặc thù
     });
 });
 

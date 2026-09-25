@@ -43,6 +43,22 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                    v => Enum.Parse<ReadingDirection>(v))
                .IsRequired();
 
+        builder.Property(s => s.Genre)
+               .HasColumnName("genre")
+               .HasColumnType("varchar(100)")
+               .HasDefaultValue("Action")
+               .IsRequired();
+
+        builder.Property(s => s.Format)
+               .HasColumnName("format")
+               .HasColumnType("varchar(50)")
+               .HasDefaultValue("Manga")
+               .IsRequired();
+
+        builder.Property(s => s.ReleaseScheduleJson)
+               .HasColumnName("release_schedule_json")
+               .HasColumnType("text");
+
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
@@ -66,5 +82,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .WithOne(p => p.Series)
                .HasForeignKey<PipelineDefinition>(p => p.SeriesId)
                .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(s => s.Preset)
+               .WithOne(p => p.Series)
+               .HasForeignKey<SeriesPreset>(p => p.SeriesId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }

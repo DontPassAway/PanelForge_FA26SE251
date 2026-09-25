@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace PanelForge.Application.DTOs.Auth;
 
@@ -15,6 +15,13 @@ public record ChangePasswordRequest
     [Required(ErrorMessage = "Xác nhận mật khẩu là bắt buộc.")]
     [Compare(nameof(NewPassword), ErrorMessage = "Mật khẩu xác nhận không khớp.")]
     public string ConfirmPassword { get; init; } = default!;
+
+    /// <summary>
+    /// Mã OTP 6 chữ số gửi qua email
+    /// </summary>
+    [Required(ErrorMessage = "Mã OTP gửi qua email là bắt buộc.")]
+    [RegularExpression(@"^\d{6}$", ErrorMessage = "Mã OTP email phải gồm đúng 6 chữ số.")]
+    public string EmailOtp { get; init; } = default!;
 
     /// <summary>
     /// Mã xác thực OTP 6 số từ Google Authenticator (bắt buộc nếu tài khoản đã bật 2FA)

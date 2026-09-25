@@ -1,8 +1,13 @@
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.DTOs.Workspaces;
+using PanelForge.Application.Features.AiConfig.Commands;
+using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.AiConfig.Queries;
+using PanelForge.Application.Features.Audit.Queries;
 using PanelForge.Application.Interfaces;
 using PanelForge.Domain.Enums;
 
@@ -14,10 +19,12 @@ namespace PanelForge.API.Controllers;
 public class WorkspacesController : ControllerBase
 {
     private readonly IWorkspaceService _workspaceService;
+    private readonly IMediator _mediator;
 
-    public WorkspacesController(IWorkspaceService workspaceService)
+    public WorkspacesController(IWorkspaceService workspaceService, IMediator mediator)
     {
         _workspaceService = workspaceService;
+        _mediator = mediator;
     }
 
     private Guid GetCurrentUserId()
@@ -210,5 +217,63 @@ public class WorkspacesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/ai-config
+    /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace (UC-02).
+    /// </summary>
+    [HttpGet("{id:guid}/ai-config")]
+    public async Task<IActionResult> GetAiConfig(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(id), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/workspaces/{id}/ai-config
+    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace (UC-02).
+    /// </summary>
+    [HttpPut("{id:guid}/ai-config")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> UpdateAiConfig(
+        Guid id,
+        [FromBody] UpdateWorkspaceAiConfigRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateWorkspaceAiConfigCommand(
+            WorkspaceId: id,
+            Provider: request.Provider,
+            ApiKey: request.ApiKey,
+            IsEnabled: request.IsEnabled,
+            MonthlyTokenQuota: request.MonthlyTokenQuota,
+            AllowedModels: request.AllowedModels
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/audit-logs
+    /// Tra cứu lịch sử Audit Log của Workspace (UC-15, BR-18).
+    /// </summary>
+    [HttpGet("{id:guid}/audit-logs")]
+    public async Task<IActionResult> GetWorkspaceAuditLogs(
+        Guid id,
+        [FromQuery] string? action,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetAuditLogsQuery(WorkspaceId: id, Action: action, Page: page, PageSize: pageSize);
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(result.Value);
     }
 }
