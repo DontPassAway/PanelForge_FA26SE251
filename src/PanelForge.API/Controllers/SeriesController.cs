@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Features.ConsistencyRules.Commands;
 using PanelForge.Application.Features.ConsistencyRules.Queries;
 using PanelForge.Application.Features.Series.Commands.CreateSeries;
@@ -11,10 +13,12 @@ using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
 using PanelForge.Application.Features.TypographyPresets.Commands;
 using PanelForge.Application.Features.TypographyPresets.Queries;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
 
 [ApiController]
+[Authorize]
 public sealed class SeriesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -26,7 +30,7 @@ public sealed class SeriesController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var userId) ? userId : Guid.Empty;
     }
 
@@ -36,6 +40,7 @@ public sealed class SeriesController : ControllerBase
     /// Task 7: Clones stages from PipelineTemplate (DB-backed).
     /// </summary>
     [HttpPost("api/workspaces/{workspaceId:guid}/series")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -50,7 +55,7 @@ public sealed class SeriesController : ControllerBase
             Title: body.Title,
             Synopsis: body.Synopsis,
             ReadingDirection: body.ReadingDirection,
-            PipelineTemplateId: body.PipelineDefinitionId,  // now maps to template
+            PipelineTemplateId: body.PipelineTemplateId,
             Genre: body.Genre,
             Format: body.Format,
             ReleaseScheduleJson: body.ReleaseScheduleJson
@@ -72,6 +77,7 @@ public sealed class SeriesController : ControllerBase
     /// GET /api/workspaces/{workspaceId}/series
     /// </summary>
     [HttpGet("api/workspaces/{workspaceId:guid}/series")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSeriesList(
         [FromRoute] Guid workspaceId,
@@ -87,6 +93,7 @@ public sealed class SeriesController : ControllerBase
     /// GET /api/series/{seriesId}
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(SeriesDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeriesById(
@@ -106,6 +113,7 @@ public sealed class SeriesController : ControllerBase
     /// PUT /api/series/{seriesId}
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -142,6 +150,7 @@ public sealed class SeriesController : ControllerBase
     /// DELETE /api/series/{seriesId}
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSeries(
@@ -164,6 +173,7 @@ public sealed class SeriesController : ControllerBase
     /// Lấy danh sách TypographyPresets của Series (Task 8, NFR-08).
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}/presets")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<TypographyPresetDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTypographyPresets(
         [FromRoute] Guid seriesId,
@@ -177,6 +187,7 @@ public sealed class SeriesController : ControllerBase
     /// POST /api/series/{seriesId}/presets
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/presets")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(TypographyPresetDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateTypographyPreset(
         [FromRoute] Guid seriesId,
@@ -206,6 +217,7 @@ public sealed class SeriesController : ControllerBase
     /// PUT /api/series/{seriesId}/presets/{presetId}
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}/presets/{presetId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(TypographyPresetDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateTypographyPreset(
         [FromRoute] Guid seriesId,
@@ -237,6 +249,7 @@ public sealed class SeriesController : ControllerBase
     /// DELETE /api/series/{seriesId}/presets/{presetId}
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/presets/{presetId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> DeleteTypographyPreset(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid presetId,
@@ -254,6 +267,7 @@ public sealed class SeriesController : ControllerBase
     /// GET /api/series/{seriesId}/consistency-rules
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}/consistency-rules")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<ConsistencyRuleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetConsistencyRules(
         [FromRoute] Guid seriesId,
@@ -267,6 +281,7 @@ public sealed class SeriesController : ControllerBase
     /// POST /api/series/{seriesId}/consistency-rules
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/consistency-rules")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ConsistencyRuleDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateConsistencyRule(
         [FromRoute] Guid seriesId,
@@ -293,6 +308,7 @@ public sealed class SeriesController : ControllerBase
     /// PUT /api/series/{seriesId}/consistency-rules/{ruleId}
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ConsistencyRuleDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateConsistencyRule(
         [FromRoute] Guid seriesId,
@@ -321,6 +337,7 @@ public sealed class SeriesController : ControllerBase
     /// DELETE /api/series/{seriesId}/consistency-rules/{ruleId}
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> DeleteConsistencyRule(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid ruleId,

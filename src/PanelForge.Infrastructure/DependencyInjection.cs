@@ -84,6 +84,11 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
         services.AddScoped<IWorkspaceService, WorkspaceService>();
 
+        // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
+        services.AddDataProtection();
+        services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
+        services.AddScoped<IAiProviderValidator, AiProviderValidator>();
+
         services.AddFirebaseServices(configuration);
 
         return services;

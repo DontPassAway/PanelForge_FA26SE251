@@ -278,9 +278,18 @@ public class WorkspaceService : IWorkspaceService
             _dbContext.Users.Add(targetUser);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        else if (!targetUser.IsActive)
+        else
         {
-            throw new ArgumentException($"Tài khoản người dùng với email '{request.Email}' hiện đang bị vô hiệu hóa.");
+            if (!targetUser.IsActive)
+            {
+                throw new ArgumentException($"Tài khoản người dùng với email '{request.Email}' hiện đang bị vô hiệu hóa.");
+            }
+
+            // BR-07: Administrator holds no workspace_members row in any Studio
+            if (targetUser.Role == SystemRole.Admin)
+            {
+                throw new InvalidOperationException("Administrator không được phép tham gia Workspace với tư cách thành viên (BR-07).");
+            }
         }
 
         var isAlreadyMember = await _dbContext.WorkspaceMembers

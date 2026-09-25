@@ -37,6 +37,10 @@ public sealed class GrantStudioCreationPermissionCommandHandler
         if (!user.IsActive)
             return Result<GrantStudioPermissionDto>.Failure("Không thể cấp quyền cho tài khoản đã bị vô hiệu hóa.");
 
+        // BR-07 & BR-22: Administrator manages the platform and holds no Workspace/Studio creation role
+        if (user.Role == PanelForge.Domain.Enums.SystemRole.Admin)
+            return Result<GrantStudioPermissionDto>.Failure("Không thể cấp quyền tạo Studio cho tài khoản Administrator (BR-07, BR-22).");
+
         user.GrantStudioCreation();
         await _dbContext.SaveChangesAsync(cancellationToken);
 

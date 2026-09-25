@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Interfaces;
+using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Common.Attributes;
@@ -20,11 +22,16 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 {
     private readonly WorkspaceRole[] _allowedRoles;
     private readonly IWorkspaceAuthorizationService _authorizationService;
+    private readonly IPanelForgeDbContext _dbContext;
 
-    public RequireWorkspaceRoleFilter(WorkspaceRole[] allowedRoles, IWorkspaceAuthorizationService authorizationService)
+    public RequireWorkspaceRoleFilter(
+        WorkspaceRole[] allowedRoles,
+        IWorkspaceAuthorizationService authorizationService,
+        IPanelForgeDbContext dbContext)
     {
         _allowedRoles = allowedRoles;
         _authorizationService = authorizationService;
+        _dbContext = dbContext;
     }
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -38,7 +45,7 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
             return;
         }
 
-        // Tìm workspaceId từ RouteData (ví dụ: {id} hoặc {workspaceId})
+        // Tìm workspaceId từ RouteData (ví dụ: {id}, {workspaceId} hoặc gián tiếp qua {seriesId})
         Guid workspaceId = Guid.Empty;
         if (context.RouteData.Values.TryGetValue("workspaceId", out var wsVal) && wsVal is string wsStr && Guid.TryParse(wsStr, out var parsedWsId))
         {
@@ -48,20 +55,45 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         {
             workspaceId = parsedId;
         }
+        else if (context.RouteData.Values.TryGetValue("seriesId", out var seriesVal) && seriesVal is string seriesStr && Guid.TryParse(seriesStr, out var parsedSeriesId))
+        {
+            var seriesWsId = await _dbContext.Series
+                .Where(s => s.Id == parsedSeriesId)
+                .Select(s => (Guid?)s.WorkspaceId)
+                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+
+            if (seriesWsId == null)
+            {
+                context.Result = new NotFoundObjectResult(new { message = "Không tìm thấy Series tương ứng." });
+                return;
+            }
+
+            workspaceId = seriesWsId.Value;
+        }
 
         if (workspaceId == Guid.Empty)
         {
-            context.Result = new BadRequestObjectResult(new { message = "Không tìm thấy tham số Workspace ID hợp lệ trên đường dẫn." });
+            context.Result = new BadRequestObjectResult(new { message = "Không tìm thấy tham số Workspace ID hoặc Series ID hợp lệ trên đường dẫn." });
             return;
         }
 
-        var hasPermission = await _authorizationService.HasWorkspaceRoleAsync(userId, workspaceId, _allowedRoles, context.HttpContext.RequestAborted);
+        bool hasPermission;
+        if (_allowedRoles.Length == 0)
+        {
+            hasPermission = await _authorizationService.IsMemberAsync(userId, workspaceId, context.HttpContext.RequestAborted);
+        }
+        else
+        {
+            hasPermission = await _authorizationService.HasWorkspaceRoleAsync(userId, workspaceId, _allowedRoles, context.HttpContext.RequestAborted);
+        }
+
         if (!hasPermission)
         {
-            context.Result = new ObjectResult(new
-            {
-                message = $"Bạn không có quyền thực hiện thao tác này trong Workspace. Yêu cầu một trong các vai trò: {string.Join(", ", _allowedRoles)}."
-            })
+            var roleMsg = _allowedRoles.Length == 0
+                ? "Bạn không phải là thành viên của Workspace này."
+                : $"Bạn không có quyền thực hiện thao tác này trong Workspace. Yêu cầu một trong các vai trò: {string.Join(", ", _allowedRoles)}.";
+
+            context.Result = new ObjectResult(new { message = roleMsg })
             {
                 StatusCode = StatusCodes.Status403Forbidden
             };

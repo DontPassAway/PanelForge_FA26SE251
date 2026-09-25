@@ -82,4 +82,41 @@ public class WorkspaceServiceTests
         dto.PendingTasks.Should().Be(1); // Only task1 should be counted
         dto.MemberCount.Should().Be(1); // Since MemberCount uses w.Members.Count but we included with `.Where(m => !m.IsDeleted)`, EF in-memory mock might not apply `.Where` to navigation properties accurately without proper setup, but the test focuses on the query logic.
     }
+
+    [Fact]
+    public async Task AddMemberAsync_WhenTargetUserIsAdmin_ShouldThrowInvalidOperationException()
+    {
+        // Arrange
+        var actorId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", actorId);
+        typeof(StudioWorkspace).GetProperty("Id")?.SetValue(workspace, workspaceId);
+
+        var adminUser = User.Create("admin@test.com", "Admin User", role: SystemRole.Admin);
+
+        _authorizationServiceMock
+            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var workspacesDbSet = DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace });
+        var usersDbSet = DbSetMockHelper.CreateDbSetMock(new List<User> { adminUser });
+        var membersDbSet = DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>());
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(workspacesDbSet);
+        _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(membersDbSet);
+
+        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
+        {
+            Email = adminUser.Email,
+            Role = WorkspaceRole.Artist
+        };
+
+        // Act
+        var act = async () => await _service.AddMemberAsync(actorId, workspaceId, request);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Administrator*");
+    }
 }

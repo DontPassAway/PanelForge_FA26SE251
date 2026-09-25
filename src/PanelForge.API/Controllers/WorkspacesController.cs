@@ -224,6 +224,7 @@ public class WorkspacesController : ControllerBase
     /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace (UC-02).
     /// </summary>
     [HttpGet("{id:guid}/ai-config")]
+    [RequireWorkspaceRole]
     public async Task<IActionResult> GetAiConfig(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(id), cancellationToken);
@@ -235,29 +236,16 @@ public class WorkspacesController : ControllerBase
 
     /// <summary>
     /// PUT /api/workspaces/{id}/ai-config
-    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace (UC-02).
+    /// UC-02: Chỉ Administrator mới có quyền cấu hình AI Provider và Token Quota cho Workspace.
+    /// Endpoint này từ chối quyền thao tác của Producer/Member và yêu cầu thực hiện qua /api/admin/workspaces/{id}/ai-config.
     /// </summary>
     [HttpPut("{id:guid}/ai-config")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    public async Task<IActionResult> UpdateAiConfig(
-        Guid id,
-        [FromBody] UpdateWorkspaceAiConfigRequest request,
-        CancellationToken cancellationToken)
+    public IActionResult UpdateAiConfig(Guid id)
     {
-        var command = new UpdateWorkspaceAiConfigCommand(
-            WorkspaceId: id,
-            Provider: request.Provider,
-            ApiKey: request.ApiKey,
-            IsEnabled: request.IsEnabled,
-            MonthlyTokenQuota: request.MonthlyTokenQuota,
-            AllowedModels: request.AllowedModels
-        );
-
-        var result = await _mediator.Send(command, cancellationToken);
-        if (!result.IsSuccess)
-            return BadRequest(new { message = result.ErrorMessage });
-
-        return Ok(result.Value);
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            message = "Theo quy định nghiệp vụ (UC-02), chỉ Administrator mới có quyền cấu hình AI Provider và hạn mức Token cho Workspace. Producer chỉ có quyền xem (Read-Only)."
+        });
     }
 
     /// <summary>
@@ -265,6 +253,7 @@ public class WorkspacesController : ControllerBase
     /// Tra cứu lịch sử Audit Log của Workspace (UC-15, BR-18).
     /// </summary>
     [HttpGet("{id:guid}/audit-logs")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> GetWorkspaceAuditLogs(
         Guid id,
         [FromQuery] string? action,

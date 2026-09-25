@@ -48,7 +48,7 @@ public sealed record CreateSeriesRequest(
     string Title,
     string? Synopsis,
     ReadingDirection ReadingDirection = ReadingDirection.RightToLeft,
-    Guid? PipelineDefinitionId = null,
+    Guid? PipelineTemplateId = null,
     string Genre = "Action",
     string Format = "Manga",
     string? ReleaseScheduleJson = null

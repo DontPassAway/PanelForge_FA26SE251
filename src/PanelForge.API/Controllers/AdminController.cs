@@ -14,6 +14,9 @@ using PanelForge.Application.Features.MasterData.ExportPresets.Commands;
 using PanelForge.Application.Features.MasterData.ExportPresets.Queries;
 using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands;
 using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
+using PanelForge.Application.Features.AiConfig.Commands;
+using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.AiConfig.Queries;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Enums;
@@ -329,6 +332,48 @@ public class AdminController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(usageList);
+    }
+
+    // ─── UC-02: Workspace AI Configuration (Admin Only) ───────────────────────
+
+    /// <summary>
+    /// GET /api/admin/workspaces/{workspaceId}/ai-config
+    /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace bởi Administrator (UC-02).
+    /// </summary>
+    [HttpGet("workspaces/{workspaceId:guid}/ai-config")]
+    public async Task<IActionResult> GetWorkspaceAiConfig(Guid workspaceId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-config
+    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace bởi Administrator (UC-02).
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-config")]
+    public async Task<IActionResult> UpdateWorkspaceAiConfig(
+        Guid workspaceId,
+        [FromBody] UpdateWorkspaceAiConfigRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateWorkspaceAiConfigCommand(
+            WorkspaceId: workspaceId,
+            Provider: request.Provider,
+            ApiKey: request.ApiKey,
+            IsEnabled: request.IsEnabled,
+            MonthlyTokenQuota: request.MonthlyTokenQuota,
+            AllowedModels: request.AllowedModels
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
     }
 
     // ─── BR-22: Studio Creation Permission ────────────────────────────────────

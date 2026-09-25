@@ -27,15 +27,28 @@ public class SeriesCommandTests
     {
         // Arrange
         var workspaceId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());
         typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, workspaceId);
 
+        var member = WorkspaceMember.Create(workspaceId, userId, WorkspaceRole.Producer);
+
+        var template = PanelForge.Domain.Entities.MasterData.PipelineTemplate.Create("STANDARD_MANGA", "Standard Manga", isDefault: true);
+        var stage = PanelForge.Domain.Entities.MasterData.PipelineTemplateStage.Create(template.Id, "SCRIPT", "Script", 1, WorkspaceRole.Writer);
+        template.Stages.Add(stage);
+
         var workspacesDbSet = DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace });
+        var membersDbSet = DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member });
+        var templatesDbSet = DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.MasterData.PipelineTemplate> { template });
+        var pipelinesDbSet = DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workflow.PipelineDefinition>());
         var seriesList = new List<Series>();
         var seriesDbSet = DbSetMockHelper.CreateDbSetMock(seriesList);
         var biblesDbSet = DbSetMockHelper.CreateDbSetMock(new List<SeriesBible>());
 
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(workspacesDbSet);
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(membersDbSet);
+        _dbContextMock.Setup(db => db.PipelineTemplates).Returns(templatesDbSet);
+        _dbContextMock.Setup(db => db.PipelineDefinitions).Returns(pipelinesDbSet);
         _dbContextMock.Setup(db => db.Series).Returns(seriesDbSet);
         _dbContextMock.Setup(db => db.SeriesBibles).Returns(biblesDbSet);
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -43,11 +56,11 @@ public class SeriesCommandTests
         var handler = new CreateSeriesCommandHandler(_dbContextMock.Object);
         var command = new CreateSeriesCommand(
             WorkspaceId: workspaceId,
-            UserId: Guid.NewGuid(),
+            UserId: userId,
             Title: "Naruto",
             Synopsis: "Ninja story",
             ReadingDirection: ReadingDirection.RightToLeft,
-            PipelineDefinitionId: null
+            PipelineTemplateId: null
         );
 
         // Act
