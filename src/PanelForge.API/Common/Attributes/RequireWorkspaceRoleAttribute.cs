@@ -70,10 +70,25 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
             workspaceId = seriesWsId.Value;
         }
+        else if (context.RouteData.Values.TryGetValue("chapterId", out var chapterVal) && chapterVal is string chapterStr && Guid.TryParse(chapterStr, out var parsedChapterId))
+        {
+            var chapterWsId = await _dbContext.Chapters
+                .Where(c => c.Id == parsedChapterId)
+                .Select(c => (Guid?)c.Series.WorkspaceId)
+                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+
+            if (chapterWsId == null)
+            {
+                context.Result = new NotFoundObjectResult(new { message = "Không tìm thấy Chapter tương ứng." });
+                return;
+            }
+
+            workspaceId = chapterWsId.Value;
+        }
 
         if (workspaceId == Guid.Empty)
         {
-            context.Result = new BadRequestObjectResult(new { message = "Không tìm thấy tham số Workspace ID hoặc Series ID hợp lệ trên đường dẫn." });
+            context.Result = new BadRequestObjectResult(new { message = "Không tìm thấy tham số Workspace ID, Series ID hoặc Chapter ID hợp lệ trên đường dẫn." });
             return;
         }
 

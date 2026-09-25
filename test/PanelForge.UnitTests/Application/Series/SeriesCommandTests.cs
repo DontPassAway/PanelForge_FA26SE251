@@ -74,6 +74,41 @@ public class SeriesCommandTests
     }
 
     [Fact]
+    public async Task CreateSeries_WhenUserIsNotProducer_ShouldReturnFailure()
+    {
+        // Arrange (UC-03: Writer cannot create Series)
+        var workspaceId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());
+        typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, workspaceId);
+
+        var member = WorkspaceMember.Create(workspaceId, userId, WorkspaceRole.Writer);
+
+        var workspacesDbSet = DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace });
+        var membersDbSet = DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member });
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(workspacesDbSet);
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(membersDbSet);
+
+        var handler = new CreateSeriesCommandHandler(_dbContextMock.Object);
+        var command = new CreateSeriesCommand(
+            WorkspaceId: workspaceId,
+            UserId: userId,
+            Title: "Naruto",
+            Synopsis: "Ninja story",
+            ReadingDirection: ReadingDirection.RightToLeft,
+            PipelineTemplateId: null
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Producer");
+    }
+
+    [Fact]
     public async Task UpdateSeries_WhenSeriesExists_ShouldUpdateDetails()
     {
         // Arrange

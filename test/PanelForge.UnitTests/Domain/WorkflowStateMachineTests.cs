@@ -4,6 +4,8 @@ using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using Xunit;
 
+#pragma warning disable CS0618 // Type or member is obsolete
+
 namespace PanelForge.UnitTests.Domain;
 
 public class WorkflowStateMachineTests

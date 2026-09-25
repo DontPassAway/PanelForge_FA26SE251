@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.TypographyPresets.Commands;
+using PanelForge.Application.Features.TypographyPresets.Models;
 using PanelForge.Application.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.TypographyPresets.Queries;

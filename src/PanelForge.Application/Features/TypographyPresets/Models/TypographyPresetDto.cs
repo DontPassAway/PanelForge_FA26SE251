@@ -1,6 +1,6 @@
 using PanelForge.Domain.Entities.Content;
 
-namespace PanelForge.Application.Features.TypographyPresets.Commands;
+namespace PanelForge.Application.Features.TypographyPresets.Models;
 
 /// <summary>DTO for TypographyPreset responses.</summary>
 public sealed record TypographyPresetDto(

@@ -44,11 +44,14 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         if (!workspaceExists)
             return Result<SeriesDto>.Failure($"Workspace {command.WorkspaceId} không tồn tại.");
 
-        // 2. Kiểm tra User có phải thành viên Workspace không
-        var isMember = await _dbContext.WorkspaceMembers
-            .AnyAsync(m => m.WorkspaceId == command.WorkspaceId && m.UserId == command.UserId, cancellationToken);
-        if (!isMember)
+        // 2. Kiểm tra User có phải thành viên Workspace và có vai trò Producer (UC-03)
+        var member = await _dbContext.WorkspaceMembers
+            .FirstOrDefaultAsync(m => m.WorkspaceId == command.WorkspaceId && m.UserId == command.UserId, cancellationToken);
+        if (member is null)
             return Result<SeriesDto>.Failure("Bạn không phải thành viên của Workspace này.");
+
+        if (member.Role != WorkspaceRole.Producer)
+            return Result<SeriesDto>.Failure("Chỉ người dùng có vai trò Producer mới có quyền tạo Series trong Workspace (UC-03).");
 
         // 3. Task 7: Resolve PipelineTemplate từ DB
         var template = command.PipelineTemplateId.HasValue

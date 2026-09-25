@@ -12,6 +12,7 @@ using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
 using PanelForge.Application.Features.TypographyPresets.Commands;
+using PanelForge.Application.Features.TypographyPresets.Models;
 using PanelForge.Application.Features.TypographyPresets.Queries;
 using PanelForge.Domain.Enums;
 
