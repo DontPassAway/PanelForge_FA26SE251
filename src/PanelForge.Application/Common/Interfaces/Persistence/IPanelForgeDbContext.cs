@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
 
 namespace PanelForge.Application.Interfaces.Persistence;
@@ -16,8 +17,15 @@ public interface IPanelForgeDbContext
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
     DbSet<AuditLog> AuditLogs { get; }
 
+    // Master Data
+    DbSet<ElementTypeMasterData> ElementTypes { get; }
+    DbSet<ExportPreset> ExportPresets { get; }
+    DbSet<PipelineTemplate> PipelineTemplates { get; }
+    DbSet<PipelineTemplateStage> PipelineTemplateStages { get; }
+
     DbSet<Series> Series { get; }
-    DbSet<SeriesPreset> SeriesPresets { get; }
+    DbSet<TypographyPreset> TypographyPresets { get; }
+    DbSet<ConsistencyRule> ConsistencyRules { get; }
     DbSet<SeriesBible> SeriesBibles { get; }
     DbSet<BibleEntry> BibleEntries { get; }
     DbSet<BibleEntryRevision> BibleEntryRevisions { get; }

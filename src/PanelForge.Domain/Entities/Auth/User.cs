@@ -25,6 +25,11 @@ public class User : BaseEntity
     public bool TwoFactorEnabled { get; private set; } = false;
     public string? TwoFactorSecret { get; private set; }
 
+    /// <summary>
+    /// BR-22: Cờ cấp phép tạo Studio. Chỉ Administrator mới được grant/revoke.
+    /// </summary>
+    public bool CanCreateStudio { get; private set; } = false;
+
     public ICollection<StudioWorkspace> OwnedWorkspaces { get; private set; } = [];
     public ICollection<WorkspaceMember> WorkspaceMemberships { get; private set; } = [];
     public ICollection<ExternalPreviewLink> CreatedPreviewLinks { get; private set; } = [];
@@ -129,4 +134,10 @@ public class User : BaseEntity
 
     public void Deactivate() => IsActive = false;
     public void Activate()   => IsActive = true;
+
+    /// <summary>BR-22: Administrator grants permission to create a Studio.</summary>
+    public void GrantStudioCreation() => CanCreateStudio = true;
+
+    /// <summary>BR-22: Administrator revokes permission to create a Studio.</summary>
+    public void RevokeStudioCreation() => CanCreateStudio = false;
 }

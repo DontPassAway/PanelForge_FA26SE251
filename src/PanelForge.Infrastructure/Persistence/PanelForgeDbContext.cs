@@ -5,6 +5,7 @@ using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
 
 namespace PanelForge.Infrastructure.Persistence;
@@ -21,8 +22,15 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    // Master Data
+    public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();
+    public DbSet<ExportPreset> ExportPresets => Set<ExportPreset>();
+    public DbSet<PipelineTemplate> PipelineTemplates => Set<PipelineTemplate>();
+    public DbSet<PipelineTemplateStage> PipelineTemplateStages => Set<PipelineTemplateStage>();
+
     public DbSet<Series> Series => Set<Series>();
-    public DbSet<SeriesPreset> SeriesPresets => Set<SeriesPreset>();
+    public DbSet<TypographyPreset> TypographyPresets => Set<TypographyPreset>();
+    public DbSet<ConsistencyRule> ConsistencyRules => Set<ConsistencyRule>();
     public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();
     public DbSet<BibleEntry> BibleEntries => Set<BibleEntry>();
     public DbSet<BibleEntryRevision> BibleEntryRevisions => Set<BibleEntryRevision>();

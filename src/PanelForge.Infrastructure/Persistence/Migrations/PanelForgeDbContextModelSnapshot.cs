@@ -247,6 +247,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(2048)")
                         .HasColumnName("avatar_url");
 
+                    b.Property<bool>("CanCreateStudio")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("can_create_studio");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -836,6 +842,85 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("chapters", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ConsistencyRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("configuration_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Pattern")
+                        .HasColumnType("text")
+                        .HasColumnName("pattern");
+
+                    b.Property<string>("RuleType")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("rule_type");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Warning")
+                        .HasColumnName("severity");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId")
+                        .HasDatabaseName("ix_consistency_rules_series_id");
+
+                    b.ToTable("consistency_rules", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Element", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1237,16 +1322,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("series", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Content.SeriesPreset", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.TypographyPreset", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<string>("ConsistencyRulesJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("consistency_rules_json");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -1261,17 +1341,64 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("FontFamily")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("font_family");
+
+                    b.Property<int>("FontSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("font_size");
+
+                    b.Property<string>("FontStyle")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("Normal")
+                        .HasColumnName("font_style");
+
+                    b.Property<int>("FontWeight")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(400)
+                        .HasColumnName("font_weight");
+
+                    b.Property<bool>("IsDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_default");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<decimal>("LetterSpacing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("letter_spacing");
+
+                    b.Property<decimal>("LineHeight")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(1.2m)
+                        .HasColumnName("line_height");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
 
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_id");
 
-                    b.Property<string>("TypographyPresetsJson")
+                    b.Property<string>("TextAlign")
                         .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("typography_presets_json");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Left")
+                        .HasColumnName("text_align");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -1280,13 +1407,231 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("UsageType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("Custom")
+                        .HasColumnName("usage_type");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SeriesId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_series_presets_series_id");
+                        .HasDatabaseName("ix_typography_presets_series_id");
 
-                    b.ToTable("series_presets", (string)null);
+                    b.ToTable("typography_presets", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.ElementTypeMasterData", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AllowedPropertiesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("allowed_properties_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_element_types_code");
+
+                    b.ToTable("element_types", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.ExportPreset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("ConfigOptionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("config_options_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FormatName")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("format_name");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_export_presets_code");
+
+                    b.ToTable("export_presets", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.PipelineTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pipeline_templates_code");
+
+                    b.ToTable("pipeline_templates", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.PipelineTemplateStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("configuration_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("GateType")
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("gate_type");
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_required");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("stage_order");
+
+                    b.Property<Guid>("PipelineTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pipeline_template_id");
+
+                    b.Property<string>("RequiredRole")
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("required_role");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineTemplateId", "Order")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pipeline_template_stages_template_order");
+
+                    b.ToTable("pipeline_template_stages", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.Assignment", b =>
@@ -1836,6 +2181,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Series");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ConsistencyRule", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
+                        .WithMany("ConsistencyRules")
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Series");
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Element", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Panel", "Panel")
@@ -1942,15 +2298,26 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Workspace");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Content.SeriesPreset", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.TypographyPreset", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
-                        .WithOne("Preset")
-                        .HasForeignKey("PanelForge.Domain.Entities.Content.SeriesPreset", "SeriesId")
+                        .WithMany("TypographyPresets")
+                        .HasForeignKey("SeriesId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.PipelineTemplateStage", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.MasterData.PipelineTemplate", "Template")
+                        .WithMany("Stages")
+                        .HasForeignKey("PipelineTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.Assignment", b =>
@@ -2127,9 +2494,16 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Chapters");
 
+                    b.Navigation("ConsistencyRules");
+
                     b.Navigation("PipelineDefinition");
 
-                    b.Navigation("Preset");
+                    b.Navigation("TypographyPresets");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.MasterData.PipelineTemplate", b =>
+                {
+                    b.Navigation("Stages");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.PipelineDefinition", b =>

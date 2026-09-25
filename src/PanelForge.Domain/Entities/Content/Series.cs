@@ -20,7 +20,13 @@ public class Series : BaseEntity
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
     public PipelineDefinition? PipelineDefinition { get; private set; }
-    public SeriesPreset? Preset { get; private set; }
+
+    /// <summary>Task 8: Series-level typography presets (replaces SeriesPreset.TypographyPresetsJson).</summary>
+    public ICollection<TypographyPreset> TypographyPresets { get; private set; } = [];
+
+    /// <summary>Task 9: Series-level consistency rules (replaces SeriesPreset.ConsistencyRulesJson).</summary>
+    public ICollection<ConsistencyRule> ConsistencyRules { get; private set; } = [];
+
     public ICollection<Chapter> Chapters { get; private set; } = [];
 
     private Series() { }
@@ -72,10 +78,4 @@ public class Series : BaseEntity
     }
 
     public void SetPipelineDefinition(Guid? pipelineDefinitionId) => PipelineDefinitionId = pipelineDefinitionId;
-
-    public void AttachPreset(SeriesPreset preset)
-    {
-        ArgumentNullException.ThrowIfNull(preset);
-        Preset = preset;
-    }
 }

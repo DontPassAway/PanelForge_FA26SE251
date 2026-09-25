@@ -6,6 +6,17 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.DTOs.Auth;
 using PanelForge.Application.Interfaces.Authentication;
 using PanelForge.Application.Features.Audit.Queries;
+using PanelForge.Application.Features.Users.Commands.GrantStudioPermission;
+using PanelForge.Application.Features.Users.Commands.RevokeStudioPermission;
+using PanelForge.Application.Features.MasterData.ElementTypes.Commands;
+using PanelForge.Application.Features.MasterData.ElementTypes.Queries;
+using PanelForge.Application.Features.MasterData.ExportPresets.Commands;
+using PanelForge.Application.Features.MasterData.ExportPresets.Queries;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
+using PanelForge.Application.Features.AiConfig.Commands;
+using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.AiConfig.Queries;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Enums;
@@ -321,5 +332,238 @@ public class AdminController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(usageList);
+    }
+
+    // ─── UC-02: Workspace AI Configuration (Admin Only) ───────────────────────
+
+    /// <summary>
+    /// GET /api/admin/workspaces/{workspaceId}/ai-config
+    /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace bởi Administrator (UC-02).
+    /// </summary>
+    [HttpGet("workspaces/{workspaceId:guid}/ai-config")]
+    public async Task<IActionResult> GetWorkspaceAiConfig(Guid workspaceId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-config
+    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace bởi Administrator (UC-02).
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-config")]
+    public async Task<IActionResult> UpdateWorkspaceAiConfig(
+        Guid workspaceId,
+        [FromBody] UpdateWorkspaceAiConfigRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateWorkspaceAiConfigCommand(
+            WorkspaceId: workspaceId,
+            Provider: request.Provider,
+            ApiKey: request.ApiKey,
+            IsEnabled: request.IsEnabled,
+            MonthlyTokenQuota: request.MonthlyTokenQuota,
+            AllowedModels: request.AllowedModels
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    // ─── BR-22: Studio Creation Permission ────────────────────────────────────
+
+    /// <summary>
+    /// POST /api/admin/users/{id}/grant-studio-permission
+    /// Grant CanCreateStudio permission to a User (BR-22).
+    /// </summary>
+    [HttpPost("users/{id:guid}/grant-studio-permission")]
+    public async Task<IActionResult> GrantStudioPermission(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GrantStudioCreationPermissionCommand(id), cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(new
+        {
+            message = $"Đã cấp quyền tạo Studio cho người dùng {result.Value!.Email}.",
+            result.Value.UserId,
+            result.Value.Email,
+            result.Value.CanCreateStudio
+        });
+    }
+
+    /// <summary>
+    /// POST /api/admin/users/{id}/revoke-studio-permission
+    /// Revoke CanCreateStudio permission from a User (BR-22).
+    /// </summary>
+    [HttpPost("users/{id:guid}/revoke-studio-permission")]
+    public async Task<IActionResult> RevokeStudioPermission(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RevokeStudioCreationPermissionCommand(id), cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(new
+        {
+            message = $"Đã thu hồi quyền tạo Studio của người dùng {result.Value!.Email}.",
+            result.Value.UserId,
+            result.Value.Email,
+            result.Value.CanCreateStudio
+        });
+    }
+
+    // ─── Element Type Master Data ──────────────────────────────────────────────
+
+    [HttpGet("element-types")]
+    public async Task<IActionResult> GetElementTypes(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetElementTypesQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    [HttpGet("element-types/{id:guid}")]
+    public async Task<IActionResult> GetElementTypeById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetElementTypeByIdQuery(id), cancellationToken);
+        if (!result.IsSuccess) return NotFound(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("element-types")]
+    public async Task<IActionResult> CreateElementType(
+        [FromBody] CreateElementTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CreateElementTypeCommand(request.Code, request.Name, request.Description, request.AllowedPropertiesJson),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPut("element-types/{id:guid}")]
+    public async Task<IActionResult> UpdateElementType(
+        Guid id, [FromBody] UpdateElementTypeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateElementTypeCommand(id, request.Name, request.Description, request.AllowedPropertiesJson, request.IsActive),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("element-types/{id:guid}")]
+    public async Task<IActionResult> DeleteElementType(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeactivateElementTypeCommand(id), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(new { message = result.Value });
+    }
+
+    // ─── Export Preset Master Data ─────────────────────────────────────────────
+
+    [HttpGet("export-presets")]
+    public async Task<IActionResult> GetExportPresets(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetExportPresetsQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    [HttpGet("export-presets/{id:guid}")]
+    public async Task<IActionResult> GetExportPresetById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetExportPresetByIdQuery(id), cancellationToken);
+        if (!result.IsSuccess) return NotFound(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("export-presets")]
+    public async Task<IActionResult> CreateExportPreset(
+        [FromBody] CreateExportPresetRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CreateExportPresetCommand(request.Code, request.Name, request.FormatName, request.ConfigOptionsJson),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPut("export-presets/{id:guid}")]
+    public async Task<IActionResult> UpdateExportPreset(
+        Guid id, [FromBody] UpdateExportPresetRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateExportPresetCommand(id, request.Name, request.FormatName, request.ConfigOptionsJson, request.IsActive),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("export-presets/{id:guid}")]
+    public async Task<IActionResult> DeleteExportPreset(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeactivateExportPresetCommand(id), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(new { message = result.Value });
+    }
+
+    // ─── Pipeline Template Master Data ────────────────────────────────────────
+
+    [HttpGet("pipeline-templates")]
+    public async Task<IActionResult> GetPipelineTemplates(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPipelineTemplatesQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    [HttpGet("pipeline-templates/{id:guid}")]
+    public async Task<IActionResult> GetPipelineTemplateById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPipelineTemplateByIdQuery(id), cancellationToken);
+        if (!result.IsSuccess) return NotFound(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("pipeline-templates")]
+    public async Task<IActionResult> CreatePipelineTemplate(
+        [FromBody] CreatePipelineTemplateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CreatePipelineTemplateCommand(request.Code, request.Name, request.Description, request.IsDefault, request.Stages),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPut("pipeline-templates/{id:guid}")]
+    public async Task<IActionResult> UpdatePipelineTemplate(
+        Guid id, [FromBody] UpdatePipelineTemplateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdatePipelineTemplateCommand(id, request.Name, request.Description, request.IsDefault, request.IsActive, request.Stages),
+            cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("pipeline-templates/{id:guid}")]
+    public async Task<IActionResult> DeletePipelineTemplate(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeactivatePipelineTemplateCommand(id), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
+        return Ok(new { message = result.Value });
     }
 }

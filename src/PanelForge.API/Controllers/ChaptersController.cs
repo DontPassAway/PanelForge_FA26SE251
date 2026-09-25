@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
@@ -8,10 +10,12 @@ using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
 using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
 
 [ApiController]
+[Authorize]
 public sealed class ChaptersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -29,9 +33,10 @@ public sealed class ChaptersController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/chapters
-    /// Tạo một tập/chương mới cho Series.
+    /// Tạo một tập/chương mới cho Series (UC-03, Release Calendar).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/chapters")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ChapterDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -62,9 +67,10 @@ public sealed class ChaptersController : ControllerBase
 
     /// <summary>
     /// GET /api/series/{seriesId}/chapters?pageIndex=1&pageSize=20
-    /// Lấy danh sách chương của Series có hỗ trợ phân trang.
+    /// Lấy danh sách chương của Series có hỗ trợ phân trang (Release Calendar).
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}/chapters")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(PagedResult<ChapterDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChaptersBySeries(
         [FromRoute] Guid seriesId,
@@ -82,6 +88,7 @@ public sealed class ChaptersController : ControllerBase
     /// Lấy thông tin chi tiết của một chương kèm danh sách Scene và Page.
     /// </summary>
     [HttpGet("api/chapters/{chapterId:guid}")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetChapterById(
@@ -99,9 +106,10 @@ public sealed class ChaptersController : ControllerBase
 
     /// <summary>
     /// PUT /api/chapters/{chapterId}
-    /// Cập nhật tên, ngày phát hành mục tiêu hoặc duyệt tăng Version của chương.
+    /// Cập nhật tên, ngày phát hành mục tiêu hoặc duyệt tăng Version của chương (Release Calendar).
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(ChapterDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -135,6 +143,7 @@ public sealed class ChaptersController : ControllerBase
     /// Xóa mềm một chương (Soft-delete).
     /// </summary>
     [HttpDelete("api/chapters/{chapterId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteChapter(

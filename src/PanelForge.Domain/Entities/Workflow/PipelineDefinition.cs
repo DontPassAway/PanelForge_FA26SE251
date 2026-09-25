@@ -118,6 +118,7 @@ public class PipelineDefinition : BaseEntity
     /// Factory method khởi tạo cấu hình quy trình Manga chuẩn 8 công đoạn theo đặc tả Capstone.
     /// Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved
     /// </summary>
+    [Obsolete("Replaced by MasterData PipelineTemplate cloning in CreateSeriesCommand (NFR-08).")]
     public static PipelineDefinition CreateDefaultMangaPipeline(Guid workspaceId, Guid? seriesId = null)
     {
         var pipeline = Create(workspaceId, "Standard Manga Pipeline", "Canonical 8-stage manga production pipeline with guarded review gates", seriesId, true);

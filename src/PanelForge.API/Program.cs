@@ -4,10 +4,12 @@ using Google.Apis.Auth.OAuth2;
 
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
+using PanelForge.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -110,6 +112,14 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// ── Migrate & Seed master data on startup ─────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PanelForgeDbContext>();
+    await db.Database.MigrateAsync();
+    await MasterDataSeeder.SeedAsync(db);
+}
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
