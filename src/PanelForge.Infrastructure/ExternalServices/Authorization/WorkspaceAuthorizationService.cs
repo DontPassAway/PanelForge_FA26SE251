@@ -5,6 +5,11 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Services;
 
+/// <summary>
+/// Kiểm tra quyền cấp Workspace (BR-07 two-level access control).
+/// Administrator KHÔNG có WorkspaceRole và KHÔNG có quyền nội dung trong bất kỳ Studio nào,
+/// nên mọi kiểm tra ở đây đều trả về false cho Admin. Chức năng quản trị đi qua AdminController.
+/// </summary>
 public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 {
     private readonly IPanelForgeDbContext _dbContext;
@@ -16,8 +21,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> IsOwnerAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user?.Role == SystemRole.Admin) return true;
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         return workspace != null && workspace.OwnerId == userId;
@@ -25,8 +29,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> IsOwnerOrProducerAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user?.Role == SystemRole.Admin) return true;
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return false;
@@ -40,8 +43,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> HasWorkspaceRoleAsync(Guid userId, Guid workspaceId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user?.Role == SystemRole.Admin) return true;
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return false;
@@ -59,8 +61,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> IsMemberAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user?.Role == SystemRole.Admin) return true;
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return false;
@@ -72,6 +73,8 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<WorkspaceRole?> GetMemberRoleAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
+        if (await IsAdminAsync(userId, cancellationToken)) return null;
+
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return null;
 
@@ -85,4 +88,8 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
         return member?.Role;
     }
+
+    // BR-07: Administrator không bao giờ có quyền cấp Workspace.
+    private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken)
+        => _dbContext.Users.AnyAsync(u => u.Id == userId && u.Role == SystemRole.Admin, cancellationToken);
 }

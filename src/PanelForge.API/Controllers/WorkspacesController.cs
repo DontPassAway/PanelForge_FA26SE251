@@ -257,12 +257,23 @@ public class WorkspacesController : ControllerBase
     public async Task<IActionResult> GetWorkspaceAuditLogs(
         Guid id,
         [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 30,
         CancellationToken cancellationToken = default)
     {
-        var query = new GetAuditLogsQuery(WorkspaceId: id, Action: action, Page: page, PageSize: pageSize);
+        // WorkspaceId luôn lấy từ route (đã qua RequireWorkspaceRole), Producer không xem được workspace khác
+        var query = new GetAuditLogsQuery(
+            WorkspaceId: id, Action: action, Page: page, PageSize: pageSize,
+            UserId: userId, EntityName: entityName, EntityId: entityId, From: from, To: to);
         var result = await _mediator.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
         return Ok(result.Value);
     }
 }

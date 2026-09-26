@@ -88,6 +88,11 @@ public static class DependencyInjection
         services.AddDataProtection();
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
+        services.AddScoped<IAiUsageService, AiUsageService>();
+
+        // ── Audit trail: danh tính người gọi request (BR-18, UC-15) ─────────────
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
 
         services.AddFirebaseServices(configuration);
 

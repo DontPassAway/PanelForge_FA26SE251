@@ -22,6 +22,94 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AiUsageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("CompletionTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("completion_tokens");
+
+                    b.Property<decimal?>("CostUsd")
+                        .HasColumnType("numeric(12,6)")
+                        .HasColumnName("cost_usd");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("Feature")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("feature");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("model");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<long>("PromptTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("prompt_tokens");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("status");
+
+                    b.Property<long>("TotalTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_tokens");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_ai_usage_records_user_id");
+
+                    b.HasIndex("WorkspaceId", "OccurredAtUtc")
+                        .HasDatabaseName("ix_ai_usage_records_workspace_occurred");
+
+                    b.ToTable("ai_usage_records", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -106,6 +194,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_audit_logs_workspace_id");
+
+                    b.HasIndex("EntityName", "EntityId")
+                        .HasDatabaseName("ix_audit_logs_entity_name_entity_id");
 
                     b.ToTable("audit_logs", (string)null);
                 });
@@ -805,9 +896,20 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("published_at");
+
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("InProduction")
+                        .HasColumnName("status");
 
                     b.Property<DateOnly?>("TargetReleaseDate")
                         .HasColumnType("date")
@@ -837,7 +939,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SeriesId", "ChapterNumber")
                         .IsUnique()
-                        .HasDatabaseName("ix_chapters_series_number");
+                        .HasDatabaseName("ix_chapters_series_number")
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.HasIndex("Status", "SeriesId")
+                        .HasDatabaseName("ix_chapters_status_series");
 
                     b.ToTable("chapters", (string)null);
                 });
@@ -1907,10 +2013,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PipelineDefinitionId", "Slug")
                         .IsUnique()
-                        .HasDatabaseName("ix_pipeline_stages_definition_slug");
+                        .HasDatabaseName("ix_pipeline_stages_definition_slug")
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.HasIndex("PipelineDefinitionId", "StageOrder")
-                        .IsUnique()
                         .HasDatabaseName("ix_pipeline_stages_definition_stage_order");
 
                     b.ToTable("pipeline_stages", (string)null);
@@ -1989,7 +2095,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PipelineDefinitionId", "FromStageId", "ToStageId")
                         .IsUnique()
-                        .HasDatabaseName("ix_stage_transitions_def_from_to");
+                        .HasDatabaseName("ix_stage_transitions_def_from_to")
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("stage_transitions", (string)null);
                 });
@@ -2058,6 +2165,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_workflow_transition_logs_to_stage_id");
 
                     b.ToTable("workflow_transition_logs", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AiUsageRecord", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Auth.ExternalPreviewLink", b =>

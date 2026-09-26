@@ -275,6 +275,13 @@ public class AuthService : IAuthService
         var newPasswordHash = _passwordHasher.HashPassword(request.NewPassword);
         user.ResetPassword(newPasswordHash);
 
+        // OTP được gửi tới hộp thư nên đặt lại thành công đã chứng minh quyền sở hữu email.
+        // Cần thiết cho tài khoản tạo từ lời mời Workspace (WorkspaceService.AddMemberAsync).
+        if (!user.IsEmailConfirmed)
+        {
+            user.ConfirmEmail();
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -577,7 +584,8 @@ public class AuthService : IAuthService
             user.IsActive,
             user.IsEmailConfirmed,
             user.TwoFactorEnabled,
-            user.Role.ToString()
+            user.Role.ToString(),
+            user.CanCreateStudio
         );
     }
 

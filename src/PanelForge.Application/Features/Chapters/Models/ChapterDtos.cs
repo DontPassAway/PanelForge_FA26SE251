@@ -1,3 +1,5 @@
+using PanelForge.Domain.Enums;
+
 namespace PanelForge.Application.Features.Chapters.Models;
 
 public sealed record ChapterDto(
@@ -11,7 +13,9 @@ public sealed record ChapterDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     int ScenesCount,
-    int PagesCount
+    int PagesCount,
+    ChapterStatus Status = ChapterStatus.InProduction,
+    DateTime? PublishedAt = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -41,7 +45,9 @@ public sealed record ChapterDetailDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     IReadOnlyList<ChapterSceneSummaryDto> Scenes,
-    IReadOnlyList<ChapterPageSummaryDto> Pages
+    IReadOnlyList<ChapterPageSummaryDto> Pages,
+    ChapterStatus Status = ChapterStatus.InProduction,
+    DateTime? PublishedAt = null
 );
 
 public sealed record CreateChapterRequest(

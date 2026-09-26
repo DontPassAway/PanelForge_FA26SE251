@@ -17,6 +17,7 @@ using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
 using PanelForge.Application.Features.AiConfig.Commands;
 using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Application.Features.AiConfig.Queries;
+using PanelForge.Application.Features.AiUsage;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Enums;
@@ -82,7 +83,9 @@ public class AdminController : ControllerBase
 
     /// <summary>
     /// POST /api/admin/assign-producer (và POST /api/admin/assign-role)
-    /// Gán vai trò Producer / SystemRole trực tiếp trong Database cho tài khoản.
+    /// SystemRole chỉ gồm Admin | User (E-11). "Producer" là WorkspaceRole, nên gán "Producer" ở đây
+    /// nghĩa là cấp quyền tạo Studio (CanCreateStudio = true, BR-22); SystemRole vẫn là User.
+    /// Khi Studio được tạo, người tạo tự trở thành Producer trong workspace_members.
     /// </summary>
     [HttpPost("assign-producer")]
     [HttpPost("assign-role")]
@@ -108,21 +111,29 @@ public class AdminController : ControllerBase
                 return BadRequest(new { message = "Không thể cấp quyền Producer cho tài khoản Administrator (BR-07, BR-22)." });
             }
 
-            user.AssignSystemRole(SystemRole.Producer);
             user.GrantStudioCreation();
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return Ok(new
             {
-                message = $"Đã gán vai trò Producer thành công cho tài khoản {user.Email}.",
+                message = $"Đã cấp quyền tạo Studio cho tài khoản {user.Email}. Người dùng sẽ là Producer của Studio họ tạo.",
                 userId = user.Id,
-                newRole = "Producer",
+                newRole = user.Role.ToString(),
                 canCreateStudio = user.CanCreateStudio
             });
         }
 
-        if (Enum.TryParse<SystemRole>(rawRole, true, out var parsedSystemRole))
+        if (Enum.TryParse<SystemRole>(rawRole, true, out var parsedSystemRole) && Enum.IsDefined(parsedSystemRole))
         {
+            if (parsedSystemRole == SystemRole.Admin && user.Role != SystemRole.Admin)
+            {
+                var blockReason = await GetAdminPromotionBlockReasonAsync(user.Id, cancellationToken);
+                if (blockReason is not null)
+                    return BadRequest(new { message = blockReason });
+
+                user.RevokeStudioCreation();
+            }
+
             user.AssignSystemRole(parsedSystemRole);
             if (parsedSystemRole == SystemRole.User)
             {
@@ -143,6 +154,25 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
+    /// BR-07: Administrator không được có dòng workspace_members và không sở hữu Studio nào.
+    /// Trả về lý do chặn nâng quyền Admin, hoặc null nếu hợp lệ.
+    /// </summary>
+    private async Task<string?> GetAdminPromotionBlockReasonAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var ownedCount = await _dbContext.StudioWorkspaces
+            .CountAsync(w => w.OwnerId == userId, cancellationToken);
+        if (ownedCount > 0)
+            return $"Không thể nâng quyền Administrator: người dùng đang sở hữu {ownedCount} Studio. Hãy chuyển quyền sở hữu hoặc xóa Studio trước (BR-07).";
+
+        var memberCount = await _dbContext.WorkspaceMembers
+            .CountAsync(m => m.UserId == userId, cancellationToken);
+        if (memberCount > 0)
+            return $"Không thể nâng quyền Administrator: người dùng đang là thành viên của {memberCount} Workspace. Hãy gỡ khỏi các Workspace trước (BR-07).";
+
+        return null;
+    }
+
+    /// <summary>
     /// POST /api/admin/users
     /// Tạo tài khoản người dùng mới bởi Administrator (UC-01).
     /// </summary>
@@ -151,6 +181,11 @@ public class AdminController : ControllerBase
         [FromBody] CreateUserByAdminRequest request,
         CancellationToken cancellationToken)
     {
+        if (!Enum.IsDefined(request.Role))
+        {
+            return BadRequest(new { message = "Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User." });
+        }
+
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var existingUser = await _dbContext.Users
             .AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
@@ -208,6 +243,20 @@ public class AdminController : ControllerBase
         if (user is null)
         {
             return NotFound(new { message = "Không tìm thấy người dùng." });
+        }
+
+        if (!Enum.IsDefined(request.Role))
+        {
+            return BadRequest(new { message = "Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User." });
+        }
+
+        if (request.Role == SystemRole.Admin && user.Role != SystemRole.Admin)
+        {
+            var blockReason = await GetAdminPromotionBlockReasonAsync(user.Id, cancellationToken);
+            if (blockReason is not null)
+                return BadRequest(new { message = blockReason });
+
+            user.RevokeStudioCreation();
         }
 
         user.UpdateProfile(request.FullName, request.PhoneNumber, user.AvatarUrl);
@@ -340,37 +389,119 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetAuditLogs(
         [FromQuery] Guid? workspaceId,
         [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? userEmail,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 30,
         CancellationToken cancellationToken = default)
     {
-        var query = new GetAuditLogsQuery(workspaceId, action, page, pageSize);
+        var query = new GetAuditLogsQuery(workspaceId, action, page, pageSize, userId, userEmail, entityName, entityId, from, to);
         var result = await _mediator.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
         return Ok(result.Value);
     }
 
     /// <summary>
+    /// GET /api/admin/audit-logs/export
+    /// UC-15 bước 4: export audit log đã lọc ra CSV (cùng bộ lọc với GET audit-logs, tối đa 10.000 dòng mới nhất).
+    /// Header X-Export-Truncated = true nếu kết quả bị cắt.
+    /// </summary>
+    [HttpGet("audit-logs/export")]
+    public async Task<IActionResult> ExportAuditLogs(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? userEmail,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new GetAuditLogsQuery(workspaceId, action, 1, 1, userId, userEmail, entityName, entityId, from, to);
+        var result = await _mediator.Send(new ExportAuditLogsQuery(filter), cancellationToken);
+        return ToCsvFile(result);
+    }
+
+    /// <summary>
     /// GET /api/admin/ai-usage
-    /// Thống kê mức độ sử dụng AI Token theo tất cả các Workspace (UC-15).
+    /// UC-15: báo cáo AI usage theo Workspace so với hạn mức, tổng hợp từ ai_usage_records trong kỳ [from, to).
+    /// Mặc định kỳ = tháng hiện tại. Giữ nguyên các field cũ (workspaceId, workspaceName, provider,
+    /// monthlyTokenQuota, usedTokensCurrentMonth, usagePercent, isEnabled).
     /// </summary>
     [HttpGet("ai-usage")]
-    public async Task<IActionResult> GetAiUsage(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAiUsage(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
     {
-        var usageList = await _dbContext.WorkspaceAiConfigs
-            .Include(c => c.Workspace)
-            .Select(c => new
-            {
-                c.WorkspaceId,
-                WorkspaceName = c.Workspace.Name,
-                c.Provider,
-                c.MonthlyTokenQuota,
-                c.UsedTokensCurrentMonth,
-                UsagePercent = c.MonthlyTokenQuota > 0 ? (double)c.UsedTokensCurrentMonth / c.MonthlyTokenQuota * 100 : 0,
-                c.IsEnabled
-            })
-            .ToListAsync(cancellationToken);
+        var result = await _mediator.Send(new GetAiUsageReportQuery(workspaceId, from, to), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
 
-        return Ok(usageList);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/admin/ai-usage/records
+    /// UC-15: danh sách chi tiết từng lần gọi AI (E-29), lọc theo workspace, user, tính năng, trạng thái, khoảng ngày.
+    /// </summary>
+    [HttpGet("ai-usage/records")]
+    public async Task<IActionResult> GetAiUsageRecords(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? feature,
+        [FromQuery] AiUsageStatus? status,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new GetAiUsageRecordsQuery(workspaceId, userId, feature, status, from, to, page, pageSize), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/admin/ai-usage/export
+    /// UC-15 bước 4: export chi tiết AI usage đã lọc ra CSV (tối đa 10.000 dòng mới nhất).
+    /// </summary>
+    [HttpGet("ai-usage/export")]
+    public async Task<IActionResult> ExportAiUsage(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? feature,
+        [FromQuery] AiUsageStatus? status,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new GetAiUsageRecordsQuery(workspaceId, userId, feature, status, from, to);
+        var result = await _mediator.Send(new ExportAiUsageRecordsQuery(filter), cancellationToken);
+        return ToCsvFile(result);
+    }
+
+    private IActionResult ToCsvFile(PanelForge.Application.Common.Result<PanelForge.Application.Common.CsvExport> result)
+    {
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        var export = result.Value!;
+        Response.Headers["X-Export-Row-Count"] = export.RowCount.ToString();
+        Response.Headers["X-Export-Truncated"] = export.Truncated ? "true" : "false";
+        Response.Headers.AccessControlExposeHeaders = "Content-Disposition, X-Export-Row-Count, X-Export-Truncated";
+        return File(export.Content, "text/csv; charset=utf-8", export.FileName);
     }
 
     // ─── UC-02: Workspace AI Configuration (Admin Only) ───────────────────────

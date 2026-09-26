@@ -1,5 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using PanelForge.Application.Interfaces;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Auth;
@@ -12,7 +14,14 @@ namespace PanelForge.Infrastructure.Persistence;
 
 public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
 {
-    public PanelForgeDbContext(DbContextOptions<PanelForgeDbContext> options) : base(options) { }
+    private readonly ICurrentUserService? _currentUser;
+
+    /// <param name="currentUser">Null khi chạy ngoài HTTP request (design-time, migration, seeder).</param>
+    public PanelForgeDbContext(DbContextOptions<PanelForgeDbContext> options, ICurrentUserService? currentUser = null)
+        : base(options)
+    {
+        _currentUser = currentUser;
+    }
 
     public DbSet<User> Users => Set<User>();
     public DbSet<StudioWorkspace> StudioWorkspaces => Set<StudioWorkspace>();
@@ -21,6 +30,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
 
     // Master Data
     public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();
@@ -49,76 +59,130 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
+        var actorId = _currentUser?.UserId?.ToString();
 
-        foreach (var entry in ChangeTracker.Entries())
+        // Chụp trạng thái TRƯỚC khi đổi Deleted → Modified (soft-delete), để audit ghi đúng hành động DELETE.
+        var pending = new List<(EntityEntry Entry, string Action, string? ChangesJson)>();
+
+        foreach (var entry in ChangeTracker.Entries().ToList())
         {
-            // 1. Tự động xử lý Audit Timestamps
+            if (entry.State is EntityState.Detached or EntityState.Unchanged)
+                continue;
+
+            if (entry.Entity is not (AuditLog or AiUsageRecord))
+            {
+                var action = entry.State switch
+                {
+                    EntityState.Added => "CREATE",
+                    EntityState.Modified => "UPDATE",
+                    EntityState.Deleted => "DELETE",
+                    _ => entry.State.ToString().ToUpperInvariant()
+                };
+                pending.Add((entry, action, AuditChangeSerializer.Serialize(entry)));
+            }
+
+            // 1. Timestamps + người thực hiện (BR-18)
             if (entry.Entity is IAuditableEntity auditable)
             {
                 switch (entry.State)
                 {
                     case EntityState.Added:
                         auditable.CreatedAt = now;
+                        if (string.IsNullOrEmpty(auditable.CreatedBy)) auditable.CreatedBy = actorId;
                         break;
                     case EntityState.Modified:
                         auditable.UpdatedAt = now;
+                        if (actorId is not null) auditable.UpdatedBy = actorId;
                         break;
                 }
             }
 
-            // 2. Tự động chuyển đổi xóa vật lý thành Soft-delete
-            if (entry.Entity is ISoftDelete softDelete && entry.State == EntityState.Deleted)
+            // 2. Chuyển xóa vật lý thành soft-delete — chỉ với entity thực sự map cột IsDeleted.
+            //    Entity bỏ qua IsDeleted (Users, master data...) vẫn xóa vật lý như cấu hình của chúng.
+            if (entry.Entity is ISoftDelete softDelete
+                && entry.State == EntityState.Deleted
+                && entry.Metadata.FindProperty(nameof(ISoftDelete.IsDeleted)) is not null)
             {
                 entry.State = EntityState.Modified;
                 softDelete.IsDeleted = true;
                 softDelete.DeletedAt = now;
+                softDelete.DeletedBy = actorId;
 
                 if (entry.Entity is IAuditableEntity auditableEntity)
                 {
                     auditableEntity.UpdatedAt = now;
+                    if (actorId is not null) auditableEntity.UpdatedBy = actorId;
                 }
             }
         }
 
-        // 3. Tự động ghi vết kiểm toán hệ thống (Audit Trail - BR-18, UC-15)
-        var auditEntries = new List<AuditLog>();
-        foreach (var entry in ChangeTracker.Entries())
+        // 3. Audit trail (BR-18, UC-15): ai, làm gì, trên entity nào, thay đổi gì
+        if (pending.Count > 0)
         {
-            if (entry.Entity is AuditLog || entry.State == EntityState.Detached || entry.State == EntityState.Unchanged)
-                continue;
+            var workspaceBySeries = await ResolveSeriesWorkspacesAsync(pending.Select(p => p.Entry), cancellationToken);
 
-            var entityName = entry.Entity.GetType().Name;
-            var action = entry.State switch
+            foreach (var (entry, action, changesJson) in pending)
             {
-                EntityState.Added => "CREATE",
-                EntityState.Modified => "UPDATE",
-                EntityState.Deleted => "DELETE",
-                _ => entry.State.ToString()
-            };
+                var entityName = entry.Metadata.ClrType.Name;
+                var entityId = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "Id")?.CurrentValue?.ToString();
 
-            var idProp = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "Id");
-            var entityId = idProp?.CurrentValue?.ToString();
-
-            Guid? wsId = null;
-            var wsProp = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "WorkspaceId");
-            if (wsProp?.CurrentValue is Guid g) wsId = g;
-
-            var log = AuditLog.Create(
-                action: $"{action}_{entityName.ToUpperInvariant()}",
-                entityName: entityName,
-                entityId: entityId,
-                workspaceId: wsId,
-                details: $"Audit Trail: {action} {entityName} (ID: {entityId})"
-            );
-            auditEntries.Add(log);
-        }
-
-        if (auditEntries.Count > 0)
-        {
-            AuditLogs.AddRange(auditEntries);
+                AuditLogs.Add(AuditLog.Create(
+                    action: $"{action}_{entityName.ToUpperInvariant()}",
+                    entityName: entityName,
+                    entityId: entityId,
+                    workspaceId: ResolveWorkspaceId(entry, workspaceBySeries),
+                    userId: _currentUser?.UserId,
+                    userEmail: _currentUser?.Email,
+                    changesJson: changesJson,
+                    ipAddress: _currentUser?.IpAddress,
+                    details: $"{action} {entityName} (ID: {entityId})"
+                ));
+            }
         }
 
         return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>WorkspaceId của bản ghi audit: cột WorkspaceId, chính Workspace, hoặc suy ra qua SeriesId.</summary>
+    private static Guid? ResolveWorkspaceId(EntityEntry entry, IReadOnlyDictionary<Guid, Guid> workspaceBySeries)
+    {
+        if (entry.Entity is StudioWorkspace workspace) return workspace.Id;
+        if (entry.Metadata.FindProperty("WorkspaceId") is not null
+            && entry.Property("WorkspaceId").CurrentValue is Guid wsId) return wsId;
+        if (entry.Metadata.FindProperty("SeriesId") is not null
+            && entry.Property("SeriesId").CurrentValue is Guid seriesId
+            && workspaceBySeries.TryGetValue(seriesId, out var seriesWsId)) return seriesWsId;
+        return null;
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, Guid>> ResolveSeriesWorkspacesAsync(
+        IEnumerable<EntityEntry> entries, CancellationToken cancellationToken)
+    {
+        var seriesIds = entries
+            .Where(e => e.Metadata.FindProperty("WorkspaceId") is null && e.Metadata.FindProperty("SeriesId") is not null)
+            .Select(e => e.Property("SeriesId").CurrentValue)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+
+        if (seriesIds.Count == 0) return new Dictionary<Guid, Guid>();
+
+        // Series mới thêm trong cùng lần lưu chưa có trong DB → lấy từ ChangeTracker
+        var result = ChangeTracker.Entries<Series>()
+            .Where(e => seriesIds.Contains(e.Entity.Id))
+            .ToDictionary(e => e.Entity.Id, e => e.Entity.WorkspaceId);
+
+        var missing = seriesIds.Where(id => !result.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
+        {
+            var fromDb = await Series.IgnoreQueryFilters().AsNoTracking()
+                .Where(s => missing.Contains(s.Id))
+                .Select(s => new { s.Id, s.WorkspaceId })
+                .ToListAsync(cancellationToken);
+            foreach (var s in fromDb) result[s.Id] = s.WorkspaceId;
+        }
+
+        return result;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -115,6 +115,9 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             );
         }
 
+        // Sinh transition mặc định (tiến tuần tự + reject từ cổng duyệt) cho pipeline vừa nhân bản
+        pipeline.RebuildDefaultTransitions();
+
         series.SetPipelineDefinition(pipeline.Id);
         _dbContext.PipelineDefinitions.Add(pipeline);
 

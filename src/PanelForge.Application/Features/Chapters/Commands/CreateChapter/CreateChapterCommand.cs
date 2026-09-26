@@ -71,7 +71,9 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             UpdatedAt: chapter.UpdatedAt,
             CreatedBy: chapter.CreatedBy,
             ScenesCount: 0,
-            PagesCount: 0
+            PagesCount: 0,
+            Status: chapter.Status,
+            PublishedAt: chapter.PublishedAt
         ));
     }
 }

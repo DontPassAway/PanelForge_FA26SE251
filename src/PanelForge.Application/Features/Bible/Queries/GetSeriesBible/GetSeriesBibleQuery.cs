@@ -34,9 +34,8 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
             .ThenBy(e => e.Name)
             .Select(e =>
             {
-                var latestRev = e.Revisions
-                    .OrderByDescending(r => r.VersionNumber)
-                    .FirstOrDefault();
+                // Revision có hiệu lực ở chương mới nhất (BR-15), khớp với current state của entry
+                var latestRev = e.GetCurrentRevision();
 
                 BibleEntryRevisionDto? revDto = null;
                 if (latestRev != null)

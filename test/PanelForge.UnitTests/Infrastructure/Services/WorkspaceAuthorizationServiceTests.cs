@@ -21,16 +21,37 @@ public class WorkspaceAuthorizationServiceTests
     }
 
     [Fact]
-    public async Task IsOwnerAsync_AdminUser_ShouldReturnTrue()
+    public async Task IsOwnerAsync_AdminUser_ShouldReturnFalse()
     {
+        // BR-07: Administrator không có quyền cấp Workspace, kể cả khi là OwnerId
         var admin = User.Create("admin@test.com", "Admin");
         admin.AssignSystemRole(SystemRole.Admin);
+        var workspace = StudioWorkspace.Create("Studio", admin.Id);
 
-        var users = new List<User> { admin };
-        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(users));
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<User> { admin }));
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
 
-        var result = await _service.IsOwnerAsync(admin.Id, Guid.NewGuid());
-        result.Should().BeTrue();
+        var result = await _service.IsOwnerAsync(admin.Id, workspace.Id);
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AdminUser_WithMemberRow_ShouldBeDeniedEverywhere()
+    {
+        // BR-07: kể cả dữ liệu cũ còn sót dòng workspace_members, Admin vẫn bị từ chối
+        var admin = User.Create("admin@test.com", "Admin");
+        admin.AssignSystemRole(SystemRole.Admin);
+        var workspace = StudioWorkspace.Create("Studio", Guid.NewGuid());
+        var member = WorkspaceMember.Create(workspace.Id, admin.Id, WorkspaceRole.Producer);
+
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<User> { admin }));
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member }));
+
+        (await _service.IsMemberAsync(admin.Id, workspace.Id)).Should().BeFalse();
+        (await _service.IsOwnerOrProducerAsync(admin.Id, workspace.Id)).Should().BeFalse();
+        (await _service.HasWorkspaceRoleAsync(admin.Id, workspace.Id, new[] { WorkspaceRole.Producer })).Should().BeFalse();
+        (await _service.GetMemberRoleAsync(admin.Id, workspace.Id)).Should().BeNull();
     }
 
     [Fact]
@@ -117,6 +138,8 @@ public class WorkspaceAuthorizationServiceTests
         var ownerId = Guid.NewGuid();
         var workspace = StudioWorkspace.Create("Studio", ownerId);
 
+        _dbContextMock.Setup(db => db.Users)
+            .Returns(DbSetMockHelper.CreateDbSetMock(new List<User>()));
         _dbContextMock.Setup(db => db.StudioWorkspaces)
             .Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
 

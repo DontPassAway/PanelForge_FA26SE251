@@ -1,7 +1,9 @@
+using System.Net;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PanelForge.Application.DTOs.Workspaces;
 using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Authentication;
 using PanelForge.Application.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Enums;
@@ -10,18 +12,24 @@ namespace PanelForge.Infrastructure.Services;
 
 public class WorkspaceService : IWorkspaceService
 {
+    // Cùng thời hạn với OTP quên mật khẩu (AuthService.ForgotPasswordAsync)
+    private static readonly TimeSpan InviteOtpLifetime = TimeSpan.FromMinutes(15);
+
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IWorkspaceAuthorizationService _authorizationService;
-    private readonly IPasswordHasher _passwordHasher;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<WorkspaceService> _logger;
 
     public WorkspaceService(
         IPanelForgeDbContext dbContext,
         IWorkspaceAuthorizationService authorizationService,
-        IPasswordHasher passwordHasher)
+        IEmailService emailService,
+        ILogger<WorkspaceService> logger)
     {
         _dbContext = dbContext;
         _authorizationService = authorizationService;
-        _passwordHasher = passwordHasher;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     public async Task<WorkspaceDto> CreateWorkspaceAsync(Guid ownerId, CreateWorkspaceRequest request, CancellationToken cancellationToken = default)
@@ -32,8 +40,13 @@ public class WorkspaceService : IWorkspaceService
             throw new UnauthorizedAccessException("Người dùng không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
+        // BR-07: Administrator không sở hữu / tham gia Studio.
+        if (owner.Role == SystemRole.Admin)
+        {
+            throw new UnauthorizedAccessException("Administrator không được phép tạo Studio (BR-07).");
+        }
+
         // BR-22: Chỉ User với CanCreateStudio = true mới được tạo Workspace.
-        // Administrator không tạo Studio content (BR-07).
         if (!owner.CanCreateStudio)
         {
             throw new UnauthorizedAccessException(
@@ -265,18 +278,20 @@ public class WorkspaceService : IWorkspaceService
         var targetUser = await _dbContext.Users
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
+        string? inviteOtp = null;
         if (targetUser is null)
         {
-            var defaultName = normalizedEmail.Split('@')[0];
-            var passwordHash = _passwordHasher.HashPassword("PanelForge@2026");
+            // Tài khoản được mời: KHÔNG có mật khẩu (không đăng nhập được) và chưa xác thực email.
+            // Người được mời tự đặt mật khẩu bằng OTP gửi tới email; đặt thành công sẽ xác thực email
+            // (AuthService.ResetPasswordAsync).
+            inviteOtp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
             targetUser = User.Create(
                 email: normalizedEmail,
-                fullName: defaultName,
-                passwordHash: passwordHash,
+                fullName: normalizedEmail.Split('@')[0],
+                passwordHash: null,
                 role: SystemRole.User);
-            targetUser.ConfirmEmail();
+            targetUser.SetPasswordResetToken(inviteOtp, DateTime.UtcNow.Add(InviteOtpLifetime));
             _dbContext.Users.Add(targetUser);
-            await _dbContext.SaveChangesAsync(cancellationToken);
         }
         else
         {
@@ -292,7 +307,7 @@ public class WorkspaceService : IWorkspaceService
             }
         }
 
-        var isAlreadyMember = await _dbContext.WorkspaceMembers
+        var isAlreadyMember = inviteOtp is null && await _dbContext.WorkspaceMembers
             .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == targetUser.Id, cancellationToken);
 
         if (isAlreadyMember)
@@ -303,7 +318,10 @@ public class WorkspaceService : IWorkspaceService
         var newMember = WorkspaceMember.Create(workspaceId, targetUser.Id, request.Role);
         _dbContext.WorkspaceMembers.Add(newMember);
 
+        // Tạo user (nếu là lời mời) và membership trong cùng một lần lưu
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await SendMemberInvitationEmailAsync(targetUser, workspace.Name, newMember.Role, inviteOtp, cancellationToken);
 
         return new WorkspaceMemberDto(
             UserId: targetUser.Id,
@@ -315,6 +333,53 @@ public class WorkspaceService : IWorkspaceService
             IsOwner: targetUser.Id == workspace.OwnerId,
             JoinedAt: newMember.JoinedAt
         );
+    }
+
+    /// <summary>
+    /// UC-01 / UC-03 bước 4: thông báo cho người được thêm vào Studio.
+    /// inviteOtp != null nghĩa là tài khoản vừa được tạo từ lời mời và cần đặt mật khẩu.
+    /// Lỗi gửi email không làm hỏng thao tác thêm thành viên (đã lưu).
+    /// </summary>
+    private async Task SendMemberInvitationEmailAsync(
+        User user, string workspaceName, WorkspaceRole role, string? inviteOtp, CancellationToken cancellationToken)
+    {
+        var safeName = WebUtility.HtmlEncode(user.FullName);
+        var safeWorkspace = WebUtility.HtmlEncode(workspaceName);
+
+        string subject;
+        string body;
+        if (inviteOtp is not null)
+        {
+            subject = $"[PanelForge] Bạn được mời tham gia Studio {workspaceName}";
+            body = $@"
+            <h3>Xin chào {safeName},</h3>
+            <p>Bạn được mời tham gia Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
+            <p>Một tài khoản đã được tạo cho email này. Để kích hoạt, hãy mở trang <em>Đặt lại mật khẩu</em> và nhập mã OTP:</p>
+            <p><strong><span style='font-size: 24px; color: #007bff;'>{inviteOtp}</span></strong></p>
+            <p>Mã có hiệu lực trong {(int)InviteOtpLifetime.TotalMinutes} phút. Nếu mã hết hạn, hãy dùng chức năng <em>Quên mật khẩu</em> với email này để nhận mã mới.</p>
+            <p>Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+        }
+        else
+        {
+            subject = $"[PanelForge] Bạn đã được thêm vào Studio {workspaceName}";
+            body = $@"
+            <h3>Xin chào {safeName},</h3>
+            <p>Bạn đã được thêm vào Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
+            <p>Đăng nhập để xem Studio trong mục <em>Your Workspaces</em>.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+        }
+
+        try
+        {
+            await _emailService.SendEmailAsync(user.Email, subject, body, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Không gửi được email mời thành viên tới {Email}", user.Email);
+        }
     }
 
     public async Task<WorkspaceMemberDto> UpdateMemberRoleAsync(Guid actorId, Guid workspaceId, Guid targetUserId, UpdateMemberRoleRequest request, CancellationToken cancellationToken = default)

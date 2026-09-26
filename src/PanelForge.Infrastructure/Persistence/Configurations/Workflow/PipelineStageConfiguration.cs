@@ -33,16 +33,19 @@ internal sealed class PipelineStageConfiguration : IEntityTypeConfiguration<Pipe
                .HasColumnName("slug")
                .HasColumnType("varchar(50)")
                .IsRequired();
+        // Stage bị soft-delete không được giữ chỗ slug (UC-03: Producer xóa rồi thêm lại stage)
         builder.HasIndex(s => new { s.PipelineDefinitionId, s.Slug })
                .IsUnique()
+               .HasFilter("\"IsDeleted\" = false")
                .HasDatabaseName("ix_pipeline_stages_definition_slug");
 
         builder.Property(s => s.StageOrder)
                .HasColumnName("stage_order")
                .HasColumnType("integer")
                .IsRequired();
+        // Không unique: sắp xếp lại (hoán đổi thứ tự) trong một lần SaveChanges sẽ vi phạm unique từng dòng.
+        // Tính liên tục 1..n do PipelineDefinition.ApplyOrder đảm bảo.
         builder.HasIndex(s => new { s.PipelineDefinitionId, s.StageOrder })
-               .IsUnique()
                .HasDatabaseName("ix_pipeline_stages_definition_stage_order");
 
         builder.Property(s => s.ColorCode)

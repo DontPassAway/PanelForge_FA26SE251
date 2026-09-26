@@ -74,6 +74,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             return Result<BibleEntryDto>.Failure(ex.Message);
         }
 
+        var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
+
         // Tự động sinh snapshot & revision v1 ban đầu (BR-18, CF1 Step 8)
         var snapshotObj = new
         {
@@ -85,7 +87,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             entry.DetailsJson,
             entry.ReferenceImageUrl,
             entry.Priority,
-            entry.StrictCheck
+            entry.StrictCheck,
+            EffectiveFromChapterNumber = effectiveFrom
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
@@ -96,7 +99,7 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             contentHash: contentHash,
             authorId: command.UserId,
             associatedChapterId: null,
-            effectiveFromChapterNumber: Math.Max(1, command.EffectiveFromChapterNumber),
+            effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: true
         );
 

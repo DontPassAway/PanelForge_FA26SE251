@@ -66,7 +66,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult GetCurrentUser()
+    public async Task<IActionResult> GetCurrentUser(CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub");
@@ -78,12 +78,21 @@ public class AuthController : ControllerBase
             ?? User.FindFirstValue("role")
             ?? "User";
 
+        // BR-22: CanCreateStudio đọc từ DB (có thể đã được Admin cấp/thu hồi sau khi token phát hành)
+        var canCreateStudio = false;
+        if (Guid.TryParse(userId, out var parsedUserId))
+        {
+            var context = await _mediator.Send(new GetLandingContextQuery(parsedUserId), cancellationToken);
+            canCreateStudio = context.IsSuccess && context.Value!.CanCreateStudio;
+        }
+
         return Ok(new
         {
             Id = userId,
             Email = email,
             FullName = name,
-            Role = role
+            Role = role,
+            CanCreateStudio = canCreateStudio
         });
     }
 

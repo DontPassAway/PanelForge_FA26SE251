@@ -16,6 +16,7 @@ public interface IPanelForgeDbContext
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<AiUsageRecord> AiUsageRecords { get; }
 
     // Master Data
     DbSet<ElementTypeMasterData> ElementTypes { get; }

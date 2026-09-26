@@ -66,5 +66,7 @@ public sealed record AddBibleEntryRevisionRequest(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1
+    int EffectiveFromChapterNumber = 1,
+    // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
+    int? ExpectedVersionNumber = null
 );

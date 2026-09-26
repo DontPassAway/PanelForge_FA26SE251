@@ -67,6 +67,10 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
                .HasColumnName("details")
                .HasColumnType("text");
 
+        // UC-15: lọc theo entity (và tra lịch sử một bản ghi cụ thể)
+        builder.HasIndex(a => new { a.EntityName, a.EntityId })
+               .HasDatabaseName("ix_audit_logs_entity_name_entity_id");
+
         builder.Property(a => a.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

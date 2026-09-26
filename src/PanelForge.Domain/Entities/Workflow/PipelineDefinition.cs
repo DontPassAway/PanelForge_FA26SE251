@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Auth;
 using PanelForge.Domain.Entities.Content;
@@ -93,6 +95,131 @@ public class PipelineDefinition : BaseEntity
         Transitions.Add(transition);
         UpdatedAt = DateTime.UtcNow;
         return transition;
+    }
+
+    // ─── UC-03: Producer cấu hình stage của pipeline Series ────────────────────
+
+    // Method (không phải property) để EF không map nhầm thành navigation
+    public IReadOnlyList<PipelineStage> GetOrderedStages() => Stages.OrderBy(s => s.StageOrder).ToList();
+
+    /// <summary>
+    /// Chèn stage mới tại vị trí <paramref name="position"/> (1-based, null = cuối pipeline),
+    /// sau đó chuẩn hóa thứ tự 1..n và cờ Initial/Terminal.
+    /// </summary>
+    public PipelineStage InsertStage(
+        string name,
+        string? slug,
+        int? position,
+        string? colorCode,
+        WorkspaceRole? allowedRole,
+        bool isApprovalGate,
+        int? estimatedDurationDays)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var normalizedSlug = NormalizeSlug(string.IsNullOrWhiteSpace(slug) ? name : slug);
+        if (normalizedSlug.Length == 0)
+            throw new ArgumentException("Slug của stage không hợp lệ.");
+        if (Stages.Any(s => s.Slug == normalizedSlug))
+            throw new ArgumentException($"Slug '{normalizedSlug}' đã tồn tại trong pipeline.");
+
+        var ordered = GetOrderedStages().ToList();
+        var index = position.HasValue ? Math.Clamp(position.Value, 1, ordered.Count + 1) - 1 : ordered.Count;
+
+        var stage = PipelineStage.Create(
+            Id, name, normalizedSlug, ordered.Count + 1, colorCode, allowedRole, isApprovalGate,
+            estimatedDurationDays: estimatedDurationDays);
+        Stages.Add(stage);
+
+        ordered.Insert(index, stage);
+        ApplyOrder(ordered);
+        return stage;
+    }
+
+    /// <summary>Sắp xếp lại toàn bộ stage. <paramref name="orderedStageIds"/> phải chứa đủ và đúng mọi stage.</summary>
+    public void ReorderStages(IReadOnlyList<Guid> orderedStageIds)
+    {
+        ArgumentNullException.ThrowIfNull(orderedStageIds);
+        var byId = Stages.ToDictionary(s => s.Id);
+        if (orderedStageIds.Count != byId.Count
+            || orderedStageIds.Distinct().Count() != orderedStageIds.Count
+            || orderedStageIds.Any(id => !byId.ContainsKey(id)))
+        {
+            throw new ArgumentException("Danh sách stageIds phải chứa đầy đủ và không trùng lặp các stage hiện có của pipeline.");
+        }
+
+        ApplyOrder(orderedStageIds.Select(id => byId[id]).ToList());
+    }
+
+    /// <summary>Gỡ stage khỏi pipeline. Pipeline luôn phải còn ít nhất 2 stage (điểm đầu và điểm kết thúc).</summary>
+    public PipelineStage RemoveStage(Guid stageId)
+    {
+        var stage = Stages.FirstOrDefault(s => s.Id == stageId)
+            ?? throw new ArgumentException("Stage không thuộc pipeline này.");
+        if (Stages.Count <= 2)
+            throw new InvalidOperationException("Pipeline phải có ít nhất 2 stage.");
+
+        Stages.Remove(stage);
+        ApplyOrder(GetOrderedStages().ToList());
+        return stage;
+    }
+
+    /// <summary>
+    /// Dựng lại bộ transition mặc định theo thứ tự stage hiện tại:
+    /// - Chuyển tiếp i → i+1, yêu cầu vai trò của stage nguồn.
+    /// - Mỗi stage là cổng duyệt (IsApprovalGate) được trả về (reject) mọi stage phía trước, bắt buộc comment.
+    /// Trả về các transition cũ bị gỡ và transition mới để tầng persistence cập nhật.
+    /// </summary>
+    public (IReadOnlyList<StageTransition> Removed, IReadOnlyList<StageTransition> Added) RebuildDefaultTransitions()
+    {
+        var removed = Transitions.ToList();
+        foreach (var t in removed) Transitions.Remove(t);
+
+        var ordered = GetOrderedStages();
+        for (var i = 0; i < ordered.Count - 1; i++)
+        {
+            var from = ordered[i];
+            var to = ordered[i + 1];
+            AddTransition(from.Id, to.Id, TransitionLabel($"{from.Name} → {to.Name}"), from.AllowedRole);
+        }
+
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            var gate = ordered[i];
+            if (!gate.IsApprovalGate) continue;
+
+            for (var j = 0; j < i; j++)
+            {
+                var target = ordered[j];
+                AddTransition(gate.Id, target.Id, TransitionLabel($"Reject: trả về {target.Name}"), gate.AllowedRole,
+                    requiresComment: true, isBackwardTransition: true);
+            }
+        }
+
+        return (removed, Transitions.ToList());
+    }
+
+    private void ApplyOrder(IReadOnlyList<PipelineStage> ordered)
+    {
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SetPosition(i + 1, isInitial: i == 0, isTerminal: i == ordered.Count - 1);
+        }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Cột transition_name là varchar(150)
+    private static string TransitionLabel(string value) => value.Length <= 150 ? value : value[..150];
+
+    private static string NormalizeSlug(string value)
+    {
+        // Bỏ dấu tiếng Việt: "Tô màu" → "to-mau"
+        var decomposed = value.Trim().ToLowerInvariant().Replace('đ', 'd').Normalize(NormalizationForm.FormD);
+        var chars = decomposed
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            .Select(c => char.IsLetterOrDigit(c) && c < 128 ? c : '-')
+            .ToArray();
+        var slug = string.Join('-', new string(chars).Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return slug.Length > 50 ? slug[..50].TrimEnd('-') : slug;
     }
 
     /// <summary>

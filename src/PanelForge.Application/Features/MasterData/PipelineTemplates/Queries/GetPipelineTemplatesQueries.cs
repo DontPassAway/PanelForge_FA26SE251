@@ -6,7 +6,8 @@ using PanelForge.Application.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
 
-public sealed record GetPipelineTemplatesQuery() : IRequest<Result<IReadOnlyList<PipelineTemplateDto>>>;
+/// <param name="ActiveOnly">true: chỉ template đang hoạt động (dùng cho Producer khi tạo Series).</param>
+public sealed record GetPipelineTemplatesQuery(bool ActiveOnly = false) : IRequest<Result<IReadOnlyList<PipelineTemplateDto>>>;
 
 public sealed class GetPipelineTemplatesQueryHandler
     : IRequestHandler<GetPipelineTemplatesQuery, Result<IReadOnlyList<PipelineTemplateDto>>>
@@ -18,6 +19,7 @@ public sealed class GetPipelineTemplatesQueryHandler
     {
         var list = await _dbContext.PipelineTemplates
             .Include(t => t.Stages)
+            .Where(t => !q.ActiveOnly || t.IsActive)
             .OrderByDescending(t => t.IsDefault).ThenBy(t => t.Code)
             .ToListAsync(ct);
         return Result<IReadOnlyList<PipelineTemplateDto>>.Success(list.Select(t => t.ToDto()).ToList());

@@ -9,5 +9,7 @@ public record UserDto(
     bool IsActive,
     bool IsEmailConfirmed = false,
     bool TwoFactorEnabled = false,
-    string Role = "User"
+    string Role = "User",
+    // BR-22: chỉ true khi Administrator đã cấp quyền tạo Studio (luôn false với Admin)
+    bool CanCreateStudio = false
 );

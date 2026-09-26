@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Persistence.Configurations.Content;
 
@@ -28,9 +29,27 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnType("numeric(8,2)")
                .IsRequired();
 
+        // Chương đã xóa mềm không giữ chỗ số chương (Producer xóa rồi tạo lại chương N)
         builder.HasIndex(c => new { c.SeriesId, c.ChapterNumber })
                .IsUnique()
+               .HasFilter("\"IsDeleted\" = false")
                .HasDatabaseName("ix_chapters_series_number");
+
+        builder.Property(c => c.Status)
+               .HasColumnName("status")
+               .HasColumnType("varchar(20)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<ChapterStatus>(v))
+               .HasDefaultValue(ChapterStatus.InProduction)
+               .HasSentinel(ChapterStatus.InProduction)
+               .IsRequired();
+
+        builder.Property(c => c.PublishedAt)
+               .HasColumnName("published_at")
+               .HasColumnType("timestamptz");
+
+        // Public catalog (BR-23/24) lọc theo trạng thái Published
+        builder.HasIndex(c => new { c.Status, c.SeriesId })
+               .HasDatabaseName("ix_chapters_status_series");
 
         builder.Property(c => c.Title)
                .HasColumnName("title")

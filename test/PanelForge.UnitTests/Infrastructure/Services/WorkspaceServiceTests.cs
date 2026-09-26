@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PanelForge.Application.Interfaces;
 using PanelForge.Application.Interfaces.Authentication;
@@ -18,15 +19,19 @@ public class WorkspaceServiceTests
 {
     private readonly Mock<IPanelForgeDbContext> _dbContextMock;
     private readonly Mock<IWorkspaceAuthorizationService> _authorizationServiceMock;
-    private readonly Mock<IPasswordHasher> _passwordHasherMock;
+    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly WorkspaceService _service;
 
     public WorkspaceServiceTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _authorizationServiceMock = new Mock<IWorkspaceAuthorizationService>();
-        _passwordHasherMock = new Mock<IPasswordHasher>();
-        _service = new WorkspaceService(_dbContextMock.Object, _authorizationServiceMock.Object, _passwordHasherMock.Object);
+        _emailServiceMock = new Mock<IEmailService>();
+        _service = new WorkspaceService(
+            _dbContextMock.Object,
+            _authorizationServiceMock.Object,
+            _emailServiceMock.Object,
+            NullLogger<WorkspaceService>.Instance);
     }
 
     [Fact]
@@ -118,5 +123,83 @@ public class WorkspaceServiceTests
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Administrator*");
+    }
+
+    [Fact]
+    public async Task AddMemberAsync_WhenEmailHasNoAccount_ShouldCreatePasswordlessInvitedUser_AndSendOtp()
+    {
+        // Arrange
+        var actorId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", actorId);
+
+        _authorizationServiceMock
+            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspace.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var users = new List<User>();
+        var usersDbSet = DbSetMockHelper.CreateDbSetMock(users);
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+
+        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
+        {
+            Email = "New.Artist@Test.com",
+            Role = WorkspaceRole.Artist
+        };
+
+        // Act
+        var result = await _service.AddMemberAsync(actorId, workspace.Id, request);
+
+        // Assert
+        var invited = users.Should().ContainSingle().Subject;
+        invited.Email.Should().Be("new.artist@test.com");
+        invited.PasswordHash.Should().BeNull("tài khoản được mời không được có mật khẩu mặc định");
+        invited.IsEmailConfirmed.Should().BeFalse();
+        invited.PasswordResetToken.Should().MatchRegex("^[0-9]{6}$");
+        invited.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
+        result.Role.Should().Be(WorkspaceRole.Artist);
+
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendEmailAsync(
+            "new.artist@test.com",
+            It.IsAny<string>(),
+            It.Is<string>(body => body.Contains(invited.PasswordResetToken!)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddMemberAsync_WhenEmailSendingFails_ShouldStillAddMember()
+    {
+        // Arrange
+        var actorId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", actorId);
+        var existingUser = User.Create("writer@test.com", "Writer");
+
+        _authorizationServiceMock
+            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspace.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _emailServiceMock
+            .Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentNullException("SenderEmail"));
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<User> { existingUser }));
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+
+        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
+        {
+            Email = existingUser.Email,
+            Role = WorkspaceRole.Writer
+        };
+
+        // Act
+        var result = await _service.AddMemberAsync(actorId, workspace.Id, request);
+
+        // Assert
+        result.UserId.Should().Be(existingUser.Id);
+        existingUser.PasswordResetToken.Should().BeNull("user đã có tài khoản không cần OTP kích hoạt");
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

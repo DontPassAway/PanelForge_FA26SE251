@@ -6,7 +6,7 @@ using PanelForge.Application.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
 
-public sealed record GetBibleEntryHistoryQuery(Guid BibleEntryId) : IRequest<Result<IReadOnlyList<BibleEntryRevisionDto>>>;
+public sealed record GetBibleEntryHistoryQuery(Guid SeriesId, Guid BibleEntryId) : IRequest<Result<IReadOnlyList<BibleEntryRevisionDto>>>;
 
 public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleEntryHistoryQuery, Result<IReadOnlyList<BibleEntryRevisionDto>>>
 {
@@ -19,8 +19,14 @@ public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleE
 
     public async Task<Result<IReadOnlyList<BibleEntryRevisionDto>>> Handle(GetBibleEntryHistoryQuery request, CancellationToken cancellationToken)
     {
-        var entryExists = await _dbContext.BibleEntries
-            .AnyAsync(e => e.Id == request.BibleEntryId, cancellationToken);
+        // Entry phải thuộc SeriesBible của seriesId trên route (chống IDOR)
+        var bibleId = await _dbContext.SeriesBibles
+            .Where(b => b.SeriesId == request.SeriesId)
+            .Select(b => (Guid?)b.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var entryExists = bibleId != null && await _dbContext.BibleEntries
+            .AnyAsync(e => e.Id == request.BibleEntryId && e.SeriesBibleId == bibleId.Value, cancellationToken);
 
         if (!entryExists)
         {
