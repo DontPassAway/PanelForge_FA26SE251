@@ -22,7 +22,6 @@ public sealed class GetPageHierarchyQueryHandler : IRequestHandler<GetPageHierar
         var page = await _dbContext.Pages
             .AsNoTracking()
             .Include(p => p.Panels)
-                .ThenInclude(p => p.Elements)
             .FirstOrDefaultAsync(p => p.Id == query.PageId, cancellationToken);
 
         if (page == null)
@@ -37,22 +36,7 @@ public sealed class GetPageHierarchyQueryHandler : IRequestHandler<GetPageHierar
                 BoundingBox: p.BoundingBox,
                 ReadingOrder: p.ReadingOrder,
                 CurrentStageId: p.CurrentStageId,
-                CreatedAt: p.CreatedAt,
-                Elements: p.Elements
-                    .OrderBy(e => e.ZIndex)
-                    .Select(e => new PageElementDetailDto(
-                        Id: e.Id,
-                        PanelId: e.PanelId,
-                        ElementType: e.ElementType.ToString(),
-                        ZIndex: e.ZIndex,
-                        TransformGeometry: e.TransformGeometry,
-                        Content: e.Content,
-                        StyleProperties: e.StyleProperties,
-                        ScriptLineId: e.ScriptLineId,
-                        SpeakerCharacterId: e.SpeakerCharacterId,
-                        CreatedAt: e.CreatedAt
-                    ))
-                    .ToList()
+                CreatedAt: p.CreatedAt
             ))
             .ToList();
 

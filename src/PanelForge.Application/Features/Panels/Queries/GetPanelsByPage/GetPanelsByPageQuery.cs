@@ -32,8 +32,7 @@ public sealed class GetPanelsByPageQueryHandler : IRequestHandler<GetPanelsByPag
                 p.CurrentStageId,
                 p.CreatedAt,
                 p.UpdatedAt,
-                p.CreatedBy,
-                p.Elements.Count
+                p.CreatedBy
             ))
             .ToListAsync(cancellationToken);
 

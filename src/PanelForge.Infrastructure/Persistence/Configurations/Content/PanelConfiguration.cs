@@ -49,10 +49,5 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .WithMany()
                .HasForeignKey(p => p.CurrentStageId)
                .OnDelete(DeleteBehavior.SetNull);
-
-        builder.HasMany(p => p.Elements)
-               .WithOne(e => e.Panel)
-               .HasForeignKey(e => e.PanelId)
-               .OnDelete(DeleteBehavior.Cascade);
     }
 }

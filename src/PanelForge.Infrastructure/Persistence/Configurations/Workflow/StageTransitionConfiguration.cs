@@ -41,7 +41,7 @@ internal sealed class StageTransitionConfiguration : IEntityTypeConfiguration<St
         // Transition soft-delete khi dựng lại pipeline không được chặn tạo lại cặp from→to
         builder.HasIndex(t => new { t.PipelineDefinitionId, t.FromStageId, t.ToStageId })
                .IsUnique()
-               .HasFilter("\"IsDeleted\" = false")
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_stage_transitions_def_from_to");
 
         builder.Property(t => t.TransitionName)

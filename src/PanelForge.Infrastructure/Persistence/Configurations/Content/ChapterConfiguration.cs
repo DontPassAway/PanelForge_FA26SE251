@@ -32,7 +32,7 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
         // Chương đã xóa mềm không giữ chỗ số chương (Producer xóa rồi tạo lại chương N)
         builder.HasIndex(c => new { c.SeriesId, c.ChapterNumber })
                .IsUnique()
-               .HasFilter("\"IsDeleted\" = false")
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_chapters_series_number");
 
         builder.Property(c => c.Status)

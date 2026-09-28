@@ -37,14 +37,12 @@ public interface IPanelForgeDbContext
     DbSet<PipelineDefinition> PipelineDefinitions { get; }
     DbSet<PipelineStage> PipelineStages { get; }
     DbSet<StageTransition> StageTransitions { get; }
-    DbSet<WorkflowTransitionLog> WorkflowTransitionLogs { get; }
     DbSet<Assignment> Assignments { get; }
     DbSet<Chapter> Chapters { get; }
     DbSet<Scene> Scenes { get; }
     DbSet<ScriptLine> ScriptLines { get; }
     DbSet<Page> Pages { get; }
     DbSet<Panel> Panels { get; }
-    DbSet<Element> Elements { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

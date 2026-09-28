@@ -36,7 +36,7 @@ internal sealed class PipelineStageConfiguration : IEntityTypeConfiguration<Pipe
         // Stage bị soft-delete không được giữ chỗ slug (UC-03: Producer xóa rồi thêm lại stage)
         builder.HasIndex(s => new { s.PipelineDefinitionId, s.Slug })
                .IsUnique()
-               .HasFilter("\"IsDeleted\" = false")
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_pipeline_stages_definition_slug");
 
         builder.Property(s => s.StageOrder)

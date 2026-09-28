@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -51,14 +52,12 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PipelineDefinition> PipelineDefinitions => Set<PipelineDefinition>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
-    public DbSet<WorkflowTransitionLog> WorkflowTransitionLogs => Set<WorkflowTransitionLog>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
     public DbSet<Page> Pages => Set<Page>();
     public DbSet<Panel> Panels => Set<Panel>();
-    public DbSet<Element> Elements => Set<Element>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -194,6 +193,18 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PanelForgeDbContext).Assembly);
 
+        // Cột chưa được đặt tên trong Configuration (chủ yếu từ BaseEntity: CreatedBy, IsDeleted...)
+        // mặc định lấy tên PascalCase → đổi sang snake_case cho đồng nhất với các cột còn lại.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                var columnName = property.GetColumnName();
+                if (columnName.Any(char.IsUpper))
+                    property.SetColumnName(ToSnakeCase(columnName));
+            }
+        }
+
         // 3. Tự động áp dụng Global Query Filter cho tất cả các Entity kế thừa ISoftDelete (chỉ khi IsDeleted thực sự được map vào bảng DB)
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
@@ -211,6 +222,9 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
             }
         }
     }
+
+    private static string ToSnakeCase(string name) =>
+        Regex.Replace(name, "(?<=[a-z0-9])([A-Z])", "_$1").ToLowerInvariant();
 
     private static void ConfigureSoftDeleteFilter<TEntity>(ModelBuilder modelBuilder)
         where TEntity : class, ISoftDelete

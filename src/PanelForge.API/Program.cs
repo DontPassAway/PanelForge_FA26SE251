@@ -10,6 +10,7 @@ using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Infrastructure.Persistence.Seeders;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -120,6 +121,9 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<PanelForgeDbContext>();
     await db.Database.MigrateAsync();
     await MasterDataSeeder.SeedAsync(db);
+
+    if (app.Environment.IsDevelopment())
+        await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
 }
 
 app.UseSwagger();

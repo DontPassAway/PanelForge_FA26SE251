@@ -25,7 +25,6 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
     public async Task<Result<PanelDto>> Handle(UpdatePanelCoordinatesCommand command, CancellationToken cancellationToken)
     {
         var panel = await _dbContext.Panels
-            .Include(p => p.Elements)
             .FirstOrDefaultAsync(p => p.Id == command.PanelId, cancellationToken);
 
         if (panel == null)
@@ -56,8 +55,7 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             CurrentStageId: panel.CurrentStageId,
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
-            CreatedBy: panel.CreatedBy,
-            ElementsCount: panel.Elements.Count
+            CreatedBy: panel.CreatedBy
         ));
     }
 }

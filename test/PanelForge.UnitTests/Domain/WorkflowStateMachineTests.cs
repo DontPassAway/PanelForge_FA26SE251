@@ -148,31 +148,4 @@ public class WorkflowStateMachineTests
         page.CurrentStageId.Should().Be(stageId);
         panel.CurrentStageId.Should().Be(stageId);
     }
-
-    [Fact]
-    public void WorkflowTransitionLog_Create_ShouldStoreAuditMetadata()
-    {
-        // Arrange
-        var panelId = Guid.NewGuid();
-        var fromStageId = Guid.NewGuid();
-        var toStageId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-
-        // Act
-        var log = WorkflowTransitionLog.Create(
-            panelId,
-            WorkflowEntityType.Panel,
-            fromStageId,
-            toStageId,
-            userId,
-            "Inks approved by Editor");
-
-        // Assert
-        log.EntityId.Should().Be(panelId);
-        log.EntityType.Should().Be(WorkflowEntityType.Panel);
-        log.FromStageId.Should().Be(fromStageId);
-        log.ToStageId.Should().Be(toStageId);
-        log.TriggeredByUserId.Should().Be(userId);
-        log.Comment.Should().Be("Inks approved by Editor");
-    }
 }

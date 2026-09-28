@@ -13,7 +13,6 @@ public class ScriptLine : BaseEntity
 
     public Scene Scene { get; private set; } = default!;
     public BibleEntry? SpeakerCharacter { get; private set; }
-    public ICollection<Element> BoundElements { get; private set; } = [];
 
     private ScriptLine() { }
 
