@@ -25,9 +25,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException(
-                "Connection string 'PostgreSQL' không được cấu hình trong appsettings.json.");
+        var connectionString = DatabaseConnection.Resolve(configuration);
 
         // ── EF Core (Auth entities: Users, Workspaces, Series, ...) ──────────
         services.AddDbContext<PanelForgeDbContext>(options =>

@@ -84,7 +84,7 @@ Installed as a Claude Code plugin at project scope (`.claude/settings.json`, mar
 
 ## Agent configuration files
 
-- `.claude/skills/` – 16 upstream skills (addyosmani/agent-skills, MIT) + 6 `panelforge-*` skills. Upstream copies are unmodified; to update, re-copy from `../../agent-tools/agent-skills/skills/<name>`.
+- `.claude/skills/` – 16 upstream skills (addyosmani/agent-skills, MIT) + 6 `panelforge-*` skills. Upstream copies are unmodified; to update, re-copy from `agent-tools/agent-skills/skills/<name>` (local clone of https://github.com/addyosmani/agent-skills, git-ignored).
 - `.claude/references/` – checklists referenced by upstream skills as `../../references/*.md`.
 - `.claude/settings.json` – shared: Ponytail plugin, `PONYTAIL_DEFAULT_MODE`, deny rules for reading secret files.
 - `.claude/settings.local.json` – personal, not committed.
