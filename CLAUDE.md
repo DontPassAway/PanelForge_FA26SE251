@@ -61,7 +61,8 @@ A lower level never overrides a higher one. Ponytail must never override a manda
 
 MCP servers configured for this machine (Claude Code user scope): `playwright` (isolated, headless), `postgres` (read-only, `panelforge_dev`), `github` (read-only + lockdown), `context7` (library docs), `sequential-thinking`, `filesystem` (only `AI_Workspace`). Load `panelforge-tooling` whenever a skill step needs one of them.
 
-- Any skill that asks for **Chrome DevTools MCP** (`browser-testing-with-devtools`, `test-driven-development`, `performance-optimization`) → use **Playwright MCP** instead (tool mapping in `panelforge-tooling`). Do not install `chrome-devtools-mcp`.
+- **Browser work defaults to Playwright MCP**, including where `browser-testing-with-devtools` / `test-driven-development` mention Chrome DevTools (tool mapping in `panelforge-tooling`).
+- **Performance work uses Chrome DevTools MCP** (from the ECC plugin, `mcp__plugin_ecc_chrome-devtools__*`): performance trace, `lighthouse_audit`, CPU/network throttling, heap snapshots. Only for `performance-optimization` and the performance section of `browser-testing-with-devtools`. Never with `--autoConnect` / `--browser-url`.
 - Library/framework API questions (MediatR, EF Core, ASP.NET Core, React, Tailwind, TanStack, dnd-kit) → `context7` before relying on memory.
 - Business-rule / schema checks (BR-01, 03, 05, 08, 11, 13, 18) → `postgres` SELECT/EXPLAIN only; DB names are snake_case.
 - PR/issue/branch context for review and planning → `github` (read-only; writes are done manually by the user).
@@ -74,7 +75,7 @@ MCP servers configured for this machine (Claude Code user scope): `playwright` (
 - **Ponytail "one assert-based self-check, no frameworks"**: tests use the existing xUnit project (`test/PanelForge.UnitTests`), not ad-hoc `demo()` checks.
 - **Ponytail "minimal output"**: still list affected BR IDs and tests in the plan/response.
 - **Ponytail never removes**: validation, authorization, audit logging, append-only history, concurrency protection, provenance, security checks, human approval of AI output.
-- **`browser-testing-with-devtools` suggests installing `chrome-devtools-mcp`**: do not install it without asking (rule 16). Prefer the already-configured Playwright MCP (`--isolated --headless`) or the built-in browser.
+- **`browser-testing-with-devtools` assumes Chrome DevTools MCP for everything**: here Chrome DevTools MCP (provided by the ECC plugin, dedicated profile) is used only for performance measurement; Playwright MCP (`--isolated --headless`) stays the default. Do not install any additional browser MCP without asking (rule 16).
 - **`ci-cd-and-automation` / `performance-optimization` examples use Node tooling (`npx tsc`, Prisma, Vercel)**: translate to this stack (`dotnet build`, `dotnet test`, EF Core migrations, existing `.github/workflows`).
 - **`git-workflow-and-versioning`**: follow the team's existing branch names; never force-push shared branches or skip hooks.
 
