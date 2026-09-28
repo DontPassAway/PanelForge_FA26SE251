@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Workspaces;
+using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Services;

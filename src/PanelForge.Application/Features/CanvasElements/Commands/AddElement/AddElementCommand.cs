@@ -1,7 +1,7 @@
 ﻿using MediatR;
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Features.Elements.AddElement;
+namespace PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 
 /// <summary>
 /// Command: Thêm một Element mới vào Page.

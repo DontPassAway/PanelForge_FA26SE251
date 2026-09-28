@@ -2,7 +2,7 @@ using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;

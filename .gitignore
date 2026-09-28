@@ -432,3 +432,6 @@ FodyWeavers.xsd
 appsettings.json
 appsettings.*.json
 **/firebase-key.json
+
+# Claude Code personal settings (agent config in .claude/ is shared)
+.claude/settings.local.json

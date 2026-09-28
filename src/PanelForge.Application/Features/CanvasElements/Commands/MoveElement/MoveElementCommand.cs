@@ -1,7 +1,7 @@
 ﻿using MediatR;
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Features.Elements.MoveElement;
+namespace PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
 
 /// <summary>
 /// Command: Di chuyển / Resize một Element.

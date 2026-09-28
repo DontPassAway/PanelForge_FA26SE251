@@ -1,6 +1,6 @@
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Identity;
 
-namespace PanelForge.Application.Interfaces.Authentication;
+namespace PanelForge.Application.Common.Interfaces.Authentication;
 
 public interface IJwtTokenGenerator
 {

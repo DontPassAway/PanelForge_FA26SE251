@@ -1,4 +1,4 @@
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Auth.Models;
 
 public record UserDto(
     Guid Id,

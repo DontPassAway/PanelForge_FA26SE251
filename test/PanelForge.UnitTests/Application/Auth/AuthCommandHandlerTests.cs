@@ -1,627 +1,537 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Moq;
 using OtpNet;
-using PanelForge.Application.DTOs.Auth;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Authentication;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
-using PanelForge.Infrastructure.Services;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Auth.Commands.ChangePassword;
+using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
+using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
+using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
+using PanelForge.Application.Features.Auth.Commands.ForgotPassword;
+using PanelForge.Application.Features.Auth.Commands.Login;
+using PanelForge.Application.Features.Auth.Commands.Register;
+using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
+using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
+using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Identity;
+using PanelForge.Infrastructure.Authentication;
 using PanelForge.UnitTests.Common;
 using Xunit;
 
-namespace PanelForge.UnitTests.Infrastructure.Authentication;
+namespace PanelForge.UnitTests.Application.Auth;
 
-public class AuthServiceTests
+/// <summary>Các handler thay thế AuthService cũ — giữ nguyên các kịch bản kiểm thử trước đây.</summary>
+public class AuthCommandHandlerTests
 {
-    private readonly Mock<IPasswordHasher> _passwordHasherMock;
-    private readonly Mock<IJwtTokenGenerator> _jwtTokenGeneratorMock;
-    private readonly Mock<IPanelForgeDbContext> _dbContextMock;
-    private readonly Mock<IEmailService> _emailServiceMock;
-    private readonly AuthService _service;
-
-    public AuthServiceTests()
-    {
-        _passwordHasherMock = new Mock<IPasswordHasher>();
-        _jwtTokenGeneratorMock = new Mock<IJwtTokenGenerator>();
-        _dbContextMock = new Mock<IPanelForgeDbContext>();
-        _emailServiceMock = new Mock<IEmailService>();
-
-        SetupRememberedDevices(_rememberedDevices);
-
-        _service = new AuthService(
-            _dbContextMock.Object,
-            _passwordHasherMock.Object,
-            _jwtTokenGeneratorMock.Object,
-            _emailServiceMock.Object);
-    }
-
+    private readonly Mock<IPasswordHasher> _passwordHasherMock = new();
+    private readonly Mock<IJwtTokenGenerator> _jwtTokenGeneratorMock = new();
+    private readonly Mock<IPanelForgeDbContext> _dbContextMock = new();
+    private readonly Mock<IEmailService> _emailServiceMock = new();
+    private readonly ITotpService _totpService = new OtpNetTotpService();
     private readonly List<UserRememberedDevice> _rememberedDevices = new();
+
+    public AuthCommandHandlerTests()
+    {
+        SetupRememberedDevices(_rememberedDevices);
+    }
 
     private void SetupUsers(List<User> users)
     {
-        var dbSet = DbSetMockHelper.CreateDbSetMock(users);
-        _dbContextMock.Setup(db => db.Users).Returns(dbSet);
-        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()))
-                      .ReturnsAsync(1);
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(users));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
     }
 
     private void SetupRememberedDevices(List<UserRememberedDevice> devices)
-    {
-        var dbSet = DbSetMockHelper.CreateDbSetMock(devices);
-        _dbContextMock.Setup(db => db.UserRememberedDevices).Returns(dbSet);
-    }
+        => _dbContextMock.Setup(db => db.UserRememberedDevices).Returns(DbSetMockHelper.CreateDbSetMock(devices));
 
     private static string HashToken(string token)
-    {
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
-    }
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+    private RegisterCommandHandler Register() => new(_dbContextMock.Object, _passwordHasherMock.Object, _emailServiceMock.Object);
+    private LoginCommandHandler Login() => new(_dbContextMock.Object, _passwordHasherMock.Object, _jwtTokenGeneratorMock.Object);
+    private ChangePasswordCommandHandler ChangePassword() => new(_dbContextMock.Object, _passwordHasherMock.Object, _totpService);
+    private VerifyTwoFactorCommandHandler VerifyTwoFactor() => new(_dbContextMock.Object, _totpService, _jwtTokenGeneratorMock.Object);
 
     // ══════════════════════════════════════════════════════════════════════════
-    // REGISTER TESTS
+    // REGISTER
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task RegisterAsync_WhenEmailAlreadyExists_ShouldThrowInvalidOperationException()
+    public async Task Register_WhenEmailAlreadyExists_ShouldFail()
     {
-        // Arrange
-        var existingUser = User.Create("test@example.com", "Existing User", "hashed_pwd");
-        SetupUsers(new List<User> { existingUser });
+        SetupUsers(new List<User> { User.Create("test@example.com", "Existing User", "hashed_pwd") });
 
-        var request = new RegisterRequest("test@example.com", "Password123!", "New User");
+        var result = await Register().Handle(
+            new RegisterCommand("test@example.com", "Password123!", "New User", null), CancellationToken.None);
 
-        // Act
-        Func<Task> act = async () => await _service.RegisterAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Email đã được đăng ký trong hệ thống.");
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().BeNull(); // → 400
+        result.ErrorMessage.Should().Be("Email đã được đăng ký trong hệ thống.");
     }
 
     [Fact]
-    public async Task RegisterAsync_WhenValidRequest_ShouldCreateUserAndReturnToken()
+    public async Task Register_WhenValid_ShouldCreateUserAndSendVerificationEmail()
     {
-        // Arrange
         var usersList = new List<User>();
         SetupUsers(usersList);
+        _passwordHasherMock.Setup(h => h.HashPassword("Password123!")).Returns("hashed_secure_password");
 
-        _passwordHasherMock.Setup(h => h.HashPassword("Password123!"))
-                           .Returns("hashed_secure_password");
+        var result = await Register().Handle(
+            new RegisterCommand("tam@example.com", "Password123!", "Bui Ngoc Tam", "0123456789"), CancellationToken.None);
 
-        _emailServiceMock.Setup(e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                         .Returns(Task.CompletedTask);
-
-        var request = new RegisterRequest("tam@example.com", "Password123!", "Bui Ngoc Tam", "0123456789");
-
-        // Act
-        var result = await _service.RegisterAsync(request);
-
-        // Assert
-        // Registration no longer returns a JWT token; the user must verify their email first.
-        result.Should().NotBeNull();
-        result.Token.Should().BeNull();
-        result.ExpiresAt.Should().BeNull();
-        result.User!.Email.Should().Be("tam@example.com");
-        result.User.FullName.Should().Be("Bui Ngoc Tam");
-        result.Message.Should().Contain("xác thực");
+        // Đăng ký chưa phát JWT; phải xác thực email trước.
+        var response = result.Value!;
+        response.Token.Should().BeNull();
+        response.ExpiresAt.Should().BeNull();
+        response.User!.Email.Should().Be("tam@example.com");
+        response.User.FullName.Should().Be("Bui Ngoc Tam");
+        response.Message.Should().Contain("xác thực");
 
         usersList.Should().ContainSingle(u => u.Email == "tam@example.com");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _emailServiceMock.Verify(e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendEmailVerificationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // LOGIN TESTS
+    // LOGIN
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task LoginAsync_WhenUserNotFound_ShouldThrowUnauthorizedAccessException()
+    public async Task Login_WhenUserNotFound_ShouldReturnUnauthorized()
     {
-        // Arrange
         SetupUsers(new List<User>());
-        var request = new LoginRequest("notfound@example.com", "Password123!");
 
-        // Act
-        Func<Task> act = async () => await _service.LoginAsync(request);
+        var result = await Login().Handle(
+            new LoginCommand("notfound@example.com", "Password123!", null), CancellationToken.None);
 
-        // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Email hoặc mật khẩu không chính xác.");
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        result.ErrorMessage.Should().Be("Email hoặc mật khẩu không chính xác.");
     }
 
     [Fact]
-    public async Task LoginAsync_WhenUserInactive_ShouldThrowUnauthorizedAccessException()
+    public async Task Login_WhenUserInactive_ShouldReturnUnauthorized()
     {
-        // Arrange
         var user = User.Create("inactive@example.com", "Inactive User", "hashed_pwd");
         user.Deactivate();
         SetupUsers(new List<User> { user });
 
-        var request = new LoginRequest("inactive@example.com", "Password123!");
+        var result = await Login().Handle(
+            new LoginCommand("inactive@example.com", "Password123!", null), CancellationToken.None);
 
-        // Act
-        Func<Task> act = async () => await _service.LoginAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Email hoặc mật khẩu không chính xác.");
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        result.ErrorMessage.Should().Be("Email hoặc mật khẩu không chính xác.");
     }
 
     [Fact]
-    public async Task LoginAsync_WhenPasswordIsIncorrect_ShouldThrowUnauthorizedAccessException()
+    public async Task Login_WhenPasswordIncorrect_ShouldReturnUnauthorized()
     {
-        // Arrange
+        SetupUsers(new List<User> { User.Create("tam@example.com", "Bui Ngoc Tam", "hashed_password") });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("WrongPassword", "hashed_password")).Returns(false);
+
+        var result = await Login().Handle(
+            new LoginCommand("tam@example.com", "WrongPassword", null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        result.ErrorMessage.Should().Be("Email hoặc mật khẩu không chính xác.");
+    }
+
+    [Fact]
+    public async Task Login_WhenEmailNotConfirmed_ShouldReturnUnauthorized()
+    {
+        SetupUsers(new List<User> { User.Create("new@example.com", "New", "hashed_password") });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password")).Returns(true);
+
+        var result = await Login().Handle(
+            new LoginCommand("new@example.com", "CorrectPassword", null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        result.ErrorMessage.Should().Contain("chưa được kích hoạt");
+    }
+
+    [Fact]
+    public async Task Login_WhenCredentialsValid_ShouldReturnToken()
+    {
         var user = User.Create("tam@example.com", "Bui Ngoc Tam", "hashed_password");
+        user.ConfirmEmail();
         SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password")).Returns(true);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("valid_jwt_token", DateTime.UtcNow.AddHours(24)));
 
-        _passwordHasherMock.Setup(h => h.VerifyPassword("WrongPassword", "hashed_password"))
-                           .Returns(false);
+        var result = await Login().Handle(
+            new LoginCommand("tam@example.com", "CorrectPassword", null), CancellationToken.None);
 
-        var request = new LoginRequest("tam@example.com", "WrongPassword");
-
-        // Act
-        Func<Task> act = async () => await _service.LoginAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Email hoặc mật khẩu không chính xác.");
+        result.Value!.Token.Should().Be("valid_jwt_token");
+        result.Value.User!.Email.Should().Be("tam@example.com");
     }
 
     [Fact]
-    public async Task LoginAsync_WhenCredentialsAreValid_ShouldReturnToken()
+    public async Task Login_WhenTwoFactorEnabled_AndNoRememberToken_ShouldRequireTwoFactor()
     {
-        // Arrange
-        var user = User.Create("tam@example.com", "Bui Ngoc Tam", "hashed_password");
-        user.ConfirmEmail(); // Email must be confirmed before login is allowed
-        SetupUsers(new List<User> { user });
-
-        _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
-                           .Returns(true);
-
-        var fakeExpiry = DateTime.UtcNow.AddHours(24);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user))
-                              .Returns(("valid_jwt_token", fakeExpiry));
-
-        var request = new LoginRequest("tam@example.com", "CorrectPassword");
-
-        // Act
-        var result = await _service.LoginAsync(request);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Token.Should().Be("valid_jwt_token");
-        result.User!.Email.Should().Be("tam@example.com");
-    }
-
-    [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_AndNoRememberToken_ShouldRequireTwoFactor()
-    {
-        // Arrange
         var user = User.Create("2fa@example.com", "2FA User", "hashed_password");
-        user.ConfirmEmail(); // Email must be confirmed before login is allowed
+        user.ConfirmEmail();
+        user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
+        user.EnableTwoFactor();
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password")).Returns(true);
+
+        var result = await Login().Handle(
+            new LoginCommand("2fa@example.com", "CorrectPassword", null), CancellationToken.None);
+
+        result.Value!.Token.Should().BeNull();
+        result.Value.RequiresTwoFactor.Should().BeTrue();
+        result.Value.TwoFactorEmail.Should().Be("2fa@example.com");
+    }
+
+    [Fact]
+    public async Task Login_WhenTwoFactorEnabled_AndDeviceRemembered_ShouldIssueTokenDirectly()
+    {
+        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
+        user.ConfirmEmail();
         user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
         user.EnableTwoFactor();
         SetupUsers(new List<User> { user });
 
-        _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password"))
-                           .Returns(true);
+        const string plainToken = "sample_remember_device_token";
+        SetupRememberedDevices(new List<UserRememberedDevice>
+        {
+            UserRememberedDevice.Create(user.Id, HashToken(plainToken), DateTime.UtcNow.AddDays(30), "My PC")
+        });
+        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("trusted-jwt-token", DateTime.UtcNow.AddDays(7)));
 
-        var request = new LoginRequest("2fa@example.com", "CorrectPassword");
+        var result = await Login().Handle(
+            new LoginCommand("user@example.com", "Password123!", plainToken), CancellationToken.None);
 
-        // Act
-        var result = await _service.LoginAsync(request);
-
-        // Assert
-        result.Token.Should().BeNull();
-        result.RequiresTwoFactor.Should().BeTrue();
-        result.TwoFactorEmail.Should().Be("2fa@example.com");
+        result.Value!.RequiresTwoFactor.Should().BeFalse();
+        result.Value.Token.Should().Be("trusted-jwt-token");
+        result.Value.Message.Should().Contain("Thiết bị tin cậy");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // CHANGE PASSWORD TESTS
+    // CHANGE PASSWORD
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task ChangePasswordAsync_WhenValid_ShouldUpdatePasswordHash()
+    public async Task ChangePassword_WhenValid_ShouldUpdatePasswordHash()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
         user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
+        _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
+        _passwordHasherMock.Setup(h => h.HashPassword("NewPassword123!")).Returns("new_hash");
 
-        _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash"))
-                           .Returns(true);
-        _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash"))
-                           .Returns(false);
-        _passwordHasherMock.Setup(h => h.HashPassword("NewPassword123!"))
-                           .Returns("new_hash");
+        var result = await ChangePassword().Handle(
+            new ChangePasswordCommand(user.Id, "OldPassword123!", "NewPassword123!", "123456", null), CancellationToken.None);
 
-        var request = new ChangePasswordRequest
-        {
-            CurrentPassword = "OldPassword123!",
-            NewPassword = "NewPassword123!",
-            ConfirmPassword = "NewPassword123!",
-            EmailOtp = "123456"
-        };
-
-        // Act
-        await _service.ChangePasswordAsync(user.Id, request);
-
-        // Assert
+        result.IsSuccess.Should().BeTrue();
         user.PasswordHash.Should().Be("new_hash");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ChangePasswordAsync_WhenCurrentPasswordIncorrect_ShouldThrowUnauthorizedAccessException()
+    public async Task ChangePassword_WhenCurrentPasswordIncorrect_ShouldReturnUnauthorized()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
         SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("WrongPassword", "old_hash")).Returns(false);
 
-        _passwordHasherMock.Setup(h => h.VerifyPassword("WrongPassword", "old_hash"))
-                           .Returns(false);
+        var result = await ChangePassword().Handle(
+            new ChangePasswordCommand(user.Id, "WrongPassword", "NewPassword123!", null, null), CancellationToken.None);
 
-        var request = new ChangePasswordRequest
-        {
-            CurrentPassword = "WrongPassword",
-            NewPassword = "NewPassword123!",
-            ConfirmPassword = "NewPassword123!"
-        };
-
-        // Act
-        Func<Task> act = async () => await _service.ChangePasswordAsync(user.Id, request);
-
-        // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Mật khẩu hiện tại không chính xác.");
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        result.ErrorMessage.Should().Be("Mật khẩu hiện tại không chính xác.");
     }
 
     [Fact]
-    public async Task ChangePasswordAsync_WhenNewPasswordSameAsCurrent_ShouldThrowInvalidOperationException()
+    public async Task ChangePassword_WhenNewPasswordSameAsCurrent_ShouldFailWithBadRequest()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("SamePassword123!", "hash")).Returns(true);
 
-        _passwordHasherMock.Setup(h => h.VerifyPassword("SamePassword123!", "hash"))
-                           .Returns(true);
+        var result = await ChangePassword().Handle(
+            new ChangePasswordCommand(user.Id, "SamePassword123!", "SamePassword123!", null, null), CancellationToken.None);
 
-        var request = new ChangePasswordRequest
-        {
-            CurrentPassword = "SamePassword123!",
-            NewPassword = "SamePassword123!",
-            ConfirmPassword = "SamePassword123!"
-        };
-
-        // Act
-        Func<Task> act = async () => await _service.ChangePasswordAsync(user.Id, request);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
+        result.ErrorCode.Should().BeNull();
+        result.ErrorMessage.Should().Be("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // FORGOT & RESET PASSWORD TESTS
+    // FORGOT & RESET PASSWORD
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task ForgotPasswordAsync_WhenUserNotFound_ShouldReturnSilentlyToPreventEnumeration()
+    public async Task ForgotPassword_WhenUserNotFound_ShouldSucceedSilently()
     {
-        // Arrange
         SetupUsers(new List<User>());
-        var request = new ForgotPasswordRequest("nonexistent@example.com");
 
-        // Act
-        await _service.ForgotPasswordAsync(request);
+        var result = await new ForgotPasswordCommandHandler(_dbContextMock.Object, _emailServiceMock.Object)
+            .Handle(new ForgotPasswordCommand("nonexistent@example.com"), CancellationToken.None);
 
-        // Assert
-        _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        result.IsSuccess.Should().BeTrue();
+        _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ForgotPasswordAsync_WhenUserExists_ShouldSetResetTokenAndSendEmail()
+    public async Task ForgotPassword_WhenUserExists_ShouldSetResetTokenAndSendEmail()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         SetupUsers(new List<User> { user });
 
-        _emailServiceMock.Setup(e => e.SendPasswordResetEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                         .Returns(Task.CompletedTask);
+        await new ForgotPasswordCommandHandler(_dbContextMock.Object, _emailServiceMock.Object)
+            .Handle(new ForgotPasswordCommand("user@example.com"), CancellationToken.None);
 
-        var request = new ForgotPasswordRequest("user@example.com");
-
-        // Act
-        await _service.ForgotPasswordAsync(request);
-
-        // Assert
         user.PasswordResetToken.Should().NotBeNullOrEmpty();
         user.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(user.Email, It.IsAny<string>(), user.FullName, It.IsAny<CancellationToken>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(
+            user.Email, It.IsAny<string>(), user.FullName, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ResetPasswordAsync_WhenTokenValid_ShouldUpdatePasswordHash()
+    public async Task ResetPassword_WhenTokenValid_ShouldUpdatePasswordHash()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
         user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.HashPassword("NewSecret123!")).Returns("new_hashed_pwd");
 
-        _passwordHasherMock.Setup(h => h.HashPassword("NewSecret123!"))
-                           .Returns("new_hashed_pwd");
+        var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
+            .Handle(new ResetPasswordCommand("user@example.com", "123456", "NewSecret123!"), CancellationToken.None);
 
-        var request = new ResetPasswordRequest
-        {
-            Email = "user@example.com",
-            Token = "123456",
-            NewPassword = "NewSecret123!",
-            ConfirmPassword = "NewSecret123!"
-        };
-
-        // Act
-        await _service.ResetPasswordAsync(request);
-
-        // Assert
+        result.IsSuccess.Should().BeTrue();
         user.PasswordHash.Should().Be("new_hashed_pwd");
         user.PasswordResetToken.Should().BeNull();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ResetPasswordAsync_WhenTokenMismatch_ShouldThrowArgumentException()
+    public async Task ResetPassword_WhenTokenMismatch_ShouldFail()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
         user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
 
-        var request = new ResetPasswordRequest
-        {
-            Email = "user@example.com",
-            Token = "999999",
-            NewPassword = "NewSecret123!",
-            ConfirmPassword = "NewSecret123!"
-        };
+        var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
+            .Handle(new ResetPasswordCommand("user@example.com", "999999", "NewSecret123!"), CancellationToken.None);
 
-        // Act
-        Func<Task> act = async () => await _service.ResetPasswordAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("Mã xác thực đặt lại mật khẩu không chính xác.");
+        result.ErrorMessage.Should().Be("Mã xác thực đặt lại mật khẩu không chính xác.");
     }
 
     [Fact]
-    public async Task ResetPasswordAsync_WhenTokenExpired_ShouldThrowArgumentException()
+    public async Task ResetPassword_WhenTokenExpired_ShouldFail()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "old_hash");
-        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(-5)); // Expired
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(-5));
         SetupUsers(new List<User> { user });
 
-        var request = new ResetPasswordRequest
-        {
-            Email = "user@example.com",
-            Token = "123456",
-            NewPassword = "NewSecret123!",
-            ConfirmPassword = "NewSecret123!"
-        };
+        var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
+            .Handle(new ResetPasswordCommand("user@example.com", "123456", "NewSecret123!"), CancellationToken.None);
 
-        // Act
-        Func<Task> act = async () => await _service.ResetPasswordAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*đã hết hạn*");
+        result.ErrorMessage.Should().Contain("đã hết hạn");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // EMAIL VERIFICATION TESTS
+    // EMAIL VERIFICATION
     // ══════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task VerifyEmailAsync_WhenValidToken_ShouldConfirmEmail()
+    public async Task VerifyEmail_WhenValidToken_ShouldConfirmEmail()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         user.SetEmailVerificationToken("654321", DateTime.UtcNow.AddHours(24));
         SetupUsers(new List<User> { user });
 
-        var request = new VerifyEmailRequest("user@example.com", "654321");
+        var result = await new VerifyEmailCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new VerifyEmailCommand("user@example.com", "654321"), CancellationToken.None);
 
-        // Act
-        await _service.VerifyEmailAsync(request);
-
-        // Assert
+        result.IsSuccess.Should().BeTrue();
         user.IsEmailConfirmed.Should().BeTrue();
         user.EmailVerificationToken.Should().BeNull();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task VerifyEmailAsync_WhenAlreadyConfirmed_ShouldReturnSilently()
+    public async Task VerifyEmail_WhenAlreadyConfirmed_ShouldNotSave()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         user.ConfirmEmail();
         SetupUsers(new List<User> { user });
 
-        var request = new VerifyEmailRequest("user@example.com", "654321");
+        var result = await new VerifyEmailCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new VerifyEmailCommand("user@example.com", "654321"), CancellationToken.None);
 
-        // Act
-        await _service.VerifyEmailAsync(request);
-
-        // Assert
+        result.IsSuccess.Should().BeTrue();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ResendVerificationEmailAsync_WhenAlreadyConfirmed_ShouldThrowInvalidOperationException()
+    public async Task ResendVerification_WhenAlreadyConfirmed_ShouldFail()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         user.ConfirmEmail();
         SetupUsers(new List<User> { user });
 
-        var request = new ResendVerificationRequest("user@example.com");
+        var result = await new ResendVerificationEmailCommandHandler(_dbContextMock.Object, _emailServiceMock.Object)
+            .Handle(new ResendVerificationEmailCommand("user@example.com"), CancellationToken.None);
 
-        // Act
-        Func<Task> act = async () => await _service.ResendVerificationEmailAsync(request);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Tài khoản email này đã được xác thực trước đó.");
+        result.ErrorMessage.Should().Be("Tài khoản email này đã được xác thực trước đó.");
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // 2FA
+    // ══════════════════════════════════════════════════════════════════════════
+
     [Fact]
-    public async Task EnableTwoFactorAsync_WhenValidUser_ShouldGenerateSecretAndUri()
+    public async Task EnableTwoFactor_WhenValidUser_ShouldGenerateSecretAndUri()
     {
-        // Arrange
         var user = User.Create("user@example.com", "User", "hash");
         SetupUsers(new List<User> { user });
 
-        // Act
-        var result = await _service.EnableTwoFactorAsync(user.Id);
+        var result = await new EnableTwoFactorCommandHandler(_dbContextMock.Object, _totpService)
+            .Handle(new EnableTwoFactorCommand(user.Id), CancellationToken.None);
 
-        // Assert
-        result.Should().NotBeNull();
-        result.SharedKey.Should().NotBeNullOrEmpty();
-        result.AuthenticatorUri.Should().Contain("otpauth://totp/PanelForge");
-        result.FormattedKey.Should().NotBeNullOrEmpty();
-        user.TwoFactorSecret.Should().Be(result.SharedKey);
+        var response = result.Value!;
+        response.SharedKey.Should().NotBeNullOrEmpty();
+        response.AuthenticatorUri.Should().Contain("otpauth://totp/PanelForge");
+        response.FormattedKey.Should().NotBeNullOrEmpty();
+        user.TwoFactorSecret.Should().Be(response.SharedKey);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 2FA REMEMBER DEVICE (30 DAYS) TESTS
-    // ══════════════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task LoginAsync_WhenTwoFactorEnabled_AndDeviceRemembered_ShouldIssueTokenDirectly()
+    private static (User user, string code) CreateTwoFactorUser()
     {
-        // Arrange
         var user = User.Create("user@example.com", "Test User", "hashed_pwd");
         user.ConfirmEmail();
-        user.SetTwoFactorSecret("JBSWY3DPEHPK3PXP");
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        user.SetTwoFactorSecret(Base32Encoding.ToString(secretBytes));
         user.EnableTwoFactor();
-        SetupUsers(new List<User> { user });
-
-        var plainToken = "sample_remember_device_token";
-        var tokenHash = HashToken(plainToken);
-        var device = UserRememberedDevice.Create(user.Id, tokenHash, DateTime.UtcNow.AddDays(30), "My PC");
-        SetupRememberedDevices(new List<UserRememberedDevice> { device });
-
-        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("trusted-jwt-token", DateTime.UtcNow.AddDays(7)));
-
-        var request = new LoginRequest("user@example.com", "Password123!", RememberDeviceToken: plainToken);
-
-        // Act
-        var result = await _service.LoginAsync(request);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.RequiresTwoFactor.Should().BeFalse();
-        result.Token.Should().Be("trusted-jwt-token");
-        result.Message.Should().Contain("Thiết bị tin cậy");
+        return (user, new Totp(secretBytes).ComputeTotp());
     }
 
     [Fact]
-    public async Task VerifyTwoFactorAsync_WhenRememberDeviceIsTrue_ShouldSaveDeviceAndReturnPlainToken()
+    public async Task VerifyTwoFactor_WhenRememberDeviceIsTrue_ShouldSaveDeviceAndReturnPlainToken()
     {
-        // Arrange
-        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
-        user.ConfirmEmail();
-
-        var secretBytes = KeyGeneration.GenerateRandomKey(20);
-        var base32Secret = Base32Encoding.ToString(secretBytes);
-        user.SetTwoFactorSecret(base32Secret);
-        user.EnableTwoFactor();
+        var (user, code) = CreateTwoFactorUser();
         SetupUsers(new List<User> { user });
-
-        var totp = new Totp(secretBytes);
-        var currentCode = totp.ComputeTotp();
-
         _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
 
-        var request = new VerifyTwoFactorRequest(
-            Code: currentCode,
-            Email: user.Email,
-            RememberDevice: true,
-            DeviceName: "Office Desktop"
-        );
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, user.Email, true, "Office Desktop"), CancellationToken.None);
 
-        // Act
-        var result = await _service.VerifyTwoFactorAsync(currentUserId: null, request);
+        var response = result.Value!;
+        response.Token.Should().Be("jwt-2fa-token");
+        response.RememberDeviceToken.Should().NotBeNullOrEmpty();
+        response.Message.Should().Contain("ghi nhớ trong 30 ngày");
 
-        // Assert
-        result.Should().NotBeNull();
-        result.Token.Should().Be("jwt-2fa-token");
-        result.RememberDeviceToken.Should().NotBeNullOrEmpty();
-        result.Message.Should().Contain("ghi nhớ trong 30 ngày");
-
-        _rememberedDevices.Count.Should().Be(1);
+        _rememberedDevices.Should().ContainSingle();
         var savedDevice = _rememberedDevices[0];
         savedDevice.UserId.Should().Be(user.Id);
         savedDevice.DeviceName.Should().Be("Office Desktop");
-        savedDevice.TokenHash.Should().Be(HashToken(result.RememberDeviceToken!));
+        savedDevice.TokenHash.Should().Be(HashToken(response.RememberDeviceToken!));
         savedDevice.ExpiresAt.Should().BeAfter(DateTime.UtcNow.AddDays(29));
     }
 
     [Fact]
-    public async Task VerifyTwoFactorAsync_WhenRememberDeviceIsFalse_ShouldNotSaveDevice()
+    public async Task VerifyTwoFactor_WhenRememberDeviceIsFalse_ShouldNotSaveDevice()
     {
-        // Arrange
-        var user = User.Create("user@example.com", "Test User", "hashed_pwd");
-        user.ConfirmEmail();
-
-        var secretBytes = KeyGeneration.GenerateRandomKey(20);
-        var base32Secret = Base32Encoding.ToString(secretBytes);
-        user.SetTwoFactorSecret(base32Secret);
-        user.EnableTwoFactor();
+        var (user, code) = CreateTwoFactorUser();
         SetupUsers(new List<User> { user });
-
-        var totp = new Totp(secretBytes);
-        var currentCode = totp.ComputeTotp();
-
         _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
 
-        var request = new VerifyTwoFactorRequest(
-            Code: currentCode,
-            Email: user.Email,
-            RememberDevice: false
-        );
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, user.Email, false, null), CancellationToken.None);
 
-        // Act
-        var result = await _service.VerifyTwoFactorAsync(currentUserId: null, request);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Token.Should().Be("jwt-2fa-token");
-        result.RememberDeviceToken.Should().BeNull();
-        _rememberedDevices.Count.Should().Be(0);
+        result.Value!.Token.Should().Be("jwt-2fa-token");
+        result.Value.RememberDeviceToken.Should().BeNull();
+        _rememberedDevices.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ForgetDeviceAsync_WhenTokenProvided_ShouldRemoveDevice()
+    public async Task VerifyTwoFactor_WhenCodeWrong_ShouldReturnUnauthorized()
     {
-        // Arrange
+        var (user, _) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, "000000", user.Email, false, null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ForgetDevice_WhenTokenProvided_ShouldRemoveDevice()
+    {
         var userId = Guid.NewGuid();
-        var plainToken = "token-to-revoke-12345";
-        var tokenHash = HashToken(plainToken);
-        var device = UserRememberedDevice.Create(userId, tokenHash, DateTime.UtcNow.AddDays(30), "Old Device");
-        _rememberedDevices.Add(device);
+        const string plainToken = "token-to-revoke-12345";
+        _rememberedDevices.Add(UserRememberedDevice.Create(userId, HashToken(plainToken), DateTime.UtcNow.AddDays(30), "Old Device"));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        // Act
-        await _service.ForgetDeviceAsync(plainToken, userId);
+        await new ForgetDeviceCommandHandler(_dbContextMock.Object)
+            .Handle(new ForgetDeviceCommand(plainToken, userId), CancellationToken.None);
 
-        // Assert
-        _rememberedDevices.Count.Should().Be(0);
+        _rememberedDevices.Should().BeEmpty();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // EXTERNAL LOGIN (Firebase qua IExternalIdentityVerifier)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private ExternalLoginCommandHandler ExternalLogin(ExternalIdentityResult identity)
+    {
+        var verifier = new Mock<IExternalIdentityVerifier>();
+        verifier.Setup(v => v.VerifyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(identity);
+        return new ExternalLoginCommandHandler(_dbContextMock.Object, verifier.Object, _jwtTokenGeneratorMock.Object);
+    }
+
+    [Fact]
+    public async Task ExternalLogin_WhenTokenInvalid_ShouldReturnUnauthorized()
+    {
+        SetupUsers(new List<User>());
+
+        var result = await ExternalLogin(new ExternalIdentityResult(ExternalIdentityStatus.InvalidToken, ErrorMessage: "bad"))
+            .Handle(new ExternalLoginCommand("x"), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExternalLogin_WhenProviderNotConfigured_ShouldReturnBadRequest()
+    {
+        SetupUsers(new List<User>());
+
+        var result = await ExternalLogin(new ExternalIdentityResult(ExternalIdentityStatus.NotConfigured, ErrorMessage: "no firebase"))
+            .Handle(new ExternalLoginCommand("x"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExternalLogin_WhenNewUser_ShouldCreateConfirmedAccountAndSignIn()
+    {
+        var users = new List<User>();
+        SetupUsers(users);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddDays(1)));
+
+        var result = await ExternalLogin(new ExternalIdentityResult(
+                ExternalIdentityStatus.Valid, Uid: "fb-uid", Email: " New@Gmail.com ", Name: null))
+            .Handle(new ExternalLoginCommand("x"), CancellationToken.None);
+
+        result.Value!.Token.Should().Be("jwt");
+        var created = users.Should().ContainSingle().Subject;
+        created.Email.Should().Be("new@gmail.com");
+        created.FullName.Should().Be("new");
+        created.FirebaseUid.Should().Be("fb-uid");
+        created.IsEmailConfirmed.Should().BeTrue();
     }
 }

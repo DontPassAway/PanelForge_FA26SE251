@@ -1,49 +1,56 @@
+using PanelForge.Application.Common.Interfaces.Persistence;
 using Marten;
-using Marten.Events;
-using PanelForge.Application.Interfaces;
+using Marten.Services;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Infrastructure.Persistence;
 
-namespace PanelForge.Infrastructure.Repositories;
+namespace PanelForge.Infrastructure.Persistence.EventStore;
 
 /// <summary>
-/// Marten-based implementation c?a IPageRepository.
+/// Marten-based implementation của IPageRepository.
 ///
-/// C�ch Marten ho?t d?ng:
-///   - M?i Page c� m?t "stream" ri�ng trong PostgreSQL table "mt_events"
+/// Cách Marten hoạt động:
+///   - Mỗi Page có một "stream" riêng trong PostgreSQL table "mt_events"
 ///   - Stream key = pageId (Guid)
-///   - Events du?c serialized th�nh JSON v� append v�o stream
-///   - Khi FetchForWritingAsync(), Marten replay t?t c? events
-///     v� g?i page.Apply(event) d? rebuild state in-memory
-///     d?ng th?i lock stream d? tr�nh race condition
+///   - Events được serialize thành JSON và append vào stream
+///   - Khi load, Marten replay tất cả events và gọi page.Apply(event) để rebuild state
+///
+/// Transaction:
+///   - Nếu EF Core đang có transaction (mở qua IUnitOfWork) → Marten enlist vào ĐÚNG transaction đó,
+///     EF và Marten cùng commit / rollback.
+///   - Nếu không → dùng session mặc định, Marten tự commit (chỉ an toàn khi Command KHÔNG ghi EF).
 /// </summary>
 public sealed class MartenPageRepository : IPageRepository
 {
     private readonly IDocumentSession _session;
+    private readonly IDocumentStore _store;
+    private readonly PanelForgeDbContext _dbContext;
 
-    public MartenPageRepository(IDocumentSession session)
+    public MartenPageRepository(
+        IDocumentSession session,
+        IDocumentStore store,
+        PanelForgeDbContext dbContext)
     {
         _session = session;
+        _store = store;
+        _dbContext = dbContext;
     }
 
     /// <summary>
-    /// Load Page b?ng Marten Event Sourcing (read-only path):
-    ///   1. Query: SELECT * FROM mt_events WHERE stream_id = pageId ORDER BY version
-    ///   2. Instantiate Page() r?ng
-    ///   3. G?i page.Apply(event) theo th? t? cho t?ng event
-    ///   4. Tr? v? Page v?i d?y d? state hi?n t?i
-    ///
-    /// NOTE: D�ng AggregateStreamAsync cho read path (GetElements, GetPage, v.v.)
+    /// Load Page bằng cách replay event stream.
+    /// Trả về null nếu stream không tồn tại hoặc Page đã bị xóa (PageDeletedEvent).
     /// </summary>
     public async Task<Page?> GetAsync(Guid pageId, CancellationToken ct = default)
     {
-        // AggregateStreamAsync: Marten replay t?t c? events trong stream v�
-        // instantiate aggregate b?ng c�ch g?i Apply() cho t?ng event theo th? t?
         var page = await _session.Events.AggregateStreamAsync<Page>(pageId, token: ct);
 
-        if (page is null)
+        if (page is null || page.IsDeleted)
             return null;
 
-        // L?y version hi?n t?i t? stream metadata
+        // Lấy version hiện tại từ stream metadata
         var state = await _session.Events.FetchStreamStateAsync(pageId, ct);
         if (state is not null)
             page.SetVersion(state.Version);
@@ -52,41 +59,50 @@ public sealed class MartenPageRepository : IPageRepository
     }
 
     /// <summary>
-    /// Luu uncommitted events t? Page v�o Marten stream.
-    /// KH�NG UPDATE b?t k? row n�o � ch? APPEND events m?i v�o mt_events.
-    ///
-    /// Strategy:
-    ///   - Version == -1 (chua bao gi? persist) ? StartStream (t?o stream m?i)
-    ///   - Version >= 0 (d� t?n t?i trong DB)   ? FetchForWriting + Append
-    ///     (d�ng IEventStream d? tr�nh session tracking conflicts)
+    /// Append uncommitted events của Page vào Marten stream. KHÔNG update row nào.
+    ///   - Version == -1 (chưa từng persist) → StartStream
+    ///   - Version >= 0                      → FetchForWriting + Append
     /// </summary>
     public async Task SaveAsync(Page page, CancellationToken ct = default)
     {
         if (!page.UncommittedEvents.Any())
             return;
 
+        var efTransaction = _dbContext.Database.CurrentTransaction;
+
+        if (efTransaction is null)
+        {
+            await AppendAndSaveAsync(_session, page, ct);
+        }
+        else
+        {
+            // shouldAutoCommit: false → Marten không commit; transaction do IUnitOfWork quản lý
+            var npgsqlTransaction = (NpgsqlTransaction)efTransaction.GetDbTransaction();
+            await using var session = _store.LightweightSession(
+                SessionOptions.ForTransaction(npgsqlTransaction, shouldAutoCommit: false));
+
+            await AppendAndSaveAsync(session, page, ct);
+        }
+
+        page.ClearUncommittedEvents();
+    }
+
+    private static async Task AppendAndSaveAsync(IDocumentSession session, Page page, CancellationToken ct)
+    {
         var events = page.UncommittedEvents.Cast<object>().ToArray();
 
         if (page.Version < 0)
         {
-            // Stream m?i � kh?i t?o l?n d?u
-            // StartStream s? fail v?i concurrency error n?u stream d� t?n t?i
-            _session.Events.StartStream<Page>(page.Id, events);
+            // StartStream fail với concurrency error nếu stream đã tồn tại
+            session.Events.StartStream<Page>(page.Id, events);
         }
         else
         {
-            // D�ng FetchForWriting d? load stream d�ng c�ch cho write path.
-            // FetchForWriting tr? v? IEventStream<Page> d� tracked b?i session,
-            // tr�nh conflict v?i AggregateStreamAsync d� ch?y tru?c d� trong GetAsync.
-            // AppendOptimistic s? check version t? d?ng.
-            var stream = await _session.Events.FetchForWriting<Page>(page.Id, ct);
+            // FetchForWriting: load stream đúng cách cho write path, tránh conflict session tracking
+            var stream = await session.Events.FetchForWriting<Page>(page.Id, ct);
             stream.AppendMany(events);
         }
 
-        // INSERT INTO mt_events (...) � DUY NH?T thao t�c SQL x?y ra
-        await _session.SaveChangesAsync(ct);
-
-        // X�a buffer � d� persist th�nh c�ng
-        page.ClearUncommittedEvents();
+        await session.SaveChangesAsync(ct);
     }
 }

@@ -1,8 +1,8 @@
 using FluentAssertions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Catalog;
-using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPipelineTemplates;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Enums;

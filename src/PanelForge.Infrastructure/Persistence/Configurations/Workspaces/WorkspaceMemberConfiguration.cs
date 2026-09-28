@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Infrastructure.Persistence.Configurations.Auth;
+namespace PanelForge.Infrastructure.Persistence.Configurations.Workspaces;
 
 internal sealed class WorkspaceMemberConfiguration : IEntityTypeConfiguration<WorkspaceMember>
 {

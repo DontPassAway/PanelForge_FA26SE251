@@ -3,7 +3,7 @@ using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
 
-namespace PanelForge.Infrastructure.Persistence;
+namespace PanelForge.Infrastructure.Persistence.Seeders;
 
 /// <summary>
 /// Seeds initial master data required by CF1 on first startup (NFR-08, Task 5, Task 3).

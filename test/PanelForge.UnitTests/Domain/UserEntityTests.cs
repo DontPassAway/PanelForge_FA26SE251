@@ -1,5 +1,5 @@
 using FluentAssertions;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Identity;
 using Xunit;
 
 namespace PanelForge.UnitTests.Domain;

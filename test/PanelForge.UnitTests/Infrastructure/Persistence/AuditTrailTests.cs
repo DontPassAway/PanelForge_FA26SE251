@@ -1,8 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Features.Audit.Queries;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
+using PanelForge.Domain.Entities.Identity;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;

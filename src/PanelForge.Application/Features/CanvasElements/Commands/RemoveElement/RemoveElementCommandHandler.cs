@@ -1,8 +1,9 @@
 ﻿using MediatR;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 
-namespace PanelForge.Application.Features.Elements.RemoveElement;
+namespace PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
 
 public sealed class RemoveElementCommandHandler
     : IRequestHandler<RemoveElementCommand, Result<bool>>

@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.ContentElements.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.PanelContentElements.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.ContentElements.Commands.UpdateElement;
+namespace PanelForge.Application.Features.PanelContentElements.Commands.UpdateContentElement;
 
 public sealed record UpdateContentElementCommand(
     Guid ElementId,

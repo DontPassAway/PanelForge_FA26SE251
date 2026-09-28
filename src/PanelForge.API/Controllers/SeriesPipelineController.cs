@@ -3,7 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.SeriesPipeline;
+using PanelForge.Application.Features.SeriesPipeline.Queries.GetSeriesPipeline;
+using PanelForge.Application.Features.SeriesPipeline.Commands.AddPipelineStage;
+using PanelForge.Application.Features.SeriesPipeline.Commands.UpdatePipelineStage;
+using PanelForge.Application.Features.SeriesPipeline.Commands.ReorderPipelineStages;
+using PanelForge.Application.Features.SeriesPipeline.Commands.DeletePipelineStage;
 using PanelForge.Application.Features.SeriesPipeline.Models;
 using PanelForge.Domain.Enums;
 

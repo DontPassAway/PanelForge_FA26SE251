@@ -23,4 +23,8 @@ public static class ResultErrorCodes
 {
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
+    /// <summary>Sai thông tin đăng nhập / OTP / token → HTTP 401.</summary>
+    public const string Unauthorized = "UNAUTHORIZED";
+    /// <summary>Đã xác thực nhưng không đủ quyền → HTTP 403.</summary>
+    public const string Forbidden = "FORBIDDEN";
 }

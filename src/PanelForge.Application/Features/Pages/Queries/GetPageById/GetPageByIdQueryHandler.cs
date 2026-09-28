@@ -1,9 +1,10 @@
+using PanelForge.Application.Common.Interfaces.Persistence;
 using MediatR;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Services;
 
-namespace PanelForge.Application.Features.Pages.GetPageById;
+namespace PanelForge.Application.Features.Pages.Queries.GetPageById;
 
 public sealed class GetPageByIdQueryHandler
     : IRequestHandler<GetPageByIdQuery, Result<PageDetailDto>>

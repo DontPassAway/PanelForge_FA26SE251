@@ -1,7 +1,7 @@
 ﻿using MediatR;
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Features.Elements.GetPageSnapshot;
+namespace PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 
 /// <summary>
 /// Query: Lấy toàn bộ trạng thái hiện tại của Page và các Elements.

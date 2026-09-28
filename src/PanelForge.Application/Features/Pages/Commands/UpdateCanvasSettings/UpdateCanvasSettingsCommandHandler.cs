@@ -1,27 +1,36 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Features.Pages.UpdateCanvasSettings;
+namespace PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 
 public sealed class UpdateCanvasSettingsCommandHandler
     : IRequestHandler<UpdateCanvasSettingsCommand, Result<bool>>
 {
     private readonly IPageRepository _pageRepository;
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCanvasSettingsCommandHandler(
         IPageRepository pageRepository,
-        IPanelForgeDbContext dbContext)
+        IPanelForgeDbContext dbContext,
+        IUnitOfWork unitOfWork)
     {
         _pageRepository = pageRepository;
         _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<bool>> Handle(
+    // Marten (event) + EF Core (read model) ghi trong cùng một transaction
+    public Task<Result<bool>> Handle(
+        UpdateCanvasSettingsCommand command,
+        CancellationToken cancellationToken)
+        => _unitOfWork.ExecuteInTransactionAsync(ct => UpdateAsync(command, ct), cancellationToken);
+
+    private async Task<Result<bool>> UpdateAsync(
         UpdateCanvasSettingsCommand command,
         CancellationToken cancellationToken)
     {

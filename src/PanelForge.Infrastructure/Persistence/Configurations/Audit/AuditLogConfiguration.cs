@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Audit;
 
-namespace PanelForge.Infrastructure.Persistence.Configurations.Auth;
+namespace PanelForge.Infrastructure.Persistence.Configurations.Audit;
 
 internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
 {

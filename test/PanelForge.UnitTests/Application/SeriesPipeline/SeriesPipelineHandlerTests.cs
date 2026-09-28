@@ -1,7 +1,11 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.SeriesPipeline;
+using PanelForge.Application.Features.SeriesPipeline.Queries.GetSeriesPipeline;
+using PanelForge.Application.Features.SeriesPipeline.Commands.AddPipelineStage;
+using PanelForge.Application.Features.SeriesPipeline.Commands.UpdatePipelineStage;
+using PanelForge.Application.Features.SeriesPipeline.Commands.ReorderPipelineStages;
+using PanelForge.Application.Features.SeriesPipeline.Commands.DeletePipelineStage;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;

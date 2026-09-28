@@ -1,6 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
-using PanelForge.Application.Features.Elements.AddElement;
+using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 
 namespace PanelForge.Application;
 

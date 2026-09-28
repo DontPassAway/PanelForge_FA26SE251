@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainChapter = PanelForge.Domain.Entities.Content.Chapter;
 
 namespace PanelForge.Application.Features.Chapters.Commands.CreateChapter;

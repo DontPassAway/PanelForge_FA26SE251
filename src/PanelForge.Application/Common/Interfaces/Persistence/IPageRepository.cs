@@ -1,6 +1,6 @@
 ﻿using PanelForge.Domain.Entities.Content;
 
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Persistence;
 
 /// <summary>
 /// Repository interface cho Page Aggregate.

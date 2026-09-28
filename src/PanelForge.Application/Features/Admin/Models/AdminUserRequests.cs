@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Admin.Models;
 
 public record CreateUserByAdminRequest
 {

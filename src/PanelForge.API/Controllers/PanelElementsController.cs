@@ -1,12 +1,12 @@
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.Features.ContentElements.Commands.CreateElement;
-using PanelForge.Application.Features.ContentElements.Commands.DeleteElement;
-using PanelForge.Application.Features.ContentElements.Commands.UpdateElement;
-using PanelForge.Application.Features.ContentElements.Models;
-using PanelForge.Application.Features.ContentElements.Queries.GetElementById;
-using PanelForge.Application.Features.ContentElements.Queries.GetElementsByPanel;
+using PanelForge.Application.Features.PanelContentElements.Commands.CreateContentElement;
+using PanelForge.Application.Features.PanelContentElements.Commands.DeleteContentElement;
+using PanelForge.Application.Features.PanelContentElements.Commands.UpdateContentElement;
+using PanelForge.Application.Features.PanelContentElements.Models;
+using PanelForge.Application.Features.PanelContentElements.Queries.GetContentElementById;
+using PanelForge.Application.Features.PanelContentElements.Queries.GetContentElementsByPanel;
 
 namespace PanelForge.API.Controllers;
 

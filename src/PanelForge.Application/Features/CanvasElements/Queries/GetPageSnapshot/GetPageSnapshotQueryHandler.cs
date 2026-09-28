@@ -1,8 +1,9 @@
 ﻿using MediatR;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 
-namespace PanelForge.Application.Features.Elements.GetPageSnapshot;
+namespace PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 
 public sealed class GetPageSnapshotQueryHandler
     : IRequestHandler<GetPageSnapshotQuery, Result<PageSnapshotDto>>

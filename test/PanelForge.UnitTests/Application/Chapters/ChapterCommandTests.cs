@@ -3,13 +3,13 @@ using Moq;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
 
-namespace PanelForge.UnitTests.Application.ChapterTests;
+namespace PanelForge.UnitTests.Application.Chapters;
 
 public class ChapterCommandTests
 {

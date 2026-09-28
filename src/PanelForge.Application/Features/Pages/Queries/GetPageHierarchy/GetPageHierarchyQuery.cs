@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.Pages.GetPageHierarchy;
+namespace PanelForge.Application.Features.Pages.Queries.GetPageHierarchy;
 
 public sealed record GetPageHierarchyQuery(Guid PageId) : IRequest<Result<PageContentHierarchyDto>>;
 

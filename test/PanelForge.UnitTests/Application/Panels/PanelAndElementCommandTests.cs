@@ -1,16 +1,16 @@
 using FluentAssertions;
 using Moq;
-using PanelForge.Application.Features.ContentElements.Commands.CreateElement;
-using PanelForge.Application.Features.ContentElements.Commands.UpdateElement;
+using PanelForge.Application.Features.PanelContentElements.Commands.CreateContentElement;
+using PanelForge.Application.Features.PanelContentElements.Commands.UpdateContentElement;
 using PanelForge.Application.Features.Panels.Commands.CreatePanel;
 using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
 
-namespace PanelForge.UnitTests.Application.PanelAndElementTests;
+namespace PanelForge.UnitTests.Application.Panels;
 
 public class PanelAndElementCommandTests
 {

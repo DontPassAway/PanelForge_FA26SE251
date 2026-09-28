@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.DTOs.Users;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.Users.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Identity;
 
-namespace PanelForge.Application.Users.Commands.UpdateUserProfile;
+namespace PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
 
 public class UpdateUserProfileCommandHandler : IRequestHandler<UpdateUserProfileCommand, UserProfileDto?>
 {

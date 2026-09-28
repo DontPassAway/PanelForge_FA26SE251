@@ -1,11 +1,11 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.Pages.ReorderPage;
+namespace PanelForge.Application.Features.Pages.Commands.ReorderPage;
 
 public sealed record ReorderPageCommand(
     Guid PageId,
@@ -17,16 +17,23 @@ public sealed class ReorderPageCommandHandler : IRequestHandler<ReorderPageComma
 {
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IPageRepository _pageRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
     public ReorderPageCommandHandler(
         IPanelForgeDbContext dbContext,
-        IPageRepository pageRepository)
+        IPageRepository pageRepository,
+        IUnitOfWork unitOfWork)
     {
         _dbContext = dbContext;
         _pageRepository = pageRepository;
+        _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<PageDto>> Handle(ReorderPageCommand command, CancellationToken cancellationToken)
+    // Marten (event) + EF Core (read model) ghi trong cùng một transaction
+    public Task<Result<PageDto>> Handle(ReorderPageCommand command, CancellationToken cancellationToken)
+        => _unitOfWork.ExecuteInTransactionAsync(ct => ReorderAsync(command, ct), cancellationToken);
+
+    private async Task<Result<PageDto>> ReorderAsync(ReorderPageCommand command, CancellationToken cancellationToken)
     {
         if (command.NewPageNumber <= 0)
             return Result<PageDto>.Failure("Số trang mới phải lớn hơn 0.");

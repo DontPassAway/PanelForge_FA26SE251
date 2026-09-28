@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Identity;
+using PanelForge.Domain.Entities.Workspaces;
+using PanelForge.Domain.Entities.Ai;
+using PanelForge.Domain.Entities.Audit;
+using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
 
-namespace PanelForge.Application.Interfaces.Persistence;
+namespace PanelForge.Application.Common.Interfaces.Persistence;
 
 public interface IPanelForgeDbContext
 {

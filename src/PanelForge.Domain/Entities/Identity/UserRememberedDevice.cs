@@ -1,6 +1,6 @@
 using PanelForge.Domain.Common;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Identity;
 
 /// <summary>
 /// Đại diện cho một thiết bị tin cậy của người dùng được ghi nhớ trong vòng 30 ngày.

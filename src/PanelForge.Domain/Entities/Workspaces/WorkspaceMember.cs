@@ -1,7 +1,8 @@
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Enums;
+using PanelForge.Domain.Entities.Identity;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Workspaces;
 
 public class WorkspaceMember : BaseEntity
 {

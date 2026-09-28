@@ -1,29 +1,38 @@
 ﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Features.Pages.CreatePage;
+namespace PanelForge.Application.Features.Pages.Commands.CreatePage;
 
 public sealed class CreatePageCommandHandler
     : IRequestHandler<CreatePageCommand, Result<PageDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IPageRepository _pageRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
     public CreatePageCommandHandler(
         IPanelForgeDbContext dbContext,
-        IPageRepository pageRepository)
+        IPageRepository pageRepository,
+        IUnitOfWork unitOfWork)
     {
         _dbContext = dbContext;
         _pageRepository = pageRepository;
+        _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<PageDto>> Handle(
+    // Marten (event) + EF Core (read model) ghi trong cùng một transaction
+    public Task<Result<PageDto>> Handle(
+        CreatePageCommand command,
+        CancellationToken cancellationToken)
+        => _unitOfWork.ExecuteInTransactionAsync(ct => CreateAsync(command, ct), cancellationToken);
+
+    private async Task<Result<PageDto>> CreateAsync(
         CreatePageCommand command,
         CancellationToken cancellationToken)
     {

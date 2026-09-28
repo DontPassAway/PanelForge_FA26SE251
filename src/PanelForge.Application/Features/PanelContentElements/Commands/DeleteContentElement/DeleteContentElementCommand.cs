@@ -1,9 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.ContentElements.Commands.DeleteElement;
+namespace PanelForge.Application.Features.PanelContentElements.Commands.DeleteContentElement;
 
 public sealed record DeleteContentElementCommand(Guid ElementId, Guid UserId) : IRequest<Result<bool>>;
 

@@ -1,4 +1,4 @@
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Services;
 
 /// <summary>
 /// Danh tính của người đang gọi request (từ JWT). Dùng cho audit trail (BR-18, UC-15).

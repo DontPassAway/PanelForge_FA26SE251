@@ -1,7 +1,7 @@
 using MediatR;
-using PanelForge.Application.DTOs.Users;
+using PanelForge.Application.Features.Users.Models;
 
-namespace PanelForge.Application.Users.Commands.UpdateUserProfile;
+namespace PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
 
 public record UpdateUserProfileCommand(
     Guid? TargetUserId,

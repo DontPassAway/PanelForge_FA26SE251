@@ -1,9 +1,10 @@
 ﻿using MediatR;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Events;
 
-namespace PanelForge.Application.Features.Elements.AddElement;
+namespace PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 
 public sealed class AddElementCommandHandler
     : IRequestHandler<AddElementCommand, Result<AddElementResponse>>

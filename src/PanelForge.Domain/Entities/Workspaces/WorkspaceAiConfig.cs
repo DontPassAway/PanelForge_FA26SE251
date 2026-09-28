@@ -1,6 +1,6 @@
 using PanelForge.Domain.Common;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Workspaces;
 
 /// <summary>
 /// Cấu hình AI Provider và hạn mức Token theo Workspace (UC-02, A-01, NFR-03).

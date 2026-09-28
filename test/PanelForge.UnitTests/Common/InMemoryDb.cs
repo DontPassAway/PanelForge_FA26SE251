@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Infrastructure.Persistence;
 
 namespace PanelForge.UnitTests.Common;

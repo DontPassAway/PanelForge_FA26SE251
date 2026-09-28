@@ -1,12 +1,12 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.ContentElements.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.PanelContentElements.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainElement = PanelForge.Domain.Entities.Content.Element;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Features.ContentElements.Commands.CreateElement;
+namespace PanelForge.Application.Features.PanelContentElements.Commands.CreateContentElement;
 
 public sealed record CreateContentElementCommand(
     Guid PanelId,

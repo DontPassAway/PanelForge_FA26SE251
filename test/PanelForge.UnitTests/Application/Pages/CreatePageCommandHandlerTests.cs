@@ -1,8 +1,8 @@
 ﻿using FluentAssertions;
 using Moq;
-using PanelForge.Application.Features.Pages.CreatePage;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Commands.CreatePage;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.UnitTests.Common;
 using Xunit;
@@ -19,7 +19,7 @@ public class CreatePageCommandHandlerTests
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object);
+        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork());
     }
 
     [Fact]

@@ -1,397 +1,471 @@
-# Kiến Trúc Clean Architecture & Quy Ước Đặt Tên trong Dự Án PanelForge
+# Kiến Trúc Clean Architecture & Quy Ước Tổ Chức Mã Nguồn – PanelForge Backend
 
-> **Dự án**: PanelForge (AI-Assisted Manga Production Management Platform)  
-> **Phiên bản tài liệu**: 1.0  
-> **Ngày lập**: 2026-09-17  
+> **Dự án**: PanelForge – AI-Assisted Manga Production Management Platform (FA26SE251)
+> **Phiên bản tài liệu**: 2.0
+> **Cập nhật**: 2026-09-28
 > **Vị trí lưu trữ**: `docs/markdown/clean-architecture-structure.md`
+> **Nền tảng**: ASP.NET Core Web API **.NET 9**, PostgreSQL (EF Core + Marten), MediatR
+
+Tài liệu này là **quy ước bắt buộc** khi thêm code vào Backend. Nó mô tả:
+- cấu trúc hiện tại,
+- cấu trúc mục tiêu theo 5 Core Flow của đề tài,
+- cách mở rộng cho **Mobile Reader app** mà không phải viết lại logic.
+
+Ký hiệu dùng trong tài liệu:
+- ✅ đã có trong code
+- 🔁 đã có nhưng cần chỉnh hoặc di chuyển
+- 🆕 sẽ thêm khi làm Core Flow tương ứng
 
 ---
 
 ## Mục Lục
-1. [Tổng Quan Kiến Trúc (Architecture Overview)](#1-tổng-quan-kiến-trúc-architecture-overview)
-2. [Cây Thư Mục Toàn Dự Án (Project Directory Tree)](#2-cây-thư-mục-toàn-dự-án-project-directory-tree)
-3. [Phân Tích Chi Tiết Từng Tầng (Layer-by-Layer Breakdown)](#3-phân-tích-chi-tiết-từng-tầng-layer-by-layer-breakdown)
-   - [3.1 Tầng Domain (PanelForge.Domain)](#31-tầng-domain-panelforgedomain)
-   - [3.2 Tầng Application (PanelForge.Application)](#32-tầng-application-panelforgeapplication)
-   - [3.3 Tầng Infrastructure (PanelForge.Infrastructure)](#33-tầng-infrastructure-panelforgeinfrastructure)
-   - [3.4 Tầng Presentation / API (PanelForge.API)](#34-tầng-presentation--api-panelforgeapi)
-   - [3.5 Tầng Test (PanelForge.UnitTests)](#35-tầng-test-panelforgeunittests)
-4. [Bảng Tra Cứu Quy Ước Đặt Tên (Naming & Placement Conventions)](#4-bảng-tra-cứu-quy-ước-đặt-tên-naming--placement-conventions)
-5. [Cơ Chế Lưu Trữ Lai: Event Sourcing + Relational (Hybrid Persistence)](#5-cơ-chế-lưu-trữ-lai-event-sourcing--relational-hybrid-persistence)
-6. [Quy Trình Chuẩn Khi Code Thêm Tính Năng Mới (Step-by-Step Guide)](#6-quy-trình-chuẩn-khi-code-thêm-tính-năng-mới-step-by-step-guide)
+1. [Tổng quan kiến trúc](#1-tổng-quan-kiến-trúc)
+2. [Quy tắc phụ thuộc giữa các project](#2-quy-tắc-phụ-thuộc-giữa-các-project)
+3. [Ánh xạ Core Flow → Code](#3-ánh-xạ-core-flow--code)
+4. [Cây thư mục mục tiêu](#4-cây-thư-mục-mục-tiêu)
+5. [Chi tiết từng tầng: được / không được đặt gì](#5-chi-tiết-từng-tầng-được--không-được-đặt-gì)
+6. [Khi nào tạo Interface / Service](#6-khi-nào-tạo-interface--service)
+7. [Bảng quy ước đặt tên & vị trí file](#7-bảng-quy-ước-đặt-tên--vị-trí-file)
+8. [Lưu trữ: Relational + Event Sourcing](#8-lưu-trữ-relational--event-sourcing)
+9. [Mở rộng cho Mobile (Reader app)](#9-mở-rộng-cho-mobile-reader-app)
+10. [Quy trình thêm một tính năng mới](#10-quy-trình-thêm-một-tính-năng-mới)
+11. [Các điểm lệch chuẩn hiện tại & lộ trình refactor](#11-các-điểm-lệch-chuẩn-hiện-tại--lộ-trình-refactor)
+12. [Lịch sử thay đổi tài liệu](#12-lịch-sử-thay-đổi-tài-liệu)
 
 ---
 
-## 1. Tổng Quan Kiến Trúc (Architecture Overview)
+## 1. Tổng quan kiến trúc
 
-Dự án **PanelForge** được xây dựng dựa trên nền tảng **.NET 9** theo mô hình **Clean Architecture** (Onion / Hexagonal Architecture) kết hợp với **Domain-Driven Design (DDD)**, **CQRS (Command Query Responsibility Segregation)** và **Event Sourcing (Marten)**.
+PanelForge áp dụng **Clean Architecture** kết hợp với:
+- **CQRS + MediatR**: mỗi use case tương ứng một Command hoặc Query và một Handler.
+- **Rich Domain Model (DDD)**: quy tắc nghiệp vụ nằm trong Entity/Aggregate.
+- **Hybrid Persistence**: dữ liệu quan hệ dùng EF Core, còn Page/Element (canvas) dùng Event Sourcing qua Marten. Cả hai chạy trên cùng một PostgreSQL.
 
-### 1.1 Nguyên tắc phụ thuộc (Dependency Rule)
+Một Backend duy nhất phục vụ **ba loại client**:
 
-Quy tắc cốt lõi: **Các tầng bên trong không bao giờ biết hoặc phụ thuộc vào các tầng bên ngoài.**
+| Client | Người dùng | Phạm vi dữ liệu | Core Flow |
+|---|---|---|---|
+| **Web Studio** (`Frontend/panelforge-fe`) | Admin, Producer, Writer, Artist, Letterer, Editor | Nội dung trong Workspace mà user là thành viên | CF1 → CF5 |
+| **PreviewLink** (web, không tài khoản) | Reviewer bên ngoài | Đúng 1 Chapter đang `Locked`, qua token | CF5 |
+| **Mobile Reader app** | Reader (tài khoản `ReaderAccount` riêng) | Chỉ các Series/Chapter đã `Published` | CF5 (BR-24, E-36) |
+
+> **Nguyên tắc vàng:** Web và Mobile chỉ là hai **cửa vào** (Presentation) khác nhau. Logic nghiệp vụ (Application và Domain) **dùng chung, không viết lại**.
+
+---
+
+## 2. Quy tắc phụ thuộc giữa các project
 
 ```text
-       ┌──────────────────────────────────────────────────┐
-       │                 PanelForge.API                   │  Presentation / Entry Point
-       └─────────────────────────┬────────────────────────┘
-                                 │
-                                 ↓
-       ┌──────────────────────────────────────────────────┐
-       │             PanelForge.Application               │  Use Cases, CQRS, Interfaces
-       └──────────────────┬───────────────────────────────┘
-                          │                      ↑
-                          ↓                      │ Implements Interfaces
-       ┌──────────────────────────────┐          │
-       │      PanelForge.Domain       │          │
-       │ (Entities, Aggregates, Enums)│          │
-       └──────────────────────────────┘          │
-                          ↑                      │
-                          │                      │
-       ┌──────────────────┴──────────────────────┴────────┐
-       │             PanelForge.Infrastructure            │  Database, EF Core, Marten,
-       │                                                  │  Firebase, BCrypt, JWT, Mail
-       └──────────────────────────────────────────────────┘
+        ┌────────────────────────── PanelForge.API ──────────────────────────┐
+        │  Controllers (Studio / Admin / Public / Mobile), Filters, Middleware│
+        └───────────────┬──────────────────────────────────┬──────────────────┘
+                        │ gửi Command/Query                 │ chỉ để đăng ký DI
+                        ▼                                   ▼
+        ┌──────── PanelForge.Application ───────┐   ┌── PanelForge.Infrastructure ──┐
+        │ Features (CQRS), Interfaces (ports),  │◄──│ EF Core, Marten, JWT, BCrypt,  │
+        │ DTO, Result                           │   │ TOTP, Firebase, Email, Storage │
+        └──────────────────┬────────────────────┘   └───────────────┬────────────────┘
+                           ▼                                        │
+                  ┌──── PanelForge.Domain ────┐◄────────────────────┘
+                  │ Entities, Enums, Events   │
+                  └───────────────────────────┘
 ```
 
-- **Domain**: Độc lập tuyệt đối, không reference bất kỳ project nào hay thư viện bên ngoài (trừ C# Standard Library).
-- **Application**: Chỉ phụ thuộc vào `Domain` và thư viện xử lý CQRS/Validation (`MediatR`). Định nghĩa các Contract/Interface để tầng ngoài cài đặt.
-- **Infrastructure**: Phụ thuộc vào `Application` và `Domain`. Hiện thực hóa tất cả các Interface (EF Core DbContext, Marten Event Store, Firebase Auth, BCrypt, Email, JWT).
-- **API**: Entry Point của Web API, phụ thuộc vào `Application` và `Infrastructure` để cấu hình Dependency Injection (DI), Middleware, Controllers.
+| Project | Được tham chiếu | Package được phép | Tuyệt đối không |
+|---|---|---|---|
+| **Domain** | (không gì cả) | Chỉ BCL (.NET) | EF, MediatR, ASP.NET, bất kỳ SDK nào |
+| **Application** | Domain | MediatR, `Microsoft.EntityFrameworkCore` (chỉ để dùng `DbSet`/LINQ qua `IPanelForgeDbContext`)* | Npgsql, Marten, Firebase, OtpNet, BCrypt, `HttpContext` |
+| **Infrastructure** | Application, Domain | Mọi thư viện kỹ thuật | Controller, logic nghiệp vụ nhiều bước |
+| **API** | Application, Infrastructure | ASP.NET, JwtBearer, Swagger | Inject `DbContext` vào Controller/Filter, viết LINQ, gọi thẳng SDK |
+
+\* Đây là **thỏa hiệp có chủ đích**: Application biết `DbSet<T>` để query linh hoạt, nhưng không biết provider cụ thể (Npgsql) hay cách cấu hình.
 
 ---
 
-## 2. Cây Thư Mục Toàn Dự Án (Project Directory Tree)
+## 3. Ánh xạ Core Flow → Code
 
-Cấu trúc thực tế đang áp dụng trong repository:
+Bảng này cho biết **mỗi Core Flow nằm ở đâu trong code**. Khi nhận task, xác định CF trước, sau đó tra đúng thư mục.
+
+| Core Flow | Domain (`Entities/…`) | Application (`Features/…`) | API Controller | Trạng thái |
+|---|---|---|---|---|
+| **CF1** Studio, Series & Bible Setup | `Identity/`, `Workspaces/`, `Content/Series`, `Bible/`, `Workflow/Pipeline*`, `MasterData/` | `Auth`, `Users`, `Admin`, `Workspaces`, `AiConfig`, `AiUsage`, `Audit`, `Series`, `SeriesPipeline`, `SeriesPresets`, `Bible`, `TypographyPresets`, `ConsistencyRules`, `MasterData/*` | `Auth`, `Users`, `Admin`, `Workspaces`, `Series`, `SeriesPipeline`, `Bible`, `PipelineTemplates` | ✅ |
+| **CF2** Chapter Production | `Content/Chapter, Scene, ScriptLine, Page, Panel, Element`, `Workflow/Assignment, StageProgress`, `Assets/`, `Ai/AiSuggestion` | `Chapters`, `Scenes`, `Pages`, `Panels`, `CanvasElements`, `PanelContentElements`, `Scripts` 🆕, `Assignments` 🆕, `Assets` 🆕, `AiSuggestions` 🆕 | `Chapters`, `Scenes`, `Pages`, `Panels`, `Elements`, `PanelElements`, … | ✅ khung nội dung, 🆕 phần còn lại |
+| **CF3** Quality Control | `Review/Comment, ChangeRequest, ConsistencyFinding` | `Reviews` 🆕, `ChangeRequests` 🆕, `ConsistencyChecks` 🆕, `StageGates` 🆕 | 🆕 | 🆕 |
+| **CF4** Version & Provenance *(xương sống)* | `Provenance/VersionEvent`, `Audit/AuditLog`, event của `Page` | `Versions` 🆕 (history, compare, restore), `Provenance` 🆕 (report) | 🆕 | ✅ event store Page, 🆕 phần còn lại |
+| **CF5** Approval, Release & Export | `Publishing/PreviewLink, ExportJob, ReaderFeedback`, `Reader/ReaderAccount, ReaderSubscription` | `ChapterApproval` 🆕 (approve/lock/reopen/publish), `PreviewLinks` 🆕, `Exports` 🆕, `ReaderFeedback` 🆕, `Catalog` ✅, **`Reader/*` 🆕 (Mobile)** | `Catalog` ✅, 🆕 `Mobile/*` | ✅ Catalog, 🆕 phần còn lại |
+| **Cross-cutting** | `Notification` | `Notifications` 🆕, `Search` 🆕 | 🆕 | 🆕 |
+
+> CF4 là **cơ chế hệ thống**, không phải một màn hình riêng. Mọi Command làm thay đổi trạng thái ở CF1, CF2, CF3 và CF5 đều phải sinh bản ghi lịch sử (BR-18). Nếu không ghi được lịch sử thì Command bị từ chối.
+
+---
+
+## 4. Cây thư mục mục tiêu
+
+Tên thư mục là **tên đích**. Mục nào có 🔁 nghĩa là code hiện tại đang nằm ở chỗ khác, xem [mục 11](#11-các-điểm-lệch-chuẩn-hiện-tại--lộ-trình-refactor). **Namespace luôn phải khớp với đường dẫn thư mục.**
 
 ```text
 PanelForge_FA26SE251/
-├── docs/                                 # Tài liệu dự án
-│   ├── database/
-│   ├── markdown/                         # Chứa tài liệu cấu trúc & hướng dẫn
-│   │   └── clean-architecture-structure.md
-│   ├── implementation-qa.md
-│   ├── project-plan.md
-│   └── requirements.md
+├── docs/
+│   └── markdown/clean-architecture-structure.md
 ├── src/
-│   ├── PanelForge.Domain/                # LAYER 1: Core Domain & Business Rules
-│   │   ├── Common/                       # Base classes (AggregateRoot, BaseEntity, IDomainEvent)
-│   │   ├── Entities/                     # Rich Domain Entities
-│   │   │   ├── Auth/                     # User, StudioWorkspace, WorkspaceMember, ExternalPreviewLink
-│   │   │   └── Content/                  # Series, Chapter, Scene, ScriptLine, Page, Panel, Element
-│   │   ├── Enums/                        # Các kiểu liệt kê của hệ thống
-│   │   └── Events/                       # Domain Events (cho Event Sourcing & Notifications)
+│   ├── PanelForge.Domain/
+│   │   ├── Common/                 ✅ BaseEntity, AggregateRoot, IDomainEvent, ISoftDelete, IAuditableEntity
+│   │   ├── Entities/
+│   │   │   ├── Identity/           ✅ User, UserRememberedDevice
+│   │   │   ├── Workspaces/         ✅ StudioWorkspace, WorkspaceMember, WorkspaceAiConfig (số nhiều để không trùng thuộc tính `Workspace`)
+│   │   │   ├── Content/            ✅ Series, Chapter, Scene, ScriptLine, Page (Aggregate), Panel, Element,
+│   │   │   │                          ElementState, TypographyPreset, ConsistencyRule · SeriesPreset (deprecated, không còn map EF)
+│   │   │   ├── Bible/              ✅ SeriesBible, BibleEntry, BibleEntryRevision
+│   │   │   ├── Workflow/           ✅ PipelineDefinition, PipelineStage, StageTransition, Assignment,
+│   │   │   │                          WorkflowTransitionLog · 🆕 StageProgress
+│   │   │   ├── MasterData/         ✅ ElementTypeMasterData, ExportPreset, PipelineTemplate(+Stage)
+│   │   │   ├── Ai/                 ✅ AiUsageRecord · 🆕 AiSuggestion
+│   │   │   ├── Audit/              ✅ AuditLog
+│   │   │   ├── Assets/             🆕 Asset (SHA-256), AssetReference
+│   │   │   ├── Review/             🆕 Comment/Annotation, ChangeRequest, ConsistencyFinding
+│   │   │   ├── Provenance/         🆕 VersionEvent / ProvenanceEvent
+│   │   │   ├── Publishing/         ✅ ExternalPreviewLink · 🆕 ExportJob, ReaderFeedback
+│   │   │   ├── Reader/             🆕 ReaderAccount, ReaderSubscription              ← Mobile
+│   │   │   └── Notifications/      🆕 Notification
+│   │   ├── Enums/                  ✅ ChapterStatus, WorkspaceRole, SystemRole, BibleEntryCategory, …
+│   │   ├── Events/                 ✅ PageCreatedEvent, ElementAddedEvent, … (event của Page aggregate)
+│   │   ├── Exceptions/             🆕 DomainException (vi phạm invariant)
+│   │   └── ValueObjects/           🆕 (khi cần: Sha256Hash, ReadingOrder, …)
 │   │
-│   ├── PanelForge.Application/           # LAYER 2: Business Logic & Use Cases
-│   │   ├── Common/                       # Shared Result Pattern & Interfaces
+│   ├── PanelForge.Application/
+│   │   ├── Common/
 │   │   │   ├── Interfaces/
-│   │   │   │   ├── Authentication/       # IJwtTokenGenerator, IPasswordHasher
-│   │   │   │   ├── Persistence/          # IPanelForgeDbContext, IPageRepository
-│   │   │   │   └── Services/             # IAuthService, IEmailService, IWorkspaceService, ...
-│   │   │   └── Result.cs                 # Result<T> pattern cho xử lý lỗi business
-│   │   ├── Features/                     # Vertical Slice theo từng Module/Feature
-│   │   │   ├── Auth/                     # Models DTOs (Login, Register, 2FA, Password...)
-│   │   │   ├── Elements/                 # CQRS (AddElement, MoveElement, RemoveElement, GetPageSnapshot)
-│   │   │   ├── Pages/                    # CQRS (CreatePage, DeletePage, GetPageById, GetPagesByChapter, UpdateCanvas)
-│   │   │   ├── Users/                    # CQRS (Commands: SoftDelete, UpdateProfile; Queries: GetUserProfile; Models)
-│   │   │   └── Workspaces/               # Models DTOs (CreateWorkspace, UpdateRole, WorkspaceDto...)
-│   │   └── DependencyInjection.cs        # Đăng ký MediatR cho toàn bộ Application
+│   │   │   │   ├── Persistence/    ✅ IPanelForgeDbContext, IPageRepository, IUnitOfWork
+│   │   │   │   ├── Authentication/ ✅ IJwtTokenGenerator, IPasswordHasher, ITotpService, IExternalIdentityVerifier
+│   │   │   │   ├── Services/       ✅ IEmailService, ICurrentUserService, IWorkspaceAuthorizationService,
+│   │   │   │   │                      IAiUsageService, IAiKeyProtector, IAiProviderValidator
+│   │   │   │   │                   ✅ IAuthService, IWorkspaceService đã xóa (2026-09-28), logic chuyển sang Features/Auth, Features/Workspaces
+│   │   │   │   ├── Storage/        🆕 IAssetStorage (upload, signed URL)
+│   │   │   │   ├── Ai/             🆕 IAiScriptBreakdownClient, IAiConsistencyClient
+│   │   │   │   ├── Notifications/  🆕 IPushNotificationSender (Mobile), INotificationPublisher
+│   │   │   │   └── Payments/       🆕 IPaymentGateway (Reader subscription – extended scope)
+│   │   │   ├── Models/             ✅ PagedResult · 🔁 Result (đang ở Common/)
+│   │   │   ├── Behaviors/          🆕 ValidationBehavior, LoggingBehavior (MediatR pipeline)
+│   │   │   └── Utilities/          🔁 CsvWriter (đang ở Common/)
+│   │   ├── Features/               ← mỗi Feature = 1 thư mục, chia theo CF như mục 3
+│   │   │   └── <Feature>/
+│   │   │       ├── Commands/<Action>/<Action>Command.cs (+Handler, +Validator)
+│   │   │       ├── Queries/<Action>/<Action>Query.cs    (+Handler)
+│   │   │       ├── Models/          Request/Response DTO của feature
+│   │   │       └── Common/          helper/factory chỉ dùng trong feature (không interface)
+│   │   └── DependencyInjection.cs  ✅
 │   │
-│   ├── PanelForge.Infrastructure/        # LAYER 3: External Services & Data Persistence
-│   │   ├── Authentication/               # JwtTokenGenerator, BcryptPasswordHasher, JwtSettings
-│   │   ├── ExternalServices/             # Dịch vụ ngoài (Firebase, Email, Workspace Authorization)
-│   │   ├── Persistence/                  # Cơ sở dữ liệu
-│   │   │   ├── Configurations/           # EF Core Fluent API Configurations (Auth, Content)
-│   │   │   ├── Migrations/               # EF Core Code-First Migrations
-│   │   │   ├── Repositories/             # MartenPageRepository (Event Sourcing)
-│   │   │   ├── PanelForgeDbContext.cs    # EF Core DbContext chính
-│   │   │   └── PanelForgeDbContextFactory.cs
-│   │   ├── Services/                     # Cài đặt AuthService, WorkspaceService
-│   │   └── DependencyInjection.cs        # Đăng ký DbContext, Marten, Services, JWT vào DI container
+│   ├── PanelForge.Infrastructure/
+│   │   ├── Persistence/
+│   │   │   ├── PanelForgeDbContext.cs, PanelForgeDbContextFactory.cs   ✅
+│   │   │   ├── Configurations/<Nhóm khớp Domain>/                      ✅ Identity, Workspaces, Ai, Audit, Publishing, Content, Bible, Workflow, MasterData
+│   │   │   ├── Migrations/                                              ✅
+│   │   │   ├── EventStore/          ✅ MartenPageRepository, Projections/PageProjection
+│   │   │   ├── Seeders/             ✅ MasterDataSeeder
+│   │   │   └── AuditChangeSerializer.cs                                ✅
+│   │   ├── Authentication/          ✅ JwtTokenGenerator, JwtSettings, BcryptPasswordHasher
+│   │   │                            ✅ OtpNetTotpService (FirebaseIdentityVerifier ở ExternalServices/Firebase/)
+│   │   ├── Services/                ✅ HttpCurrentUserService, AiUsageService, AiKeyProtector, AiProviderValidator
+│   │   │                            ✅ WorkspaceAuthorizationService
+│   │   ├── ExternalServices/        (chỉ những gì GỌI RA NGOÀI hệ thống)
+│   │   │   ├── Email/               ✅ EmailService
+│   │   │   ├── Firebase/            ✅ FirebaseServiceExtensions · 🆕 FcmPushNotificationSender
+│   │   │   ├── Storage/             🆕 (S3/MinIO/Firebase Storage) AssetStorage
+│   │   │   ├── Ai/                  🆕 các AI provider client
+│   │   │   └── Payments/            🆕 payment gateway
+│   │   ├── BackgroundJobs/          🆕 ExportWorker, AiJobWorker (xử lý async – NFR-05, A-01)
+│   │   └── DependencyInjection.cs   ✅
 │   │
-│   └── PanelForge.API/                   # LAYER 4: Presentation & Web API Controllers
-│       ├── Common/
-│       │   └── Attributes/               # Custom Attributes & Action Filters (RequireWorkspaceRoleAttribute)
-│       ├── Controllers/                  # REST API Controllers (AuthController, PagesController, ...)
-│       ├── appsettings.json              # Cấu hình Database, JWT, Firebase, Logging
-│       └── Program.cs                    # Entry Point: Middleware pipeline, Swagger, DI, Auth
+│   └── PanelForge.API/
+│       ├── Controllers/
+│       │   ├── Studio/              🔁 Workspaces, Series, Chapters, Pages, … (Web Studio – đang ở gốc Controllers/)
+│       │   ├── Admin/               🔁 AdminController
+│       │   ├── Public/              🔁 Catalog · 🆕 PreviewLinks (không cần đăng nhập)
+│       │   └── Mobile/              🆕 Reader*Controller – route /api/mobile/v1/...
+│       ├── Filters/                 🔁 RequireWorkspaceRoleAttribute (đang ở Common/Attributes/)
+│       ├── Middleware/              🆕 GlobalExceptionHandler (ProblemDetails)
+│       ├── Extensions/              🆕 AddApiAuthentication(), AddSwaggerDocs(), ResultExtensions (Result → IActionResult)
+│       ├── Program.cs               ✅
+│       └── appsettings*.json        ✅ (không commit secret, firebase-key.json đã ignore)
 │
 └── test/
-    └── PanelForge.UnitTests/             # Unit Tests
-        ├── Common/                       # Mocks & Test Helpers (DbSetMockHelper, TestAsyncQueryProvider)
-        ├── Domain/                       # Unit Test cho Domain Aggregates & Entities
-        └── Infrastructure/               # Unit Test cho Services & Auth
+    └── PanelForge.UnitTests/        ✅ chia thư mục giống src/: Domain/, Application/<Feature>/, Infrastructure/, API/
 ```
 
----
-
-## 3. Phân Tích Chi Tiết Từng Tầng (Layer-by-Layer Breakdown)
-
-### 3.1 Tầng Domain (`PanelForge.Domain`)
-
-Tầng trung tâm chứa toàn bộ quy tắc nghiệp vụ cốt lõi, không chứa bất kỳ logic giao diện, database hay third-party SDK nào.
-
-#### Thư mục và File:
-1. **`Common/`**:
-   - `BaseEntity.cs`: Chứa thuộc tính định danh cơ bản `public Guid Id { get; protected set; }`. Mọi Entity thông thường đều kế thừa class này.
-   - `AggregateRoot.cs`: Base class cho mô hình **Event Sourcing** (`Page`). Quản lý danh sách `_uncommittedEvents`, `Version` (cho Optimistic Concurrency), method `RaiseEvent(IDomainEvent)` và abstract method `Apply(IDomainEvent)`.
-   - `IDomainEvent.cs`: Interface đánh dấu cho tất cả Domain Event (`EventId`, `OccurredAt`).
-
-2. **`Entities/`**: Chia theo Bounded Context:
-   - `Auth/`:
-     - `User.cs`: Thực thể tài khoản, hỗ trợ mật khẩu băm, Firebase UID, Two-Factor Authentication (2FA), Email Verification.
-     - `StudioWorkspace.cs`: Không gian làm việc của studio/nhóm sáng tác.
-     - `WorkspaceMember.cs`: Thành viên trong workspace kèm quyền hạn (`WorkspaceRole`).
-     - `ExternalPreviewLink.cs`: Link xem trước dành cho đối tác/khách hàng bên ngoài.
-   - `Content/`:
-     - Phân cấp nội dung Manga:
-       `Series` ➔ `Chapter` ➔ `Scene` ➔ `ScriptLine` ➔ `Page` (AggregateRoot) ➔ `Panel` ➔ `Element`.
-     - `ElementState.cs`: Giá trị trạng thái in-memory của Element trên Page khi replay Event Stream.
-
-3. **`Enums/`**:
-   - `ElementType.cs`: Kiểu phần tử (Dialogue, SFX, Balloon, ArtLayer, Narration...).
-   - `LayoutFormat.cs`: Định dạng layout trang (StandardPage, WebtoonStrip...).
-   - `ReadingDirection.cs`: Hướng đọc truyện (RightToLeft, LeftToRight, TopToBottom).
-   - `SystemRole.cs`: Quyền hệ thống cấp cao (Admin, User).
-   - `WorkspaceRole.cs`: Quyền trong Studio (Owner, Producer, Writer, Artist, Letterer, Editor, Viewer).
-
-4. **`Events/`**:
-   - Các sự kiện miền (Domain Events) bất biến phục vụ Event Sourcing: `PageCreatedEvent`, `PageCanvasUpdatedEvent`, `PageReorderedEvent`, `ElementAddedEvent`, `ElementMovedEvent`, `ElementRemovedEvent`.
-
-> **Quy tắc thiết kế Domain**:
-> - **Encapsulation**: Thuộc tính chỉ cho phép `private set` hoặc `protected set`.
-> - **Static Factory Method**: Dùng `public static Entity Create(...)` để khởi tạo thực thể, thực hiện validation ngay lúc tạo thay vì dùng public constructor trống.
-> - **Rich Domain Model**: Hành vi nghiệp vụ được viết trực tiếp bên trong Entity/Aggregate (ví dụ: `page.AddElement(...)`, `user.UpdateProfile(...)`) chứ không để Entity bị anemic (chỉ có getter/setter).
+> **Di chuyển Controller sang thư mục con không làm đổi route**, vì route khai báo bằng `[Route]` và `[HttpGet]`. Frontend không bị ảnh hưởng.
 
 ---
 
-### 3.2 Tầng Application (`PanelForge.Application`)
+## 5. Chi tiết từng tầng: được / không được đặt gì
 
-Tầng điều phối luồng nghiệp vụ (Orchestration), hiện thực hóa các Use Case thông qua mẫu hình **CQRS** kết hợp thư viện **MediatR**.
+### 5.1 Domain – "Quy tắc nghiệp vụ không đổi dù đổi DB hay framework"
 
-#### Thư mục và File:
-1. **`Common/`**:
-   - `Result.cs`: Generic class `Result<T>` đóng gói kết quả trả về (`IsSuccess`, `Value`, `ErrorMessage`). Tránh lạm dụng throw Exception cho các lỗi nghiệp vụ dự đoán được.
-   - `Interfaces/Persistence/`:
-     - `IPanelForgeDbContext.cs`: Interface cho Entity Framework Core DbContext (để Application truy vấn dữ liệu mà không cần phụ thuộc trực tiếp vào package EF Core Npgsql).
-     - `IPageRepository.cs`: Interface cho repository nạp/lưu Page Aggregate qua Marten Event Store.
-   - `Interfaces/Authentication/`:
-     - `IJwtTokenGenerator.cs`: Ký và sinh JWT token.
-     - `IPasswordHasher.cs`: Băm và kiểm tra mật khẩu.
-   - `Interfaces/Services/`:
-     - `IAuthService.cs`, `IWorkspaceService.cs`, `IEmailService.cs`, `IWorkspaceAuthorizationService.cs`.
+**Được đặt:**
+- Entity/Aggregate có **hành vi**: `chapter.Approve(...)`, `chapter.Lock()`, `page.AddElement(...)`, `bibleEntry.AddRevision(...)`.
+- Invariant của Business Rule, ví dụ:
+  - BR-03: phân cấp chứa đựng Series → Chapter → Scene → Page → Panel → Element.
+  - BR-05: mỗi ScriptLine gắn tối đa một text Element.
+  - BR-06, BR-12: không sửa khi Chapter đang `Locked`.
+- Enum, Domain Event, Value Object, DomainException.
 
-2. **`Features/`**: Tổ chức theo tính năng (Feature-based / Vertical Slice):
-   - **`Auth/Models/`**: Các DTO request/response liên quan đến Auth (`LoginRequest`, `RegisterRequest`, `AuthResponse`, `ChangePasswordRequest`, `VerifyTwoFactorRequest`...).
-   - **`Workspaces/Models/`**: Các DTO quản lý không gian làm việc (`CreateWorkspaceRequest`, `WorkspaceDto`, `AddWorkspaceMemberRequest`...).
-   - **`Users/`**:
-     - `Commands/`: Mỗi command đặt trong thư mục riêng:
-       - `SoftDeleteUser/SoftDeleteUserCommand.cs` & `SoftDeleteUserCommandHandler.cs`
-       - `UpdateUserProfile/UpdateUserProfileCommand.cs` & `UpdateUserProfileCommandHandler.cs`
-     - `Queries/`:
-       - `GetUserProfile/GetUserProfileQuery.cs` & `GetUserProfileQueryHandler.cs`
-     - `Models/`: `UserProfileDto.cs`, `UpdateUserProfileRequest.cs`
-   - **`Pages/`**:
-     - `CreatePage/CreatePageCommand.cs` & `CreatePageCommandHandler.cs`
-     - `DeletePage/DeletePageCommand.cs` & `DeletePageCommandHandler.cs`
-     - `GetPageById/GetPageByIdQuery.cs` & `GetPageByIdQueryHandler.cs`
-     - `GetPagesByChapter/GetPagesByChapterQuery.cs` & `GetPagesByChapterQueryHandler.cs`
-     - `UpdateCanvasSettings/UpdateCanvasSettingsCommand.cs` & `UpdateCanvasSettingsCommandHandler.cs`
-     - `Models/PageDto.cs`
-   - **`Elements/`**:
-     - `AddElement/`, `MoveElement/`, `RemoveElement/`, `GetPageSnapshot/` (Command và Handler tương ứng).
+**Quy ước:**
+- Setter là `private set`. Có constructor rỗng `private` cho EF.
+- Tạo đối tượng qua `public static X Create(...)`, trong đó validate ngay.
+- Chuyển trạng thái bằng method có tên nghiệp vụ, không set trực tiếp `Status = ...`.
+- **Append-only (BR-01, C-01):** dữ liệu có phiên bản (Bible, Version) chỉ **thêm revision mới**, không có method `Update` ghi đè. Xóa luôn là **soft delete** (`ISoftDelete`).
 
-3. **`DependencyInjection.cs`**:
-   - Sử dụng `services.AddMediatR(...)` để tự động quét toàn bộ Assembly và đăng ký các Handler.
+**Không được:** attribute của EF, DTO, `HttpContext`, MediatR, `DateTime` lấy từ service ngoài.
 
----
+### 5.2 Application – "Hệ thống làm được gì (use case)"
 
-### 3.3 Tầng Infrastructure (`PanelForge.Infrastructure`)
+**Được đặt:**
+- Command/Query + Handler: điều phối Domain, gọi các interface, trả về `Result<T>`.
+- DTO request/response trong `Features/<Feature>/Models/`.
+- Interface (port) cho mọi thứ cần từ bên ngoài, đặt trong `Common/Interfaces/`.
+- Helper, factory, mapper `static` dùng chung trong một feature, đặt trong `Features/<Feature>/Common/`.
 
-Tầng chịu trách nhiệm giao tiếp với hệ thống bên ngoài: Database (PostgreSQL qua EF Core & Marten), Firebase Admin SDK, BCrypt, SMTP Mail Server, JWT.
+**Quy ước:**
+- **Một use case tương ứng một Command/Query và một Handler.** Handler cùng file với Command, hoặc file riêng `…Handler.cs` cùng thư mục. Chọn một kiểu cho cả feature.
+- Luôn dùng cấu trúc `Commands/<Action>/` và `Queries/<Action>/`. **Không** dồn nhiều handler vào một file `XxxCommands.cs`.
+- Lỗi nghiệp vụ dự đoán được thì trả `Result<T>.Failure(message, ResultErrorCodes.X)`, không throw.
+- Kiểm tra quyền trong Workspace qua `IWorkspaceAuthorizationService`.
+- Command nào làm thay đổi dữ liệu có phiên bản thì phải ghi lịch sử (CF4, BR-18).
 
-#### Thư mục và File:
-1. **`Persistence/`**:
-   - `PanelForgeDbContext.cs`: Kế thừa `DbContext` của EF Core, hiện thực hóa interface `IPanelForgeDbContext`.
-   - `Configurations/`: Sử dụng Fluent API tách biệt từng Entity:
-     - `Auth/`: `UserConfiguration.cs`, `StudioWorkspaceConfiguration.cs`, `WorkspaceMemberConfiguration.cs`, `ExternalPreviewLinkConfiguration.cs`.
-     - `Content/`: `SeriesConfiguration.cs`, `ChapterConfiguration.cs`, `SceneConfiguration.cs`, `ScriptLineConfiguration.cs`, `PageConfiguration.cs`, `PanelConfiguration.cs`, `ElementConfiguration.cs`.
-   - `Migrations/`: Toàn bộ các file migration sinh ra bởi EF Core.
-   - `Repositories/`:
-     - `MartenPageRepository.cs`: Hiện thực `IPageRepository` sử dụng **Marten** để quản lý stream sự kiện của Page Aggregate.
+**Không được:** `using` Npgsql, Marten, Firebase, OtpNet, BCrypt, `Microsoft.AspNetCore.*`. Không tạo `XxxService` theo tên Entity hay Core Flow (xem mục 6).
 
-2. **`Authentication/`**:
-   - `BcryptPasswordHasher.cs`: Hiện thực `IPasswordHasher` sử dụng thư viện `BCrypt.Net-Next`.
-   - `JwtTokenGenerator.cs`: Tạo Bearer Token có chứa Claims (`sub`, `email`, `role`, `user_id`).
-   - `JwtSettings.cs`: Model ánh xạ từ config `JwtSettings` trong `appsettings.json`.
+### 5.3 Infrastructure – "Chi tiết kỹ thuật"
 
-3. **`ExternalServices/`**:
-   - `Firebase/FirebaseServiceExtensions.cs`: Khởi tạo FirebaseApp từ file service account credential hoặc chuỗi config.
-   - `Email/EmailService.cs`: Gửi email xác thực tài khoản và đổi mật khẩu qua MailKit/SMTP.
-   - `Authorization/WorkspaceAuthorizationService.cs`: Kiểm tra phân quyền thành viên trong Studio Workspace.
+**Được đặt:**
+- Class hiện thực của các interface trong Application.
+- Cấu hình EF, migration, Marten, projection, seeder.
+- Client gọi dịch vụ ngoài: Email, Firebase, Storage, AI, Payment.
+- Worker nền: export, AI job.
 
-4. **`Services/`**:
-   - `AuthService.cs`: Triển khai các luồng đăng ký, đăng nhập, quên mật khẩu, kích hoạt 2FA.
-   - `WorkspaceService.cs`: Triển khai tạo workspace, mời thành viên, cập nhật role.
+**Phân biệt hai thư mục:**
+- `ExternalServices/`: code **gọi ra ngoài** hệ thống qua mạng hoặc SDK.
+- `Services/`: code hiện thực nội bộ, ví dụ đọc DB, mã hóa khóa, lấy user hiện tại.
 
-5. **`DependencyInjection.cs`**:
-   - Extension method `AddInfrastructure(this IServiceCollection services, IConfiguration configuration)` đăng ký tập trung tất cả dịch vụ tầng này.
+**Không được:** use case nhiều bước, ví dụ luồng đăng ký gồm tạo user, gửi mail, tạo token.
+
+### 5.4 API – "Cửa vào HTTP"
+
+**Controller phải mỏng:** nhận request → dựng Command/Query → `ISender.Send(...)` → map `Result` sang HTTP status.
+
+**Chia thư mục theo client:** `Studio/`, `Admin/`, `Public/`, `Mobile/`.
+
+**Phân quyền:**
+- `[Authorize]` cho user đã đăng nhập.
+- `[RequireWorkspaceRole(...)]` cho vai trò trong Workspace.
+- Policy riêng cho Reader (xem mục 9).
+
+**Không được:** inject `IPanelForgeDbContext` hay repository, viết LINQ, gọi SDK.
+
+`Program.cs` chỉ gọi các extension và cấu hình middleware.
 
 ---
 
-### 3.4 Tầng Presentation / API (`PanelForge.API`)
+## 6. Khi nào tạo Interface / Service
 
-Entry Point của toàn ứng dụng, tiếp nhận request HTTP, kiểm tra Authorization và ủy quyền xử lý cho MediatR / Application Services.
+**Quy tắc:** chức năng nghiệp vụ dùng **Handler**. Chỉ tạo interface cho các nhóm trong bảng dưới.
 
-#### Thư mục và File:
-1. **`Controllers/`**:
-   - `AuthController.cs`: Tuyến `/api/auth` (register, login, logout, 2fa, forgot-password, verify-email).
-   - `UsersController.cs`: Tuyến `/api/users` (lấy profile me, cập nhật hồ sơ, xóa mềm tài khoản).
-   - `WorkspacesController.cs`: Tuyến `/api/workspaces` (quản lý workspace và thành viên).
-   - `PagesController.cs`: Tuyến `/api/chapters/{chapterId}/pages` và `/api/pages/{pageId}` (gọi MediatR).
-   - `ElementsController.cs`: Tuyến thao tác trực tiếp trên canvas manga (thêm, di chuyển, xóa element).
-   - `AdminController.cs`: Tuyến dành riêng cho Quản trị viên hệ thống.
+| Nhóm | Dấu hiệu | Ví dụ | Interface? | Implementation đặt ở |
+|---|---|---|:---:|---|
+| **1. Cổng ra công nghệ ngoài** | Cần SDK/thư viện hoặc gọi mạng | `IEmailService`, `IJwtTokenGenerator`, `IPasswordHasher`, `ITotpService`, `IExternalIdentityVerifier`, `IAssetStorage`, `IPushNotificationSender`, `IPaymentGateway`, `IPageRepository` | **Có** | Infrastructure |
+| **2. Ngữ cảnh runtime** | Lấy từ request hoặc môi trường | `ICurrentUserService` (+ thông tin Reader cho Mobile) | **Có** | Infrastructure/API |
+| | Thời gian | `TimeProvider` có sẵn trong .NET, **không** tự viết `IClock` | Dùng sẵn | — |
+| **3. Năng lực dùng chung của Application** | Nhiều handler cần, nhỏ, một trách nhiệm | `IWorkspaceAuthorizationService`, `IAiUsageService` (quota) | Có thể | Ưu tiên Application |
+| **4. Helper / Factory / Mapper** | Hàm thuần, không phụ thuộc gì | `AuthResponseFactory`, mapper Entity → DTO | **Không** (class `static`) | `Features/<Feature>/Common/` |
 
-2. **`Common/Attributes/`**:
-   - `RequireWorkspaceRoleAttribute.cs`: Custom Action Filter cho phép giới hạn quyền hạn trong từng workspace cụ thể (kiểm tra `Owner`, `Producer`, `Artist`, ... theo `workspaceId` trên route).
-
-3. **`Program.cs`**:
-   - Gọi `builder.Services.AddApplication()` và `builder.Services.AddInfrastructure(builder.Configuration)`.
-   - Cấu hình JWT Bearer Authentication (`AddJwtBearer`).
-   - Cấu hình Swagger với SwaggerDoc v1 và SecurityDefinition Bearer Token.
-   - Thiết lập Middleware: `UseSwagger`, `UseSwaggerUI`, `UseAuthentication`, `UseAuthorization`, `MapControllers`.
+**Cách nhận biết nhanh:**
+- Service mang **tên một thực thể** (`SeriesService`, `ChapterService`, `StudioService`) → **sai**, chuyển sang Handler.
+- Service mang **tên một năng lực** (`PasswordHasher`, `EmailSender`, `WorkspaceAuthorization`) → thường đúng.
+- Quy tắc trạng thái của một Entity (ví dụ Chapter chỉ Publish được khi đang Locked) → **đặt trong method của Domain**, không đặt trong service.
 
 ---
 
-### 3.5 Tầng Test (`PanelForge.UnitTests`)
+## 7. Bảng quy ước đặt tên & vị trí file
 
-Nằm trong thư mục `test/PanelForge.UnitTests`:
-- **`Common/`**: Chứa mock helper cho EF Core Async Query (`DbSetMockHelper.cs`, `TestAsyncQueryProvider.cs`).
-- **`Domain/`**: Kiểm tra tính đúng đắn của logic Domain:
-  - `PageAggregateTests.cs`: Kiểm tra Event Sourcing, RaiseEvent, Apply cho Element và Page.
-  - `UserEntityTests.cs`, `ChapterAndSceneTests.cs`, `StudioWorkspaceTests.cs`.
-- **`Infrastructure/`**:
-  - `AuthServiceTests.cs`, `BcryptPasswordHasherTests.cs`, `WorkspaceAuthorizationServiceTests.cs`.
+| Loại | Vị trí | Tên file/class | Kế thừa / kiểu | Ví dụ |
+|---|---|---|---|---|
+| Entity | `Domain/Entities/<Nhóm>/` | `<Entity>.cs` (số ít) | `BaseEntity` | `Chapter.cs` |
+| Aggregate (event-sourced) | `Domain/Entities/<Nhóm>/` | `<Aggregate>.cs` | `AggregateRoot` | `Page.cs` |
+| Domain Event | `Domain/Events/` | `<Entity><Việc đã xảy ra>Event.cs` | `record : IDomainEvent` | `ElementMovedEvent.cs` |
+| Enum | `Domain/Enums/` | `<Name>.cs` | `enum` | `ChapterStatus.cs` |
+| Command | `Application/Features/<F>/Commands/<Action>/` | `<Verb><Noun>Command.cs` | `record : IRequest<Result<T>>` | `CreateChapterCommand.cs` |
+| Command Handler | cùng thư mục | `<Verb><Noun>CommandHandler` | `IRequestHandler<,>` | `CreateChapterCommandHandler` |
+| Query (+Handler) | `Application/Features/<F>/Queries/<Action>/` | `Get<Noun>[By<X>]Query.cs` | `record : IRequest<Result<T>>` | `GetChaptersBySeriesQuery.cs` |
+| Validator 🆕 | cùng thư mục với Command | `<Verb><Noun>CommandValidator.cs` | (khi thêm FluentValidation) | `CreateChapterCommandValidator.cs` |
+| Request DTO | `Application/Features/<F>/Models/` | `<Action>Request.cs` | `record` | `CreateWorkspaceRequest.cs` |
+| Response DTO | `Application/Features/<F>/Models/` | `<Noun>Dto.cs` / `<Action>Response.cs` | `record` | `ChapterDto.cs`, `AuthResponse.cs` |
+| DTO riêng cho Mobile | `Application/Features/Reader/<F>/Models/` | `Reader<Noun>Dto.cs` | `record` | `ReaderChapterDto.cs` |
+| Interface (port) | `Application/Common/Interfaces/<Nhóm>/` | `I<Năng lực>.cs` | `interface` | `IAssetStorage.cs` |
+| EF Configuration | `Infrastructure/Persistence/Configurations/<Nhóm khớp Domain>/` | `<Entity>Configuration.cs` | `IEntityTypeConfiguration<T>` | `ChapterConfiguration.cs` |
+| Repository | `Infrastructure/Persistence/EventStore/` | `<Tech><Entity>Repository.cs` | `I<Entity>Repository` | `MartenPageRepository.cs` |
+| Implementation ra ngoài | `Infrastructure/ExternalServices/<Nhà cung cấp>/` | `<Tech><Năng lực>.cs` | interface tương ứng | `FcmPushNotificationSender.cs` |
+| Controller Web | `API/Controllers/Studio/` | `<PluralNoun>Controller.cs` | `ControllerBase` | `ChaptersController.cs` |
+| Controller Mobile | `API/Controllers/Mobile/` | `Reader<PluralNoun>Controller.cs` | `ControllerBase` | `ReaderLibraryController.cs` |
+| Filter/Attribute | `API/Filters/` | `<Name>Attribute.cs` | `TypeFilterAttribute` | `RequireWorkspaceRoleAttribute.cs` |
+| Test | `test/PanelForge.UnitTests/<Layer>/<Feature>/` | `<Subject>Tests.cs` | xUnit | `CreateChapterCommandTests.cs` |
 
----
-
-## 4. Bảng Tra Cứu Quy Ước Đặt Tên (Naming & Placement Conventions)
-
-Bảng dưới đây là kim chỉ nam bắt buộc khi thêm bất kỳ class/file nào vào codebase:
-
-| Loại Class / File | Vị trí thư mục (Directory Path) | Quy tắc đặt tên File & Class | Interface / Base Class kế thừa | Ví dụ thực tế trong dự án |
-| :--- | :--- | :--- | :--- | :--- |
-| **Domain Entity** | `src/PanelForge.Domain/Entities/<Context>/` | `<EntityName>.cs` (Danh từ số ít, PascalCase) | `BaseEntity` | `User.cs`, `Chapter.cs`, `Panel.cs` |
-| **Aggregate Root** | `src/PanelForge.Domain/Entities/Content/` | `<AggregateName>.cs` | `AggregateRoot` | `Page.cs` |
-| **Domain Event** | `src/PanelForge.Domain/Events/` | `<Entity><ActionDone>Event.cs` (Quá khứ) | `IDomainEvent` (record) | `PageCreatedEvent.cs`, `ElementAddedEvent.cs` |
-| **Domain Enum** | `src/PanelForge.Domain/Enums/` | `<EnumName>.cs` (PascalCase, số ít) | `enum` | `ElementType.cs`, `WorkspaceRole.cs` |
-| **Command (CQRS)** | `src/PanelForge.Application/Features/<Feature>/<Action>/` hoặc `.../Commands/<Action>/` | `<Verb><Noun>Command.cs` | `IRequest<Result<TResponse>>` (record) | `CreatePageCommand.cs`, `UpdateUserProfileCommand.cs` |
-| **Command Handler** | Nằm chung thư mục với Command | `<Verb><Noun>CommandHandler.cs` | `IRequestHandler<TCommand, Result<TResponse>>` | `CreatePageCommandHandler.cs`, `UpdateUserProfileCommandHandler.cs` |
-| **Query (CQRS)** | `src/PanelForge.Application/Features/<Feature>/<Action>/` hoặc `.../Queries/<Action>/` | `<Verb><Noun>Query.cs` | `IRequest<Result<TResponse>>` (record) | `GetPageByIdQuery.cs`, `GetUserProfileQuery.cs` |
-| **Query Handler** | Nằm chung thư mục với Query | `<Verb><Noun>QueryHandler.cs` | `IRequestHandler<TQuery, Result<TResponse>>` | `GetPageByIdQueryHandler.cs`, `GetUserProfileQueryHandler.cs` |
-| **Request DTO** | `src/PanelForge.Application/Features/<Feature>/Models/` | `<Action>Request.cs` hoặc `<Action>RequestBody.cs` | `record` hoặc `class` | `LoginRequest.cs`, `CreateWorkspaceRequest.cs` |
-| **Response DTO** | `src/PanelForge.Application/Features/<Feature>/Models/` | `<Noun>Dto.cs` hoặc `<Action>Response.cs` | `record` hoặc `class` | `PageDto.cs`, `UserProfileDto.cs`, `AuthResponse.cs` |
-| **Interface Persistence**| `src/PanelForge.Application/Common/Interfaces/Persistence/` | `I<Noun>Repository.cs` hoặc `I<Noun>DbContext.cs` | `interface` | `IPageRepository.cs`, `IPanelForgeDbContext.cs` |
-| **Interface Service** | `src/PanelForge.Application/Common/Interfaces/Services/` | `I<Noun>Service.cs` | `interface` | `IAuthService.cs`, `IWorkspaceService.cs` |
-| **EF Core Configuration**| `src/PanelForge.Infrastructure/Persistence/Configurations/<Context>/` | `<EntityName>Configuration.cs` | `IEntityTypeConfiguration<TEntity>` | `PageConfiguration.cs`, `UserConfiguration.cs` |
-| **Repository Impl** | `src/PanelForge.Infrastructure/Persistence/Repositories/` | `<Tech><Entity>Repository.cs` | `I<Entity>Repository` | `MartenPageRepository.cs` |
-| **Service Impl** | `src/PanelForge.Infrastructure/Services/` | `<Noun>Service.cs` | `I<Noun>Service` | `AuthService.cs`, `WorkspaceService.cs` |
-| **API Controller** | `src/PanelForge.API/Controllers/` | `<PluralNoun>Controller.cs` | `ControllerBase`, `[ApiController]` | `PagesController.cs`, `UsersController.cs` |
-| **API Attribute / Filter**| `src/PanelForge.API/Common/Attributes/` | `<Name>Attribute.cs` | `TypeFilterAttribute`, `ActionFilterAttribute` | `RequireWorkspaceRoleAttribute.cs` |
-| **Unit Test Class** | `test/PanelForge.UnitTests/<Layer>/` | `<SubjectUnderTest>Tests.cs` | `class` kiểm thử `[Fact]`, `[Theory]` | `PageAggregateTests.cs`, `AuthServiceTests.cs` |
+**Quy ước đặt tên Action:**
+- **Bám theo route và nghiệp vụ đã có.** Ví dụ: dùng `AddMember`, không dùng `InviteMember`, vì API hiện tại thêm thành viên trực tiếp chứ không có luồng mời. Dùng `Workspaces`, không dùng `Studios`, vì route là `/api/workspaces`.
+- Dữ liệu có phiên bản dùng `Add<X>Revision`, không dùng `Update<X>`.
+- Các trạng thái của Chapter: `ApproveChapter`, `LockChapter`, `ReopenChapter`, `PublishChapter`.
 
 ---
 
-## 5. Cơ Chế Lưu Trữ Lai: Event Sourcing + Relational (Hybrid Persistence)
+## 8. Lưu trữ: Relational + Event Sourcing
 
-Một nét kiến trúc đặc trưng và nổi bật nhất của **PanelForge** là việc kết hợp đồng thời hai cơ chế lưu trữ:
+| Cơ chế | Dữ liệu | Lý do |
+|---|---|---|
+| **EF Core (bảng quan hệ)** | User, Workspace, Series, Chapter, Scene, ScriptLine, Panel, Bible, Workflow, MasterData, AuditLog, … | Khóa ngoại, truy vấn nhiều cấp, phân trang |
+| **Marten Event Store** (`mt_events`) | `Page` aggregate và các Element trên canvas | Lịch sử chỉnh sửa đầy đủ, replay, optimistic concurrency (`Version`) |
 
-### 5.1 Phân chia trách nhiệm lưu trữ
+### 8.1 Quy tắc ghi dữ liệu (bắt buộc với code mới)
 
-1. **Relational Data (EF Core + PostgreSQL)**:
-   - Áp dụng cho: `User`, `StudioWorkspace`, `WorkspaceMember`, `ExternalPreviewLink`, `Series`, `Chapter`, `Scene`, `ScriptLine`.
-   - Mục đích: Đảm bảo toàn vẹn dữ liệu quan hệ, hỗ trợ khóa ngoại (foreign key), cascade delete, và truy vấn quan hệ bảng nhiều cấp nhanh chóng.
+1. **Không ghi hai nơi mà không có transaction chung.**
+   Gọi `_pageRepository.SaveAsync(...)` (Marten tự commit) rồi mới gọi `_dbContext.SaveChangesAsync()` sẽ dẫn đến lệch dữ liệu nếu bước thứ hai lỗi. Đây là lỗi đã biết, xem [mục 11](#11-các-điểm-lệch-chuẩn-hiện-tại--lộ-trình-refactor). Có hai hướng xử lý:
+   - **Ngắn hạn:** Marten session dùng chung connection và transaction với EF Core, để một lần commit áp dụng cho cả hai.
+   - **Dài hạn:** Marten là nguồn dữ liệu gốc, còn bảng `pages` được cập nhật bằng **projection `Inline`**. Handler chỉ ghi vào Marten.
+2. **Xóa một aggregate event-sourced** thì phải phát event (ví dụ `PageDeletedEvent`) vào stream, không được chỉ xóa bảng phía EF.
+3. **Append-only (BR-01, BR-08):** "Restore" nghĩa là tạo **phiên bản mới** chép lại trạng thái cũ, không xóa hay sửa bản cũ.
 
-2. **Event Sourced Data (Marten + PostgreSQL JSONB)**:
-   - Áp dụng cho: `Page` và các `Element` trên trang vẽ Manga.
-   - Mục đích:
-     - Lưu trữ toàn bộ lịch sử biên tập của từng trang truyện (Ai đã thêm bóng thoại, ai di chuyển panel, lúc mấy giờ).
-     - Hỗ trợ Undo / Redo vô hạn và Time Travel Debugging / Rollback.
-     - Khả năng tái hiện trạng thái (replay stream) bất kỳ thời điểm nào trong quá khứ.
+### 8.2 Hai loại "event"
 
-### 5.2 Luồng xử lý Dual-Write trong Command Handler
+| Loại | Mục đích | Hiện tại |
+|---|---|---|
+| **Event Sourcing event** | Dựng lại trạng thái aggregate (`Page.Apply(...)`) | ✅ 6 event trong `Domain/Events/` |
+| **Domain event để thông báo** | Báo cho phần khác xử lý, ví dụ gửi Notification khi được giao việc hoặc đẩy push cho Reader khi có chapter mới | 🆕 chưa có |
 
-Minh họa luồng khi gọi `CreatePageCommandHandler`:
+Khi bắt đầu cần loại thứ hai (CF2 Notification, CF5 Publish), tách riêng thành `Domain/Events/Notifications/` với interface marker riêng, và dispatch sau khi `SaveChanges` thành công.
+
+---
+
+## 9. Mở rộng cho Mobile (Reader app)
+
+### 9.1 Phạm vi nghiệp vụ (theo BR-24, US-30, E-36, CF5 bước 10–12)
+
+Reader trên Mobile có thể:
+- **Đăng ký và đăng nhập** bằng `ReaderAccount`. Đây là tài khoản **tách biệt** với `User` của Studio.
+- **Duyệt catalog công khai** các Series đã Published. API `GET /api/catalog/...` ✅ đã có.
+- **Đăng ký theo dõi (subscribe)** một Series. Nếu Series yêu cầu trả phí thì cần subscription còn hiệu lực (phần mở rộng).
+- **Đọc** các Chapter `Published`, theo `ReadingDirection` của Series.
+- **Gửi feedback** ở cấp chapter. Feedback này đi vào luồng triage giống PreviewLink (CF5 bước 6).
+
+Reader **không bao giờ** được truy cập:
+- nội dung trong Workspace,
+- Chapter đang `Locked` hoặc `InProduction` (BR-07, NFR-06).
+
+### 9.2 Nguyên tắc thiết kế
+
+| Nguyên tắc | Cách làm |
+|---|---|
+| **Dùng chung Application** | Mobile chỉ thêm Controller trong `API/Controllers/Mobile/`. Logic nằm trong `Application/Features/Reader/*`. Logic dùng chung với Web (ví dụ lọc Published) phải gọi chung một query hoặc một method Domain, **không copy**. |
+| **Route có version** | Tiền tố `/api/mobile/v1/...`. App mobile không bắt người dùng cập nhật được, nên khi đổi contract phải tạo `v2` song song thay vì sửa `v1`. Route Web giữ nguyên. |
+| **Tách danh tính Reader** | JWT của Reader có claim `actor_type=reader` (hoặc audience riêng). Controller Mobile dùng `[Authorize(Policy = "Reader")]`. Controller Studio dùng policy `StudioUser`. **Token Reader bị từ chối ở mọi API Studio.** |
+| **DTO gọn cho mobile** | Tạo `Reader*Dto` riêng: ít field, có sẵn URL ảnh, **phân trang bắt buộc** (`PagedResult`). Không trả Entity hay DTO nội bộ của Studio. |
+| **Ảnh qua signed URL** | Ảnh trang lấy qua `IAssetStorage.GetSignedUrl(...)`, URL có thời hạn ngắn (BR-04, BR-13). Không trả đường dẫn file cố định. |
+| **Kiểm tra quyền đọc ở Application** | Handler đọc chapter kiểm tra: Chapter `Published`, cộng thêm subscription nếu Series yêu cầu. Viết thành method Domain, ví dụ `series.CanBeReadBy(subscription)`, để Web và Mobile dùng chung. |
+| **Tích hợp ngoài qua interface** | Push dùng `IPushNotificationSender` (FCM). Thanh toán dùng `IPaymentGateway`. Class hiện thực đặt ở `Infrastructure/ExternalServices/…`. |
+
+### 9.3 Cấu trúc thư mục cho Mobile
 
 ```text
-HTTP POST /api/chapters/{id}/pages
-           │
-           ▼
-     PagesController
-           │  _mediator.Send(CreatePageCommand)
-           ▼
- CreatePageCommandHandler
-     ├── 1. Kiểm tra Chapter có tồn tại (truy vấn EF Core)
-     ├── 2. Tính PageNumber tự động (truy vấn EF Core)
-     ├── 3. Page.Create(...) 
-     │       └── Sinh Domain Event: PageCreatedEvent
-     ├── 4. [Write Model] _pageRepository.SaveAsync(page)
-     │       └── Append PageCreatedEvent vào Marten stream (PostgreSQL table: mt_events)
-     └── 5. [Read Model] _dbContext.Pages.Add(page) + SaveChangesAsync()
-             └── Lưu bản ghi chiếu vào bảng relational "pages" để join nhanh
+Domain/Entities/Reader/
+├── ReaderAccount.cs
+└── ReaderSubscription.cs
+
+Application/Features/Reader/
+├── Auth/        Commands/{RegisterReader, LoginReader, RefreshReaderToken} · Models/
+├── Library/     Queries/{GetMySubscriptions, GetReadingProgress} · Commands/{SubscribeSeries, UnsubscribeSeries}
+├── Reading/     Queries/{GetPublishedChapter, GetChapterPages}          (dùng chung quy tắc Published)
+├── Feedback/    Commands/{SubmitReaderFeedback}
+└── Common/      ReaderAccessPolicy (static helper, nếu cần)
+
+Application/Features/Catalog/   ✅ dùng chung cho Web (user chưa có Workspace) và Mobile
+
+API/Controllers/Mobile/
+├── ReaderAuthController.cs      [Route("api/mobile/v1/auth")]
+├── ReaderCatalogController.cs   [Route("api/mobile/v1/catalog")]  → gửi query của Features/Catalog
+├── ReaderLibraryController.cs   [Route("api/mobile/v1/library")]
+└── ReaderReadingController.cs   [Route("api/mobile/v1/series/{seriesId}/chapters")]
 ```
 
+### 9.4 Khi cần tách hẳn một host riêng cho Mobile
+
+Nếu sau này cần deploy hoặc scale Mobile độc lập, tạo project `src/PanelForge.MobileApi/` tham chiếu `Application` và `Infrastructure`, rồi chuyển `Controllers/Mobile/` sang đó. **Domain, Application và Infrastructure không phải sửa gì.** Đây là lý do bắt buộc Controller phải mỏng.
+
 ---
 
-## 6. Quy Trình Chuẩn Khi Code Thêm Tính Năng Mới (Step-by-Step Guide)
+## 10. Quy trình thêm một tính năng mới
 
-Khi một Developer nhận task mới (ví dụ: phát triển tính năng quản lý Chapter hoặc phê duyệt bản vẽ):
+**Bước 0: Xác định vị trí**
+- Tính năng thuộc CF nào, feature nào (xem mục 3)?
+- Client nào gọi: Studio, Admin, Public hay Mobile?
+- Đọc `HANDOFF.md` ở thư mục gốc để xem Frontend có yêu cầu nào đang `WAITING_BE`.
 
-### Bước 1: Định nghĩa Domain (`PanelForge.Domain`)
-1. Tạo thực thể Entity trong `Entities/<Context>/<EntityName>.cs`:
-   - Kế thừa `BaseEntity` hoặc `AggregateRoot`.
-   - Đặt constructor rỗng `private EntityName() { }`.
-   - Cung cấp `public static EntityName Create(...)` để kiểm tra validation.
-   - Đặt tất cả setter là `private set`.
-2. Định nghĩa các Enum liên quan trong `Enums/`.
-3. Nếu tính năng thuộc phạm vi Event Sourcing, tạo Event tương ứng trong `Events/` (dùng C# `record` kế thừa `IDomainEvent`).
+**Bước 1: Domain**
+1. Tạo hoặc bổ sung Entity trong `Entities/<Nhóm>/`, kèm factory `Create(...)` và method nghiệp vụ.
+2. Đặt invariant của BR tương ứng vào trong method. Viết test ở `test/.../Domain/`.
 
-### Bước 2: Thiết kế Use Cases & CQRS (`PanelForge.Application`)
-1. Tạo folder tính năng trong `Features/<FeatureName>/`.
-2. Tạo DTOs trong `Features/<FeatureName>/Models/` (Request DTO, Response DTO).
-3. Nếu là thao tác thay đổi dữ liệu (Create/Update/Delete):
-   - Tạo `<Action>Command.cs` implementing `IRequest<Result<TResponse>>`.
-   - Tạo `<Action>CommandHandler.cs` implementing `IRequestHandler<TCommand, Result<TResponse>>`.
-4. Nếu là thao tác đọc dữ liệu:
-   - Tạo `<Action>Query.cs` implementing `IRequest<Result<TResponse>>`.
-   - Tạo `<Action>QueryHandler.cs` implementing `IRequestHandler<TQuery, Result<TResponse>>`.
-5. Nếu cần tương tác dịch vụ ngoài, khai báo Interface tại `Common/Interfaces/`.
+**Bước 2: Application**
+1. Tạo `Features/<F>/Commands|Queries/<Action>/` gồm Command/Query và Handler.
+2. Tạo DTO trong `Features/<F>/Models/`.
+3. Chỉ khi cần công nghệ ngoài: khai báo interface trong `Common/Interfaces/<Nhóm>/` (theo mục 6).
+4. Nếu thay đổi dữ liệu có phiên bản: ghi lịch sử (CF4).
 
-### Bước 3: Cấu hình Persistence & Dịch vụ ngoài (`PanelForge.Infrastructure`)
-1. Nếu có Entity mới của EF Core:
-   - Thêm `DbSet<EntityName>` vào `IPanelForgeDbContext` và `PanelForgeDbContext`.
-   - Tạo file cấu hình `Configurations/<Context>/<EntityName>Configuration.cs` implementing `IEntityTypeConfiguration<T>`.
-   - Chạy lệnh migration:
-     ```bash
-     dotnet ef migrations add Add<EntityName> --project src/PanelForge.Infrastructure --startup-project src/PanelForge.API
-     ```
-2. Nếu có Service/Repository mới:
-   - Viết class hiện thực hóa interface trong `Services/` hoặc `Repositories/`.
-   - Khai báo đăng ký DI trong `Infrastructure/DependencyInjection.cs`.
-
-### Bước 4: Expose Endpoints (`PanelForge.API`)
-1. Tạo hoặc bổ sung method trong Controller tương ứng tại `Controllers/<Name>Controller.cs`.
-2. Sử dụng `[Authorize]` hoặc custom attribute `[RequireWorkspaceRole(...)]` nếu cần phân quyền.
-3. Inject `IMediator` hoặc `ISender` để gửi Command/Query sang tầng Application.
-4. Trả về mã HTTP chuẩn RESTful (`Ok(result.Value)`, `CreatedAtAction`, `BadRequest`, `NotFound`).
-
-### Bước 5: Viết Unit Test (`PanelForge.UnitTests`)
-1. Viết test cho phương thức khởi tạo và logic nghiệp vụ của Entity/Aggregate trong `Domain/`.
-2. Viết test cho Command/Query Handler hoặc Service trong `Infrastructure/` / `Application/`.
-3. Chạy kiểm thử:
+**Bước 3: Infrastructure**
+1. Entity mới: thêm `DbSet` vào `IPanelForgeDbContext` và `PanelForgeDbContext`, tạo `Configurations/<Nhóm>/<Entity>Configuration.cs`, rồi tạo migration:
    ```bash
-   dotnet test
+   dotnet ef migrations add Add<EntityName> --project src/PanelForge.Infrastructure --startup-project src/PanelForge.API
    ```
+2. Interface mới: viết class hiện thực vào đúng thư mục và đăng ký trong `DependencyInjection.cs`.
+
+**Bước 4: API**
+1. Thêm action vào Controller trong đúng thư mục client (`Studio/`, `Admin/`, `Public/`, `Mobile/`).
+2. Gắn `[Authorize]`, `[RequireWorkspaceRole(...)]` hoặc `[Authorize(Policy = "Reader")]`.
+3. Gọi `ISender.Send(...)` và map `Result` sang status code (`200/201/400/403/404/409`).
+
+**Bước 5: Test và bàn giao**
+1. Viết test cho Handler trong `test/.../Application/<Feature>/`, rồi chạy `dotnet test`.
+2. Cập nhật `HANDOFF.md`: ghi method, route, Request/Response DTO (tên field, kiểu, nullable) và yêu cầu auth. Nếu đổi contract của một API đã `DONE`, ghi vào mục "Nhật ký thay đổi breaking".
 
 ---
-*Tài liệu được biên soạn và đồng bộ dựa trên cấu trúc thực tế của mã nguồn PanelForge.*
+
+## 11. Các điểm lệch chuẩn hiện tại & lộ trình refactor
+
+Danh sách từ đợt rà soát ngày 2026-09-28. **Code mới không được lặp lại các lỗi này.** Code cũ sửa dần theo thứ tự ưu tiên.
+
+| Ưu tiên | Vấn đề | Vị trí | Hướng sửa |
+|:---:|---|---|---|
+| ✅ đã sửa 2026-09-28 | Dual-write Marten + EF không có transaction chung | `Pages/CreatePage`, `Pages/ReorderPage`, `Pages/UpdateCanvasSettings` | Đã thêm `IUnitOfWork`: Marten enlist vào transaction của EF (hướng ngắn hạn mục 8.1). Đã kiểm chứng rollback trên PostgreSQL thật. |
+| ✅ đã sửa 2026-09-28 | `DeletePage` chỉ xóa phía EF, stream Marten vẫn còn | `Pages/DeletePage/DeletePageCommandHandler.cs` | Phát `PageDeletedEvent` và soft delete |
+| ✅ đã sửa 2026-09-28 | Use case nằm trong Infrastructure (god service) | `Infrastructure/Services/AuthService.cs` (644 dòng), `WorkspaceService.cs` (465 dòng) | Đã tách `ITotpService`, `IExternalIdentityVerifier`; 12 handler `Features/Auth/Commands/*`, 9 handler `Features/Workspaces/*`; route và DTO giữ nguyên; đã xóa `AuthService`, `WorkspaceService`, `IAuthService`, `IWorkspaceService`. |
+| ✅ đã sửa 2026-09-28 | Controller truy vấn DB trực tiếp | `API/Controllers/AdminController.cs` | Chuyển sang `Features/Admin/Commands|Queries` |
+| ✅ đã sửa 2026-09-28 | Filter truy vấn DB trực tiếp | `API/Common/Attributes/RequireWorkspaceRoleAttribute.cs` | Dùng `IWorkspaceAuthorizationService` |
+| ✅ đã sửa 2026-09-28 | Hai kiểu cấu trúc CQRS | `Features/Pages`, `Features/Elements` (kiểu phẳng) | Đã chuyển về `Commands/` và `Queries/`. |
+| ✅ đã sửa 2026-09-28 | Nhiều handler dồn trong một file | `SeriesPipeline/SeriesPipelineHandlers.cs`, `AiUsage/AiUsageQueries.cs`, `Catalog/PublicCatalogQueries.cs`, `ConsistencyRules/Commands/ConsistencyRuleCommands.cs`, `MasterData/*/…Commands.cs` | Đã tách mỗi use case một thư mục (DTO → `Models/`, static helper → `Common/`). **Còn lại:** `Catalog/PublicCatalogQueries.cs` chưa tách vì phiên sửa lỗi Catalog đang sửa cùng file. |
+| ✅ đã sửa 2026-09-28 | Request DTO đặt sai chỗ | `ConsistencyRules/Commands/ConsistencyRuleRequests.cs`, `TypographyPresets/Commands/TypographyPresetRequests.cs` | Đã chuyển về `Models/`. |
+| ✅ đã sửa 2026-09-28 | Namespace không khớp thư mục | Ví dụ `IPageRepository` (`PanelForge.Application.Interfaces`), `MartenPageRepository` (`PanelForge.Infrastructure.Repositories`), `using PanelForge.Application.DTOs.*` | Mọi file trong `src/` đã khớp. Ngoại lệ có chủ đích: test `Application/Series` giữ namespace `SeriesTests` để không trùng class `Series`. |
+| ✅ đã sửa 2026-09-28 | Hai feature "Element" dễ nhầm | `Features/Elements` (Marten), `Features/ContentElements` (EF) | Đã đổi tên thành `CanvasElements` và `PanelContentElements`. |
+| ✅ đã sửa 2026-09-28 | Thư mục Domain `Auth/` chứa thứ không phải Auth | `StudioWorkspace`, `WorkspaceAiConfig`, `AiUsageRecord`, `AuditLog`, `ExternalPreviewLink` | Đã tách thành `Identity/`, `Workspaces/`, `Ai/`, `Audit/`, `Publishing/`. EF xác nhận không đổi schema (`has-pending-model-changes`). |
+| ✅ đã sửa 2026-09-28 | Configuration không khớp nhóm Domain | `Configurations/Content/Bible*Configuration.cs` | Đã chuyển; Configurations giờ khớp nhóm Domain. |
+| ✅ đã sửa 2026-09-28 | `WorkspaceAuthorizationService` sai thư mục | `Infrastructure/ExternalServices/Authorization/` | Chuyển sang `Infrastructure/Services/` |
+| ✅ đã sửa 2026-09-28 | File lỗi encoding (vỡ dấu tiếng Việt) | `Infrastructure/Persistence/Repositories/MartenPageRepository.cs` | Lưu lại bằng UTF-8 |
+| ✅ đã sửa 2026-09-28 | Endpoint thử nghiệm, tên file khác tên class | `API/Controllers/TestController.cs` (class `TestAuthController`) | Đã xóa (FE không dùng). |
+| ✅ đã sửa 2026-09-28 (phiên riêng) | `GET /api/catalog/series` trả 500 trên PostgreSQL (LINQ không dịch được sang SQL; unit test chạy EF InMemory nên không bắt được). Phát hiện khi chạy thử API 2026-09-28 | `Features/Catalog/PublicCatalogQueries.cs` | Viết lại truy vấn để PostgreSQL dịch được (sắp xếp / tính toán trước khi projection sang record). Đây là API public dùng cho Mobile Reader. || 🔴 1 | Migration EF `20260916040132_AddEventSourcingElements` tự tạo bảng `mt_events` / `mt_streams` bằng SQL tay, lệch schema với Marten 9 → dựng database MỚI thì Marten báo lỗi schema | `Infrastructure/Persistence/Migrations/` | Để Marten tự quản lý schema `mt_*` (bỏ SQL tay khỏi migration cho DB mới, có phương án cho DB đã chạy). Cần thống nhất với nhóm vì migration đã chạy trên máy mọi người. |
+| 🔴 1 | Migration EF `20260916040132_AddEventSourcingElements` tự tạo bảng `mt_events` / `mt_streams` bằng SQL tay, lệch schema với Marten 9 → dựng database MỚI thì Marten báo lỗi schema | `Infrastructure/Persistence/Migrations/` | Để Marten tự quản lý schema `mt_*` (bỏ SQL tay khỏi migration cho DB mới, có phương án cho DB đã chạy). Cần thống nhất với nhóm vì migration đã chạy trên máy mọi người. |
+
+> Việc di chuyển file và đổi namespace **không làm đổi route hay DTO**, nên không ảnh hưởng Frontend. Nên làm theo từng feature, mỗi lần một commit, và chạy `dotnet build` cùng `dotnet test` sau mỗi bước.
+
+---
+
+## 12. Lịch sử thay đổi tài liệu
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 1.0 | 2026-09-17 | Bản đầu: mô tả 4 tầng và quy ước đặt tên theo code thời điểm đó. |
+| 2.0 | 2026-09-28 | Thêm ánh xạ CF1–CF5 → code; cây thư mục mục tiêu có trạng thái ✅/🔁/🆕; quy tắc khi nào tạo Interface/Service (4 nhóm); quy tắc ghi dữ liệu Marten + EF và append-only; mục mở rộng cho Mobile Reader (route `/api/mobile/v1`, policy Reader, DTO riêng, signed URL); danh sách điểm lệch chuẩn và lộ trình refactor. Bỏ `AuthService`/`WorkspaceService` khỏi danh sách "đặt đúng chỗ". |
+
+---
+*Tài liệu này được đối chiếu với mã nguồn thực tế và với `docs/markdown/PanelForge_Capstone_Content.md`. Khi cấu trúc code thay đổi, cập nhật mục 4 và mục 11 trước tiên.*

@@ -1,6 +1,7 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Identity;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Publishing;
 
 public class ExternalPreviewLink : BaseEntity
 {

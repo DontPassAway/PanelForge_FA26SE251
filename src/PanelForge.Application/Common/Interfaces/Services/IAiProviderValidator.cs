@@ -1,6 +1,6 @@
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Services;
 
 /// <summary>
 /// Service kiểm tra tính hợp lệ của API Key khi lưu cấu hình AI Provider (UC-02 Alternate Flow).

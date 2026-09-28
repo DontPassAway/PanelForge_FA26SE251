@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Services;
@@ -88,6 +88,18 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
         return member?.Role;
     }
+
+    public Task<Guid?> GetWorkspaceIdOfSeriesAsync(Guid seriesId, CancellationToken cancellationToken = default)
+        => _dbContext.Series
+            .Where(s => s.Id == seriesId)
+            .Select(s => (Guid?)s.WorkspaceId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Guid?> GetWorkspaceIdOfChapterAsync(Guid chapterId, CancellationToken cancellationToken = default)
+        => _dbContext.Chapters
+            .Where(c => c.Id == chapterId)
+            .Select(c => (Guid?)c.Series.WorkspaceId)
+            .FirstOrDefaultAsync(cancellationToken);
 
     // BR-07: Administrator không bao giờ có quyền cấp Workspace.
     private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken)

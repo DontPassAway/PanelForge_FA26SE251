@@ -10,6 +10,7 @@ using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Persistence.Seeders;
 
 var builder = WebApplication.CreateBuilder(args);
 

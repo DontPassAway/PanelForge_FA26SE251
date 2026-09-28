@@ -1,7 +1,7 @@
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Services;
 
 /// <summary>
 /// Cổng kiểm soát và ghi nhận mọi lần gọi AI theo workspace (UC-02, UC-15, E-29).

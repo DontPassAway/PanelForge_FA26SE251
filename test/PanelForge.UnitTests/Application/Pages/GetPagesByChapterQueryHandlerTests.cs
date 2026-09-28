@@ -1,7 +1,7 @@
 ﻿using FluentAssertions;
 using Moq;
-using PanelForge.Application.Features.Pages.GetPagesByChapter;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Queries.GetPagesByChapter;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;

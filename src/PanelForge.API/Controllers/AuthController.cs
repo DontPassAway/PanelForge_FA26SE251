@@ -2,9 +2,21 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.DTOs.Auth;
-using PanelForge.Application.Features.Auth.Queries;
-using PanelForge.Application.Services;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Auth.Models;
+using PanelForge.Application.Features.Auth.Commands.ChangePassword;
+using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
+using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
+using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
+using PanelForge.Application.Features.Auth.Commands.ForgotPassword;
+using PanelForge.Application.Features.Auth.Commands.Login;
+using PanelForge.Application.Features.Auth.Commands.Register;
+using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
+using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
+using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
+using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
 
 namespace PanelForge.API.Controllers;
 
@@ -12,49 +24,35 @@ namespace PanelForge.API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _authService;
+    private const string RememberDeviceCookie = "pf_remember_device";
+    private const string RememberDeviceHeader = "X-Remember-Device-Token";
+
     private readonly IMediator _mediator;
 
-    public AuthController(IAuthService authService, IMediator mediator)
+    public AuthController(IMediator mediator)
     {
-        _authService = authService;
         _mediator = mediator;
     }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var response = await _authService.RegisterAsync(request, cancellationToken);
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(
+            new RegisterCommand(request.Email, request.Password, request.FullName, request.PhoneNumber),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var rememberDeviceToken = Request.Cookies["pf_remember_device"]
-                ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault()
-                ?? request.RememberDeviceToken;
+        var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
+            ?? Request.Headers[RememberDeviceHeader].FirstOrDefault()
+            ?? request.RememberDeviceToken;
 
-            var response = await _authService.LoginAsync(request, rememberDeviceToken, cancellationToken: cancellationToken);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(
+            new LoginCommand(request.Email, request.Password, rememberDeviceToken), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize]
@@ -100,201 +98,114 @@ public class AuthController : ControllerBase
     [HttpPost("send-change-password-otp")]
     public async Task<IActionResult> SendChangePasswordOtp(CancellationToken cancellationToken)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!Guid.TryParse(userIdStr, out var userId))
-        {
-            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
 
-        try
-        {
-            await _authService.SendChangePasswordOtpAsync(userId, cancellationToken);
-            return Ok(new { message = "Mã xác thực OTP đã được gửi đến email của bạn." });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new SendChangePasswordOtpCommand(userId), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Mã xác thực OTP đã được gửi đến email của bạn." })
+            : ToError(result);
     }
 
     [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!Guid.TryParse(userIdStr, out var userId))
-        {
-            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
 
-        try
-        {
-            await _authService.ChangePasswordAsync(userId, request, cancellationToken);
-            return Ok(new { message = "Đổi mật khẩu thành công." });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new ChangePasswordCommand(
+            userId, request.CurrentPassword, request.NewPassword, request.EmailOtp, request.OtpCode),
+            cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Đổi mật khẩu thành công." })
+            : ToError(result);
     }
 
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
-        await _authService.ForgotPasswordAsync(request, cancellationToken);
+        await _mediator.Send(new ForgotPasswordCommand(request.Email), cancellationToken);
         return Ok(new { message = "Nếu email tồn tại trong hệ thống, mã xác thực đặt lại mật khẩu đã được gửi đến hộp thư của bạn." });
     }
 
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _authService.ResetPasswordAsync(request, cancellationToken);
-            return Ok(new { message = "Đặt lại mật khẩu thành công. Bạn hiện có thể đăng nhập bằng mật khẩu mới." });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(
+            new ResetPasswordCommand(request.Email, request.Token, request.NewPassword), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Đặt lại mật khẩu thành công. Bạn hiện có thể đăng nhập bằng mật khẩu mới." })
+            : ToError(result);
     }
 
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var response = await _authService.VerifyEmailAsync(request, cancellationToken);
-            return Ok(response);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new VerifyEmailCommand(request.Email, request.Token), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _authService.ResendVerificationEmailAsync(request, cancellationToken);
-            return Ok(new { message = "Mã xác thực mới đã được gửi đến email của bạn nếu tài khoản hợp lệ." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new ResendVerificationEmailCommand(request.Email), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Mã xác thực mới đã được gửi đến email của bạn nếu tài khoản hợp lệ." })
+            : ToError(result);
     }
 
     [HttpPost("external-login")]
     public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var response = await _authService.ExternalLoginAsync(request, cancellationToken);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new ExternalLoginCommand(request.IdToken), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize]
     [HttpPost("enable-2fa")]
     public async Task<IActionResult> EnableTwoFactor(CancellationToken cancellationToken)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!Guid.TryParse(userIdStr, out var userId))
-        {
-            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
 
-        try
-        {
-            var response = await _authService.EnableTwoFactorAsync(userId, cancellationToken);
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        var result = await _mediator.Send(new EnableTwoFactorCommand(userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpPost("verify-2fa")]
     public async Task<IActionResult> VerifyTwoFactor([FromBody] VerifyTwoFactorRequest request, CancellationToken cancellationToken)
     {
-        Guid? userId = null;
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (Guid.TryParse(userIdStr, out var parsedGuid))
-        {
-            userId = parsedGuid;
-        }
+        var result = await _mediator.Send(new VerifyTwoFactorCommand(
+            GetCurrentUserId(), request.Code, request.Email, request.RememberDevice, request.DeviceName),
+            cancellationToken);
+        if (!result.IsSuccess)
+            return ToError(result);
 
-        try
+        var response = result.Value!;
+        if (!string.IsNullOrEmpty(response.RememberDeviceToken))
         {
-            var response = await _authService.VerifyTwoFactorAsync(userId, request, cancellationToken);
-
-            if (!string.IsNullOrEmpty(response.RememberDeviceToken))
+            Response.Cookies.Append(RememberDeviceCookie, response.RememberDeviceToken, new CookieOptions
             {
-                Response.Cookies.Append("pf_remember_device", response.RememberDeviceToken, new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = Request.IsHttps,
-                    SameSite = SameSiteMode.Lax,
-                    Expires = DateTimeOffset.UtcNow.AddDays(30)
-                });
-            }
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Expires = DateTimeOffset.UtcNow.AddDays(30)
+            });
+        }
 
-            return Ok(response);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        return Ok(response);
     }
 
     [HttpPost("forget-device")]
     public async Task<IActionResult> ForgetDevice(CancellationToken cancellationToken)
     {
-        var rememberDeviceToken = Request.Cookies["pf_remember_device"]
-            ?? Request.Headers["X-Remember-Device-Token"].FirstOrDefault();
+        var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
+            ?? Request.Headers[RememberDeviceHeader].FirstOrDefault();
 
-        Guid? userId = null;
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (Guid.TryParse(userIdStr, out var parsedGuid))
-        {
-            userId = parsedGuid;
-        }
+        await _mediator.Send(new ForgetDeviceCommand(rememberDeviceToken, GetCurrentUserId()), cancellationToken);
 
-        await _authService.ForgetDeviceAsync(rememberDeviceToken, userId, cancellationToken);
-
-        Response.Cookies.Delete("pf_remember_device");
+        Response.Cookies.Delete(RememberDeviceCookie);
 
         return Ok(new { message = "Thiết bị này đã được xóa khỏi danh sách thiết bị tin cậy." });
     }
@@ -309,9 +220,8 @@ public class AuthController : ControllerBase
     [HttpGet("me/landing-context")]
     public async Task<IActionResult> GetLandingContext(CancellationToken cancellationToken)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!Guid.TryParse(userIdStr, out var userId))
-            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
 
         var result = await _mediator.Send(new GetLandingContextQuery(userId), cancellationToken);
         if (!result.IsSuccess)
@@ -319,4 +229,19 @@ public class AuthController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    private Guid? GetCurrentUserId()
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+    }
+
+    private IActionResult UnknownUser()
+        => Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+
+    // UNAUTHORIZED → 401, lỗi nghiệp vụ khác → 400; body { message } như trước
+    private IActionResult ToError<T>(Result<T> result)
+        => result.ErrorCode == ResultErrorCodes.Unauthorized
+            ? Unauthorized(new { message = result.ErrorMessage })
+            : BadRequest(new { message = result.ErrorMessage });
 }

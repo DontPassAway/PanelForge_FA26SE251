@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Publishing;
 
-namespace PanelForge.Infrastructure.Persistence.Configurations.Auth;
+namespace PanelForge.Infrastructure.Persistence.Configurations.Publishing;
 
 internal sealed class ExternalPreviewLinkConfiguration : IEntityTypeConfiguration<ExternalPreviewLink>
 {

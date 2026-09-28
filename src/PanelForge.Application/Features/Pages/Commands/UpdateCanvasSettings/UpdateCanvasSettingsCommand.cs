@@ -1,7 +1,7 @@
 using MediatR;
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Features.Pages.UpdateCanvasSettings;
+namespace PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 
 public sealed record UpdateCanvasSettingsCommand(
     Guid PageId,

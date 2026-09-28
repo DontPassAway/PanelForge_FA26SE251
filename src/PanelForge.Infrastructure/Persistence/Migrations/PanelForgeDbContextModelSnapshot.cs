@@ -22,7 +22,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AiUsageRecord", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiUsageRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -110,7 +110,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("ai_usage_records", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AuditLog", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Audit.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -201,7 +201,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.ExternalPreviewLink", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExternalPreviewLink", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -271,7 +271,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("external_preview_links", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.StudioWorkspace", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -328,7 +328,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("studio_workspaces", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.User", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -428,7 +428,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.UserRememberedDevice", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.UserRememberedDevice", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -486,7 +486,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("user_remembered_devices", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.WorkspaceAiConfig", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -564,7 +564,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("workspace_ai_configs", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.WorkspaceMember", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceMember", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -2167,9 +2167,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("workflow_transition_logs", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.AiUsageRecord", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiUsageRecord", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithMany()
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2178,7 +2178,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Workspace");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.ExternalPreviewLink", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExternalPreviewLink", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
                         .WithMany("ExternalPreviewLinks")
@@ -2186,7 +2186,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Auth.User", "CreatedByUser")
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "CreatedByUser")
                         .WithMany("CreatedPreviewLinks")
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2195,9 +2195,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("CreatedByUser");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.StudioWorkspace", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.User", "Owner")
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "Owner")
                         .WithMany("OwnedWorkspaces")
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2206,9 +2206,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Owner");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.UserRememberedDevice", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.UserRememberedDevice", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.User", "User")
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2217,26 +2217,26 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.WorkspaceAiConfig", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithOne()
-                        .HasForeignKey("PanelForge.Domain.Entities.Auth.WorkspaceAiConfig", "WorkspaceId")
+                        .HasForeignKey("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", "WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Workspace");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.WorkspaceMember", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceMember", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.User", "User")
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
                         .WithMany("WorkspaceMemberships")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithMany("Members")
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2277,7 +2277,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithMany()
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2407,7 +2407,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithMany("Series")
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2440,7 +2440,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.Assignment", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Auth.User", "Assignee")
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "Assignee")
                         .WithMany("AssignedTasks")
                         .HasForeignKey("AssigneeUserId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2480,7 +2480,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PanelForge.Domain.Entities.Workflow.PipelineDefinition", "SeriesId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("PanelForge.Domain.Entities.Auth.StudioWorkspace", "Workspace")
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithMany()
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -2547,14 +2547,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("ToStage");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.StudioWorkspace", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.Navigation("Members");
 
                     b.Navigation("Series");
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Auth.User", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.User", b =>
                 {
                     b.Navigation("AssignedTasks");
 

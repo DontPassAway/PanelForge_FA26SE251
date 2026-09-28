@@ -1,6 +1,6 @@
 using PanelForge.Domain.Common;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Audit;
 
 /// <summary>
 /// Thực thể ghi nhận lịch sử kiểm toán toàn diện (BR-18, UC-15).

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Infrastructure.Persistence.Configurations.Content;
+namespace PanelForge.Infrastructure.Persistence.Configurations.Bible;
 
 internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEntry>
 {

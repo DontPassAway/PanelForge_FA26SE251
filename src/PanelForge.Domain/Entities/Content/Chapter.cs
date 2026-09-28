@@ -1,5 +1,5 @@
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;

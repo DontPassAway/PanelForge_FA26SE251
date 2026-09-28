@@ -1,4 +1,4 @@
-namespace PanelForge.Application.DTOs.Content;
+namespace PanelForge.Application.Features.Pages.Models;
 
 public sealed record PageDto(
     Guid Id,

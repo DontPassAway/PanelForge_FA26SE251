@@ -2,7 +2,7 @@ using Marten.Events.Aggregation;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Events;
 
-namespace PanelForge.Infrastructure.Persistence.Projections;
+namespace PanelForge.Infrastructure.Persistence.EventStore.Projections;
 
 public class PageProjection : SingleStreamProjection<Page, Guid>
 {
@@ -22,4 +22,5 @@ public class PageProjection : SingleStreamProjection<Page, Guid>
     public void Apply(Page page, ElementAddedEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementMovedEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementRemovedEvent @event) => page.Apply(@event);
+    public void Apply(Page page, PageDeletedEvent @event) => page.Apply(@event);
 }

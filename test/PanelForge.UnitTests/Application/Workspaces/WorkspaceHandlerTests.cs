@@ -1,205 +1,209 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Authentication;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Workspaces.Commands.AddMember;
+using PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
+using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
+using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Identity;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
-using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
-using System.Reflection;
 using Xunit;
 
-namespace PanelForge.UnitTests.Infrastructure.Services;
+namespace PanelForge.UnitTests.Application.Workspaces;
 
-public class WorkspaceServiceTests
+/// <summary>Các handler thay thế WorkspaceService cũ — giữ nguyên các kịch bản kiểm thử trước đây.</summary>
+public class WorkspaceHandlerTests
 {
-    private readonly Mock<IPanelForgeDbContext> _dbContextMock;
-    private readonly Mock<IWorkspaceAuthorizationService> _authorizationServiceMock;
-    private readonly Mock<IEmailService> _emailServiceMock;
-    private readonly WorkspaceService _service;
+    private readonly Mock<IPanelForgeDbContext> _dbContextMock = new();
+    private readonly Mock<IWorkspaceAuthorizationService> _authorizationServiceMock = new();
+    private readonly Mock<IEmailService> _emailServiceMock = new();
 
-    public WorkspaceServiceTests()
-    {
-        _dbContextMock = new Mock<IPanelForgeDbContext>();
-        _authorizationServiceMock = new Mock<IWorkspaceAuthorizationService>();
-        _emailServiceMock = new Mock<IEmailService>();
-        _service = new WorkspaceService(
-            _dbContextMock.Object,
-            _authorizationServiceMock.Object,
-            _emailServiceMock.Object,
-            NullLogger<WorkspaceService>.Instance);
-    }
+    private AddWorkspaceMemberCommandHandler AddMember() => new(
+        _dbContextMock.Object,
+        _authorizationServiceMock.Object,
+        _emailServiceMock.Object,
+        NullLogger<AddWorkspaceMemberCommandHandler>.Instance);
+
+    private void AllowManage(Guid actorId, Guid workspaceId)
+        => _authorizationServiceMock
+            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
     [Fact]
-    public async Task GetUserWorkspacesAsync_ShouldFilterIsDeletedAndCountPendingTasks()
+    public async Task GetMyWorkspaces_ShouldFilterIsDeletedAndCountPendingTasks()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var owner = User.Create("owner@test.com", "Owner");
         owner.GetType().GetProperty("Id")?.SetValue(owner, userId);
 
         var workspace = StudioWorkspace.Create("Test Studio", owner.Id);
-        
-        // Use reflection to set private property if necessary, but owner is set via Create
         workspace.GetType().GetProperty("Owner")?.SetValue(workspace, owner);
-        
+
         var deletedMember = WorkspaceMember.Create(workspace.Id, Guid.NewGuid(), WorkspaceRole.Artist);
         deletedMember.GetType().GetProperty("IsDeleted")?.SetValue(deletedMember, true);
-        
         var activeMember = WorkspaceMember.Create(workspace.Id, userId, WorkspaceRole.Writer);
-        
-        // Inject members list using property setter or backing field
-        var membersProp = typeof(StudioWorkspace).GetProperty("Members");
-        var membersList = new List<WorkspaceMember> { deletedMember, activeMember };
-        membersProp?.SetValue(workspace, membersList);
+        typeof(StudioWorkspace).GetProperty("Members")?.SetValue(workspace, new List<WorkspaceMember> { deletedMember, activeMember });
 
         var series = Series.Create(workspace.Id, "Series 1", ReadingDirection.LeftToRight);
         series.GetType().GetProperty("WorkspaceId")?.SetValue(series, workspace.Id);
 
-        var task1 = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 1");
-        task1.GetType().GetProperty("Series")?.SetValue(task1, series);
-        // task1 is Assigned (Pending)
+        var pending = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 1");
+        pending.GetType().GetProperty("Series")?.SetValue(pending, series);
 
-        var task2 = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 2");
-        task2.MarkApproved(); // Approved, should not count
-        task2.GetType().GetProperty("Series")?.SetValue(task2, series);
+        var approved = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 2");
+        approved.MarkApproved();
+        approved.GetType().GetProperty("Series")?.SetValue(approved, series);
 
-        var task3 = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 3");
-        task3.GetType().GetProperty("IsDeleted")?.SetValue(task3, true); // Deleted task, should not count
-        task3.GetType().GetProperty("Series")?.SetValue(task3, series);
-
-        var workspaces = new List<StudioWorkspace> { workspace };
-        var assignments = new List<Assignment> { task1, task2, task3 };
-
-        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(workspaces));
-        _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(assignments));
-
-        // Act
-        var result = await _service.GetUserWorkspacesAsync(userId);
-
-        // Assert
-        result.Should().HaveCount(1);
-        var dto = result.First();
-        dto.PendingTasks.Should().Be(1); // Only task1 should be counted
-        dto.MemberCount.Should().Be(1); // Since MemberCount uses w.Members.Count but we included with `.Where(m => !m.IsDeleted)`, EF in-memory mock might not apply `.Where` to navigation properties accurately without proper setup, but the test focuses on the query logic.
-    }
-
-    [Fact]
-    public async Task AddMemberAsync_WhenTargetUserIsAdmin_ShouldThrowInvalidOperationException()
-    {
-        // Arrange
-        var actorId = Guid.NewGuid();
-        var workspaceId = Guid.NewGuid();
-        var workspace = StudioWorkspace.Create("Test Studio", actorId);
-        typeof(StudioWorkspace).GetProperty("Id")?.SetValue(workspace, workspaceId);
-
-        var adminUser = User.Create("admin@test.com", "Admin User", role: SystemRole.Admin);
-
-        _authorizationServiceMock
-            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspaceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        var workspacesDbSet = DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace });
-        var usersDbSet = DbSetMockHelper.CreateDbSetMock(new List<User> { adminUser });
-        var membersDbSet = DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>());
-
-        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(workspacesDbSet);
-        _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
-        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(membersDbSet);
-
-        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
-        {
-            Email = adminUser.Email,
-            Role = WorkspaceRole.Artist
-        };
-
-        // Act
-        var act = async () => await _service.AddMemberAsync(actorId, workspaceId, request);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Administrator*");
-    }
-
-    [Fact]
-    public async Task AddMemberAsync_WhenEmailHasNoAccount_ShouldCreatePasswordlessInvitedUser_AndSendOtp()
-    {
-        // Arrange
-        var actorId = Guid.NewGuid();
-        var workspace = StudioWorkspace.Create("Test Studio", actorId);
-
-        _authorizationServiceMock
-            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspace.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        var users = new List<User>();
-        var usersDbSet = DbSetMockHelper.CreateDbSetMock(users);
+        var deleted = Assignment.Create(series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), userId, WorkspaceRole.Artist, "Task 3");
+        deleted.GetType().GetProperty("IsDeleted")?.SetValue(deleted, true);
+        deleted.GetType().GetProperty("Series")?.SetValue(deleted, series);
 
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
-        _dbContextMock.Setup(db => db.Users).Returns(usersDbSet);
+        _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment> { pending, approved, deleted }));
+
+        var result = await new GetMyWorkspacesQueryHandler(_dbContextMock.Object)
+            .Handle(new GetMyWorkspacesQuery(userId), CancellationToken.None);
+
+        var dto = result.Value.Should().ContainSingle().Subject;
+        dto.PendingTasks.Should().Be(1);   // chỉ task chưa duyệt, chưa xóa
+        dto.MemberCount.Should().Be(1);    // bỏ member đã xóa
+        dto.IsOwner.Should().BeTrue();
+        dto.CurrentUserRole.Should().Be(WorkspaceRole.Producer);
+    }
+
+    [Fact]
+    public async Task AddMember_WhenTargetUserIsAdmin_ShouldFail_BR07()
+    {
+        var actorId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", actorId);
+        var adminUser = User.Create("admin@test.com", "Admin User", role: SystemRole.Admin);
+        AllowManage(actorId, workspace.Id);
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<User> { adminUser }));
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
 
-        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
-        {
-            Email = "New.Artist@Test.com",
-            Role = WorkspaceRole.Artist
-        };
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, adminUser.Email, WorkspaceRole.Artist), CancellationToken.None);
 
-        // Act
-        var result = await _service.AddMemberAsync(actorId, workspace.Id, request);
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().BeNull(); // → 400
+        result.ErrorMessage.Should().Contain("Administrator");
+    }
 
-        // Assert
+    [Fact]
+    public async Task AddMember_WhenActorNotProducer_ShouldReturnForbidden()
+    {
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(Guid.NewGuid(), Guid.NewGuid(), "x@test.com", WorkspaceRole.Artist), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+    }
+
+    [Fact]
+    public async Task AddMember_WhenEmailHasNoAccount_ShouldCreatePasswordlessInvitedUser_AndSendOtp()
+    {
+        var actorId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", actorId);
+        AllowManage(actorId, workspace.Id);
+
+        var users = new List<User>();
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(users));
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, "New.Artist@Test.com", WorkspaceRole.Artist), CancellationToken.None);
+
         var invited = users.Should().ContainSingle().Subject;
         invited.Email.Should().Be("new.artist@test.com");
         invited.PasswordHash.Should().BeNull("tài khoản được mời không được có mật khẩu mặc định");
         invited.IsEmailConfirmed.Should().BeFalse();
         invited.PasswordResetToken.Should().MatchRegex("^[0-9]{6}$");
         invited.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
-        result.Role.Should().Be(WorkspaceRole.Artist);
+        result.Value!.Role.Should().Be(WorkspaceRole.Artist);
 
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _emailServiceMock.Verify(e => e.SendEmailAsync(
-            "new.artist@test.com",
-            It.IsAny<string>(),
-            It.Is<string>(body => body.Contains(invited.PasswordResetToken!)),
-            It.IsAny<CancellationToken>()), Times.Once);
+        _emailServiceMock.Verify(e => e.SendWorkspaceInvitationAsync(
+            "new.artist@test.com", It.IsAny<string>(), "Test Studio", "Artist",
+            invited.PasswordResetToken, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task AddMemberAsync_WhenEmailSendingFails_ShouldStillAddMember()
+    public async Task AddMember_WhenEmailSendingFails_ShouldStillAddMember()
     {
-        // Arrange
         var actorId = Guid.NewGuid();
         var workspace = StudioWorkspace.Create("Test Studio", actorId);
         var existingUser = User.Create("writer@test.com", "Writer");
-
-        _authorizationServiceMock
-            .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspace.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        AllowManage(actorId, workspace.Id);
         _emailServiceMock
-            .Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(e => e.SendWorkspaceInvitationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentNullException("SenderEmail"));
 
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<User> { existingUser }));
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
 
-        var request = new PanelForge.Application.DTOs.Workspaces.AddWorkspaceMemberRequest
-        {
-            Email = existingUser.Email,
-            Role = WorkspaceRole.Writer
-        };
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, existingUser.Email, WorkspaceRole.Writer), CancellationToken.None);
 
-        // Act
-        var result = await _service.AddMemberAsync(actorId, workspace.Id, request);
-
-        // Assert
-        result.UserId.Should().Be(existingUser.Id);
+        result.Value!.UserId.Should().Be(existingUser.Id);
         existingUser.PasswordResetToken.Should().BeNull("user đã có tài khoản không cần OTP kích hoạt");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateWorkspace_WithoutCanCreateStudio_ShouldReturnUnauthorized_BR22()
+    {
+        await using var db = InMemoryDb.Create();
+        var user = User.Create("u@test.com", "U");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await new CreateWorkspaceCommandHandler(db)
+            .Handle(new CreateWorkspaceCommand(user.Id, "Studio", 0), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CreateWorkspace_WithPermission_ShouldAddOwnerAsProducer()
+    {
+        await using var db = InMemoryDb.Create();
+        var user = User.Create("p@test.com", "P");
+        user.GrantStudioCreation();
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await new CreateWorkspaceCommandHandler(db)
+            .Handle(new CreateWorkspaceCommand(user.Id, "  My Studio ", 0), CancellationToken.None);
+
+        result.Value!.IsOwner.Should().BeTrue();
+        result.Value.CurrentUserRole.Should().Be(WorkspaceRole.Producer);
+        db.WorkspaceMembers.Should().ContainSingle(m => m.UserId == user.Id && m.Role == WorkspaceRole.Producer);
+    }
+
+    [Fact]
+    public async Task RemoveMember_WhenTargetIsOwner_ShouldFail()
+    {
+        await using var db = InMemoryDb.Create();
+        var ownerId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Studio", ownerId);
+        db.StudioWorkspaces.Add(workspace);
+        await db.SaveChangesAsync();
+
+        var result = await new RemoveWorkspaceMemberCommandHandler(db, _authorizationServiceMock.Object)
+            .Handle(new RemoveWorkspaceMemberCommand(ownerId, workspace.Id, ownerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Chủ sở hữu");
     }
 }

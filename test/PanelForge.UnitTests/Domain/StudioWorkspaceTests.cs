@@ -1,5 +1,6 @@
 using FluentAssertions;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Identity;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using Xunit;
 

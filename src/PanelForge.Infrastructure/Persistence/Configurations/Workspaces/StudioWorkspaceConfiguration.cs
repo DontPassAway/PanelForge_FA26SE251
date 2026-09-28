@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
 
-namespace PanelForge.Infrastructure.Persistence.Configurations.Auth;
+namespace PanelForge.Infrastructure.Persistence.Configurations.Workspaces;
 
 internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<StudioWorkspace>
 {

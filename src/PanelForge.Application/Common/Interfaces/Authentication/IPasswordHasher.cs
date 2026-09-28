@@ -1,4 +1,4 @@
-namespace PanelForge.Application.Interfaces.Authentication;
+namespace PanelForge.Application.Common.Interfaces.Authentication;
 
 public interface IPasswordHasher
 {

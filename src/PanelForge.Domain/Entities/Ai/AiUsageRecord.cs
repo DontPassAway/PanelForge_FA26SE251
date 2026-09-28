@@ -1,7 +1,8 @@
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Enums;
+using PanelForge.Domain.Entities.Workspaces;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Ai;
 
 /// <summary>
 /// E-29 AIUsageRecord: một bản ghi cho mỗi lần gọi AI (workspace, tính năng, model, token, chi phí, trạng thái).

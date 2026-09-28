@@ -1,6 +1,6 @@
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Features.ContentElements.Models;
+namespace PanelForge.Application.Features.PanelContentElements.Models;
 
 public sealed record ContentElementDto(
     Guid Id,

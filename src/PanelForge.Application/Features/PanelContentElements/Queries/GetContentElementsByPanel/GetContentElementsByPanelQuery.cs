@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.ContentElements.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.PanelContentElements.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.ContentElements.Queries.GetElementsByPanel;
+namespace PanelForge.Application.Features.PanelContentElements.Queries.GetContentElementsByPanel;
 
 public sealed record GetContentElementsByPanelQuery(Guid PanelId) : IRequest<Result<IReadOnlyList<ContentElementDto>>>;
 

@@ -1,12 +1,13 @@
 ﻿using FluentAssertions;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using Moq;
-using PanelForge.Application.Features.Elements.GetPageSnapshot;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using Xunit;
 
-namespace PanelForge.UnitTests.Application.Elements;
+namespace PanelForge.UnitTests.Application.CanvasElements;
 
 public class GetPageSnapshotQueryHandlerTests
 {

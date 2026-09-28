@@ -4,16 +4,16 @@ using Marten;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Authentication;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Application.Services;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Events;
 using PanelForge.Infrastructure.Authentication;
-using PanelForge.Infrastructure.Firebase;
+using PanelForge.Infrastructure.ExternalServices.Email;
+using PanelForge.Infrastructure.ExternalServices.Firebase;
 using PanelForge.Infrastructure.Persistence;
-using PanelForge.Infrastructure.Persistence.Projections;
-using PanelForge.Infrastructure.Repositories;
+using PanelForge.Infrastructure.Persistence.EventStore.Projections;
+using PanelForge.Infrastructure.Persistence.EventStore;
 using PanelForge.Infrastructure.Services;
 using Weasel.Core;
 
@@ -60,7 +60,8 @@ public static class DependencyInjection
                 typeof(PageReorderedEvent),
                 typeof(ElementAddedEvent),
                 typeof(ElementMovedEvent),
-                typeof(ElementRemovedEvent)
+                typeof(ElementRemovedEvent),
+                typeof(PageDeletedEvent)
             });
 
             // Đăng ký PageProjection tường minh (SingleStreamProjection)
@@ -73,16 +74,17 @@ public static class DependencyInjection
 
         // ── Repositories ───────────────────────────────────────────────────────
         services.AddScoped<IPageRepository, MartenPageRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // ── Auth infrastructure ────────────────────────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddSingleton<ITotpService, OtpNetTotpService>();
+        services.AddSingleton<IExternalIdentityVerifier, FirebaseIdentityVerifier>();
 
         services.AddScoped<IEmailService, EmailService>();
-        services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
-        services.AddScoped<IWorkspaceService, WorkspaceService>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
         services.AddDataProtection();

@@ -1,8 +1,9 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Features.AiUsage;
-using PanelForge.Application.Interfaces;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
+using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.Infrastructure.Services;

@@ -1,8 +1,8 @@
 using MediatR;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
+using PanelForge.Application.Features.Pages.Models;
 
-namespace PanelForge.Application.Features.Pages.CreatePage;
+namespace PanelForge.Application.Features.Pages.Commands.CreatePage;
 
 public sealed record CreatePageCommand(
     Guid ChapterId,

@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
-namespace PanelForge.Application.Features.Pages.GetPagesByChapter;
+namespace PanelForge.Application.Features.Pages.Queries.GetPagesByChapter;
 
 public sealed class GetPagesByChapterQueryHandler
     : IRequestHandler<GetPagesByChapterQuery, Result<IReadOnlyList<PageDto>>>

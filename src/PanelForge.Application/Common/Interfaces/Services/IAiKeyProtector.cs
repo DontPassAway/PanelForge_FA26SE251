@@ -1,4 +1,4 @@
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Services;
 
 /// <summary>
 /// Service bảo vệ/mã hóa API Key của AI Provider trước khi lưu vào DB (UC-02, NFR-03).

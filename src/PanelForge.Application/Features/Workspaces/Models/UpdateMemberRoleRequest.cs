@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.DTOs.Workspaces;
+namespace PanelForge.Application.Features.Workspaces.Models;
 
 public record UpdateMemberRoleRequest
 {

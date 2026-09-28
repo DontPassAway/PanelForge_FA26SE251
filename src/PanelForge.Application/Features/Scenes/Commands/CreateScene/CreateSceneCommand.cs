@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Scenes.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainScene = PanelForge.Domain.Entities.Content.Scene;
 
 namespace PanelForge.Application.Features.Scenes.Commands.CreateScene;

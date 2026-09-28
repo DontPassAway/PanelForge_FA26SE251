@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PanelForge.Application.DTOs.Workspaces;
+namespace PanelForge.Application.Features.Workspaces.Models;
 
 public record UpdateWorkspaceRequest
 {

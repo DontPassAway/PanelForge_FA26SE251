@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace PanelForge.Infrastructure.Firebase;
+namespace PanelForge.Infrastructure.ExternalServices.Firebase;
 
 public static class FirebaseServiceExtensions
 {

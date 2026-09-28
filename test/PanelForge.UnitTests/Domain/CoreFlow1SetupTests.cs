@@ -1,5 +1,6 @@
 using FluentAssertions;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
+using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;

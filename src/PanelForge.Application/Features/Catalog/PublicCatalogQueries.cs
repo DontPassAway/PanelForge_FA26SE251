@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Catalog;
@@ -68,7 +68,13 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
 
         var total = await query.CountAsync(ct);
 
+        // Sắp xếp + phân trang trên entity TRƯỚC khi projection vào positional record:
+        // EF Core không dịch được OrderBy theo member của record (LatestPublishedAt) sau khi đã Select.
         var items = await query
+            .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.Published).Max(c => c.PublishedAt))
+            .ThenBy(s => s.Title)
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
             .Select(s => new PublicSeriesDto(
                 s.Id,
                 s.Title,
@@ -79,10 +85,6 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
                 s.Workspace.Name,
                 s.Chapters.Count(c => c.Status == ChapterStatus.Published),
                 s.Chapters.Where(c => c.Status == ChapterStatus.Published).Max(c => c.PublishedAt)))
-            .OrderByDescending(s => s.LatestPublishedAt)
-            .ThenBy(s => s.Title)
-            .Skip((pageIndex - 1) * pageSize)
-            .Take(pageSize)
             .ToListAsync(ct);
 
         return Result<PagedResult<PublicSeriesDto>>.Success(new PagedResult<PublicSeriesDto>(

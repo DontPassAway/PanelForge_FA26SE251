@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands;
-using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Models;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPipelineTemplates;
 
 namespace PanelForge.API.Controllers;
 

@@ -1,7 +1,7 @@
 ﻿using MediatR;
 using PanelForge.Application.Common;
 
-namespace PanelForge.Application.Features.Elements.RemoveElement;
+namespace PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
 
 /// <summary>
 /// Command: Xóa mềm (Soft Delete) một Element.

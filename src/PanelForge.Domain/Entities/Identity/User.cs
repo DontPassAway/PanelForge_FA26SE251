@@ -1,8 +1,10 @@
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
+using PanelForge.Domain.Entities.Workspaces;
+using PanelForge.Domain.Entities.Publishing;
 
-namespace PanelForge.Domain.Entities.Auth;
+namespace PanelForge.Domain.Entities.Identity;
 
 public class User : BaseEntity
 {
