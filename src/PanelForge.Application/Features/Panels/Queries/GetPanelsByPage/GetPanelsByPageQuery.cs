@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Panels.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Panels.Queries.GetPanelsByPage;
 
@@ -32,8 +32,7 @@ public sealed class GetPanelsByPageQueryHandler : IRequestHandler<GetPanelsByPag
                 p.CurrentStageId,
                 p.CreatedAt,
                 p.UpdatedAt,
-                p.CreatedBy,
-                p.Elements.Count
+                p.CreatedBy
             ))
             .ToListAsync(cancellationToken);
 

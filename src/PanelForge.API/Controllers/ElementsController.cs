@@ -1,10 +1,10 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.Features.Elements.AddElement;
-using PanelForge.Application.Features.Elements.GetPageSnapshot;
-using PanelForge.Application.Features.Elements.MoveElement;
-using PanelForge.Application.Features.Elements.RemoveElement;
+using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
+using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
+using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
+using PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
 using System.Security.Claims;
 
 namespace PanelForge.API.Controllers;

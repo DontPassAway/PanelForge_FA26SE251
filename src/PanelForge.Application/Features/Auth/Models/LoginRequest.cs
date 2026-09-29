@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Auth.Models;
 
 public record LoginRequest(
     [Required(ErrorMessage = "Email là bắt buộc.")]

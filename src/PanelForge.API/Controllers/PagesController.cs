@@ -1,14 +1,14 @@
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.DTOs.Content;
-using PanelForge.Application.Features.Pages.CreatePage;
-using PanelForge.Application.Features.Pages.DeletePage;
-using PanelForge.Application.Features.Pages.GetPageById;
-using PanelForge.Application.Features.Pages.GetPageHierarchy;
-using PanelForge.Application.Features.Pages.GetPagesByChapter;
-using PanelForge.Application.Features.Pages.ReorderPage;
-using PanelForge.Application.Features.Pages.UpdateCanvasSettings;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Features.Pages.Commands.CreatePage;
+using PanelForge.Application.Features.Pages.Commands.DeletePage;
+using PanelForge.Application.Features.Pages.Queries.GetPageById;
+using PanelForge.Application.Features.Pages.Queries.GetPageHierarchy;
+using PanelForge.Application.Features.Pages.Queries.GetPagesByChapter;
+using PanelForge.Application.Features.Pages.Commands.ReorderPage;
+using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 
 namespace PanelForge.API.Controllers;
 

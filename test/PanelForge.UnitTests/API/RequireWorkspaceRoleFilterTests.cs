@@ -7,11 +7,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Moq;
 using PanelForge.API.Common.Attributes;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Content;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Enums;
-using PanelForge.UnitTests.Common;
 using Xunit;
 
 namespace PanelForge.UnitTests.API;
@@ -19,12 +16,10 @@ namespace PanelForge.UnitTests.API;
 public class RequireWorkspaceRoleFilterTests
 {
     private readonly Mock<IWorkspaceAuthorizationService> _authServiceMock;
-    private readonly Mock<IPanelForgeDbContext> _dbContextMock;
 
     public RequireWorkspaceRoleFilterTests()
     {
         _authServiceMock = new Mock<IWorkspaceAuthorizationService>();
-        _dbContextMock = new Mock<IPanelForgeDbContext>();
     }
 
     private static (ActionExecutingContext context, bool executed) CreateContext(
@@ -56,18 +51,11 @@ public class RequireWorkspaceRoleFilterTests
         // Arrange
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
-        var seriesId = Guid.NewGuid();
         var chapterId = Guid.NewGuid();
 
-        var series = Series.Create(workspaceId, "Test Series", ReadingDirection.RightToLeft);
-        typeof(Series).GetProperty("Id")!.SetValue(series, seriesId);
-
-        var chapter = Chapter.Create(seriesId, 1, "Chapter 1");
-        typeof(Chapter).GetProperty("Id")!.SetValue(chapter, chapterId);
-        typeof(Chapter).GetProperty("Series")!.SetValue(chapter, series);
-
-        var chaptersDbSet = DbSetMockHelper.CreateDbSetMock(new List<Chapter> { chapter });
-        _dbContextMock.Setup(db => db.Chapters).Returns(chaptersDbSet);
+        _authServiceMock
+            .Setup(a => a.GetWorkspaceIdOfChapterAsync(chapterId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workspaceId);
 
         _authServiceMock
             .Setup(a => a.HasWorkspaceRoleAsync(userId, workspaceId, It.Is<WorkspaceRole[]>(r => r.Contains(WorkspaceRole.Producer)), It.IsAny<CancellationToken>()))
@@ -78,7 +66,7 @@ public class RequireWorkspaceRoleFilterTests
 
         var (context, _) = CreateContext(userId, routeData);
         var filter = new RequireWorkspaceRoleFilter(
-            [WorkspaceRole.Producer], _authServiceMock.Object, _dbContextMock.Object);
+            [WorkspaceRole.Producer], _authServiceMock.Object);
 
         var executed = false;
         ActionExecutionDelegate next = () =>
@@ -102,15 +90,16 @@ public class RequireWorkspaceRoleFilterTests
         var userId = Guid.NewGuid();
         var chapterId = Guid.NewGuid();
 
-        var chaptersDbSet = DbSetMockHelper.CreateDbSetMock(new List<Chapter>());
-        _dbContextMock.Setup(db => db.Chapters).Returns(chaptersDbSet);
+        _authServiceMock
+            .Setup(a => a.GetWorkspaceIdOfChapterAsync(chapterId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
 
         var routeData = new RouteData();
         routeData.Values.Add("chapterId", chapterId.ToString());
 
         var (context, _) = CreateContext(userId, routeData);
         var filter = new RequireWorkspaceRoleFilter(
-            [WorkspaceRole.Producer], _authServiceMock.Object, _dbContextMock.Object);
+            [WorkspaceRole.Producer], _authServiceMock.Object);
 
         var executed = false;
         ActionExecutionDelegate next = () =>
@@ -143,7 +132,7 @@ public class RequireWorkspaceRoleFilterTests
 
         var (context, _) = CreateContext(userId, routeData);
         var filter = new RequireWorkspaceRoleFilter(
-            [WorkspaceRole.Producer], _authServiceMock.Object, _dbContextMock.Object);
+            [WorkspaceRole.Producer], _authServiceMock.Object);
 
         var executed = false;
         ActionExecutionDelegate next = () =>

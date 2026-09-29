@@ -1,6 +1,6 @@
 using MediatR;
 
-namespace PanelForge.Application.Users.Commands.SoftDeleteUser;
+namespace PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
 
 public record SoftDeleteUserCommand(
     Guid? TargetUserId,

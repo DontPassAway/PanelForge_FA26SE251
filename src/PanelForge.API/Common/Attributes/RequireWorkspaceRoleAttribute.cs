@@ -1,9 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Common.Attributes;
@@ -22,16 +20,13 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 {
     private readonly WorkspaceRole[] _allowedRoles;
     private readonly IWorkspaceAuthorizationService _authorizationService;
-    private readonly IPanelForgeDbContext _dbContext;
 
     public RequireWorkspaceRoleFilter(
         WorkspaceRole[] allowedRoles,
-        IWorkspaceAuthorizationService authorizationService,
-        IPanelForgeDbContext dbContext)
+        IWorkspaceAuthorizationService authorizationService)
     {
         _allowedRoles = allowedRoles;
         _authorizationService = authorizationService;
-        _dbContext = dbContext;
     }
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -57,10 +52,8 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("seriesId", out var seriesVal) && seriesVal is string seriesStr && Guid.TryParse(seriesStr, out var parsedSeriesId))
         {
-            var seriesWsId = await _dbContext.Series
-                .Where(s => s.Id == parsedSeriesId)
-                .Select(s => (Guid?)s.WorkspaceId)
-                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+            var seriesWsId = await _authorizationService.GetWorkspaceIdOfSeriesAsync(
+                parsedSeriesId, context.HttpContext.RequestAborted);
 
             if (seriesWsId == null)
             {
@@ -72,10 +65,8 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("chapterId", out var chapterVal) && chapterVal is string chapterStr && Guid.TryParse(chapterStr, out var parsedChapterId))
         {
-            var chapterWsId = await _dbContext.Chapters
-                .Where(c => c.Id == parsedChapterId)
-                .Select(c => (Guid?)c.Series.WorkspaceId)
-                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+            var chapterWsId = await _authorizationService.GetWorkspaceIdOfChapterAsync(
+                parsedChapterId, context.HttpContext.RequestAborted);
 
             if (chapterWsId == null)
             {

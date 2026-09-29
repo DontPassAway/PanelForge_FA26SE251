@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Moq;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Application.Users.Queries.GetUserProfile;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Users.Queries.GetUserProfile;
+using PanelForge.Domain.Entities.Identity;
 using PanelForge.UnitTests.Common;
 using Xunit;
 

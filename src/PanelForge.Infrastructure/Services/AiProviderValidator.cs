@@ -1,5 +1,5 @@
 using PanelForge.Application.Common;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Infrastructure.Services;
 

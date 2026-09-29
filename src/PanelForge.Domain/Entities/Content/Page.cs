@@ -183,6 +183,7 @@ public sealed class Page : AggregateRoot
             case ElementAddedEvent e:      Apply(e); break;
             case ElementMovedEvent e:      Apply(e); break;
             case ElementRemovedEvent e:    Apply(e); break;
+            case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
     }
@@ -242,6 +243,31 @@ public sealed class Page : AggregateRoot
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.IsRemoved = true; // Soft Delete — record vẫn tồn tại trong stream
+    }
+
+    internal void Apply(PageDeletedEvent e)
+    {
+        IsDeleted = true;
+        DeletedAt = e.OccurredAt.UtcDateTime;
+        DeletedBy = e.DeletedByUserId?.ToString();
+    }
+
+    // ── Delete ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Xóa mềm Page.
+    /// → Raises: PageDeletedEvent (stream được giữ lại để truy vết lịch sử)
+    /// </summary>
+    public void Delete(Guid? deletedByUserId)
+    {
+        if (IsDeleted)
+            throw new InvalidOperationException($"Page {Id} đã bị xóa.");
+
+        RaiseEvent(new PageDeletedEvent(
+            EventId:         Guid.NewGuid(),
+            OccurredAt:      DateTimeOffset.UtcNow,
+            PageId:          Id,
+            DeletedByUserId: deletedByUserId
+        ));
     }
 
     // ── Canvas settings ──────────────────────────────────────────────────────

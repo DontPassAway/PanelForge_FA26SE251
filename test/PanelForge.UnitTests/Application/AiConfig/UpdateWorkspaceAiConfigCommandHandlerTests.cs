@@ -1,10 +1,10 @@
 using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.AiConfig.Commands;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.UnitTests.Common;
 using Xunit;
 

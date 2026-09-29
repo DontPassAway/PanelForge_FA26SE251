@@ -35,7 +35,6 @@ public class BaseEntityAuditAndSoftDeleteTests
         var chapter = Chapter.Create(series.Id, 1, "Romance Dawn");
         var scene = Scene.Create(chapter.Id, 1, "Luffy at sea");
         var panel = Panel.Create(Guid.NewGuid(), 1, 1, "{}");
-        var element = Element.Create(panel.Id, ElementType.DialogueBalloon, 1, "Hello!");
 
         // Assert
         series.Should().BeAssignableTo<IAuditableEntity>();
@@ -51,9 +50,6 @@ public class BaseEntityAuditAndSoftDeleteTests
 
         panel.Should().BeAssignableTo<IAuditableEntity>();
         panel.Should().BeAssignableTo<ISoftDelete>();
-
-        element.Should().BeAssignableTo<IAuditableEntity>();
-        element.Should().BeAssignableTo<ISoftDelete>();
     }
 
     [Fact]

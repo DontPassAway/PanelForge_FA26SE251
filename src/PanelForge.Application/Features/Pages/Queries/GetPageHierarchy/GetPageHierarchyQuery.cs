@@ -1,0 +1,59 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
+
+namespace PanelForge.Application.Features.Pages.Queries.GetPageHierarchy;
+
+public sealed record GetPageHierarchyQuery(Guid PageId) : IRequest<Result<PageContentHierarchyDto>>;
+
+public sealed class GetPageHierarchyQueryHandler : IRequestHandler<GetPageHierarchyQuery, Result<PageContentHierarchyDto>>
+{
+    private readonly IPanelForgeDbContext _dbContext;
+
+    public GetPageHierarchyQueryHandler(IPanelForgeDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public async Task<Result<PageContentHierarchyDto>> Handle(GetPageHierarchyQuery query, CancellationToken cancellationToken)
+    {
+        var page = await _dbContext.Pages
+            .AsNoTracking()
+            .Include(p => p.Panels)
+            .FirstOrDefaultAsync(p => p.Id == query.PageId, cancellationToken);
+
+        if (page == null)
+            return Result<PageContentHierarchyDto>.Failure($"Page {query.PageId} không tồn tại.");
+
+        var panels = page.Panels
+            .OrderBy(p => p.ReadingOrder)
+            .Select(p => new PagePanelDetailDto(
+                Id: p.Id,
+                PageId: p.PageId,
+                PanelNumber: p.PanelNumber,
+                BoundingBox: p.BoundingBox,
+                ReadingOrder: p.ReadingOrder,
+                CurrentStageId: p.CurrentStageId,
+                CreatedAt: p.CreatedAt
+            ))
+            .ToList();
+
+        var hierarchy = new PageContentHierarchyDto(
+            Id: page.Id,
+            ChapterId: page.ChapterId,
+            SceneId: page.SceneId,
+            PageNumber: page.PageNumber,
+            LayoutFormat: page.LayoutFormat.ToString(),
+            WidthPx: page.WidthPx,
+            HeightPx: page.HeightPx,
+            Dpi: page.Dpi,
+            CreatedAt: page.CreatedAt,
+            UpdatedAt: page.UpdatedAt,
+            Panels: panels
+        );
+
+        return Result<PageContentHierarchyDto>.Success(hierarchy);
+    }
+}

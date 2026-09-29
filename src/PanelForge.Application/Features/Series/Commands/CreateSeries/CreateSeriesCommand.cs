@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Series.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Bible;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 using PanelForge.Domain.Enums;
@@ -114,6 +114,9 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
                 isTerminal: templateStage.Order == template.Stages.Max(s => s.Order)
             );
         }
+
+        // Sinh transition mặc định (tiến tuần tự + reject từ cổng duyệt) cho pipeline vừa nhân bản
+        pipeline.RebuildDefaultTransitions();
 
         series.SetPipelineDefinition(pipeline.Id);
         _dbContext.PipelineDefinitions.Add(pipeline);

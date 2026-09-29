@@ -1,5 +1,5 @@
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;

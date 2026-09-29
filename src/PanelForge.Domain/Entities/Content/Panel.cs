@@ -13,7 +13,6 @@ public class Panel : BaseEntity
 
     public Page Page { get; private set; } = default!;
     public PipelineStage? CurrentStage { get; private set; }
-    public ICollection<Element> Elements { get; private set; } = [];
 
     private Panel() { }
 

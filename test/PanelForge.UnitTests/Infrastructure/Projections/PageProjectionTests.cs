@@ -2,7 +2,7 @@ using FluentAssertions;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Events;
-using PanelForge.Infrastructure.Persistence.Projections;
+using PanelForge.Infrastructure.Persistence.EventStore.Projections;
 using Xunit;
 
 namespace PanelForge.UnitTests.Infrastructure.Projections;

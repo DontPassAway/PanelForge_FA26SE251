@@ -1,9 +1,8 @@
 using FluentAssertions;
 using Moq;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Application.Users.Commands.SoftDeleteUser;
-using PanelForge.Domain.Entities.Auth;
-using PanelForge.Domain.Enums;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
+using PanelForge.Domain.Entities.Identity;
 using PanelForge.UnitTests.Common;
 using Xunit;
 

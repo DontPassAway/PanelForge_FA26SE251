@@ -112,4 +112,15 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
         return revision;
     }
+
+    /// <summary>
+    /// Revision đang có hiệu lực ở chương mới nhất (BR-15): EffectiveFromChapterNumber lớn nhất,
+    /// cùng chương thì VersionNumber lớn nhất. Trạng thái hiện tại (Name, Description, ...) của entry
+    /// phải luôn khớp với revision này; một bản sửa hồi tố (effective từ chương cũ hơn) không được ghi đè nó.
+    /// </summary>
+    public BibleEntryRevision? GetCurrentRevision()
+        => Revisions
+            .OrderByDescending(r => r.EffectiveFromChapterNumber)
+            .ThenByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
 }

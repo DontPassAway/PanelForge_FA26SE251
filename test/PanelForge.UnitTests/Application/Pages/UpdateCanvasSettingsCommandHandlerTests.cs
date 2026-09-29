@@ -1,8 +1,8 @@
 ﻿using FluentAssertions;
 using Moq;
-using PanelForge.Application.Features.Pages.UpdateCanvasSettings;
-using PanelForge.Application.Interfaces;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
@@ -20,7 +20,7 @@ public class UpdateCanvasSettingsCommandHandlerTests
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
         _dbContextMock = new Mock<IPanelForgeDbContext>();
-        _handler = new UpdateCanvasSettingsCommandHandler(_pageRepositoryMock.Object, _dbContextMock.Object);
+        _handler = new UpdateCanvasSettingsCommandHandler(_pageRepositoryMock.Object, _dbContextMock.Object, new PassThroughUnitOfWork());
     }
 
     [Fact]

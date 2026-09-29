@@ -1,6 +1,6 @@
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.Interfaces;
+namespace PanelForge.Application.Common.Interfaces.Services;
 
 public interface IWorkspaceAuthorizationService
 {
@@ -9,4 +9,10 @@ public interface IWorkspaceAuthorizationService
     Task<bool> HasWorkspaceRoleAsync(Guid userId, Guid workspaceId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default);
     Task<bool> IsMemberAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default);
     Task<WorkspaceRole?> GetMemberRoleAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>Workspace chứa Series; null nếu Series không tồn tại.</summary>
+    Task<Guid?> GetWorkspaceIdOfSeriesAsync(Guid seriesId, CancellationToken cancellationToken = default);
+
+    /// <summary>Workspace chứa Chapter (qua Series); null nếu Chapter không tồn tại.</summary>
+    Task<Guid?> GetWorkspaceIdOfChapterAsync(Guid chapterId, CancellationToken cancellationToken = default);
 }

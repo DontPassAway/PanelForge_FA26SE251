@@ -1,24 +1,44 @@
-using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.DTOs.Auth;
-using PanelForge.Application.Interfaces.Authentication;
-using PanelForge.Application.Features.Audit.Queries;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
+using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
+using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
+using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
+using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
+using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
+using PanelForge.Application.Features.Admin.Models;
+using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
+using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
+using PanelForge.Application.Features.Audit.Queries.ExportAuditLogs;
+using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
 using PanelForge.Application.Features.Users.Commands.GrantStudioPermission;
 using PanelForge.Application.Features.Users.Commands.RevokeStudioPermission;
-using PanelForge.Application.Features.MasterData.ElementTypes.Commands;
-using PanelForge.Application.Features.MasterData.ElementTypes.Queries;
-using PanelForge.Application.Features.MasterData.ExportPresets.Commands;
-using PanelForge.Application.Features.MasterData.ExportPresets.Queries;
-using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands;
-using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries;
-using PanelForge.Application.Features.AiConfig.Commands;
+using PanelForge.Application.Features.MasterData.ElementTypes.Models;
+using PanelForge.Application.Features.MasterData.ElementTypes.Commands.CreateElementType;
+using PanelForge.Application.Features.MasterData.ElementTypes.Commands.UpdateElementType;
+using PanelForge.Application.Features.MasterData.ElementTypes.Commands.DeactivateElementType;
+using PanelForge.Application.Features.MasterData.ElementTypes.Queries.GetElementTypes;
+using PanelForge.Application.Features.MasterData.ElementTypes.Queries.GetElementTypeById;
+using PanelForge.Application.Features.MasterData.ExportPresets.Models;
+using PanelForge.Application.Features.MasterData.ExportPresets.Commands.CreateExportPreset;
+using PanelForge.Application.Features.MasterData.ExportPresets.Commands.UpdateExportPreset;
+using PanelForge.Application.Features.MasterData.ExportPresets.Commands.DeactivateExportPreset;
+using PanelForge.Application.Features.MasterData.ExportPresets.Queries.GetExportPresets;
+using PanelForge.Application.Features.MasterData.ExportPresets.Queries.GetExportPresetById;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Models;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands.CreatePipelineTemplate;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands.UpdatePipelineTemplate;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Commands.DeactivatePipelineTemplate;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPipelineTemplates;
+using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPipelineTemplateById;
+using PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
+using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Models;
-using PanelForge.Application.Features.AiConfig.Queries;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
+using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
+using PanelForge.Application.Features.AiUsage.Queries.ExportAiUsageRecords;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -28,18 +48,11 @@ namespace PanelForge.API.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminController : ControllerBase
 {
-    private readonly IPanelForgeDbContext _dbContext;
     private readonly IMediator _mediator;
-    private readonly IPasswordHasher _passwordHasher;
 
-    public AdminController(
-        IPanelForgeDbContext dbContext,
-        IMediator mediator,
-        IPasswordHasher passwordHasher)
+    public AdminController(IMediator mediator)
     {
-        _dbContext = dbContext;
         _mediator = mediator;
-        _passwordHasher = passwordHasher;
     }
 
     [HttpGet("users")]
@@ -48,41 +61,15 @@ public class AdminController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 20;
-
-        var totalUsers = await _dbContext.Users.CountAsync(cancellationToken);
-        var users = await _dbContext.Users
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(u => new
-            {
-                u.Id,
-                u.Email,
-                u.FullName,
-                u.PhoneNumber,
-                Role = u.Role.ToString(),
-                u.CanCreateStudio,
-                u.IsActive,
-                u.IsEmailConfirmed,
-                u.TwoFactorEnabled,
-                u.CreatedAt
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(new
-        {
-            Total = totalUsers,
-            Page = page,
-            PageSize = pageSize,
-            Items = users
-        });
+        var result = await _mediator.Send(new GetAdminUsersQuery(page, pageSize), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>
     /// POST /api/admin/assign-producer (và POST /api/admin/assign-role)
-    /// Gán vai trò Producer / SystemRole trực tiếp trong Database cho tài khoản.
+    /// SystemRole chỉ gồm Admin | User (E-11). "Producer" là WorkspaceRole, nên gán "Producer" ở đây
+    /// nghĩa là cấp quyền tạo Studio (CanCreateStudio = true, BR-22); SystemRole vẫn là User.
+    /// Khi Studio được tạo, người tạo tự trở thành Producer trong workspace_members.
     /// </summary>
     [HttpPost("assign-producer")]
     [HttpPost("assign-role")]
@@ -90,56 +77,9 @@ public class AdminController : ControllerBase
         [FromBody] AssignRoleRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users
-            .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
-
-        if (user is null)
-        {
-            return NotFound(new { message = "Không tìm thấy người dùng." });
-        }
-
-        var rawRole = request.NewRole?.Trim() ?? string.Empty;
-
-        if (string.Equals(rawRole, "Producer", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(rawRole, "GrantProducer", StringComparison.OrdinalIgnoreCase))
-        {
-            if (user.Role == SystemRole.Admin)
-            {
-                return BadRequest(new { message = "Không thể cấp quyền Producer cho tài khoản Administrator (BR-07, BR-22)." });
-            }
-
-            user.AssignSystemRole(SystemRole.Producer);
-            user.GrantStudioCreation();
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                message = $"Đã gán vai trò Producer thành công cho tài khoản {user.Email}.",
-                userId = user.Id,
-                newRole = "Producer",
-                canCreateStudio = user.CanCreateStudio
-            });
-        }
-
-        if (Enum.TryParse<SystemRole>(rawRole, true, out var parsedSystemRole))
-        {
-            user.AssignSystemRole(parsedSystemRole);
-            if (parsedSystemRole == SystemRole.User)
-            {
-                user.RevokeStudioCreation();
-            }
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                message = $"Đã cập nhật vai trò của người dùng {user.Email} thành {parsedSystemRole}.",
-                userId = user.Id,
-                newRole = parsedSystemRole.ToString(),
-                canCreateStudio = user.CanCreateStudio
-            });
-        }
-
-        return BadRequest(new { message = $"Vai trò '{request.NewRole}' không hợp lệ. Hợp lệ: Producer, Admin, User." });
+        var result = await _mediator.Send(
+            new AssignUserRoleCommand(request.UserId, request.NewRole), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>
@@ -151,47 +91,13 @@ public class AdminController : ControllerBase
         [FromBody] CreateUserByAdminRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var existingUser = await _dbContext.Users
-            .AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
+        var result = await _mediator.Send(new CreateUserByAdminCommand(
+            request.Email, request.FullName, request.Password, request.PhoneNumber, request.Role, request.IsActive),
+            cancellationToken);
 
-        if (existingUser)
-        {
-            return BadRequest(new { message = $"Email '{request.Email}' đã tồn tại trong hệ thống." });
-        }
-
-        var passwordHash = _passwordHasher.HashPassword(request.Password);
-        var newUser = PanelForge.Domain.Entities.Auth.User.Create(
-            email: normalizedEmail,
-            fullName: request.FullName,
-            passwordHash: passwordHash,
-            phoneNumber: request.PhoneNumber,
-            role: request.Role);
-
-        if (request.IsActive)
-        {
-            newUser.Activate();
-            newUser.ConfirmEmail();
-        }
-        else
-        {
-            newUser.Deactivate();
-        }
-
-        _dbContext.Users.Add(newUser);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return StatusCode(StatusCodes.Status201Created, new
-        {
-            newUser.Id,
-            newUser.Email,
-            newUser.FullName,
-            newUser.PhoneNumber,
-            Role = newUser.Role.ToString(),
-            newUser.IsActive,
-            newUser.IsEmailConfirmed,
-            newUser.CreatedAt
-        });
+        return result.IsSuccess
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : ToError(result);
     }
 
     /// <summary>
@@ -204,37 +110,10 @@ public class AdminController : ControllerBase
         [FromBody] UpdateUserByAdminRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
-        if (user is null)
-        {
-            return NotFound(new { message = "Không tìm thấy người dùng." });
-        }
-
-        user.UpdateProfile(request.FullName, request.PhoneNumber, user.AvatarUrl);
-        user.AssignSystemRole(request.Role);
-
-        if (request.IsActive)
-        {
-            user.Activate();
-        }
-        else
-        {
-            user.Deactivate();
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new
-        {
-            user.Id,
-            user.Email,
-            user.FullName,
-            user.PhoneNumber,
-            Role = user.Role.ToString(),
-            user.IsActive,
-            user.IsEmailConfirmed,
-            user.CreatedAt
-        });
+        var result = await _mediator.Send(new UpdateUserByAdminCommand(
+            id, request.FullName, request.PhoneNumber, request.Role, request.IsActive),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>
@@ -244,16 +123,10 @@ public class AdminController : ControllerBase
     [HttpDelete("users/{id:guid}")]
     public async Task<IActionResult> DeleteUser(Guid id, CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
-        if (user is null)
-        {
-            return NotFound(new { message = "Không tìm thấy người dùng." });
-        }
+        var result = await _mediator.Send(new DeactivateUserCommand(id), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
 
-        user.Deactivate();
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new { message = $"Đã vô hiệu hóa tài khoản {user.Email} thành công." });
+        return Ok(new { message = $"Đã vô hiệu hóa tài khoản {result.Value!.Email} thành công." });
     }
 
     /// <summary>
@@ -263,23 +136,10 @@ public class AdminController : ControllerBase
     [HttpPatch("users/{id:guid}/toggle-status")]
     public async Task<IActionResult> ToggleUserStatus(Guid id, CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
-        if (user is null)
-        {
-            return NotFound(new { message = "Không tìm thấy người dùng." });
-        }
+        var result = await _mediator.Send(new ToggleUserStatusCommand(id), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
 
-        if (user.IsActive)
-        {
-            user.Deactivate();
-        }
-        else
-        {
-            user.Activate();
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
+        var user = result.Value!;
         return Ok(new
         {
             user.Id,
@@ -299,38 +159,24 @@ public class AdminController : ControllerBase
         [FromBody] ResetPasswordByAdminRequest request,
         CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
-        if (user is null)
-        {
-            return NotFound(new { message = "Không tìm thấy người dùng." });
-        }
+        var result = await _mediator.Send(new ResetUserPasswordByAdminCommand(id, request.NewPassword), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
 
-        var newHash = _passwordHasher.HashPassword(request.NewPassword);
-        user.ResetPassword(newHash);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new { message = $"Đã đặt lại mật khẩu cho tài khoản {user.Email} thành công." });
+        return Ok(new { message = $"Đã đặt lại mật khẩu cho tài khoản {result.Value!.Email} thành công." });
     }
 
     [HttpGet("system-stats")]
     public async Task<IActionResult> GetSystemStats(CancellationToken cancellationToken)
     {
-        var totalUsers    = await _dbContext.Users.CountAsync(cancellationToken);
-        var adminCount    = await _dbContext.Users.CountAsync(u => u.Role == SystemRole.Admin, cancellationToken);
-        var userCount     = await _dbContext.Users.CountAsync(u => u.Role == SystemRole.User, cancellationToken);
-        var workspaceCount = await _dbContext.StudioWorkspaces.CountAsync(cancellationToken);
-        var memberCount   = await _dbContext.WorkspaceMembers.CountAsync(cancellationToken);
-
-        return Ok(new
-        {
-            TotalUsers = totalUsers,
-            Admins = adminCount,
-            RegisteredUsers = userCount,
-            TotalWorkspaces = workspaceCount,
-            TotalWorkspaceMembers = memberCount,
-            ServerTimeUtc = DateTime.UtcNow
-        });
+        var result = await _mediator.Send(new GetSystemStatsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
+
+    // NOT_FOUND → 404, lỗi nghiệp vụ khác → 400; body { message } như trước
+    private IActionResult ToError<T>(Result<T> result)
+        => result.ErrorCode == ResultErrorCodes.NotFound
+            ? NotFound(new { message = result.ErrorMessage })
+            : BadRequest(new { message = result.ErrorMessage });
 
     /// <summary>
     /// GET /api/admin/audit-logs
@@ -340,37 +186,119 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetAuditLogs(
         [FromQuery] Guid? workspaceId,
         [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? userEmail,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 30,
         CancellationToken cancellationToken = default)
     {
-        var query = new GetAuditLogsQuery(workspaceId, action, page, pageSize);
+        var query = new GetAuditLogsQuery(workspaceId, action, page, pageSize, userId, userEmail, entityName, entityId, from, to);
         var result = await _mediator.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
         return Ok(result.Value);
     }
 
     /// <summary>
+    /// GET /api/admin/audit-logs/export
+    /// UC-15 bước 4: export audit log đã lọc ra CSV (cùng bộ lọc với GET audit-logs, tối đa 10.000 dòng mới nhất).
+    /// Header X-Export-Truncated = true nếu kết quả bị cắt.
+    /// </summary>
+    [HttpGet("audit-logs/export")]
+    public async Task<IActionResult> ExportAuditLogs(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? userEmail,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new GetAuditLogsQuery(workspaceId, action, 1, 1, userId, userEmail, entityName, entityId, from, to);
+        var result = await _mediator.Send(new ExportAuditLogsQuery(filter), cancellationToken);
+        return ToCsvFile(result);
+    }
+
+    /// <summary>
     /// GET /api/admin/ai-usage
-    /// Thống kê mức độ sử dụng AI Token theo tất cả các Workspace (UC-15).
+    /// UC-15: báo cáo AI usage theo Workspace so với hạn mức, tổng hợp từ ai_usage_records trong kỳ [from, to).
+    /// Mặc định kỳ = tháng hiện tại. Giữ nguyên các field cũ (workspaceId, workspaceName, provider,
+    /// monthlyTokenQuota, usedTokensCurrentMonth, usagePercent, isEnabled).
     /// </summary>
     [HttpGet("ai-usage")]
-    public async Task<IActionResult> GetAiUsage(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAiUsage(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
     {
-        var usageList = await _dbContext.WorkspaceAiConfigs
-            .Include(c => c.Workspace)
-            .Select(c => new
-            {
-                c.WorkspaceId,
-                WorkspaceName = c.Workspace.Name,
-                c.Provider,
-                c.MonthlyTokenQuota,
-                c.UsedTokensCurrentMonth,
-                UsagePercent = c.MonthlyTokenQuota > 0 ? (double)c.UsedTokensCurrentMonth / c.MonthlyTokenQuota * 100 : 0,
-                c.IsEnabled
-            })
-            .ToListAsync(cancellationToken);
+        var result = await _mediator.Send(new GetAiUsageReportQuery(workspaceId, from, to), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
 
-        return Ok(usageList);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/admin/ai-usage/records
+    /// UC-15: danh sách chi tiết từng lần gọi AI (E-29), lọc theo workspace, user, tính năng, trạng thái, khoảng ngày.
+    /// </summary>
+    [HttpGet("ai-usage/records")]
+    public async Task<IActionResult> GetAiUsageRecords(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? feature,
+        [FromQuery] AiUsageStatus? status,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new GetAiUsageRecordsQuery(workspaceId, userId, feature, status, from, to, page, pageSize), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/admin/ai-usage/export
+    /// UC-15 bước 4: export chi tiết AI usage đã lọc ra CSV (tối đa 10.000 dòng mới nhất).
+    /// </summary>
+    [HttpGet("ai-usage/export")]
+    public async Task<IActionResult> ExportAiUsage(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? feature,
+        [FromQuery] AiUsageStatus? status,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new GetAiUsageRecordsQuery(workspaceId, userId, feature, status, from, to);
+        var result = await _mediator.Send(new ExportAiUsageRecordsQuery(filter), cancellationToken);
+        return ToCsvFile(result);
+    }
+
+    private IActionResult ToCsvFile(Result<CsvExport> result)
+    {
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        var export = result.Value!;
+        Response.Headers["X-Export-Row-Count"] = export.RowCount.ToString();
+        Response.Headers["X-Export-Truncated"] = export.Truncated ? "true" : "false";
+        Response.Headers.AccessControlExposeHeaders = "Content-Disposition, X-Export-Row-Count, X-Export-Truncated";
+        return File(export.Content, "text/csv; charset=utf-8", export.FileName);
     }
 
     // ─── UC-02: Workspace AI Configuration (Admin Only) ───────────────────────

@@ -376,7 +376,9 @@ cd PanelForge_FA26SE251
 
 ### 7.3 Start Infrastructure
 
-Start the required infrastructure using Docker Compose:
+Create `src/PanelForge.API/appsettings.Development.json` from one of the example files and choose a database — PostgreSQL installed on your machine (pgAdmin 4) or PostgreSQL in Docker. Step-by-step guide (Vietnamese): [docs/database/setup-database.md](docs/database/setup-database.md).
+
+To use Docker, start the required infrastructure using Docker Compose:
 
 ```bash
 docker compose up -d postgres-db

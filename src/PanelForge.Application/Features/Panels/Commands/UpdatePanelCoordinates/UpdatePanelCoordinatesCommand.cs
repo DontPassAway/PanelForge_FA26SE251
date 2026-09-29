@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Panels.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
 
@@ -25,7 +25,6 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
     public async Task<Result<PanelDto>> Handle(UpdatePanelCoordinatesCommand command, CancellationToken cancellationToken)
     {
         var panel = await _dbContext.Panels
-            .Include(p => p.Elements)
             .FirstOrDefaultAsync(p => p.Id == command.PanelId, cancellationToken);
 
         if (panel == null)
@@ -56,8 +55,7 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             CurrentStageId: panel.CurrentStageId,
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
-            CreatedBy: panel.CreatedBy,
-            ElementsCount: panel.Elements.Count
+            CreatedBy: panel.CreatedBy
         ));
     }
 }

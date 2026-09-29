@@ -1,4 +1,4 @@
-namespace PanelForge.Application.DTOs.Content;
+namespace PanelForge.Application.Features.Pages.Models;
 
 public sealed record PageDto(
     Guid Id,
@@ -46,20 +46,6 @@ public sealed record PagePanelDetailDto(
     string BoundingBox,
     int ReadingOrder,
     Guid? CurrentStageId,
-    DateTime CreatedAt,
-    IReadOnlyList<PageElementDetailDto> Elements
-);
-
-public sealed record PageElementDetailDto(
-    Guid Id,
-    Guid PanelId,
-    string ElementType,
-    int ZIndex,
-    string TransformGeometry,
-    string? Content,
-    string StyleProperties,
-    Guid? ScriptLineId,
-    Guid? SpeakerCharacterId,
     DateTime CreatedAt
 );
 

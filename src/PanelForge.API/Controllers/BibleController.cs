@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
+using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Models;
@@ -123,6 +124,7 @@ public sealed class BibleController : ControllerBase
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddBibleEntryRevision(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid entryId,
@@ -141,16 +143,19 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.ReferenceImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber
+            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
+            ExpectedVersionNumber: body.ExpectedVersionNumber
         );
 
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.ErrorMessage?.Contains("không tồn tại") == true)
-                return NotFound(new { error = result.ErrorMessage });
-
-            return BadRequest(new { error = result.ErrorMessage });
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
         }
 
         return Ok(result.Value);
@@ -169,7 +174,7 @@ public sealed class BibleController : ControllerBase
         [FromRoute] Guid entryId,
         CancellationToken cancellationToken)
     {
-        var query = new GetBibleEntryHistoryQuery(entryId);
+        var query = new GetBibleEntryHistoryQuery(seriesId, entryId);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)

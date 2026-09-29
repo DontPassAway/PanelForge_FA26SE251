@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Infrastructure.Services;
 

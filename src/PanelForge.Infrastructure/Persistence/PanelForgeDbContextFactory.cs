@@ -35,8 +35,7 @@ public sealed class PanelForgeDbContextFactory : IDesignTimeDbContextFactory<Pan
             .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("Connection string 'PostgreSQL' not found.");
+        var connectionString = DatabaseConnection.Resolve(configuration);
 
         var optionsBuilder = new DbContextOptionsBuilder<PanelForgeDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsql =>

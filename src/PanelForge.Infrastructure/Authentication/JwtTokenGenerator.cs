@@ -3,8 +3,8 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using PanelForge.Application.Interfaces.Authentication;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Domain.Entities.Identity;
 
 namespace PanelForge.Infrastructure.Authentication;
 

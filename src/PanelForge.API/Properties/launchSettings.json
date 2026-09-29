@@ -11,6 +11,28 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
+    "http-docker": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5044",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Database__Target": "Docker"
+      }
+    },
+    "http-local": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5044",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Database__Target": "Local"
+      }
+    },
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,

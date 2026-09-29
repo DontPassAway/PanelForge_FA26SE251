@@ -39,6 +39,7 @@ public class PipelineStage : BaseEntity
         int? estimatedDurationDays = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ValidateLengths(name, colorCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stageOrder);
 
@@ -65,10 +66,33 @@ public class PipelineStage : BaseEntity
         int? estimatedDurationDays)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ValidateLengths(name, colorCode);
         Name = name.Trim();
         ColorCode = colorCode?.Trim();
         AllowedRole = allowedRole;
         IsApprovalGate = isApprovalGate;
         EstimatedDurationDays = estimatedDurationDays;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Khớp schema: name varchar(100), color_code varchar(20)
+    private static void ValidateLengths(string name, string? colorCode)
+    {
+        if (name.Trim().Length > 100)
+            throw new ArgumentException("Tên stage tối đa 100 ký tự.");
+        if (colorCode?.Trim().Length > 20)
+            throw new ArgumentException("Mã màu tối đa 20 ký tự.");
+    }
+
+    /// <summary>Chỉ PipelineDefinition được đổi vị trí / cờ biên để giữ thứ tự 1..n liên tục.</summary>
+    internal void SetPosition(int stageOrder, bool isInitial, bool isTerminal)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stageOrder);
+        if (StageOrder == stageOrder && IsInitial == isInitial && IsTerminal == isTerminal) return;
+
+        StageOrder = stageOrder;
+        IsInitial = isInitial;
+        IsTerminal = isTerminal;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

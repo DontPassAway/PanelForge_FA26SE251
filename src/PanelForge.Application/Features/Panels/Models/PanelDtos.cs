@@ -9,17 +9,7 @@ public sealed record PanelDto(
     Guid? CurrentStageId,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? CreatedBy,
-    int ElementsCount
-);
-
-public sealed record PanelElementSummaryDto(
-    Guid Id,
-    string ElementType,
-    int ZIndex,
-    string TransformGeometry,
-    string? Content,
-    string StyleProperties
+    string? CreatedBy
 );
 
 public sealed record PanelDetailDto(
@@ -31,8 +21,7 @@ public sealed record PanelDetailDto(
     Guid? CurrentStageId,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? CreatedBy,
-    IReadOnlyList<PanelElementSummaryDto> Elements
+    string? CreatedBy
 );
 
 public sealed record CreatePanelRequest(

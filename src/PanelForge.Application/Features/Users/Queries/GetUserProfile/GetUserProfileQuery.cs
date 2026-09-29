@@ -1,7 +1,7 @@
 using MediatR;
-using PanelForge.Application.DTOs.Users;
+using PanelForge.Application.Features.Users.Models;
 
-namespace PanelForge.Application.Users.Queries.GetUserProfile;
+namespace PanelForge.Application.Features.Users.Queries.GetUserProfile;
 
 public record GetUserProfileQuery(
     Guid? Id = null,

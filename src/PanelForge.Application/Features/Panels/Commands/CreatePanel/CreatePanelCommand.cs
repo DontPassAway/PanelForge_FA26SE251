@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Panels.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainPanel = PanelForge.Domain.Entities.Content.Panel;
 
 namespace PanelForge.Application.Features.Panels.Commands.CreatePanel;
@@ -89,8 +89,7 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
             CurrentStageId: panel.CurrentStageId,
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
-            CreatedBy: panel.CreatedBy,
-            ElementsCount: 0
+            CreatedBy: panel.CreatedBy
         ));
     }
 }

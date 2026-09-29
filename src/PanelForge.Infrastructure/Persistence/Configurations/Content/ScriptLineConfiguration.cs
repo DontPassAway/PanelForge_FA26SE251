@@ -40,10 +40,5 @@ internal sealed class ScriptLineConfiguration : IEntityTypeConfiguration<ScriptL
         builder.Property(l => l.StageDirection)
                .HasColumnName("stage_direction")
                .HasColumnType("text");
-
-        builder.HasMany(l => l.BoundElements)
-               .WithOne(e => e.ScriptLine)
-               .HasForeignKey(e => e.ScriptLineId)
-               .OnDelete(DeleteBehavior.SetNull);
     }
 }

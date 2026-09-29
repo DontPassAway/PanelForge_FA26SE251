@@ -1,4 +1,4 @@
-namespace PanelForge.Application.DTOs.Users;
+namespace PanelForge.Application.Features.Users.Models;
 
 public record UserProfileDto(
     Guid Id,
