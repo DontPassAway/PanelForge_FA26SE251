@@ -141,7 +141,7 @@ public class WorkspaceHandlerTests
     {
         var actorId = Guid.NewGuid();
         var workspace = StudioWorkspace.Create("Test Studio", actorId);
-        var existingUser = User.Create("writer@test.com", "Writer");
+        var existingUser = User.Create("writer@test.com", "Writer", "hash"); // đã có mật khẩu → không phải lời mời chờ kích hoạt
         AllowManage(actorId, workspace.Id);
         _emailServiceMock
             .Setup(e => e.SendWorkspaceInvitationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),

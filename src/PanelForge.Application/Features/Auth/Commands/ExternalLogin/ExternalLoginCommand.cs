@@ -79,7 +79,7 @@ public sealed class ExternalLoginCommandHandler : IRequestHandler<ExternalLoginC
         if (user.TwoFactorEnabled)
             return Result<AuthResponse>.Success(AuthResponseFactory.TwoFactorChallenge(user));
 
-        return Result<AuthResponse>.Success(AuthResponseFactory.SignedIn(
+        return Result<AuthResponse>.Success(await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, 
             user, _jwtTokenGenerator, "Đăng nhập mạng xã hội thành công."));
     }
 }

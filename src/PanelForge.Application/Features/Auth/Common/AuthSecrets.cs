@@ -8,11 +8,14 @@ internal static class AuthSecrets
 {
     public static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan RememberDeviceLifetime = TimeSpan.FromDays(30);
+    public static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30);
 
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
     /// <summary>OTP 6 chữ số gửi qua email.</summary>
     public static string NewEmailOtp() => RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+
+    public static string NewRefreshToken() => NewRememberDeviceToken();
 
     /// <summary>Token ghi nhớ thiết bị: 32 byte ngẫu nhiên, hex 64 ký tự.</summary>
     public static string NewRememberDeviceToken()

@@ -3,6 +3,7 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +12,7 @@ using PanelForge.Application;
 using PanelForge.Infrastructure;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Infrastructure.Persistence.Seeders;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,6 +54,20 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtAudience,
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
+    };
+
+    // User bị khoá / xoá mềm mất quyền ngay, không phải đợi JWT hết hạn.
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var sub = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
+                      ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var db = context.HttpContext.RequestServices.GetRequiredService<IPanelForgeDbContext>();
+            if (!Guid.TryParse(sub, out var userId)
+                || !await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, context.HttpContext.RequestAborted))
+                context.Fail("Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.");
+        }
     };
 });
 
@@ -113,6 +129,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Chống dò mật khẩu / OTP: tối đa 10 request/phút/IP cho các endpoint auth ([EnableRateLimiting("auth")]).
+// ponytail: giới hạn theo IP, chưa theo email; khoá tài khoản sau N lần sai OTP cần thêm cột + migration.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+
 var app = builder.Build();
 
 // ── Migrate & Seed master data on startup ─────────────────────────────────────
@@ -138,6 +169,7 @@ app.UseSwaggerUI(options =>
 // [THÊM MỚI] 2. Kích hoạt middleware CORS (Phải đặt TRƯỚC UseAuthentication)
 app.UseCors("AllowFrontend");
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

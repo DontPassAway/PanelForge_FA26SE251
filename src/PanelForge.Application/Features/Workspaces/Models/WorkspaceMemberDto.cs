@@ -10,5 +10,7 @@ public record WorkspaceMemberDto(
     string? AvatarUrl,
     WorkspaceRole Role,
     bool IsOwner,
-    DateTime JoinedAt
+    DateTime JoinedAt,
+    bool IsEmailConfirmed = true,
+    bool? InvitationEmailSent = null
 );

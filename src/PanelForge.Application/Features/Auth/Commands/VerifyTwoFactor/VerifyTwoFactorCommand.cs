@@ -94,7 +94,7 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
             : "Xác thực 2FA và đăng nhập thành công.";
 
         return Result<AuthResponse>.Success(
-            AuthResponseFactory.SignedIn(user, _jwtTokenGenerator, message, rememberToken));
+            await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, message, rememberToken));
     }
 
     private static Result<AuthResponse> Unauthorized(string message)

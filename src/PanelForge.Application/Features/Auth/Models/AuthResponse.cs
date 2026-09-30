@@ -7,5 +7,6 @@ public record AuthResponse(
     bool RequiresTwoFactor = false,
     string? TwoFactorEmail = null,
     string? Message = null,
-    string? RememberDeviceToken = null
+    string? RememberDeviceToken = null,
+    string? RefreshToken = null
 );

@@ -38,5 +38,6 @@ internal static class WorkspaceMapper
             AvatarUrl: user.AvatarUrl,
             Role: member.Role,
             IsOwner: user.Id == ownerId,
-            JoinedAt: member.JoinedAt);
+            JoinedAt: member.JoinedAt,
+            IsEmailConfirmed: user.IsEmailConfirmed);
 }

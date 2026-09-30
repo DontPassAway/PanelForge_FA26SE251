@@ -30,11 +30,15 @@ public sealed class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailComma
             return Result<AuthResponse>.Failure("Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.");
 
         if (user.IsEmailConfirmed)
-            return Result<AuthResponse>.Success(AuthResponseFactory.SignedIn(
-                user, _jwtTokenGenerator, "Tài khoản đã được xác thực từ trước."));
+            return Result<AuthResponse>.Success(AuthResponseFactory.WithoutToken(
+                user, "Tài khoản đã được xác thực từ trước. Vui lòng đăng nhập."));
 
         if (!AuthSecrets.OtpMatches(user.EmailVerificationToken, command.Token))
-            return Result<AuthResponse>.Failure("Mã xác thực email không chính xác.");
+        {
+            user.RegisterFailedOtp();
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Result<AuthResponse>.Failure("Mã xác thực email không chính xác. Nhập sai nhiều lần sẽ phải yêu cầu gửi lại mã mới.");
+        }
 
         if (AuthSecrets.IsExpired(user.EmailVerificationTokenExpiresAt))
             return Result<AuthResponse>.Failure("Mã xác thực email đã hết hạn. Vui lòng yêu cầu gửi lại mã mới.");
@@ -42,7 +46,7 @@ public sealed class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailComma
         user.ConfirmEmail();
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Result<AuthResponse>.Success(AuthResponseFactory.SignedIn(
+        return Result<AuthResponse>.Success(await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, 
             user, _jwtTokenGenerator, "Xác thực tài khoản thành công!"));
     }
 }

@@ -18,11 +18,18 @@ public class User : BaseEntity
     public SystemRole Role { get; private set; } = SystemRole.User;
 
     public bool IsEmailConfirmed { get; private set; } = false;
+
+    /// <summary>Tài khoản tạo từ lời mời Workspace, chưa đặt mật khẩu và chưa xác thực email.</summary>
+    public bool IsPendingInvitation => PasswordHash is null && !IsEmailConfirmed;
     public string? EmailVerificationToken { get; private set; }
     public DateTime? EmailVerificationTokenExpiresAt { get; private set; }
 
     public string? PasswordResetToken { get; private set; }
     public DateTime? PasswordResetTokenExpiresAt { get; private set; }
+
+    /// <summary>Số lần nhập sai OTP (xác thực email / đặt lại mật khẩu) kể từ khi cấp OTP hiện tại.</summary>
+    public int OtpFailedAttempts { get; private set; }
+    public const int MaxOtpFailedAttempts = 5;
 
     public bool TwoFactorEnabled { get; private set; } = false;
     public string? TwoFactorSecret { get; private set; }
@@ -82,6 +89,7 @@ public class User : BaseEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
         EmailVerificationToken = token.Trim();
         EmailVerificationTokenExpiresAt = expiresAt;
+        OtpFailedAttempts = 0;
     }
 
     public void ConfirmEmail()
@@ -89,6 +97,7 @@ public class User : BaseEntity
         IsEmailConfirmed = true;
         EmailVerificationToken = null;
         EmailVerificationTokenExpiresAt = null;
+        OtpFailedAttempts = 0;
     }
 
     public void SetPasswordResetToken(string token, DateTime expiresAt)
@@ -96,6 +105,7 @@ public class User : BaseEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
         PasswordResetToken = token.Trim();
         PasswordResetTokenExpiresAt = expiresAt;
+        OtpFailedAttempts = 0;
     }
 
     public void ResetPassword(string newPasswordHash)
@@ -104,6 +114,18 @@ public class User : BaseEntity
         PasswordHash = newPasswordHash;
         PasswordResetToken = null;
         PasswordResetTokenExpiresAt = null;
+        OtpFailedAttempts = 0;
+    }
+
+    /// <summary>Ghi nhận một lần nhập sai OTP; đủ 5 lần thì huỷ các OTP đang có, phải xin mã mới.</summary>
+    public void RegisterFailedOtp()
+    {
+        if (++OtpFailedAttempts < MaxOtpFailedAttempts) return;
+        EmailVerificationToken = null;
+        EmailVerificationTokenExpiresAt = null;
+        PasswordResetToken = null;
+        PasswordResetTokenExpiresAt = null;
+        OtpFailedAttempts = 0;
     }
 
     public void SetTwoFactorSecret(string secret)

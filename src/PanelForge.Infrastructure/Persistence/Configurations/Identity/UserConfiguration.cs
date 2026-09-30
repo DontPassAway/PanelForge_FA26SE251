@@ -89,6 +89,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasColumnName("password_reset_token_expires_at")
                .HasColumnType("timestamptz");
 
+        builder.Property(u => u.OtpFailedAttempts)
+               .HasColumnName("otp_failed_attempts")
+               .HasDefaultValue(0)
+               .IsRequired();
+
         builder.Property(u => u.TwoFactorEnabled)
                .HasColumnName("two_factor_enabled")
                .HasDefaultValue(false)

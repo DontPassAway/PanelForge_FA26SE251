@@ -1,5 +1,6 @@
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
 
 namespace PanelForge.Application.Features.Auth.Common;
@@ -19,12 +20,26 @@ internal static class AuthResponseFactory
         user.Role.ToString(),
         user.CanCreateStudio);
 
-    /// <summary>Đăng nhập thành công: phát JWT.</summary>
-    public static AuthResponse SignedIn(
+    /// <summary>Đăng nhập thành công: phát access JWT + refresh token (lưu hash, hạn 30 ngày).</summary>
+    public static async Task<AuthResponse> SignedInAsync(
+        IPanelForgeDbContext dbContext,
+        CancellationToken cancellationToken,
         User user,
         IJwtTokenGenerator jwtTokenGenerator,
         string message,
         string? rememberDeviceToken = null)
+    {
+        var refreshToken = AuthSecrets.NewRefreshToken();
+        dbContext.RefreshTokens.Add(RefreshToken.Create(
+            user.Id, AuthSecrets.HashToken(refreshToken), DateTime.UtcNow.Add(AuthSecrets.RefreshTokenLifetime)));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken);
+    }
+
+    /// <summary>Dựng AuthResponse từ refresh token đã được lưu sẵn (dùng khi xoay vòng token).</summary>
+    public static AuthResponse Build(
+        User user, IJwtTokenGenerator jwtTokenGenerator, string message, string? rememberDeviceToken, string refreshToken)
     {
         var (token, expiresAt) = jwtTokenGenerator.GenerateToken(user);
         return new AuthResponse(
@@ -32,7 +47,8 @@ internal static class AuthResponseFactory
             ExpiresAt: expiresAt,
             User: ToUserDto(user),
             Message: message,
-            RememberDeviceToken: rememberDeviceToken);
+            RememberDeviceToken: rememberDeviceToken,
+            RefreshToken: refreshToken);
     }
 
     /// <summary>Tài khoản bật 2FA: yêu cầu nhập mã Authenticator, chưa phát JWT.</summary>

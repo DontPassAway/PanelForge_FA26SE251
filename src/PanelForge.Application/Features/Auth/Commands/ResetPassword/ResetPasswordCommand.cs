@@ -29,12 +29,17 @@ public sealed class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordC
             return Result<bool>.Failure("Email hoặc mã xác thực không hợp lệ.");
 
         if (!AuthSecrets.OtpMatches(user.PasswordResetToken, command.Token))
-            return Result<bool>.Failure("Mã xác thực đặt lại mật khẩu không chính xác.");
+        {
+            user.RegisterFailedOtp();
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Result<bool>.Failure("Mã xác thực đặt lại mật khẩu không chính xác. Nhập sai nhiều lần sẽ phải yêu cầu mã mới.");
+        }
 
         if (AuthSecrets.IsExpired(user.PasswordResetTokenExpiresAt))
             return Result<bool>.Failure("Mã xác thực đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu mã mới.");
 
         user.ResetPassword(_passwordHasher.HashPassword(command.NewPassword));
+        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken);
 
         // OTP được gửi tới hộp thư nên đặt lại thành công đã chứng minh quyền sở hữu email.
         // Cần thiết cho tài khoản tạo từ lời mời Workspace.

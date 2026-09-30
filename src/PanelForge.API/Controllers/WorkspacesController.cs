@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Workspaces.Models;
@@ -11,6 +12,7 @@ using PanelForge.Application.Features.Workspaces.Commands.AddMember;
 using PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
 using PanelForge.Application.Features.Workspaces.Commands.DeleteWorkspace;
 using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
+using PanelForge.Application.Features.Workspaces.Commands.ResendInvitation;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateMemberRole;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspace;
 using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
@@ -107,6 +109,21 @@ public class WorkspacesController : ControllerBase
             new AddWorkspaceMemberCommand(actorId, id, request.Email, request.Role), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetMembers), new { id }, result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>Gửi lại OTP kích hoạt cho thành viên được mời nhưng chưa kích hoạt tài khoản.</summary>
+    [HttpPost("{id:guid}/members/{userId:guid}/resend-invitation")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> ResendInvitation(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } actorId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new ResendWorkspaceInvitationCommand(actorId, id, userId), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
             : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
     }
 

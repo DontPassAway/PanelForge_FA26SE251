@@ -1101,6 +1101,70 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("typography_presets", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_tokens_token_hash");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("refresh_tokens", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1154,6 +1218,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_email_confirmed");
+
+                    b.Property<int>("OtpFailedAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("otp_failed_attempts");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("varchar(255)")
@@ -2308,6 +2378,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Identity.RefreshToken", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Identity.UserRememberedDevice", b =>

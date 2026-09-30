@@ -46,7 +46,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result<A
 
         if (!user.TwoFactorEnabled)
             return Result<AuthResponse>.Success(
-                AuthResponseFactory.SignedIn(user, _jwtTokenGenerator, "Đăng nhập thành công."));
+                await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, "Đăng nhập thành công."));
 
         if (!string.IsNullOrWhiteSpace(command.RememberDeviceToken))
         {
@@ -56,7 +56,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result<A
 
             // Thiết bị tin cậy còn hạn (30 ngày) → bỏ qua thử thách 2FA
             if (device is not null && !device.IsExpired)
-                return Result<AuthResponse>.Success(AuthResponseFactory.SignedIn(
+                return Result<AuthResponse>.Success(await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, 
                     user, _jwtTokenGenerator, "Đăng nhập thành công (Thiết bị tin cậy được ghi nhớ)."));
         }
 

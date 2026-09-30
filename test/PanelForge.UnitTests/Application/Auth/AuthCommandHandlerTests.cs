@@ -13,6 +13,7 @@ using PanelForge.Application.Features.Auth.Commands.Login;
 using PanelForge.Application.Features.Auth.Commands.Register;
 using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
 using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -35,9 +36,12 @@ public class AuthCommandHandlerTests
     private readonly ITotpService _totpService = new OtpNetTotpService();
     private readonly List<UserRememberedDevice> _rememberedDevices = new();
 
+    private readonly List<RefreshToken> _refreshTokens = new();
+
     public AuthCommandHandlerTests()
     {
         SetupRememberedDevices(_rememberedDevices);
+        _dbContextMock.Setup(db => db.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(_refreshTokens));
     }
 
     private void SetupUsers(List<User> users)
@@ -323,7 +327,7 @@ public class AuthCommandHandlerTests
         var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
             .Handle(new ResetPasswordCommand("user@example.com", "999999", "NewSecret123!"), CancellationToken.None);
 
-        result.ErrorMessage.Should().Be("Mã xác thực đặt lại mật khẩu không chính xác.");
+        result.ErrorMessage.Should().StartWith("Mã xác thực đặt lại mật khẩu không chính xác.");
     }
 
     [Fact]
@@ -356,7 +360,7 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.IsEmailConfirmed.Should().BeTrue();
         user.EmailVerificationToken.Should().BeNull();
-        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2)); // xác nhận email + lưu refresh token
     }
 
     [Fact]
@@ -372,6 +376,109 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task VerifyEmail_WhenAlreadyConfirmed_ShouldNotIssueToken()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        user.ConfirmEmail();
+        SetupUsers(new List<User> { user });
+
+        var result = await new VerifyEmailCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new VerifyEmailCommand("user@example.com", "bat-ky"), CancellationToken.None);
+
+        result.Value!.Token.Should().BeNull();
+        result.Value.RefreshToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResetPassword_After5WrongOtps_ShouldInvalidateOtpEvenIfNextGuessIsCorrect()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+        var handler = new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object);
+
+        for (var i = 0; i < User.MaxOtpFailedAttempts; i++)
+            await handler.Handle(new ResetPasswordCommand("user@example.com", "000000", "NewSecret123!"), CancellationToken.None);
+
+        var result = await handler.Handle(
+            new ResetPasswordCommand("user@example.com", "123456", "NewSecret123!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        user.PasswordResetToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Login_WhenValid_ShouldIssueRefreshTokenStoredAsHash()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        user.ConfirmEmail();
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hash")).Returns(true);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+
+        var result = await Login().Handle(new LoginCommand("user@example.com", "Password123!", null), CancellationToken.None);
+
+        result.Value!.RefreshToken.Should().NotBeNullOrEmpty();
+        _refreshTokens.Should().ContainSingle().Which.TokenHash.Should().Be(HashToken(result.Value.RefreshToken!));
+    }
+
+    [Fact]
+    public async Task RefreshToken_WhenValid_ShouldRotate()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        SetupUsers(new List<User> { user });
+        var old = RefreshToken.Create(user.Id, HashToken("old-token"), DateTime.UtcNow.AddDays(1));
+        _refreshTokens.Add(old);
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+        SetupRefreshTokenUser(old, user);
+
+        var result = await new RefreshTokenCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new RefreshTokenCommand("old-token"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        old.IsRevoked.Should().BeTrue();
+        result.Value!.RefreshToken.Should().NotBe("old-token");
+        _refreshTokens.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task RefreshToken_WhenRevokedTokenReused_ShouldRevokeAllSessions()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        var stolen = RefreshToken.Create(user.Id, HashToken("stolen"), DateTime.UtcNow.AddDays(1));
+        stolen.Revoke();
+        var other = RefreshToken.Create(user.Id, HashToken("other-session"), DateTime.UtcNow.AddDays(1));
+        _refreshTokens.AddRange(new[] { stolen, other });
+        SetupRefreshTokenUser(stolen, user);
+
+        var result = await new RefreshTokenCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new RefreshTokenCommand("stolen"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        other.IsRevoked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RefreshToken_WhenUserDeactivated_ShouldFail()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        user.Deactivate();
+        var token = RefreshToken.Create(user.Id, HashToken("t"), DateTime.UtcNow.AddDays(1));
+        _refreshTokens.Add(token);
+        SetupRefreshTokenUser(token, user);
+
+        var result = await new RefreshTokenCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
+            .Handle(new RefreshTokenCommand("t"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+    }
+
+    // Include(t => t.User) không chạy trên mock → gán sẵn navigation qua reflection
+    private static void SetupRefreshTokenUser(RefreshToken token, User user)
+        => typeof(RefreshToken).GetProperty(nameof(RefreshToken.User))!.SetValue(token, user);
 
     [Fact]
     public async Task ResendVerification_WhenAlreadyConfirmed_ShouldFail()

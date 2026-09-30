@@ -57,10 +57,7 @@ public class SeriesCommandTests
         var command = new CreateSeriesCommand(
             WorkspaceId: workspaceId,
             UserId: userId,
-            Title: "Naruto",
-            Synopsis: "Ninja story",
-            ReadingDirection: ReadingDirection.RightToLeft,
-            PipelineTemplateId: null
+            Title: "Naruto"
         );
 
         // Act
@@ -94,10 +91,7 @@ public class SeriesCommandTests
         var command = new CreateSeriesCommand(
             WorkspaceId: workspaceId,
             UserId: userId,
-            Title: "Naruto",
-            Synopsis: "Ninja story",
-            ReadingDirection: ReadingDirection.RightToLeft,
-            PipelineTemplateId: null
+            Title: "Naruto"
         );
 
         // Act

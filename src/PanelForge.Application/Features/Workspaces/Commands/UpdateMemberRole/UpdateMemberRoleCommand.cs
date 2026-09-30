@@ -31,6 +31,10 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
                 "Chỉ Chủ sở hữu (Owner) hoặc Quản lý sản xuất (Producer) mới có quyền đổi vai trò thành viên.",
                 ResultErrorCodes.Forbidden);
 
+        if (!Enum.IsDefined(command.NewRole))
+            return Result<WorkspaceMemberDto>.Failure(
+                $"Vai trò không hợp lệ. Các vai trò hợp lệ: {string.Join(", ", Enum.GetNames<WorkspaceRole>())}.");
+
         var workspace = await _dbContext.StudioWorkspaces
             .FirstOrDefaultAsync(w => w.Id == command.WorkspaceId, cancellationToken);
         if (workspace is null)

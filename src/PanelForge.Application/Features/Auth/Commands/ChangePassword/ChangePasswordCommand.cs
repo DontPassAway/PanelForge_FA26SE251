@@ -47,7 +47,11 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
             return Result<bool>.Failure("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
 
         if (!AuthSecrets.OtpMatches(user.PasswordResetToken, command.EmailOtp))
-            return Unauthorized("Mã OTP xác thực qua email không chính xác.");
+        {
+            user.RegisterFailedOtp();
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Unauthorized("Mã OTP xác thực qua email không chính xác. Nhập sai nhiều lần sẽ phải yêu cầu mã mới.");
+        }
 
         if (AuthSecrets.IsExpired(user.PasswordResetTokenExpiresAt))
             return Unauthorized("Mã OTP xác thực qua email đã hết hạn. Vui lòng yêu cầu mã mới.");
@@ -65,6 +69,7 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
         }
 
         user.ResetPassword(_passwordHasher.HashPassword(command.NewPassword));
+        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<bool>.Success(true);

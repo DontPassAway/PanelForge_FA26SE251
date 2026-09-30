@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
@@ -10,6 +11,8 @@ using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
 using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
 using PanelForge.Application.Features.Auth.Commands.ForgotPassword;
 using PanelForge.Application.Features.Auth.Commands.Login;
+using PanelForge.Application.Features.Auth.Commands.Logout;
+using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.Register;
 using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
 using PanelForge.Application.Features.Auth.Commands.ResetPassword;
@@ -34,6 +37,7 @@ public class AuthController : ControllerBase
         _mediator = mediator;
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -43,6 +47,7 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
@@ -57,9 +62,20 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("logout")]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest? request, CancellationToken cancellationToken)
     {
+        if (GetCurrentUserId() is { } userId)
+            await _mediator.Send(new LogoutCommand(userId, request?.RefreshToken), cancellationToken);
         return Ok(new { message = "Đăng xuất thành công." });
+    }
+
+    /// <summary>Đổi refresh token lấy access JWT mới (xoay vòng refresh token).</summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RefreshTokenCommand(request.RefreshToken), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [Authorize]
@@ -108,6 +124,7 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
@@ -122,6 +139,7 @@ public class AuthController : ControllerBase
             : ToError(result);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -129,6 +147,7 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Nếu email tồn tại trong hệ thống, mã xác thực đặt lại mật khẩu đã được gửi đến hộp thư của bạn." });
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -139,6 +158,7 @@ public class AuthController : ControllerBase
             : ToError(result);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken)
     {
@@ -146,6 +166,7 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken)
     {
@@ -173,6 +194,7 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("verify-2fa")]
     public async Task<IActionResult> VerifyTwoFactor([FromBody] VerifyTwoFactorRequest request, CancellationToken cancellationToken)
     {

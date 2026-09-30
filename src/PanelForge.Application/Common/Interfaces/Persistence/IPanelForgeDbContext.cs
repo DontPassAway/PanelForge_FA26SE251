@@ -18,6 +18,7 @@ public interface IPanelForgeDbContext
     DbSet<WorkspaceMember> WorkspaceMembers { get; }
     DbSet<ExternalPreviewLink> ExternalPreviewLinks { get; }
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
+    DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiUsageRecord> AiUsageRecords { get; }
