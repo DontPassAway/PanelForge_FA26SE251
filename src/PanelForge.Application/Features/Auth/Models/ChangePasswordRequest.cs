@@ -28,4 +28,10 @@ public record ChangePasswordRequest
     /// </summary>
     [RegularExpression(@"^\d{6}$", ErrorMessage = "Mã xác thực 2FA phải gồm đúng 6 chữ số.")]
     public string? OtpCode { get; init; }
+
+    /// <summary>
+    /// Refresh token của phiên đang dùng. Nếu gửi, phiên này được giữ lại; các thiết bị khác bị đăng xuất.
+    /// Không gửi thì mọi phiên (kể cả phiên hiện tại) bị đăng xuất khi access token hết hạn.
+    /// </summary>
+    public string? CurrentRefreshToken { get; init; }
 }

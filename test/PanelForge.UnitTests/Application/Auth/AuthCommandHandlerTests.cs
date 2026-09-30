@@ -240,6 +240,46 @@ public class AuthCommandHandlerTests
     }
 
     [Fact]
+    public async Task ChangePassword_ShouldRevokeOtherSessionsButKeepCurrentOne()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
+        _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
+        _passwordHasherMock.Setup(h => h.HashPassword("NewPassword123!")).Returns("new_hash");
+        var current = RefreshToken.Create(user.Id, HashToken("current-session"), DateTime.UtcNow.AddDays(1));
+        var otherDevice = RefreshToken.Create(user.Id, HashToken("other-device"), DateTime.UtcNow.AddDays(1));
+        _refreshTokens.AddRange(new[] { current, otherDevice });
+
+        var result = await ChangePassword().Handle(
+            new ChangePasswordCommand(user.Id, "OldPassword123!", "NewPassword123!", "123456", null, "current-session"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        current.IsRevoked.Should().BeFalse("phiên đang đổi mật khẩu phải được giữ lại");
+        otherDevice.IsRevoked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ChangePassword_WithoutCurrentRefreshToken_ShouldRevokeAllSessions()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
+        _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
+        _passwordHasherMock.Setup(h => h.HashPassword("NewPassword123!")).Returns("new_hash");
+        var session = RefreshToken.Create(user.Id, HashToken("session"), DateTime.UtcNow.AddDays(1));
+        _refreshTokens.Add(session);
+
+        await ChangePassword().Handle(
+            new ChangePasswordCommand(user.Id, "OldPassword123!", "NewPassword123!", "123456", null), CancellationToken.None);
+
+        session.IsRevoked.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ChangePassword_WhenCurrentPasswordIncorrect_ShouldReturnUnauthorized()
     {
         var user = User.Create("user@example.com", "User", "old_hash");

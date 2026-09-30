@@ -16,7 +16,8 @@ public sealed record ChangePasswordCommand(
     string CurrentPassword,
     string NewPassword,
     string? EmailOtp,
-    string? TwoFactorCode) : IRequest<Result<bool>>;
+    string? TwoFactorCode,
+    string? KeepRefreshToken = null) : IRequest<Result<bool>>;
 
 public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordCommand, Result<bool>>
 {
@@ -69,7 +70,11 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
         }
 
         user.ResetPassword(_passwordHasher.HashPassword(command.NewPassword));
-        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken);
+        // Đăng xuất mọi thiết bị khác, giữ phiên hiện tại (client gửi refresh token của phiên đang dùng)
+        var keepHash = string.IsNullOrWhiteSpace(command.KeepRefreshToken)
+            ? null
+            : AuthSecrets.HashToken(command.KeepRefreshToken.Trim());
+        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken, keepHash);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<bool>.Success(true);

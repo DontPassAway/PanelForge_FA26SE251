@@ -132,7 +132,8 @@ public class AuthController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(new ChangePasswordCommand(
-            userId, request.CurrentPassword, request.NewPassword, request.EmailOtp, request.OtpCode),
+            userId, request.CurrentPassword, request.NewPassword, request.EmailOtp, request.OtpCode,
+            request.CurrentRefreshToken),
             cancellationToken);
         return result.IsSuccess
             ? Ok(new { message = "Đổi mật khẩu thành công." })
