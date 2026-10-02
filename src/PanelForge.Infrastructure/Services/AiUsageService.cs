@@ -51,7 +51,7 @@ public sealed class AiUsageService : IAiUsageService
             feature: entry.Feature,
             provider: config?.Provider ?? UnconfiguredProvider,
             status: entry.Status,
-            userId: _currentUser.UserId,
+            userId: entry.UserId ?? _currentUser.UserId,
             model: entry.Model,
             promptTokens: entry.PromptTokens,
             completionTokens: entry.CompletionTokens,

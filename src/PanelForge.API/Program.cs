@@ -14,6 +14,7 @@ using PanelForge.Infrastructure.Persistence;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Infrastructure.Persistence.Seeders;
+using PanelForge.API.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -72,6 +73,9 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+// ── AI Multi-Agent: đánh dấu run dở (AI service chết/restart) là Interrupted ──────────
+builder.Services.AddHostedService<AiRunSweeper>();
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -155,6 +159,13 @@ using (var scope = app.Services.CreateScope())
 
     if (app.Environment.IsDevelopment())
         await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
+
+    // Dữ liệu mẫu demo AI: opt-in (AiService:SeedDemoData=true), chạy lặp không tạo trùng, không sửa dữ liệu có sẵn
+    if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("AiService:SeedDemoData"))
+    {
+        var seeded = await AiDemoSeeder.SeedAsync(db);
+        app.Logger.LogInformation("AiDemoSeeder: {Result}", seeded ? "đã seed Studio Moonlight" : "bỏ qua (đã có hoặc thiếu tài khoản dev)");
+    }
 }
 
 app.UseSwagger();

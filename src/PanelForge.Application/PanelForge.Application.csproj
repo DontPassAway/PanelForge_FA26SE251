@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PanelForge.Domain\PanelForge.Domain.csproj" />
+    <ProjectReference Include="..\PanelForge.AI.Contracts\PanelForge.AI.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

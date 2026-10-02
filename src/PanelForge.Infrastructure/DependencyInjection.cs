@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Infrastructure.ExternalServices;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Events;
@@ -89,6 +91,26 @@ public static class DependencyInjection
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
         services.AddScoped<IAiUsageService, AiUsageService>();
+
+        // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
+        var aiSettings = new AiAgentSettings();
+        configuration.GetSection(AiAgentSettings.SectionName).Bind(aiSettings);
+        services.AddSingleton(aiSettings);
+        services.AddHttpClient<IAiClient, AiClient>(client =>
+            {
+                client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            })
+            .AddStandardResilienceHandler(o =>
+            {
+                var timeout = TimeSpan.FromSeconds(Math.Max(2, aiSettings.ServiceTimeoutSeconds));
+                o.AttemptTimeout.Timeout = timeout;
+                o.TotalRequestTimeout.Timeout = timeout * 2 + TimeSpan.FromSeconds(2);
+                o.Retry.MaxRetryAttempts = 1;               // giao job idempotent theo runId phía AI service
+                o.CircuitBreaker.SamplingDuration = timeout * 2 + TimeSpan.FromSeconds(1);
+                o.CircuitBreaker.MinimumThroughput = 3;     // 3 lần lỗi → mở mạch, trả AI_UNAVAILABLE ngay
+                o.CircuitBreaker.FailureRatio = 0.5;
+                o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(20);
+            });
 
         // ── Audit trail: danh tính người gọi request (BR-18, UC-15) ─────────────
         services.AddHttpContextAccessor();

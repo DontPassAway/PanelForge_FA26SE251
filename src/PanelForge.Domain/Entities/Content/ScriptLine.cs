@@ -21,7 +21,8 @@ public class ScriptLine : BaseEntity
         int lineOrder,
         string? dialogueText = null,
         string? stageDirection = null,
-        Guid? speakerCharacterId = null)
+        Guid? speakerCharacterId = null,
+        Guid? id = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lineOrder);
 
@@ -30,6 +31,8 @@ public class ScriptLine : BaseEntity
 
         return new ScriptLine
         {
+            // Id do ứng dụng cấp (AI draft) để sourceScriptLineIds của Storyboard trỏ đúng dòng sau khi Accept
+            Id = id ?? Guid.NewGuid(),
             SceneId = sceneId,
             LineOrder = lineOrder,
             DialogueText = dialogueText?.Trim(),

@@ -22,6 +22,11 @@ public interface IPanelForgeDbContext
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiUsageRecord> AiUsageRecords { get; }
+    DbSet<AiWorkflowRun> AiWorkflowRuns { get; }
+    DbSet<AiAgentStep> AiAgentSteps { get; }
+    DbSet<AiSuggestion> AiSuggestions { get; }
+    DbSet<AiSuggestionDecision> AiSuggestionDecisions { get; }
+    DbSet<ContentRevision> ContentRevisions { get; }
 
     // Master Data
     DbSet<ElementTypeMasterData> ElementTypes { get; }

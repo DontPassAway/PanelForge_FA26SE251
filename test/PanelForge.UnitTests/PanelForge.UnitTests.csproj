@@ -25,6 +25,8 @@
     <ProjectReference Include="..\..\src\PanelForge.Domain\PanelForge.Domain.csproj" />
     <ProjectReference Include="..\..\src\PanelForge.Infrastructure\PanelForge.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\PanelForge.API\PanelForge.API.csproj" />
+    <ProjectReference Include="..\..\src\PanelForge.AI\PanelForge.AI.csproj" />
+    <ProjectReference Include="..\..\src\PanelForge.AI.Contracts\PanelForge.AI.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

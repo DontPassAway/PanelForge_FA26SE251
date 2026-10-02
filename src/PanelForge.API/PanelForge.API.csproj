@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <UserSecretsId>panelforge-api-4f6c1b7e</UserSecretsId>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

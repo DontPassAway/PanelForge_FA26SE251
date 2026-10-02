@@ -37,6 +37,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
+    public DbSet<AiWorkflowRun> AiWorkflowRuns => Set<AiWorkflowRun>();
+    public DbSet<AiAgentStep> AiAgentSteps => Set<AiAgentStep>();
+    public DbSet<AiSuggestion> AiSuggestions => Set<AiSuggestion>();
+    public DbSet<AiSuggestionDecision> AiSuggestionDecisions => Set<AiSuggestionDecision>();
+    public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
 
     // Master Data
     public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();

@@ -22,6 +22,306 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiAgentStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Agent")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("agent");
+
+                    b.Property<DateTime>("CompletedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<long?>("CompletionTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("completion_tokens");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("InputJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("input_json");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("OutputJson")
+                        .HasColumnType("text")
+                        .HasColumnName("output_json");
+
+                    b.Property<string>("ParametersJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("parameters_json");
+
+                    b.Property<Guid?>("ParentStepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_step_id");
+
+                    b.Property<string>("PromptRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("prompt_ref");
+
+                    b.Property<long?>("PromptTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("prompt_tokens");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("prompt_version");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<int>("RepairAttempts")
+                        .HasColumnType("int")
+                        .HasColumnName("repair_attempts");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("int")
+                        .HasColumnName("round");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("StepIndex")
+                        .HasColumnType("int")
+                        .HasColumnName("step_index");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid?>("UsageRecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usage_record_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsageRecordId");
+
+                    b.HasIndex("RunId", "StepIndex")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_agent_steps_run_step");
+
+                    b.ToTable("ai_agent_steps", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("BaseChapterVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_chapter_version");
+
+                    b.Property<Guid?>("BaseScriptRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("base_script_revision_id");
+
+                    b.Property<string>("BibleRevisionIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bible_revision_ids_json");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("HasBlockingFindings")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_blocking_findings");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("ParentSuggestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_suggestion_id");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("payload_hash");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<Guid>("SceneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scene_id");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("step_id");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("summary");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentSuggestionId");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("ix_ai_suggestions_run");
+
+                    b.HasIndex("StepId");
+
+                    b.HasIndex("SeriesId", "Status")
+                        .HasDatabaseName("ix_ai_suggestions_series_status");
+
+                    b.ToTable("ai_suggestions", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiSuggestionDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ChapterVersionAtDecision")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chapter_version_at_decision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_user_id");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("ModificationLevel")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("modification_level");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("ResultRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("result_revision_id");
+
+                    b.Property<Guid>("SuggestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("suggestion_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResultRevisionId");
+
+                    b.HasIndex("SuggestionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_suggestion_decisions_accepted")
+                        .HasFilter("decision = 'Accepted'");
+
+                    b.ToTable("ai_suggestion_decisions", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiUsageRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -108,6 +408,139 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_ai_usage_records_workspace_occurred");
 
                     b.ToTable("ai_usage_records", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiWorkflowRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("BaseChapterVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_chapter_version");
+
+                    b.Property<Guid?>("BaseScriptRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("base_script_revision_id");
+
+                    b.Property<string>("BibleRevisionIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bible_revision_ids_json");
+
+                    b.Property<string>("Brief")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("brief");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("ContextSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("context_snapshot_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTime>("LastActivityAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_activity_at_utc");
+
+                    b.Property<int>("MaxRevisionRounds")
+                        .HasColumnType("int")
+                        .HasColumnName("max_revision_rounds");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ReadingDirection")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("reading_direction");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<int>("RevisionRounds")
+                        .HasColumnType("int")
+                        .HasColumnName("revision_rounds");
+
+                    b.Property<Guid?>("SceneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scene_id");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("WorkflowType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("FullScene")
+                        .HasColumnName("workflow_type");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId");
+
+                    b.HasIndex("SceneId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.HasIndex("SeriesId", "CreatedAt")
+                        .HasDatabaseName("ix_ai_workflow_runs_series_created");
+
+                    b.HasIndex("Status", "LastActivityAtUtc")
+                        .HasDatabaseName("ix_ai_workflow_runs_status_activity");
+
+                    b.ToTable("ai_workflow_runs", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Audit.AuditLog", b =>
@@ -639,6 +1072,84 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_consistency_rules_series_id");
 
                     b.ToTable("consistency_rules", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ContentRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("MappingJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("mapping_json");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
+
+                    b.Property<Guid?>("PreviousRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("previous_revision_id");
+
+                    b.Property<Guid>("SceneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scene_id");
+
+                    b.Property<Guid?>("SourceSuggestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_suggestion_id");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("summary");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("version_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId");
+
+                    b.HasIndex("SceneId", "Kind", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_content_revisions_scene_kind_version");
+
+                    b.ToTable("content_revisions", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Page", b =>
@@ -2213,6 +2724,54 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("workspace_members", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiAgentStep", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiWorkflowRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiUsageRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UsageRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiSuggestion", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiSuggestion", null)
+                        .WithMany()
+                        .HasForeignKey("ParentSuggestionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiWorkflowRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiAgentStep", null)
+                        .WithMany()
+                        .HasForeignKey("StepId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiSuggestionDecision", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.ContentRevision", null)
+                        .WithMany()
+                        .HasForeignKey("ResultRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiSuggestion", null)
+                        .WithMany()
+                        .HasForeignKey("SuggestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiUsageRecord", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
@@ -2222,6 +2781,32 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiWorkflowRun", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Scene", null)
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Series", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntry", b =>
@@ -2285,6 +2870,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ContentRevision", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Scene", null)
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Page", b =>

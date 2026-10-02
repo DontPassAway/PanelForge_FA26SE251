@@ -31,4 +31,5 @@ public sealed record AiUsageEntry(
     long CompletionTokens = 0,
     decimal? CostUsd = null,
     string? ErrorMessage = null,
-    int? DurationMs = null);
+    int? DurationMs = null,
+    Guid? UserId = null);

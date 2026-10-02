@@ -27,4 +27,10 @@ public static class ResultErrorCodes
     public const string Unauthorized = "UNAUTHORIZED";
     /// <summary>Đã xác thực nhưng không đủ quyền → HTTP 403.</summary>
     public const string Forbidden = "FORBIDDEN";
+    /// <summary>Dữ liệu/đề xuất không qua kiểm tra nội dung → HTTP 400.</summary>
+    public const string Validation = "VALIDATION_FAILED";
+    /// <summary>AI service tắt/không phản hồi → HTTP 503. Chức năng Backend khác vẫn chạy.</summary>
+    public const string AiUnavailable = "AI_UNAVAILABLE";
+    public const string AiDisabled = "AI_DISABLED";
+    public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";
 }
