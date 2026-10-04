@@ -70,88 +70,91 @@ Mô hình này lấy cảm hứng từ cơ chế lưu trữ của **Git LFS** v�
    `assets/original/{hash[0..2]}/{hash[2..4]}/{hash}.{ext}`  
    *Ví dụ:* `assets/original/3a/f8/3af8d9c2e14b...89a0.png`
 3. **Lợi ích cốt lõi:**
-   - **Deduplication tức thì (Tối ưu 100% dung lượng):** Nếu 2 artist tải lên cùng một bản vẽ, hoặc khi nhân bản một Panel có chung hình nền, hệ thống kiểm tra thấy Hash đã tồn tại trong DB -> **Không cần upload lại, không tốn thêm 1 byte ổ cứng nào**, chỉ cần trỏ `AssetId` về bản ghi cũ.
+   - **Deduplication trong phạm vi một Workspace:** Nếu 2 artist **cùng Workspace** tải lên cùng một bản vẽ, hoặc khi nhân bản một Panel có chung hình nền, hệ thống kiểm tra thấy Hash đã tồn tại trong Workspace đó -> **không cần upload lại**, chỉ cần trỏ `AssetId` về bản ghi cũ.
    - **Bảo toàn toàn vẹn lịch sử (Provenance & Event Sourcing):** Mỗi phiên bản trong quá khứ trỏ tới một Hash cụ thể. Do tên file gắn liền với nội dung, không một ai có thể sửa nội dung mà giữ nguyên được Hash.
    - **Xác minh tính toàn vẹn (Integrity Verification):** Bất cứ khi nào tải file, hệ thống có thể băm lại để đảm bảo file trên cloud không bị hỏng hóc hay can thiệp.
+
+### 3.2. Phạm Vi Deduplication: Theo Workspace, Không Toàn Cục
+
+Workspace là ranh giới tenant của hệ thống. Vì vậy deduplication và kiểm tra hash chỉ thực hiện **trong cùng một Workspace**:
+
+- Chỉ mục unique là `(WorkspaceId, Sha256Hash)`, không phải `Sha256Hash` toàn cục.
+- Nếu dedup toàn cục, bước `prepare-upload` trả `alreadyExists: true` sẽ tiết lộ cho Workspace A rằng một Workspace khác đã có đúng file đó. Kèm với việc hash do client tự khai, người dùng có thể khai một hash bất kỳ để nhận `AssetId` của người khác mà không chứng minh được mình có file.
+- Hạn mức lưu trữ (Storage Quota) tính theo Workspace nên mỗi Workspace phải có bản ghi `Asset` của riêng mình.
+- Chi phí đánh đổi: cùng một file ở hai Workspace khác nhau sẽ được lưu hai lần. Đây là lựa chọn có chủ đích để giữ ranh giới tenant.
+
+Với asset nhỏ hơn ngưỡng cấu hình, hoặc khi cần chắc chắn, server nên tự tính lại SHA-256 sau khi upload (đã có trong bước `confirm-upload`) thay vì tin hash của client.
 
 ---
 
 ## 4. Thiết Kế Cơ Sở Dữ Liệu (Asset Entity)
 
-Trong PostgreSQL (quản lý bởi EF Core), chúng ta cần bổ sung bảng `Assets` để lưu trữ siêu dữ liệu (metadata) của các file:
+Trong PostgreSQL (quản lý bởi EF Core), chúng ta cần bổ sung bảng `Assets` để lưu trữ siêu dữ liệu (metadata) của các file.
+
+Entity theo đúng quy ước của domain hiện tại: kế thừa `BaseEntity` (đã có sẵn `Id` với `protected set`, `CreatedAt`, trường audit và soft-delete, nên **không khai báo lại**), setter `private`, tạo qua factory `Create(...)`:
 
 ```csharp
 namespace PanelForge.Domain.Entities.Storage;
 
 public class Asset : BaseEntity
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>Workspace sở hữu asset (ranh giới tenant, dùng cho Storage Quota).</summary>
+    public Guid WorkspaceId { get; private set; }
 
     /// <summary>
-    /// Mã băm SHA-256 nội dung nhị phân (Dùng cho Content-Addressable Storage & Deduplication).
-    /// Được đánh chỉ mục Unique.
+    /// SHA-256 nội dung nhị phân (Content-Addressable Storage & Deduplication).
+    /// Unique theo cặp (WorkspaceId, Sha256Hash), KHÔNG unique toàn cục (xem 3.2).
     /// </summary>
-    public string Sha256Hash { get; set; } = default!;
+    public string Sha256Hash { get; private set; } = default!;
+
+    public string OriginalFileName { get; private set; } = default!;
+
+    /// <summary>MIME: image/png, image/jpeg, image/webp...</summary>
+    public string MimeType { get; private set; } = default!;
+
+    public long SizeBytes { get; private set; }
+    public int Width { get; private set; }
+    public int Height { get; private set; }
+
+    /// <summary>Khóa file gốc trên Object Storage (bất biến).</summary>
+    public string StorageKey { get; private set; } = default!;
+
+    /// <summary>Khóa ảnh hiển thị WebP tối ưu cho Canvas Editor.</summary>
+    public string? DisplayStorageKey { get; private set; }
+
+    /// <summary>Khóa ảnh Thumbnail WebP (256 hoặc 512 px).</summary>
+    public string? ThumbnailStorageKey { get; private set; }
+
+    public Guid UploadedByUserId { get; private set; }
 
     /// <summary>
-    /// Tên file gốc người dùng tải lên (để hiển thị UI khi cần).
+    /// Asset dẫn xuất (tách nền, ảnh AI tạo): trỏ về asset nguồn. Null nếu là file người dùng tải lên trực tiếp.
+    /// Asset nguồn luôn được giữ nguyên.
     /// </summary>
-    public string OriginalFileName { get; set; } = default!;
+    public Guid? SourceAssetId { get; private set; }
 
-    /// <summary>
-    /// Định dạng MIME (image/png, image/jpeg, image/webp, image/clip-studio...).
-    /// </summary>
-    public string MimeType { get; set; } = default!;
+    /// <summary>Cách asset này ra đời; mặc định là người dùng tải lên.</summary>
+    public AssetOrigin Origin { get; private set; } = AssetOrigin.Upload;
 
-    /// <summary>
-    /// Dung lượng file tính bằng Byte.
-    /// </summary>
-    public long SizeBytes { get; set; }
+    /// <summary>Tên tool/model đã tạo asset dẫn xuất (ví dụ rembg + tên model). Null với Upload.</summary>
+    public string? DerivationTool { get; private set; }
 
-    /// <summary>
-    /// Chiều rộng (pixels).
-    /// </summary>
-    public int Width { get; set; }
+    /// <summary>Liên kết tới bản ghi provenance AI (AiSuggestion/AiUsageRecord) khi Origin = AiGenerated.</summary>
+    public Guid? AiSuggestionId { get; private set; }
 
-    /// <summary>
-    /// Chiều cao (pixels).
-    /// </summary>
-    public int Height { get; set; }
+    private Asset() { }
+}
 
-    /// <summary>
-    /// Khóa lưu trữ file gốc trên S3 / Object Storage.
-    /// </summary>
-    public string StorageKey { get; set; } = default!;
-
-    /// <summary>
-    /// Khóa lưu trữ ảnh hiển thị trên Web (đã nén WebP kích thước phù hợp màn hình).
-    /// </summary>
-    public string? DisplayStorageKey { get; set; }
-
-    /// <summary>
-    /// Khóa lưu trữ ảnh Thumbnail (WebP 256x256 / 512x512).
-    /// </summary>
-    public string? ThumbnailStorageKey { get; set; }
-
-    /// <summary>
-    /// Workspace sở hữu tài nguyên này (để kiểm soát hạn mức lưu trữ Storage Quota).
-    /// </summary>
-    public Guid WorkspaceId { get; set; }
-
-    /// <summary>
-    /// Người tải lên.
-    /// </summary>
-    public Guid UploadedByUserId { get; set; }
-
-    /// <summary>
-    /// Số lượng đối tượng đang tham chiếu tới Asset này (Reference Counter).
-    /// Giúp dọn dẹp (Garbage Collection) các asset mồ côi nếu cần.
-    /// </summary>
-    public int ReferenceCount { get; set; } = 1;
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+public enum AssetOrigin
+{
+    Upload = 1,
+    BackgroundRemoved = 2,
+    AiGenerated = 3
 }
 ```
+
+> Đây là thiết kế đề xuất, chưa có trong code. Các trường dẫn xuất (`SourceAssetId`, `Origin`, `DerivationTool`, `AiSuggestionId`) phục vụ yêu cầu 5.8 và 5.9 trong `requirements.md`.
+> Không dùng `ReferenceCount` làm cơ sở xóa file: bản đã commit trong lịch sử phiên bản không được xóa (`requirements.md` 4.4, 6.1). Dọn dẹp chỉ áp dụng cho asset chưa từng được gắn vào bất kỳ revision nào (ví dụ upload bị bỏ dở), theo Retention Policy do Admin cấu hình.
 
 ---
 
@@ -170,7 +173,7 @@ sequenceDiagram
     participant S3 as Object Storage (MinIO/R2)
 
     User->>API: POST /api/assets/prepare-upload (fileName, size, sha256Hash)
-    API->>DB: Kiểm tra xem Sha256Hash đã tồn tại chưa?
+    API->>DB: Kiểm tra (WorkspaceId, Sha256Hash) đã tồn tại chưa?
     alt Đã tồn tại (Deduplication)
         DB-->>API: Trả về AssetId hiện có
         API-->>User: HTTP 200 { alreadyExists: true, assetId: "..." } (Instant Upload!)
@@ -194,6 +197,40 @@ Khi file gốc được tải lên thành công:
 3. **Thumbnail Variant (Tối ưu cho Dashboard):** Chuyển đổi sang `.webp` kích thước 256px hoặc 512px để hiển thị danh sách trang, task board, preview nhỏ.
 4. **Công cụ xử lý khuyến nghị:** Sử dụng thư viện **`SixLabors.ImageSharp`** hoặc **`SkiaSharp`** chạy trực tiếp trong C# .NET Core mà không cần cài đặt ImageMagick ngoài hệ thống.
 
+### 5.3. Asset Dẫn Xuất: Tách Nền và Ảnh AI Tạo
+
+Hai thao tác sau không ghi đè asset hiện có mà **luôn sinh asset mới** có `SourceAssetId` (hoặc `AiSuggestionId`) trỏ về nguồn:
+
+```text
+Asset gốc (Origin = Upload)
+        │  Artist bấm "Tách nền"
+        ▼
+Job nền (bất đồng bộ) ──► service tách nền (ví dụ rembg tự host)
+        ▼
+Asset mới (Origin = BackgroundRemoved, SourceAssetId = asset gốc, DerivationTool = tên tool/model)
+        ▼
+Artist xem và chấp nhận ──► dùng làm ARTWORK_LAYER hoặc element nhân vật
+```
+
+```text
+Yêu cầu tạo ảnh (prompt + reference từ Series Bible)
+        ▼
+Job nền ──► provider ảnh do Admin cấu hình (ví dụ ComfyUI tự host)
+        ▼
+AiSuggestion (kèm provenance: model, tham số, input, output)
+        ▼
+Asset mới (Origin = AiGenerated, AiSuggestionId = ...)
+        ▼
+Người dùng Accept / Edit / Reject ──► chỉ khi Accept mới gắn vào Panel
+```
+
+Nguyên tắc:
+
+- Kết quả đi qua cùng pipeline của mục 5.1 và 5.2 (hash, lưu object, tạo variant), và thuộc cùng Workspace với asset nguồn.
+- Chưa được Accept thì asset AI/tách nền không xuất hiện trong artwork của Panel, không vào export.
+- Asset dẫn xuất tính vào Storage Quota của Workspace.
+- Cả hai thao tác ghi provenance theo `requirements.md` mục 6.2 và 8.
+
 ---
 
 ## 6. Bảo Mật & Phân Phối Ảnh (Security & Delivery)
@@ -214,10 +251,14 @@ Khi file gốc được tải lên thành công:
 
 Hệ thống sử dụng chuẩn giao tiếp **S3-Compatible API**, cho phép chuyển đổi linh hoạt giữa các môi trường mà không cần sửa code:
 
-### 7.1. Môi trường Local Development & Test: MinIO
-- Chạy thông qua Docker Compose (được bổ sung vào `docker-compose.yml`).
-- Hoàn toàn miễn phí, độc lập, không cần Internet khi code.
-- Giao diện MinIO Console (`localhost:9001`) trực quan để kiểm tra file.
+### 7.1. Môi trường Local Development & Test
+
+> **Lưu ý (cập nhật 04/10/2026):** bản trước của tài liệu này đề xuất MinIO. Theo các nguồn tìm được, bản community của MinIO đã vào chế độ maintenance từ 12/2025 và repository bị archive từ 02/2026 (chỉ vá bảo mật, không phát hành bản mới, không có binary chính thức). Không nên chọn cho dự án mới. Xem `storage-strategy.md` mục 3.2.
+
+Khuyến nghị: hai cài đặt cho cùng cổng `IObjectStorageService`:
+- **Dev và test:** cài đặt ghi vào **thư mục cục bộ**, không cần thêm container.
+- **Staging/demo:** **Garage** (tự host, đang được duy trì, hỗ trợ presigned URL) hoặc SeaweedFS chạy bằng Docker Compose, hoặc dùng thẳng Cloudflare R2.
+- Nhận định về Garage/SeaweedFS lấy từ bài so sánh trên web, **chưa được thử với `AWSSDK.S3` trong dự án này**.
 
 ### 7.2. Môi trường Production / Cloud: Cloudflare R2 (Khuyến nghị số 1)
 - **Lý do chọn Cloudflare R2:**
@@ -230,7 +271,7 @@ Hệ thống sử dụng chuẩn giao tiếp **S3-Compatible API**, cho phép ch
 ## 8. Lộ Trình Triển Khai Cho Team
 
 ### Bước 1: Hạ tầng (BE)
-- Cập nhật `docker-compose.yml` để thêm container **MinIO** phục vụ môi trường dev.
+- Dev/test: cài đặt `IObjectStorageService` ghi vào thư mục cục bộ (không cần container). Staging/demo: thêm Garage hoặc SeaweedFS vào `docker-compose.yml`, hoặc dùng Cloudflare R2 (xem 7.1).
 - Cài đặt package `AWSSDK.S3` và `SixLabors.ImageSharp` vào `PanelForge.Infrastructure`.
 
 ### Bước 2: Domain & Persistence (BE1)

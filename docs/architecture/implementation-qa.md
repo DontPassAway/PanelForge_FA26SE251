@@ -91,6 +91,7 @@ The backend should expose documented APIs for:
 
 - Authentication
 - Users
+- Workspaces
 - Series
 - Chapters
 - Scenes
@@ -104,6 +105,7 @@ The backend should expose documented APIs for:
 - Comments
 - Versions
 - Provenance
+- Assets (upload, view URL, derived assets)
 - AI jobs
 - Exports
 
@@ -290,7 +292,38 @@ SHA-256
 Content Identifier
 ```
 
-This supports deduplication and integrity checking.
+This supports deduplication and integrity checking. Deduplication is scoped to a Workspace, because the Workspace is the tenant boundary (see `storage-architecture.md` section 3.2).
+
+## 6.2 Derived Assets: Background Removal and AI-Generated Images
+
+Two operations produce a new asset instead of modifying an existing one:
+
+```text
+Uploaded Asset
+    ↓
+Background Removal Job
+    ↓
+Derived Asset (linked to source)
+    ↓
+Artist reviews and accepts
+```
+
+```text
+Generation Request
+    ↓
+Image Generation Job
+    ↓
+AI Suggestion + Derived Asset
+    ↓
+Human Accept / Edit / Reject
+```
+
+- Both run as background jobs (see section 8.1) and must not block manual production.
+- Background removal can use a self-hosted service; image generation uses a provider the Administrator has configured.
+- Results record provenance (tool or model, parameters, source asset, accepting user).
+- A result becomes part of a Panel only after human acceptance.
+
+Design details: `storage-architecture.md` sections 4 and 5.3.
 
 ---
 
@@ -367,6 +400,13 @@ AI Analysis
   ↓
 Potential Inconsistencies
 ```
+
+### Extended AI Features (after the initial features)
+
+- Background removal for uploaded artwork
+- AI-generated draft images
+
+These follow the same pattern as the initial features: background job, Suggestion, human review, provenance (see section 6.2).
 
 ### Human Review
 

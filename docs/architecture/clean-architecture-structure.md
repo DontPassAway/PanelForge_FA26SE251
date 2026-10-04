@@ -3,7 +3,7 @@
 > **Dự án**: PanelForge – AI-Assisted Manga Production Management Platform (FA26SE251)
 > **Phiên bản tài liệu**: 2.0
 > **Cập nhật**: 2026-09-28
-> **Vị trí lưu trữ**: `docs/markdown/clean-architecture-structure.md`
+> **Vị trí lưu trữ**: `docs/architecture/clean-architecture-structure.md`
 > **Nền tảng**: ASP.NET Core Web API **.NET 9**, PostgreSQL (EF Core + Marten), MediatR
 
 Tài liệu này là **quy ước bắt buộc** khi thêm code vào Backend. Nó mô tả:
@@ -106,7 +106,7 @@ Tên thư mục là **tên đích**. Mục nào có 🔁 nghĩa là code hiện 
 ```text
 PanelForge_FA26SE251/
 ├── docs/
-│   └── markdown/clean-architecture-structure.md
+│   └── architecture/clean-architecture-structure.md
 ├── src/
 │   ├── PanelForge.Domain/
 │   │   ├── Common/                 ✅ BaseEntity, AggregateRoot, IDomainEvent, ISoftDelete, IAuditableEntity
@@ -468,4 +468,4 @@ Danh sách từ đợt rà soát ngày 2026-09-28. **Code mới không được 
 | 2.0 | 2026-09-28 | Thêm ánh xạ CF1–CF5 → code; cây thư mục mục tiêu có trạng thái ✅/🔁/🆕; quy tắc khi nào tạo Interface/Service (4 nhóm); quy tắc ghi dữ liệu Marten + EF và append-only; mục mở rộng cho Mobile Reader (route `/api/mobile/v1`, policy Reader, DTO riêng, signed URL); danh sách điểm lệch chuẩn và lộ trình refactor. Bỏ `AuthService`/`WorkspaceService` khỏi danh sách "đặt đúng chỗ". |
 
 ---
-*Tài liệu này được đối chiếu với mã nguồn thực tế và với `docs/markdown/PanelForge_Capstone_Content.md`. Khi cấu trúc code thay đổi, cập nhật mục 4 và mục 11 trước tiên.*
+*Tài liệu này được đối chiếu với mã nguồn thực tế và với `docs/requirements/PanelForge_Capstone_Content.md`. Khi cấu trúc code thay đổi, cập nhật mục 4 và mục 11 trước tiên.*

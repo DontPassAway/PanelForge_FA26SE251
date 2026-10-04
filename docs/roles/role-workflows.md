@@ -2,7 +2,7 @@
 
 > **Dự án:** PanelForge: An AI-Assisted Manga Production Management Platform with a Structured Content Model and Full Revision Provenance  
 > **Tài liệu:** Luồng nghiệp vụ chi tiết của từng vai trò (Role Flows) & Vòng đời sản xuất chương truyện (Chapter Production Lifecycle)  
-> **Cập nhật:** 19/09/2026
+> **Cập nhật:** 04/10/2026
 
 ---
 
@@ -12,13 +12,18 @@ Hệ thống phân quyền trong PanelForge được chia làm 2 cấp:
 1. **System Roles (Cấp toàn hệ thống):**
    - `Admin`: Quản trị hạ tầng, tài khoản, quota tài nguyên, audit log.
    - `User`: Người dùng thông thường đã xác thực.
-2. **Workspace Roles (Cấp dự án / Studio StudioWorkspace):**
-   - `Producer / Series Owner`: Quản lý dự án, cấu hình quy trình, Series Bible, phân công, phê duyệt và xuất bản.
+2. **Workspace Roles (Cấp Studio Workspace, enum `WorkspaceRole` trong code):**
+   - `Producer / Series Owner`: Quản lý dự án, cấu hình quy trình, Series Bible, phân công, phê duyệt và xuất bản. Là role duy nhất được tạo Series trong Workspace.
    - `Writer`: Soạn thảo kịch bản cấu trúc, AI Breakdown, liên kết Series Bible.
-   - `Artist` (bao gồm `Penciler`, `Inker`, `Colorist`): Lên layout khung hình, vẽ và upload artwork theo từng công đoạn.
+   - `Artist`: Lên layout khung hình, vẽ và upload artwork theo từng công đoạn (Thumbnail, Pencil, Ink, Color), tách nền ảnh đã tải lên, yêu cầu AI tạo ảnh nháp. Trong code chỉ có một role `Artist`; `Penciler`, `Inker`, `Colorist` là cách gọi theo công đoạn chứ không phải role riêng.
    - `Letterer`: Đặt bóng thoại, hộp thoại, hiệu ứng âm thanh (SFX), liên kết kịch bản.
    - `Editor / Reviewer`: Soát lỗi, gắn ghi chú khoanh vùng (Region Annotation), kiểm tra logic với Series Bible, phê duyệt hoặc yêu cầu sửa đổi (Change Request).
-   - `Reader / External Stakeholder`: Khách ngoài, xem bản thử nghiệm qua link bảo mật có watermark, đóng góp ý kiến.
+
+3. **Người ngoài (không phải role trong Workspace):**
+   - `External Reviewer` (người xem thử): Không có tài khoản sản xuất và không thuộc `WorkspaceRole`. Truy cập qua link xem thử (`ExternalPreviewLink`) chỉ cấp cho **chương đã khóa**, gắn email người nhận, có watermark, hết hạn, thu hồi được, ghi log mọi lần truy cập (BR-09, BR-17).
+   - `Public Reader` (độc giả công khai): Dùng tài khoản Reader riêng trên app, duyệt catalog và đọc chương `Published`; có thể theo dõi hoặc đăng ký Series (BR-24, US-30). Tách biệt hoàn toàn khỏi truy cập Workspace và khỏi link xem thử.
+
+Một Studio Workspace chứa **nhiều Series**; mỗi Series có pipeline, Series Bible và chương riêng.
 
 ---
 
@@ -72,11 +77,12 @@ sequenceDiagram
     Editor->>Editor: Triage các cảnh báo logic (sai màu tóc, sai xưng hô, sai mốc thời gian)
     Editor->>Prod: Chấp thuận toàn bộ chương truyện
 
-    Note over Prod,Ext: Giai đoạn 5: Thử nghiệm ngoài & Xuất bản (Release)
-    Prod->>Ext: Tạo External Preview Link (Watermarked, expiring) gửi đối tác
-    Ext->>Prod: Đọc bản thử nghiệm & gửi feedback cấp trang
-    Prod->>Prod: Khóa chương (Lock Chapter), kiểm tra Provenance Report
-    Prod->>Prod: Kích hoạt Pipeline Export (PDF, CBZ, Webtoon Vertical Scroll)
+    Note over Prod,Ext: Giai đoạn 5: Khóa chương, xem thử ngoài & Xuất bản (Release)
+    Prod->>Prod: Duyệt và khóa chương (Locked), kiểm tra Provenance Report
+    Prod->>Ext: Tạo External Preview Link cho chương đã khóa (gắn email người nhận, watermark, hết hạn, thu hồi được)
+    Ext->>Prod: Đọc bản thử nghiệm & gửi feedback cấp chương/trang
+    Prod->>Editor: Triage phản hồi (nếu cần sửa: Producer mở lại chương kèm lý do, sửa, khóa lại)
+    Prod->>Prod: Phát hành (Published), kích hoạt Pipeline Export (PDF, CBZ, Webtoon Vertical Scroll)
 ```
 
 ---
@@ -93,7 +99,7 @@ sequenceDiagram
        ├─► [1. Quản lý Tài khoản & Workspace]
        │     ├─ Tạo / Khóa / Mở khóa tài khoản người dùng
        │     ├─ Cấp quyền SystemRole (Admin, User)
-       │     └─ Tạo Studio Workspace & gán Producer quản lý
+       │     └─ Cấp quyền tạo Studio (CanCreateStudio); người được cấp tự tạo Studio và tự thành Producer (BR-22). Admin không mời thành viên vào Workspace
        │
        ├─► [2. Cấu hình Tài nguyên AI (AI Provider Configuration)]
        │     ├─ Cấu hình API Key (OpenAI, Google Gemini, Anthropic)
@@ -122,7 +128,7 @@ sequenceDiagram
 [Đăng nhập Workspace]
        │
        ├─► [1. Thiết lập Bộ Truyện (Series Setup)]
-       │     ├─ Tạo Series mới (Tiêu đề, Tóm tắt, Layout: Truyền thống / Webtoon)
+       │     ├─ Tạo Series mới trong Workspace, có thể tạo nhiều Series (Tiêu đề, Tóm tắt, Layout: Truyền thống / Webtoon)
        │     ├─ Cấu hình Pipeline Stages chuẩn (vd: Script → Thumb → Pencil → Ink → Color → Letter → Review → Done)
        │     └─ Thiết lập lịch phát hành dự kiến (Release Calendar)
        │
@@ -206,7 +212,13 @@ sequenceDiagram
        │     ├─ Upload file vẽ lên hệ thống qua cơ chế Direct Upload CAS:
        │     │    • Chọn công đoạn tương ứng (Thumbnail / Pencil / Ink / Color)
        │     │    • File tự động tính SHA-256 hash và chống trùng lặp dữ liệu
-       │     └─ Đánh dấu layer thuộc tính (Lineart, Background, Flat Color)
+       │     ├─ Đánh dấu layer thuộc tính (Lineart, Background, Flat Color)
+       │     ├─ (Tùy chọn) Tách nền ảnh vừa tải lên:
+       │     │    • Ảnh gốc giữ nguyên; kết quả là asset dẫn xuất mới, liên kết về asset gốc
+       │     │    • Artist xem và chấp nhận kết quả trước khi dùng làm lớp artwork hoặc nhân vật
+       │     └─ (Tùy chọn) Yêu cầu AI tạo ảnh nháp cho Panel:
+       │          • Kết quả là Suggestion (Accept / Edit / Reject), không tự trở thành artwork
+       │          • Lưu thành phiên bản mới kèm provenance; dùng làm bản nháp hoặc tham khảo
        │
        ├─► [3. Xử lý Phản hồi (Change Requests)]
        │     ├─ Nhận thông báo có ghi chú review từ Editor
@@ -276,14 +288,14 @@ sequenceDiagram
                    ├─ NẾU CÒN LỖI:
                    │    └─ Bấm "Request Changes" -> Giao việc sửa về cho Artist/Letterer kèm danh sách Change Requests
                    └─ NẾU ĐẠT YÊU CẦU:
-                        └─ Bấm "Approve Submission" -> Ký duyệt công đoạn, đẩy tiến độ Panel sang Approved
+                        └─ Bấm "Approve Submission" -> Duyệt cổng của stage hiện tại, item (Page/Panel) sang stage kế tiếp (BR-06, BR-20). Chỉ khi qua cổng Review, item mới đạt stage Approved; việc duyệt và khóa cả chương là của Producer (UC-20)
 ```
 
 ---
 
-### 3.7. 👥 Reader / External Stakeholder (Khách Ngoài / Độc Giả Thử Nghiệm)
+### 3.7. 👥 External Reviewer (Khách Ngoài Xem Thử Bản Thảo)
 
-**Mục tiêu:** Xem trước bản thảo để nghiệm thu hợp đồng hoặc khảo sát phản hồi độc giả mà không làm rò rỉ tác phẩm.
+**Mục tiêu:** Xem trước bản thảo của **chương đã khóa** để nghiệm thu hợp đồng hoặc khảo sát phản hồi mà không làm rò rỉ tác phẩm. Link do Producer tạo sau khi khóa chương, gắn đúng email người nhận (BR-17).
 
 ```
 [Nhận Liên Kết Chia Sẻ (Email/Chat)]
@@ -292,9 +304,9 @@ sequenceDiagram
 [Mở Link: /preview/{token}]
        │
        ├─► [1. Xác thực & Ràng buộc Bảo mật]
-       │     ├─ Kiểm tra token còn hiệu lực không (Expiring Link: 24h - 7 ngày)
-       │     ├─ Ghi nhận nhật ký truy cập (Audit Log: IP, thiết bị, thời gian)
-       │     └─ Tải ảnh đã được đóng dấu chìm (Dynamic Watermark: email + IP mờ trên từng panel)
+       │     ├─ Kiểm tra token còn hiệu lực, chưa bị thu hồi, đúng người nhận (Expiring Link: 24h - 7 ngày)
+       │     ├─ Ghi nhận nhật ký truy cập, kể cả lần bị từ chối (Audit Log: IP, thiết bị, thời gian)
+       │     └─ Tải ảnh đã được đóng dấu chìm (Dynamic Watermark: email người nhận + thời gian mờ trên từng panel)
        │
        ├─► [2. Trải nghiệm Đọc (Reading Mode)]
        │     ├─ Chế độ Manga truyền thống (Lật trang ngang, hỗ trợ đọc từ phải sang trái RTL)
@@ -304,6 +316,25 @@ sequenceDiagram
              ├─ Gửi đánh giá / bình luận tổng quan cấp Chương (Chapter-level feedback)
              └─ Gửi bình luận nhanh theo từng Trang (Page-level feedback)
              *(Lưu ý: Không có quyền truy cập vào Canvas hay cấu trúc Workspace sản xuất)*
+```
+
+---
+
+### 3.7b. 📖 Public Reader (Độc Giả Công Khai)
+
+**Mục tiêu:** Đọc truyện đã phát hành qua catalog công khai và app, bằng tài khoản Reader riêng (BR-24, US-30).
+
+```
+[Mở catalog công khai (không cần đăng nhập)]
+       │
+       ├─► [1. Duyệt Series có chương Published]
+       │
+       ├─► [2. Đăng ký tài khoản Reader (khác tài khoản Workspace)]
+       │
+       ├─► [3. Đọc chương Published theo chiều đọc của Series (RTL hoặc cuộn dọc)]
+       │
+       └─► [4. Theo dõi Series; nếu chủ Series bật truy cập trả phí thì đăng ký để đọc mọi chương đã phát hành]
+             *(Chỉ chương Published hiển thị. Không dùng chung quyền với Workspace hay link xem thử.)*
 ```
 
 ---
@@ -326,15 +357,25 @@ Mọi người dùng sau khi đăng nhập đều có luồng tương tác cá n
 | Chức năng / Hành động | Admin | Producer | Writer | Artist | Letterer | Editor | External |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Quản lý Studio & Quota AI** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Tạo Series & Mời thành viên** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Cấp / thu hồi quyền tạo Studio (CanCreateStudio)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Tạo Studio Workspace (người được cấp quyền, tự thành Producer)** | 🟡 (Chỉ khi được cấp quyền) | 🟡 (Chỉ khi được cấp quyền) | 🟡 | 🟡 | 🟡 | 🟡 | ❌ |
+| **Tạo Series (trong Workspace)** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Mời thành viên & gán role (WorkspaceRole)** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Tạo / Cập nhật Series Bible** | ✅ | ✅ | 🟡 (Đề xuất) | 👁️ (Xem) | 👁️ (Xem) | 🟡 (Góp ý) | ❌ |
 | **Viết Script & Gọi AI Breakdown** | ❌ | ✅ | ✅ | 👁️ (Xem) | 👁️ (Xem) | 👁️ (Xem) | ❌ |
 | **Vẽ & Upload Artwork Layer** | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| **Tách nền ảnh đã tải lên** | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| **Yêu cầu AI tạo ảnh nháp** | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | **Đặt Balloon, SFX & Gõ thoại** | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | **Khoanh vùng Annotation & Review** | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **Chạy AI Consistency Check** | ❌ | ✅ | 🟡 | ❌ | ❌ | ✅ | ❌ |
 | **Duyệt (Approve) / Khóa Chapter** | ❌ | ✅ | ❌ | ❌ | ❌ | 🟡 (Stage gate) | ❌ |
-| **Xem trước qua link Watermark** | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Chốt layout trang/panel** | ❌ | ✅ | 🟡 (Đề xuất) | ✅ | ❌ | 🟡 (Kiểm tra) | ❌ |
+| **Duyệt thay đổi nội dung thoại (Accept Lettering)** | ❌ | ✅ | ✅ | ❌ | 🟡 (Nếu chính sách Series cho phép) | ✅ | ❌ |
+| **Duyệt cổng stage** | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ (mặc định) | ❌ |
+| **Mở lại chương đã khóa (kèm lý do)** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Tạo link xem thử (chỉ chương đã khóa, gắn email người nhận)** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Xem bản thảo qua link được cấp** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Xuất bản (Export PDF, CBZ, Webtoon)** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ---

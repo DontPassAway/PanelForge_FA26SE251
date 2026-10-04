@@ -3,7 +3,7 @@
 > **Session date:** 2026-09-25
 > **Build status:** ✅ `Build succeeded. 0 Warning(s). 0 Error(s).`
 > **Migration status:** ✅ `20260925023331_AddCF1CompletionMasterData` — Applied to DB
-> **Based on:** `docs/markdown/PanelForge_Capstone_Content.md`
+> **Based on:** `docs/requirements/PanelForge_Capstone_Content.md`
 
 ---
 

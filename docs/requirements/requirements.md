@@ -13,7 +13,8 @@
   - [3.4 Artist](#34-artist)
   - [3.5 Letterer](#35-letterer)
   - [3.6 Editor / Reviewer](#36-editor--reviewer)
-  - [3.7 Reader / External Stakeholder](#37-reader--external-stakeholder)
+  - [3.7 External Reviewer](#37-external-reviewer)
+  - [3.7b Public Reader](#37b-public-reader)
   - [3.8 Authenticated Users](#38-authenticated-users)
 - [4. Core Domain Requirements](#4-core-domain-requirements)
 - [5. AI Requirements](#5-ai-requirements)
@@ -102,13 +103,16 @@ PanelForge represents Manga production as structured, versioned, and traceable d
 The core hierarchy is:
 
 ```text
-Series
-  └── Chapter
-       └── Scene
-            └── Page
-                 └── Panel
-                      └── Element
+Studio Workspace
+  └── Series (many per Workspace)
+       └── Chapter
+            └── Scene
+                 └── Page
+                      └── Panel
+                           └── Element
 ```
+
+A Studio Workspace is the tenant boundary: it owns its members, roles, AI configuration, and one or more Series. Each Series has its own pipeline, Series Bible, and chapters.
 
 The platform combines:
 
@@ -136,7 +140,9 @@ The Administrator shall be able to:
 - Disable users
 - Manage roles
 - Manage permissions
-- Manage workspace membership
+- Grant or revoke the permission to create a Studio (CanCreateStudio)
+
+The Administrator does not invite members into a Workspace and has no content access in it. Only the Producer invites members and assigns WorkspaceRoles.
 
 ### AI Configuration
 
@@ -174,9 +180,10 @@ The Administrator shall be able to:
 
 The Producer or Series Owner shall be able to:
 
-### Series Management
+### Workspace and Series Management
 
-- Create Series
+- Create and manage a Studio Workspace (where permitted)
+- Create multiple Series inside one Workspace
 - Configure Series
 - Configure release calendars
 - Configure production workflow
@@ -219,6 +226,10 @@ The Producer or Series Owner shall be able to:
 - Approve chapters
 - Reject chapters
 - Lock chapters
+- Reopen a locked chapter with a recorded reason
+- Issue preview links for locked chapters
+- Publish chapters
+- Configure the approver of each stage gate (the Editor by default)
 - Trigger exports
 - Restore previous versions
 - Review provenance reports
@@ -264,8 +275,10 @@ The Artist shall be able to:
 - View references
 - View deadlines
 - Create thumbnail layouts
-- Create panel layouts
-- Upload artwork versions
+- Create panel layouts (the Artist owns the final page layout, panel size and position, camera angle, and space for lettering; the Writer proposes scene and panel structure and pacing, and the Editor checks reading flow)
+- Upload artwork versions (artwork produced in external tools, attached to the Panel and the current pipeline stage)
+- Remove the background from an uploaded image (see 5.9)
+- Request AI-generated draft images (see 5.8)
 - Track production stages
 - Access Series Bible references
 - Access shared assets
@@ -344,21 +357,43 @@ The Editor or Reviewer shall be able to:
 
 - Approve submissions
 - Reject submissions
-- Move work through approval gates
+- Approve stage gates, which moves an item to the next stage (approving a stage is separate from the Producer approving and locking a chapter)
+- Triage each consistency finding as Confirmed, Rejected, Ignored (with a recorded reason), or Needs clarification
 
 ---
 
-## 3.7 Reader / External Stakeholder
+## 3.7 External Reviewer
 
-External stakeholders shall be able to:
+An External Reviewer is a named recipient of a preview link. They have no account and are not a WorkspaceRole.
 
-- Open time-limited preview links
-- Access watermarked content
-- Read preview chapters
+External reviewers shall be able to:
+
+- Open a time-limited preview link issued to their email address
+- Access watermarked content (the watermark shows the recipient)
+- Read the preview of a Locked chapter
 - Provide chapter-level feedback
 - Provide page-level feedback
 
-External stakeholders shall not receive full production workspace access.
+A preview link is issued only for a Locked chapter. The Producer can revoke it before expiry, and every access attempt, including denied ones, is logged.
+
+External reviewers shall not receive full production workspace access.
+
+Feedback is triaged by the Producer or Editor. If a change is needed, the Producer reopens the chapter with a recorded reason, the change goes through the normal workflow, and the chapter is locked again.
+
+---
+
+## 3.7b Public Reader
+
+A Public Reader reads released work through the public catalog, separately from the Workspace and from preview links.
+
+Public readers shall be able to:
+
+- Browse the public catalog of Series that have Published chapters
+- Register a Reader account (separate from Workspace users)
+- Read Published chapters in the Series reading direction
+- Follow a Series and, where the Series owner enables paid access, subscribe to read every Published chapter
+
+Only Published chapters are visible. Public Reader access, Workspace access, and preview-link access are three separate paths and must not reuse one another's authorization.
 
 ---
 
@@ -389,6 +424,8 @@ Authenticated users shall be able to:
 The system shall enforce:
 
 ```text
+Studio Workspace
+  ↓
 Series
   ↓
 Chapter
@@ -411,6 +448,8 @@ A Page must belong to exactly one Scene.
 A Scene must belong to exactly one Chapter.
 
 A Chapter must belong to exactly one Series.
+
+A Series must belong to exactly one Studio Workspace, and a Workspace may contain many Series.
 
 ---
 
@@ -505,7 +544,7 @@ the suggestion.
 
 The system may use vision-based similarity analysis to help identify possible character continuity problems.
 
-This feature is intended for checking rather than autonomous artwork generation.
+This feature is a checking aid. Its findings are suggestions for the Editor, not automatic rejections.
 
 ---
 
@@ -549,6 +588,31 @@ If the AI provider is:
 - Temporarily failing
 
 the manual production workflow must remain usable.
+
+---
+
+## 5.8 AI-Generated Draft Images
+
+The system may generate draft images for a Panel from its script description, Series Bible references, and Series style rules.
+
+- A generated image is an AI Suggestion. It never becomes the Panel's artwork until a human accepts it (5.6).
+- Generation is asynchronous (6.4) and the result is stored as a new artwork version; no existing version is overwritten.
+- The generation request and result record provenance (section 8): model, parameters, prompt and reference inputs, output asset, accepting user, and human modifications.
+- Generated images are intended as drafts and references (for example Thumbnail-stage drafts or backgrounds), not as a replacement for the Artist's work.
+- The Administrator controls which image providers and models are enabled and their quotas (3.1). Workspace content is sent only to providers the Administrator has configured.
+- If generation is unavailable, uploading artwork manually remains fully usable (5.7).
+
+---
+
+## 5.9 Background Removal
+
+An Artist may upload an image and request background removal.
+
+- The result is stored as a new asset derived from the original; the original is retained unchanged.
+- The derived asset records its source asset, the operation, and the tool or model used (section 8).
+- The result may be used as an `ARTWORK_LAYER` or character element on a Panel after the Artist reviews and accepts it.
+- Processing is asynchronous for large images (6.4).
+- Background removal does not require an external provider if a self-hosted model is used; the choice is a deployment decision.
 
 ---
 
@@ -600,6 +664,7 @@ Expensive operations should be processed asynchronously.
 Examples:
 
 - AI generation
+- AI image generation and background removal
 - Consistency analysis
 - Large exports
 - Image processing
@@ -687,10 +752,18 @@ Authorization shall consider:
 
 External preview links should support:
 
+- Issuing only for a Locked chapter
+- Binding to a named recipient email
 - Short expiration
 - Revocation
-- Watermarking
-- Access logging
+- Watermarking that shows the recipient
+- Access logging, including denied attempts
+
+---
+
+## 7.3b Public Reader Access
+
+Published Series are discoverable in a public catalog independent of Workspace membership. Public Reader accounts are separate from Workspace users, and only Published chapters are exposed.
 
 ---
 

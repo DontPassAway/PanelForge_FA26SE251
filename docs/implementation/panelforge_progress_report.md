@@ -216,9 +216,9 @@ PanelForge_FA26SE251/
 
 | Tài liệu | Trạng thái |
 |---|---|
-| `docs/requirements.md` | ✅ |
-| `docs/project-plan.md` | ✅ |
-| `docs/implementation-qa.md` | ✅ |
+| `docs/requirements/requirements.md` | ✅ |
+| `docs/requirements/project-plan.md` | ✅ |
+| `docs/architecture/implementation-qa.md` | ✅ |
 | `docs/database/` | ✅ |
 | README.md (16KB) | ✅ |
 

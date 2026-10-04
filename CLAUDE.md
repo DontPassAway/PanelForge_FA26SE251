@@ -1,8 +1,8 @@
 # CLAUDE.md – PanelForge Backend
 
-ASP.NET Core Web API (.NET 8) · Clean Architecture · CQRS with MediatR · EF Core + PostgreSQL · xUnit.
+ASP.NET Core Web API (.NET 9) · Clean Architecture · CQRS with MediatR · EF Core + PostgreSQL · xUnit.
 
-Solution: `PanelForge.slnx` · Projects: `src/PanelForge.{API,Application,Domain,Infrastructure}`, tests in `test/PanelForge.UnitTests`.
+Solution: `PanelForge.slnx` · Projects: `src/PanelForge.{API,Application,Domain,Infrastructure}`, plus the AI projects `src/PanelForge.AI` and `src/PanelForge.AI.Contracts`; tests in `test/PanelForge.UnitTests`.
 
 ```bash
 dotnet build PanelForge.slnx
@@ -32,7 +32,7 @@ Frontend ↔ Backend coordination happens through `../../HANDOFF.md` (see the wo
 
 ## Precedence when instructions conflict
 
-1. PanelForge Business Rules / requirements (`panelforge-business-rules`, `docs/requirements.md`)
+1. PanelForge Business Rules / requirements (`panelforge-business-rules`, `docs/requirements/requirements.md`)
 2. Security and data integrity
 3. Existing project architecture (what the code already does)
 4. PanelForge custom skills (`.claude/skills/panelforge-*`)

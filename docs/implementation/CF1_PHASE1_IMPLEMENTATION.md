@@ -4,7 +4,7 @@
 > **Build Status:** ✅ `Build succeeded. 0 Warning(s). 0 Error(s).`  
 > **Test Status:** ✅ `Passed! - Failed: 0, Passed: 156, Skipped: 0, Total: 156`  
 > **Target Scope:** Phase 1 — Security & Bug Fixes (Bảo mật & Sửa lỗi CF1)  
-> **References:** `docs/markdown/PanelForge_Capstone_Content.md` (BR-07, BR-22, BR-23, UC-03, NFR-08)  
+> **References:** `docs/requirements/PanelForge_Capstone_Content.md` (BR-07, BR-22, BR-23, UC-03, NFR-08)  
 
 ---
 

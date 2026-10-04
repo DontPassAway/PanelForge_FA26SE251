@@ -54,7 +54,9 @@ The mandatory MVP consists of the following capabilities.
 The system must support:
 
 ```text
-Series
+Studio Workspace
+  ↓
+Series (many per Workspace)
   ↓
 Chapter
   ↓
@@ -173,6 +175,27 @@ Potential future capabilities include:
 
 If real-time collaboration is too complex for the capstone scope, optimistic concurrency and explicit conflict detection remain acceptable alternatives.
 
+## 3.5 Artwork Upload and Background Removal
+
+An Artist uploads artwork produced in external tools and may remove the background of an uploaded image.
+
+- The original asset is kept unchanged; the result is a new derived asset linked to its source.
+- The Artist reviews the result before using it on a Panel.
+
+See `requirements.md` section 5.9 and `storage-architecture.md`.
+
+## 3.6 AI-Generated Draft Images
+
+AI may generate draft or reference images for a Panel.
+
+- Output is a Suggestion that a human must accept, edit, or reject.
+- It is stored as a new artwork version with full provenance.
+- It does not replace the Artist's Pencil, Ink, or Color work.
+
+This is lower priority than the mandatory MVP and the AI features in sections 2.6 and 2.7.
+
+See `requirements.md` section 5.8.
+
 ---
 
 # 4. Out of Scope
@@ -181,13 +204,20 @@ If real-time collaboration is too complex for the capstone scope, optimistic con
 
 PanelForge is not intended to become a generative artwork platform.
 
-AI focuses on:
+AI-generated images are allowed only as human-reviewed drafts (section 3.6). The following remain out of scope:
+
+- Publishing AI-generated artwork without human review
+- Replacing the Artist's production stages with AI output
+- Fully automated page or chapter generation
+
+AI primarily focuses on:
 
 - Text
 - Structure
 - Metadata
 - Consistency
 - Production assistance
+- Draft images (human-reviewed)
 
 ---
 
@@ -359,6 +389,8 @@ DevOps
 - Consistency checking
 - Character continuity
 - Balloon-fit analysis
+- Background removal service
+- AI draft image generation (extended scope)
 - AI provenance
 - Provider fallback
 - Unit testing
@@ -565,6 +597,7 @@ A separately manageable AI assistance service supporting:
 - Series Bible consistency checking
 - Character continuity
 - Layout suggestions where implemented
+- Background removal and draft image generation where implemented
 - AI provenance
 
 ---

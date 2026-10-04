@@ -1,551 +1,387 @@
-# PanelForge_FA26SE251
+# PanelForge
 
-An AI-Assisted Manga Production Management Platform with a Structured Content Model and Full Revision Provenance.
+**An AI-assisted manga production management platform with a structured content model and full revision provenance.**
+
+PanelForge manages manga, comic and webtoon production as **structured, versioned and traceable data** instead of a pile of loose files. A chapter is stored down to individual panels and elements (balloons, narration boxes, sound effects, character instances, artwork layers), moves through a configurable production pipeline, and every change, human or AI, leaves a permanent, attributable record.
+
+> **Status:** in development (September 2026 – March 2027). Software Engineering Capstone Project. See [Current status](#9-current-status) for exactly what works today.
 
 ---
 
 ## Table of Contents
 
-* [1. Project Overview](#1-project-overview)
-* [2. Project Information](#2-project-information)
-* [3. Core Features](#3-core-features)
-* [4. User Roles](#4-user-roles)
-* [5. System Architecture](#5-system-architecture)
-* [6. Technical Documentation](#6-technical-documentation)
-* [7. Getting Started](#7-getting-started)
-* [8. Project Scope](#8-project-scope)
-* [9. Project Plan](#9-project-plan)
-* [10. Expected Deliverables](#10-expected-deliverables)
-* [11. Academic Context](#11-academic-context)
-* [12. License](#12-license)
+1. [The problem](#1-the-problem)
+2. [What PanelForge does](#2-what-panelforge-does)
+3. [Roles](#3-roles)
+4. [How a page is produced](#4-how-a-page-is-produced)
+5. [Core concepts and rules](#5-core-concepts-and-rules)
+6. [AI assistance](#6-ai-assistance)
+7. [Architecture and tech stack](#7-architecture-and-tech-stack)
+8. [Getting started](#8-getting-started)
+9. [Current status](#9-current-status)
+10. [Documentation](#10-documentation)
+11. [Project scope](#11-project-scope)
+12. [Project information](#12-project-information)
+13. [License](#13-license)
 
 ---
 
-## 1. Project Overview
+## 1. The problem
 
-PanelForge is an AI-assisted Manga production management platform designed to manage Manga, comic, and webtoon production as structured, versioned, and traceable data rather than as a collection of independent files.
+A distributed manga team typically works across a word processor (scripts), Photoshop or Clip Studio (artwork), spreadsheets (schedules), shared drives (assets) and chat (feedback). That fragmentation causes:
 
-The platform is designed for distributed creative teams consisting of writers, artists, letterers, editors, and producers who collaborate on the same series and chapters.
+| Problem | Consequence |
+|---|---|
+| Scripts and artwork stored separately | The system cannot tell which dialogue belongs to which panel, who speaks it, or which character appears |
+| Feedback scattered across tools | Comments become detached from the exact artwork version they refer to |
+| No single source of truth for the story | Hair colours, names and plot facts drift over hundreds of chapters |
+| Files overwritten or duplicated by hand | Nobody can reconstruct who changed what, when, or which version was approved |
+| Tracking at file or page level only | Panel-level progress is invisible |
+| AI used without records | No trace of which model, input and human edits produced a result |
 
-The core idea of PanelForge is to represent a Manga chapter as queryable structured data down to individual panels and elements such as dialogue balloons, narration boxes, sound effects, character instances, and artwork layers.
+---
 
-### Core Pillars
+## 2. What PanelForge does
 
-**Structured Representation**
-
-Manga content is represented using an explicit hierarchy:
+### Structured content model
 
 ```text
-Series
-  └── Chapter
-       └── Scene
-            └── Page
-                 └── Panel
-                      └── Element
+Studio Workspace
+  └── Series                (many per Workspace)
+       └── Chapter
+            └── Scene
+                 └── Page
+                      └── Panel
+                           └── Element   (balloon, narration box, SFX, character, artwork layer)
 ```
 
-**Production Pipeline**
+Every entity belongs to exactly one parent; orphans are rejected. Scripts, panels, characters and dialogue keep explicit, machine-readable relationships, so you can ask "which line is in this balloon, and who says it?"
 
-Creative work is managed through configurable production stages with role-based assignments, deadlines, dependencies, approval gates, and panel-level progress tracking.
+### Versioned Series Bible
 
-**AI Assistance and Provenance**
+A per-series repository of characters, locations, props, terminology, style rules and established plot facts. Every fact carries an **effective-from chapter**, so a check on chapter 3 uses the facts true at chapter 3, and a later change is stored as a new version rather than an overwrite. It is both a human reference and the grounding source for AI consistency checks. Details: [`docs/domain/series-bible.md`](docs/domain/series-bible.md).
 
-AI provides production assistance such as script breakdown and consistency checking while maintaining a human-in-the-loop workflow and recording the provenance of AI-assisted operations.
+### Configurable production pipeline
 
----
-
-## 2. Project Information
-
-| Item             | Information                                                                                                                              |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Project Name     | PanelForge                                                                                                                               |
-| English Title    | PanelForge: An AI-Assisted Manga Production Management Platform with a Structured Content Model and Full Revision Provenance             |
-| Vietnamese Title | PanelForge: Nền tảng quản lý sản xuất truyện tranh Manga theo mô hình nội dung có cấu trúc, hỗ trợ cộng tác và truy vết phiên bản với AI |
-| Project Type     | Software Engineering Capstone Project                                                                                                    |
-| Academic Period  | 09/2026 – 03/2027                                                                                                                        |
-| Supervisor       | Nguyễn Tấn Phúc                                                                                                                          |
-| Student          | Bùi Ngọc Tâm                                                                                                                             |
-| Student Code     | SE170009                                                                                                                                 |
-
----
-
-## 3. Core Features
-
-### 3.1 Structured Manga Content Model
-
-PanelForge uses a strict hierarchical content model:
+Each series gets its own pipeline, cloned from an admin-managed template:
 
 ```text
-Series
-  └── Chapter
-       └── Scene
-            └── Page
-                 └── Panel
-                      └── Element
+Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved
+Writer   Artist      Artist   Artist Artist  Letterer Editor   Editor
 ```
 
-Elements may represent:
+Stages, their order and the approver of each gate are configurable (a black-and-white series simply drops *Color*). The workflow supports role-based assignments, deadlines, dependencies, guarded stage transitions, approval gates, change requests and **panel-level progress**. Pages and panels progress independently and in parallel; within one page or panel, a stage starts only when the previous stage is approved.
 
-* Dialogue balloons
-* Narration boxes
-* Sound effects
-* Character instances
-* Artwork layers
+### Panel-anchored review
 
-This allows scripts, panels, characters, dialogue, and visual content to maintain explicit machine-readable relationships.
+Feedback is attached to a **region of a specific panel version**: comments, drawn annotations and change requests, with version comparison and approve/reject decisions. Every consistency finding ends as *Confirmed*, *Rejected*, *Ignored* (with a recorded reason) or *Needs clarification*.
+
+### Immutable versioning and provenance
+
+* Append-only history: stored revisions are never overwritten or deleted.
+* Restoring an old version creates a **new** version at the head of history.
+* Optimistic concurrency: an update based on a stale version is rejected and the conflict is surfaced, never silently overwritten.
+* Full audit trail: who, when, what changed. AI operations also record model, parameters, prompt and input context, the accepting user and human modifications.
+* Binary assets are content-addressed (SHA-256), which gives integrity checks and deduplication.
+
+### Human-in-the-loop AI
+
+AI proposes; people decide. See [AI assistance](#6-ai-assistance).
+
+### Secure sharing and delivery
+
+* **Preview links** for external reviewers: issued only for a *locked* chapter, bound to a named recipient email, time-limited, revocable, watermarked with the recipient, and every access (including denied attempts) is logged.
+* **Public catalog** of *published* series for readers, kept completely separate from workspace and preview access.
+* Export targets: print-ready images, PDF, CBZ, vertical-scroll webtoon, open JSON.
 
 ---
 
-### 3.2 Versioned Series Bible
+## 3. Roles
 
-The Series Bible is a versioned repository containing:
+PanelForge has two levels of access. `SystemRole` (Administrator or User) only separates platform administration from ordinary accounts and **grants no content rights by itself**. `WorkspaceRole` is stored per user per Workspace and grants actions inside that Workspace; with no membership there is no access.
 
-* Characters
-* Locations
-* Props
-* Terminology
-* Style rules
-* Established plot facts
+| Role | Level | Main responsibilities |
+|---|---|---|
+| **Administrator** | System | Accounts, permission to create Studios, AI provider/model/quota configuration, storage settings, shared templates, audit. Does not invite members and has no content access |
+| **Producer / Series Owner** | Workspace | Creates series, configures the pipeline, invites members and assigns roles, assigns work, sets deadlines, locks and reopens chapters, issues preview links, publishes |
+| **Writer** | Workspace | Structured scripts, scenes, dialogue, speakers, Bible links, AI script breakdown. Proposes scene/panel structure and pacing |
+| **Artist** | Workspace | Owns the final page layout, panel size and position, camera angle, space for lettering; uploads artwork |
+| **Letterer** | Workspace | Balloons, narration, SFX, typography, reading order; binds text to script lines |
+| **Editor / Reviewer** | Workspace | Review, annotations, consistency checks, change requests, approves stage gates |
+| **External Reviewer** | Link only | Views a locked chapter through a recipient-bound, watermarked link and sends feedback. No account |
+| **Public Reader** | Separate account | Reads published chapters through the public catalog |
 
-It acts as both a human reference source and a grounding source for AI-powered consistency checking.
+Only the Producer invites members. A user may create a Studio only if an Administrator has granted that permission; the creator automatically becomes its Producer.
+
+A full walk-through of every role with a worked example: [`docs/roles/role-flow-examples.md`](docs/roles/role-flow-examples.md).
 
 ---
 
-### 3.3 Collaborative Production Pipeline
+## 4. How a page is produced
 
-PanelForge supports configurable production workflows such as:
+1. **Setup.** An Administrator grants a user permission to create a Studio. The user creates the Workspace (and becomes Producer), then creates a Series; the pipeline is cloned from a template and an empty Series Bible is created. The Producer invites members and builds the Bible.
+2. **Script.** The Writer writes structured script lines (optionally with AI breakdown). An Editor approves the *Script* gate.
+3. **Layout and artwork.** The Artist fixes the layout, draws Thumbnail, Pencil, Ink and Color in an external tool, and uploads each version against the right page or panel. The Editor reviews with region-anchored comments and change requests; the Artist revises and resubmits.
+4. **Lettering.** The Letterer places balloons on the canvas and binds each to one script line and speaker. The system warns about text overflow, overlap with key artwork and reading-order problems.
+5. **Review and consistency.** The Editor runs the AI consistency check against the Series Bible and triages each finding, then approves the *Review* gate.
+6. **Lock.** When all pages and panels are approved, the Producer approves and **locks** the chapter (read-only; reopening requires a recorded reason).
+7. **Preview and publish.** The Producer sends recipient-bound preview links for the locked chapter, triages feedback (reopening if a fix is needed), then publishes and exports.
+
+Three different "approvals" are deliberately kept apart: approving a **stage gate** (the item moves to the next stage), reaching the final **Approved** stage, and the Producer **approving and locking the chapter**.
+
+---
+
+## 5. Core concepts and rules
+
+The project is governed by 24 business rules (BR-01 to BR-24). The most important ones:
+
+| Rule | In short |
+|---|---|
+| BR-01 / BR-08 | History is append-only; restore creates a new version |
+| BR-03 | Strict containment: Element → Panel → Page → Scene → Chapter → Series |
+| BR-05 | One dialogue line binds to at most one balloon/text element |
+| BR-06 / BR-19 / BR-20 | Guarded stage transitions; per-page/panel dependencies; gate approval conditions |
+| BR-07 / BR-22 / BR-23 | Two-level access control; Studio creation permission; users only see their own Workspaces |
+| BR-11 | Optimistic concurrency: stale updates are rejected |
+| BR-12 | A locked chapter is read-only until reopened with a recorded reason |
+| BR-15 | The Series Bible is versioned by effective chapter |
+| BR-02 / BR-10 / BR-21 | AI only suggests; provenance is mandatory; every finding is triaged by a person |
+| BR-04 / BR-13 / BR-16 | SHA-256 verified assets; deduplication; short-lived, logged asset access |
+| BR-09 / BR-17 / BR-24 | Expiring, recipient-bound previews; public reading kept separate |
+| BR-18 | Complete audit trail |
+
+The full glossary and every rule, with plain-language explanations and examples (Vietnamese): [`docs/requirements/glossary-and-rules.md`](docs/requirements/glossary-and-rules.md).
+
+---
+
+## 6. AI assistance
+
+AI is an assistant, never a decision maker:
 
 ```text
-Script
-  ↓
-Thumbnail
-  ↓
-Pencil
-  ↓
-Ink
-  ↓
-Color
-  ↓
-Letter
-  ↓
-Review
-  ↓
-Approved
+Request → Backend checks permissions and snapshots context
+        → Supervisor picks the next specialist agent
+        → Agent output is validated by code (AI service, then Backend)
+        → Suggestion with full provenance
+        → Human: Accept / Edit / Reject
 ```
 
-The workflow supports:
+* **Seven specialist agents:** Writer, Continuity, Storyboard, Artist, Letterer, Editor, Producer, coordinated by a Gemini-powered **Supervisor** that is not a role and cannot write content, approve, or move a stage.
+* **Seven workflow types:** `FullScene`, `Script`, `Storyboard`, `Artist`, `Letterer`, `Editor`, `Producer`, each with its own valid agent chain and allowed roles.
+* **Guardrails in code:** the set of allowed next actions is computed by deterministic rules; the model's choice is filtered, and the Backend re-validates everything. Numbers (percentages, character limits) are computed by code, and the model only returns short keys, never real IDs.
+* **Accept does only what it says:** it creates a new content revision. It does not approve a gate, move a stage or lock a chapter.
+* **Graceful failure:** if AI is disabled, slow or rate-limited, manual production keeps working.
+* **Providers:** `Mock` (default, no API key, deterministic fixtures) or `Gemini`, configured per Workspace by an Administrator with quotas and usage records.
 
-* Role-based assignments
-* Deadlines
-* Dependencies
-* Stage transitions
-* Panel-level progress
-* Approval gates
-* Change requests
-
----
-
-### 3.4 Panel-Anchored Review
-
-Reviews are attached directly to a specific region of a specific panel version.
-
-Reviewers can:
-
-* Add comments
-* Draw annotations
-* Create change requests
-* Compare versions
-* Approve submissions
-* Reject submissions
-
-This prevents feedback from becoming detached from the artwork it refers to.
+Design and demo guide: [`docs/ai/ai-multi-agent-demo.md`](docs/ai/ai-multi-agent-demo.md).
 
 ---
 
-### 3.5 Human-in-the-Loop AI
-
-PanelForge uses AI as an assistant rather than an autonomous decision maker.
-
-AI-assisted capabilities include:
-
-* Script-to-structure breakdown
-* Panel planning
-* Layout suggestions
-* Series Bible consistency checking
-* Character continuity checking
-* Balloon-fit analysis
-
-AI output follows:
+## 7. Architecture and tech stack
 
 ```text
-AI Suggestion
-      ↓
-Human Review
-      ↓
-Accept / Edit / Reject
-      ↓
-Provenance Record
+┌────────────────────────────────────────────────────────────┐
+│  Frontend (panelforge-fe): React 19, Vite, Tailwind        │
+│  Script editor · Panel canvas · Dashboard · Review tools   │
+└──────────────────────────────┬─────────────────────────────┘
+                               │ REST + JWT
+┌──────────────────────────────▼─────────────────────────────┐
+│  PanelForge.API         controllers, auth, Swagger         │
+├────────────────────────────────────────────────────────────┤
+│  PanelForge.Application CQRS (MediatR): commands, queries  │
+├────────────────────────────────────────────────────────────┤
+│  PanelForge.Domain      entities, aggregates, rules, events│
+├────────────────────────────────────────────────────────────┤
+│  PanelForge.Infrastructure  EF Core, Marten, auth, email   │
+└───────────┬──────────────────────────────┬─────────────────┘
+            │                              │ HTTP (127.0.0.1)
+   ┌────────▼─────────┐          ┌─────────▼──────────────────┐
+   │ PostgreSQL 17    │          │ PanelForge.AI              │
+   │ • relational     │          │ Supervisor + 7 agents,     │
+   │   (EF Core)      │          │ Gemini or Mock; no direct  │
+   │ • event store    │          │ database access            │
+   │   (Marten)       │          └────────────────────────────┘
+   └──────────────────┘          PanelForge.AI.Contracts (shared contract)
 ```
 
----
+| Area | Technology |
+|---|---|
+| Backend | .NET 9, ASP.NET Core Web API |
+| Architecture | Clean Architecture (API, Application, Domain, Infrastructure), CQRS with MediatR, `Result<T>` |
+| Persistence | PostgreSQL 17; EF Core for relational data; **Marten** event store for the page canvas (event sourcing) |
+| Auth | JWT with refresh tokens, OTP, Firebase identity verification |
+| AI | Separate `PanelForge.AI` service (Gemini or Mock), shared `PanelForge.AI.Contracts` |
+| Frontend | React 19, Vite, Tailwind, TanStack Query, dnd-kit (separate project `panelforge-fe`) |
+| Testing | xUnit (backend); Vitest and Testing Library (frontend) |
+| CI/CD | GitHub Actions (build and test against a PostgreSQL service container), Docker |
 
-### 3.6 Immutable Versioning
-
-PanelForge maintains complete revision history through:
-
-* Append-only event logging
-* Versioned domain entities
-* Content-addressed assets
-* Version comparison
-* Rollback
-* Historical reconstruction
-
-AI-assisted operations additionally record relevant AI provenance.
-
----
-
-### 3.7 Multi-Format Export
-
-PanelForge is designed to support export to:
-
-* Print-ready page images
-* PDF
-* CBZ
-* Vertical-scroll webtoon output
-* Open JSON
-
----
-
-## 4. User Roles
-
-| Role                    | Main Responsibilities                                      |
-| ----------------------- | ---------------------------------------------------------- |
-| Administrator           | Users, workspaces, permissions, AI configuration, audit    |
-| Producer / Series Owner | Series setup, workflow, assignments, approvals             |
-| Writer                  | Structured scripts, scenes, panels, dialogue, AI breakdown |
-| Artist                  | Layouts, thumbnails, artwork, production stages            |
-| Letterer                | Balloons, narration, SFX, typography, reading order        |
-| Editor / Reviewer       | Review, annotations, consistency checks, approval          |
-| External Stakeholder    | Watermarked previews and feedback                          |
-| Authenticated User      | Profile, notifications, search, activity history           |
-
----
-
-## 5. System Architecture
-
-PanelForge follows a modular architecture separating the core production domain from supporting services.
+### Repository layout
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                       Frontend App                          │
-│                                                             │
-│ Script Editor | Panel Canvas | Dashboard | Review Tool     │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ↓
-┌─────────────────────────────────────────────────────────────┐
-│                          API Layer                          │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-         ┌─────────────────────┼─────────────────────┐
-         ↓                     ↓                     ↓
-┌────────────────┐    ┌────────────────┐    ┌────────────────┐
-│  Domain Core   │    │Workflow Engine │    │ Access Control │
-└────────┬───────┘    └────────┬───────┘    └────────┬───────┘
-         │                     │                     │
-         └─────────────────────┼─────────────────────┘
-                               ↓
-                 ┌───────────────────────────┐
-                 │    Persistence Layer      │
-                 └─────────────┬─────────────┘
-                               │
-                ┌──────────────┴──────────────┐
-                ↓                             ↓
-        Event / Data Store             Object Storage
-                │
-                ↓
-         Read Projections
-                │
-                ↓
-          Query Models
-
-                 ┌─────────────────────────┐
-                 │       AI Service        │
-                 │                         │
-                 │ LLM / Vector DB /       │
-                 │ Consistency Analysis    │
-                 └─────────────────────────┘
+PanelForge_FA26SE251/
+├── src/
+│   ├── PanelForge.API              REST controllers, Swagger
+│   ├── PanelForge.Application      use cases (commands/queries), interfaces
+│   ├── PanelForge.Domain           entities, aggregates, domain events, enums
+│   ├── PanelForge.Infrastructure   EF Core, Marten, migrations, seeders, integrations
+│   ├── PanelForge.AI               multi-agent AI service
+│   └── PanelForge.AI.Contracts     contracts shared by API and AI service
+├── test/PanelForge.UnitTests       xUnit tests
+├── docs/                           documentation (see below)
+├── docker-compose.yml, Dockerfile
+└── .github/workflows/ci.yml        CI pipeline
 ```
 
-The architecture is designed around Domain-Driven Design, CQRS, Event Sourcing, immutable versioning, workflow modelling, concurrency control, provenance, and modular service boundaries.
-
 ---
 
-## 6. Technical Documentation
+## 8. Getting started
 
-Detailed technical documentation is separated into four documents.
-
-### Requirements
-
-[Functional & Non-Functional Requirements](docs/requirements.md)
-
-Contains:
-
-* Problem statement
-* Functional requirements
-* Role-based requirements
-* Non-functional requirements
-* Security requirements
-* Revision and provenance requirements
-
-### Architecture
-
-[System Architecture & Technical Foundations](docs/architecture.md)
-
-Contains:
-
-* Architectural overview
-* Domain-Driven Design
-* Aggregate modelling
-* Event Sourcing
-* CQRS
-* Content-Addressed Storage
-* Workflow state machines
-* Concurrency control
-* AI service architecture
-* Provenance architecture
-
-### Implementation & QA
-
-[Implementation & Quality Assurance](docs/implementation-qa.md)
-
-Contains:
-
-* Backend implementation
-* Database
-* Authentication
-* Image pipeline
-* Export pipeline
-* Unit testing
-* Integration testing
-* Security testing
-* Concurrency testing
-* CI/CD
-
-### Project Plan
-
-[Project Planning & Deliverables](docs/project-plan.md)
-
-Contains:
-
-* MVP scope
-* Extended scope
-* Out-of-scope items
-* Work packages
-* Project timeline
-* Deliverables
-* Demonstration dataset
-* Success criteria
-
----
-
-## 7. Getting Started
-
-### 7.1 Prerequisites
-
-The current development environment requires:
+### 8.1 Prerequisites
 
 * .NET 9 SDK
-* Docker Desktop
-* Docker Compose
-* PostgreSQL 17
+* PostgreSQL 17, either installed locally or through Docker (Docker Desktop and Compose)
 * Git
+* Node.js (LTS) for the frontend
 
-Additional services may be required depending on the selected implementation of AI, object storage, background processing, and vector search.
-
----
-
-### 7.2 Clone Repository
+### 8.2 Clone and configure
 
 ```bash
 git clone <repository-url>
 cd PanelForge_FA26SE251
 ```
 
----
+Create `src/PanelForge.API/appsettings.Development.json` from `appsettings.Development.Example.json` (or `appsettings.Example.json`) and choose a database target. Never commit secrets: keep JWT secrets, SMTP passwords, Firebase keys and AI service keys in environment variables or `dotnet user-secrets`.
 
-### 7.3 Start Infrastructure
+```bash
+dotnet user-secrets set "JwtSettings:Secret" "<at-least-32-characters>" --project src/PanelForge.API
+```
 
-Create `src/PanelForge.API/appsettings.Development.json` from one of the example files and choose a database — PostgreSQL installed on your machine (pgAdmin 4) or PostgreSQL in Docker. Step-by-step guide (Vietnamese): [docs/database/setup-database.md](docs/database/setup-database.md).
+Step-by-step database setup (Vietnamese): [`docs/database/setup-database.md`](docs/database/setup-database.md).
 
-To use Docker, start the required infrastructure using Docker Compose:
+### 8.3 Start the database
 
 ```bash
 docker compose up -d postgres-db
-```
-
-Check running containers:
-
-```bash
 docker compose ps
 ```
 
----
+The API applies EF Core migrations automatically on startup.
 
-### 7.4 Restore Dependencies
+### 8.4 Run the backend
 
 ```bash
 dotnet restore
+dotnet run --project src/PanelForge.API --launch-profile http
 ```
 
----
+Swagger UI: <http://localhost:5044/swagger>
 
-### 7.5 Run Backend
+### 8.5 Run the AI service (optional)
+
+AI features are optional; manual production works without them. The default provider is `Mock` and needs no API key.
+
+Use the same service key for both projects, then start the AI service on `127.0.0.1:5055`:
 
 ```bash
-dotnet run --project src/PanelForge.API
+dotnet user-secrets set "AiService:ServiceKey" "<random-key>" --project src/PanelForge.API
+dotnet user-secrets set "AiService:ServiceKey" "<random-key>" --project src/PanelForge.AI
+dotnet run --project src/PanelForge.AI
+```
+
+To use Gemini, an Administrator configures the key and allowed models per Workspace, and the backend sets `AiService:Provider` to `Gemini`. For optional demo data (Development only), set `AiService__SeedDemoData=true`. See [`docs/ai/ai-multi-agent-demo.md`](docs/ai/ai-multi-agent-demo.md).
+
+### 8.6 Run the frontend
+
+The web client lives in the separate `panelforge-fe` project:
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+```
+
+### 8.7 Run the tests
+
+```bash
+dotnet test PanelForge.slnx          # backend
+npm run quality                      # frontend: typecheck, lint, tests
 ```
 
 ---
 
-### 7.6 Access Swagger
+## 9. Current status
 
-After the API has started, open:
+*As of 4 October 2026, based on reading the code.*
 
-```text
-https://localhost:7274/swagger
-```
+**Working today**
 
-The exact port may change depending on the local development configuration.
+* Authentication (JWT, refresh tokens, OTP lockout, Firebase login), user and Studio-permission administration, audit logs
+* Workspaces and members (Producer-only invitations), Series, Chapters, Scenes, Pages, Panels and Elements APIs
+* Page canvas persisted as an append-only event stream (Marten)
+* Per-series pipeline cloned from templates, with stage add/edit/delete/reorder and generated guarded transitions
+* Series Bible with chapter-versioned revisions; per-series typography presets and consistency rules
+* AI multi-agent service: seven agents, seven workflows, role/assignment/stage/lock checks, suggestions with provenance, accept/reject
+* Read-only public catalog endpoints for published series
 
----
+**In progress or planned**
 
-## 8. Project Scope
-
-### 8.1 Mandatory MVP
-
-The mandatory MVP focuses on:
-
-1. Structured Manga content model
-2. Versioned Series Bible
-3. Production pipeline
-4. Panel-anchored review
-5. Provenance subsystem
-6. Script-to-structure breakdown
-7. Grounded consistency checking
+* Assignment API (assign, submit, review, rework) and stage-transition endpoints, including dependencies and approval gates
+* Asset storage: upload, content-addressed object storage, artwork versions, background removal, AI draft images
+* Region-anchored annotations and change requests
+* Recipient-bound preview links, reader accounts and subscriptions
+* Notifications and activity feed
+* Chapter approve / lock / reopen / publish and export (PDF, CBZ, webtoon, JSON)
+* Production dashboard, burndown and workload
 
 ---
 
-### 8.2 Extended Scope
+## 10. Documentation
 
-Potential extended features include:
+Everything lives under [`docs/`](docs/README.md), organised by topic.
 
-* AI layout suggestions
-* Vision-based character continuity
-* Balloon-fit analysis
-* Advanced collaborative editing
-* More advanced real-time collaboration
+| Folder | What you will find |
+|---|---|
+| [`docs/requirements/`](docs/requirements/) | [Requirements](docs/requirements/requirements.md), [project plan](docs/requirements/project-plan.md), the original [specification with BR/US/UC/FR/NFR](docs/requirements/PanelForge_Capstone_Content.md), and a [glossary and rules](docs/requirements/glossary-and-rules.md) |
+| [`docs/roles/`](docs/roles/) | [Role workflows](docs/roles/role-workflows.md) and [worked examples for every role](docs/roles/role-flow-examples.md) |
+| [`docs/domain/`](docs/domain/) | [Series Bible](docs/domain/series-bible.md) |
+| [`docs/architecture/`](docs/architecture/) | [Clean architecture structure](docs/architecture/clean-architecture-structure.md), [implementation and QA](docs/architecture/implementation-qa.md) |
+| [`docs/storage/`](docs/storage/) | [Asset storage architecture](docs/storage/storage-architecture.md) and [storage strategy](docs/storage/storage-strategy.md) |
+| [`docs/ai/`](docs/ai/) | [AI multi-agent design and demo](docs/ai/ai-multi-agent-demo.md) |
+| [`docs/database/`](docs/database/) | [Database setup](docs/database/setup-database.md) |
+| [`docs/implementation/`](docs/implementation/) | Implementation logs and progress reports |
+| [`docs/research/`](docs/research/) | Research on roles and supporting tools |
 
----
-
-### 8.3 Out of Scope
-
-PanelForge deliberately excludes autonomous generative artwork from the core project scope.
-
-AI focuses on:
-
-* Structure
-* Text
-* Metadata
-* Consistency
-* Production assistance
-
-Vision capabilities are intended for similarity-based continuity checking rather than autonomous artwork generation.
-
-Commercial copyrighted Manga should not be used as demonstration material without appropriate permission.
+Several documents are written in Vietnamese; the specification and project plan are in English.
 
 ---
 
-## 9. Project Plan
+## 11. Project scope
 
-The project is divided into five major work packages:
+**Mandatory MVP:** structured content model, versioned Series Bible, production pipeline, panel-anchored review, provenance subsystem, AI script-to-structure breakdown, grounded consistency checking.
 
-| Package | Focus                                                  |
-| ------- | ------------------------------------------------------ |
-| WP1     | Project Management, Domain Analysis and Content Schema |
-| WP2     | Content Domain, Provenance and Version Control         |
-| WP3     | Production Pipeline, Access Control and Delivery       |
-| WP4     | Structured Editors and Production Workspace            |
-| WP5     | AI Assistance, QA and Deployment                       |
+**Extended scope:** AI layout suggestions, vision-based character continuity, balloon-fit analysis, background removal for uploaded artwork, human-reviewed AI draft images, richer real-time collaboration.
 
-The detailed responsibilities and project planning are documented in:
-
-[docs/project-plan.md](docs/project-plan.md)
+**Out of scope:** publishing AI-generated artwork without human review, replacing the artist's production stages with AI output, fully automated page generation, and using copyrighted commercial manga as demonstration material without permission. Demonstration content is self-authored, openly licensed, or used with written permission.
 
 ---
 
-## 10. Expected Deliverables
+## 12. Project information
 
-The project is expected to deliver:
-
-* Deployed PanelForge web platform
-* Backend/API service
-* Event-sourced provenance store
-* Object storage integration
-* AI assistance service
-* Open Manga JSON schema
-* Import/export tooling
-* SRS
-* SDD
-* Database and event-store design
-* Test plan and test report
-* Deployment guide
-* Bilingual user manual
-* Demonstration dataset
-* Final presentation package
-* Demonstration video
-* Source repository
+| Item | Information |
+|---|---|
+| Project name | PanelForge |
+| English title | PanelForge: An AI-Assisted Manga Production Management Platform with a Structured Content Model and Full Revision Provenance |
+| Vietnamese title | PanelForge: Nền tảng quản lý sản xuất truyện tranh Manga theo mô hình nội dung có cấu trúc, hỗ trợ cộng tác và truy vết phiên bản với AI |
+| Project type | Software Engineering Capstone Project |
+| Academic period | 09/2026 – 03/2027 |
+| Supervisor | Nguyễn Tấn Phúc |
+| Student | Bùi Ngọc Tâm |
+| Student code | SE170009 |
+| Repository | `PanelForge_FA26SE251` |
 
 ---
 
-## 11. Academic Context
+## 13. License
 
-PanelForge is a Software Engineering Capstone Project focused on applying software engineering principles to a real-world creative production problem.
+Academic Capstone Project, PanelForge Team.
 
-Major engineering areas include:
-
-* Domain modelling
-* Software architecture
-* Event-driven persistence
-* CQRS
-* Version control
-* Concurrency control
-* Workflow modelling
-* Access control
-* AI service integration
-* Automated testing
-* CI/CD
-* Cloud deployment
-* Data portability
-
----
-
-## 12. License
-
-Academic Capstone Project — PanelForge Team.
-
-Demonstration content must comply with the project's rights-clean content policy.
-
-No copyrighted commercial Manga should be ingested without appropriate permission.
-
----
-
-## Project Status
-
-**Status:** In Development
-
-**Project Period:** September 2026 – March 2027
-
-**Project Type:** Software Engineering Capstone Project
-
-**Repository:** `PanelForge_FA26SE251`
+Demonstration content must comply with the project's rights-clean content policy. No copyrighted commercial manga should be ingested without appropriate permission.
