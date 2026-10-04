@@ -121,8 +121,8 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             pipeline.AddStage("Ink", "ink", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
             pipeline.AddStage("Color", "color", 5, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
             pipeline.AddStage("Letter", "letter", 6, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Review", "review", 7, null, WorkspaceRole.Producer, isApprovalGate: true, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Approved", "approved", 8, null, WorkspaceRole.Producer, false, isInitial: false, isTerminal: true);
+            pipeline.AddStage("Review", "review", 7, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Approved", "approved", 8, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
         }
 
         // Sinh transition mặc định
