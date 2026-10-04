@@ -1,7 +1,7 @@
 # Series Bible
 
 > **Tài liệu:** Giải thích Series Bible trong PanelForge: nó là gì, chứa gì, được phiên bản hóa ra sao, ai dùng và dùng để làm gì.
-> **Cập nhật:** 04/10/2026
+> **Cập nhật:** 04/10/2026 (thêm mục 10 và 11: tham khảo thiết kế và quy tắc kiểm tra bằng code)
 > **Nguồn:** `requirements.md` (3.2, 4.5, 5.2), `PanelForge_Capstone_Content.md` (BR-01, BR-08, BR-15, BR-18, BR-21, US-01), `project-plan.md` (2.2), và code `Domain/Entities/Bible`, `BibleController`.
 
 ---
@@ -185,7 +185,122 @@ Các thao tác nằm ở `BibleController`.
 
 ---
 
-## 10. Tóm tắt
+## 10. Tham khảo thiết kế từ các nguồn ngoài
+
+Đã mở trực tiếp ba nguồn ngày 04/10/2026. Phần dưới chỉ ghi điều trang nguồn nói; mọi áp dụng cho PanelForge là **đề xuất thiết kế**, chưa phải tính năng đã có.
+
+| Nguồn | Giấy phép | Dùng cho việc gì | Dùng trực tiếp được không |
+|---|---|---|---|
+| [danjdewhurst/story-skills](https://github.com/danjdewhurst/story-skills) | **MIT** | Ý tưởng **quy tắc kiểm tra bằng code** trên metadata có cấu trúc | Không: là CLI Node.js cho tiểu thuyết (Markdown kèm YAML), không có khái niệm trang, panel, ảnh. Chỉ học ý tưởng rồi tự cài trong .NET |
+| [xnovelist – STORY_BIBLE.md](https://github.com/giapnguyen74/xnovelist/blob/main/docs/STORY_BIBLE.md) | **Không thấy giấy phép trên trang** | Ý tưởng **schema trường dữ liệu** và cách chọn Bible đưa cho AI | Không sao chép nguyên văn hay mã; chỉ tham khảo ý tưởng |
+| [Novelcrafter – Codex](https://www.novelcrafter.com/features/codex) | **Sản phẩm thương mại** (gói 4 đến 20 USD/tháng, dùng thử 21 ngày) | **Trải nghiệm** quản lý mục Bible và thay đổi theo mốc thời gian | Không: chỉ để tham khảo UX; có xuất Codex ra thư mục |
+
+### 10.1 Những điều mỗi nguồn thực sự có
+
+**story-skills** (263 sao, 423 commit tại thời điểm đọc, có bộ test và harness đánh giá)
+- Lệnh `story continuity` kiểm **tất định bằng code**: nhân vật xuất hiện sau khi chết, hứa hẹn và giải quyết đúng thứ tự (setup trước payoff), câu hỏi được đặt trước khi trả lời, nhân vật POV có trong danh sách cảnh, trạng thái bền vững tham chiếu đúng chương có thật, thời gian di chuyển theo tuyến địa điểm.
+- Mô hình trạng thái: nhân vật (sống/chết, có mặt, kiến thức), đồ vật (trạng thái hoạt động hay bị phá hủy, chủ sở hữu, vị trí), **kiến thức của độc giả khác kiến thức của nhân vật**, dòng thời gian cảnh.
+- Cách xử lý ngoại lệ: hồi tưởng cố ý được cho phép; nhân vật đã chết được nhắc đến qua trường `mentions`; finding bị bác bỏ ghi vào `continuity/exemptions.md`.
+- **Điều chưa xác nhận:** nhận xét gốc nói công cụ bắt "đồ vật đã bị phá hủy nhưng vẫn hoạt động". Trang chỉ nói có theo dõi trạng thái đồ vật, **không liệt kê đó là một kiểm tra cụ thể**, nên đừng coi đó là chức năng đã xác minh.
+- Giới hạn của chính nguồn: kiểm tra dựa trên **metadata được khai báo**, không đọc hiểu mọi mâu thuẫn trong văn bản tự do.
+
+**xnovelist**
+- Character: `id` ổn định, `name`, `aliases`, `role`, `age`, `appearance`, `traits`, `desires`, `fears`, `speechPatterns`, `relationships` (id, loại, ghi chú), `notes`, `evidence` (chương kèm trích dẫn).
+- Location: `id`, `name`, `aliases`, `scale` (phòng đến thế giới), `descriptors`, `significance`, `inhabitants`, `notes`, `evidence`.
+- Style: nhịp câu, từ vựng (từ nên dùng hay tránh), quy ước thoại, ngôi kể và thì, bảng cảm giác, **cặp đại từ** (cho ngôn ngữ nhiều cách xưng hô).
+- **Continuity theo chương không phải schema cứng**: là Markdown tự do theo mẫu (tóm tắt, trạng thái nhân vật, độc giả đã biết gì, nút thắt chưa giải quyết, ràng buộc tiếp theo).
+- Khi dựng context cho chương N: chỉ lấy nhân vật và địa điểm **được nhắc trong văn bản**, và lấy continuity của chương **N−1**.
+
+**Novelcrafter**
+- Loại mục: nhân vật, địa điểm, lore, đồ vật, tuyến phụ. Có tên gọi khác (aliases) nhận diện khi gõ, tham chiếu giữa các mục, trường tùy chỉnh, **Progressions** (ghi thay đổi theo mốc thời gian), và chia sẻ một Codex giữa nhiều quyển trong cùng series.
+
+### 10.2 Cái PanelForge đã có và cái nên học
+
+| Ý tưởng | PanelForge đã có chưa | Nên làm gì |
+|---|---|---|
+| Thay đổi theo timeline (Progressions) | **Có**: `BibleEntryRevision.EffectiveFromChapterNumber` (BR-15), truy vấn Bible tại chương N | Không cần học thêm về dữ liệu. Chỉ học **cách hiển thị**: một mục có dòng thời gian "An trước Chương 5 / từ Chương 5" |
+| Chia sẻ giữa nhiều quyển | Mỗi Series có một Bible riêng | Chưa cần; một Workspace nhiều Series chia sẻ thuật ngữ chung là ý tưởng P2 |
+| **Aliases** (tên gọi khác) | Chưa có trường riêng | Thêm `aliases` vào `DetailsJson`: biệt danh, cách gọi theo quan hệ, không dấu. Rất quan trọng với tiếng Việt vì xưng hô thay đổi theo người nói |
+| **Evidence** (chương kèm trích dẫn nguồn của từng sự thật) | Finding AI đã bắt buộc có bằng chứng; chưa có ở mục Bible | Thêm `evidence` vào revision: chương hoặc trang nơi sự thật được xác lập |
+| Trường chi tiết theo loại | `DetailsJson` tự do, không có khuôn | Định nghĩa khuôn trường theo loại (10.3) |
+| Cặp đại từ và quy ước xưng hô | Loại `Terminology` đã có | Dùng `Terminology` với cấu trúc người nói → người nghe → cách gọi |
+| Chọn Bible đưa cho AI theo cảnh | AI đã lấy Bible **có hiệu lực tại chương** | Học thêm: chỉ đưa các mục **được nhắc trong cảnh**, giảm token và giảm bề mặt tấn công prompt injection |
+| Continuity chương N−1 | Chưa có | Có thể **sinh tự động** "trạng thái cuối chương trước" từ các revision hiệu lực, không cần viết tay |
+
+### 10.3 Mở rộng riêng cho manga (đề xuất của riêng PanelForge)
+
+Ba nguồn là công cụ cho **văn bản**; không nguồn nào xử lý hình ảnh. Phần dưới là mở rộng do PanelForge tự thiết kế, nằm trong `DetailsJson` nên **không cần đổi bảng**.
+
+| Loại mục | Trường gợi ý thêm |
+|---|---|
+| Character | `aliases`, `modelSheet` (AssetId của ảnh model sheet), `outfits` (tên, hiệu lực từ chương), `colorPalette` (màu tóc, mắt, da), `distinguishingMarks` (sẹo, phụ kiện), `speechPatterns`, `relationships` |
+| Prop | `appearance`, `owner`, `status` (đang dùng, hỏng, mất), `availableFromChapter` |
+| Location | `scale`, `descriptors`, `inhabitants`, ảnh tham chiếu |
+| StyleRule | quy tắc hình ảnh: độ dày nét, kiểu screentone, bảng màu, cách vẽ cảnh mưa |
+| Terminology | cặp người nói → người nghe → cách xưng hô |
+| PlotFact | `establishedAtChapter`, `knownBy`, `revealedToReaderAtChapter` |
+
+Ví dụ phần `DetailsJson` của mục nhân vật An (minh họa, giá trị do mình đặt):
+
+```json
+{
+  "aliases": ["An", "cô bé ga Mưa"],
+  "appearance": { "hair": "đen, ngắn", "eyes": "nâu" },
+  "outfits": [{ "name": "áo mưa vàng", "fromChapter": 1 }],
+  "speechPatterns": "nói ít, câu ngắn",
+  "relationships": [{ "with": "NGUOI_LA", "kind": "chưa gặp", "fromChapter": 1 }]
+}
+```
+
+Kiểm tra bằng thị giác (ví dụ sẹo, màu mắt trong tranh) vẫn là **phạm vi mở rộng** theo spec (FR-04).
+
+---
+
+## 11. Quy tắc kiểm tra continuity bằng code
+
+Nguyên tắc học từ story-skills: **tách kiểm tra tất định bằng code khỏi đánh giá bằng AI**. Cái gì có đáp án đúng sai rõ ràng thì để code làm; AI chỉ dùng cho phần mơ hồ (giọng văn, mâu thuẫn theo ngữ nghĩa). Điều này cũng khớp với hướng "code trước, AI sau" trong `panelforge-design-research.md`.
+
+### 11.1 Các loại quy tắc đề xuất
+
+| Mã quy tắc | Kiểm tra gì | Dữ liệu cần | Phụ thuộc |
+|---|---|---|---|
+| `PROP_NOT_BEFORE` | Đạo cụ hoặc sự kiện **không được xuất hiện trước chương X** (ví dụ chìa khóa bạc chỉ từ Chương 5) | Mục Bible có hiệu lực từ chương X; dòng script liên kết tới mục đó | Cần liên kết script ↔ mục Bible (FR-Writer-04) |
+| `CHARACTER_AFTER_DEATH` | Nhân vật đã chết vẫn nói hay xuất hiện ở chương sau | Trạng thái "đã chết từ chương X"; speaker của dòng thoại | **Làm sớm được**: `ScriptLine.SpeakerCharacterId` đã trỏ tới mục Bible |
+| `REF_NOT_FOUND` | Tham chiếu tới mục Bible hay chương không tồn tại hoặc đã vô hiệu | Liên kết và danh sách mục | Cần liên kết script ↔ mục Bible |
+| `SETUP_BEFORE_PAYOFF` | Hệ quả xuất hiện trước nguyên nhân | Quan hệ giữa các PlotFact | Cần thêm quan hệ giữa các sự kiện |
+| `OBJECT_STATE_CONFLICT` | Đạo cụ đã hỏng hay mất nhưng vẫn được dùng | Trạng thái đạo cụ theo chương; liên kết prop ↔ dòng hoặc panel | Cần liên kết prop ↔ panel; nguồn chưa xác nhận kiểm tra này |
+| `STRICT_SPELLING` | Tên nhân vật hay địa điểm viết khác tên chuẩn hoặc alias | Tên và `aliases` | Dùng được ngay với văn bản thoại |
+| `FORBIDDEN_TERM` | Dùng cách xưng hô hay thuật ngữ sai theo cặp người nói → người nghe | Mục `Terminology` có cấu trúc | Cần speaker và người nghe |
+
+**Ví dụ với bộ truyện mẫu:** quy tắc "An chỉ nhận chìa khóa từ Chương 5" là một `PROP_NOT_BEFORE` với `entry = CHIA_KHOA_BAC`, `notBeforeChapter = 5`. Khi dòng thoại của Chương 3 liên kết tới mục đó, code báo lỗi ngay mà **không cần gọi AI**; AI chỉ cần cho các trường hợp không có liên kết.
+
+### 11.2 Khớp với `ConsistencyRule` hiện có
+
+Thực thể `ConsistencyRule` của dự án đã có `RuleType`, `Pattern`, `Severity`, `IsEnabled` và `ConfigurationJson`. Các giá trị `RuleType` hiện có là `CharacterContinuity`, `PropContinuity`, `LoreContinuity`, `ToneConsistency`, `StrictSpelling`, `DialogueOverflow`, `Custom`.
+- Các quy tắc ở 11.1 có thể dùng `RuleType` có sẵn (ví dụ `PropContinuity`) cùng tham số trong `ConfigurationJson` (`entryCode`, `notBeforeChapter`), nên **không cần bảng mới** cho phần quy tắc.
+- Mỗi lần kiểm tra tạo `ConsistencyFinding` (E-26) có: mã quy tắc, mức độ, dòng script, **phiên bản mục Bible đã dùng**, và đoạn trích làm bằng chứng.
+
+### 11.3 Ngoại lệ hợp lệ
+
+Học từ story-skills: hồi tưởng và nhắc đến người đã khuất là hợp lệ.
+- Đánh dấu **hồi tưởng** ở mức Scene hoặc dòng script để quy tắc bỏ qua.
+- Bác bỏ một finding là một bản ghi có lý do, đúng với BR-21 (Ignored bắt buộc ghi lý do).
+
+### 11.4 Kết luận: có đưa vào dự án được không?
+
+| Câu hỏi | Trả lời |
+|---|---|
+| Thêm vào `series-bible.md` để làm tài liệu thiết kế? | **Có**, đã thêm ở mục 10 và 11 |
+| Dùng nguyên repo hay tài liệu của họ? | **Không**. story-skills là Node.js cho tiểu thuyết; xnovelist không có giấy phép; Novelcrafter là sản phẩm thương mại |
+| Có cần sửa mô hình dữ liệu? | **Ít**: `DetailsJson`, `ConsistencyRule` và `BibleEntryRevision` đã đủ chỗ chứa. Phần thiếu thật sự là **liên kết script ↔ mục Bible** (hiện chỉ có `SpeakerCharacterId` cho nhân vật) |
+| Quy tắc nào làm sớm nhất? | `CHARACTER_AFTER_DEATH` và `STRICT_SPELLING`, vì chỉ cần dữ liệu đã có |
+| Giới hạn? | Kiểm tra chỉ đúng khi metadata được khai báo đủ; không thay được AI cho mâu thuẫn trong văn bản tự do |
+
+Ưu tiên đề xuất: đưa vào nhóm **P1** của backlog trong `panelforge-design-research.md` (kiểm tra bằng code và bằng chứng continuity), sau khi có CRUD ScriptLine và liên kết script ↔ Bible ở P0.
+
+---
+
+## 12. Tóm tắt
 
 - Bible là **một kho có phiên bản** gồm 6 loại thông tin, mỗi Series một cái.
 - Nó vừa là **tài liệu tham chiếu cho người**, vừa là **nền kiểm tra cho AI**.
