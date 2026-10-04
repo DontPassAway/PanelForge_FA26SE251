@@ -12,7 +12,7 @@ Mục lục các tài liệu, sắp xếp theo thư mục.
 | [`ai/`](ai/) | AI multi-agent | [`ai-multi-agent-demo.md`](ai/ai-multi-agent-demo.md) |
 | [`database/`](database/) | Cài đặt cơ sở dữ liệu | [`setup-database.md`](database/setup-database.md) |
 | [`implementation/`](implementation/) | Nhật ký triển khai và báo cáo tiến độ | `CF1_PHASE1/2/3_IMPLEMENTATION.md`, [`CF1_implementation_handoff.md`](implementation/CF1_implementation_handoff.md), [`panelforge_progress_report.md`](implementation/panelforge_progress_report.md) |
-| [`research/`](research/) | Nghiên cứu công cụ, role và quyết định thiết kế | [`RESEARCH_ROLES_AND_TOOLS.md`](research/RESEARCH_ROLES_AND_TOOLS.md) (công cụ ngoài), [`panelforge-design-research.md`](research/panelforge-design-research.md) (quy trình, mô hình dữ liệu, pipeline, versioning, AI; có bằng chứng và backlog) |
+| [`research/`](research/) | Nghiên cứu công cụ, role và quyết định thiết kế | [`RESEARCH_ROLES_AND_TOOLS.md`](research/RESEARCH_ROLES_AND_TOOLS.md) (công cụ ngoài), [`panelforge-design-research.md`](research/panelforge-design-research.md) (quy trình, mô hình dữ liệu, pipeline, versioning, AI; có bằng chứng và backlog), [`consistency-design.md`](research/consistency-design.md) (thiết kế kiểm tra nhất quán: quy tắc, dữ liệu, triage, kiểm thử) |
 
 ## Nên đọc theo thứ tự nào
 
