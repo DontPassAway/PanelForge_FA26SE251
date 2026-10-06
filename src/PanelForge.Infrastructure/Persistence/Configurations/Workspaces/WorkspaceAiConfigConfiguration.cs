@@ -51,6 +51,18 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
                .HasDefaultValue(0L)
                .IsRequired();
 
+        builder.Property(c => c.MonthlyImageQuota)
+               .HasColumnName("monthly_image_quota")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
+        builder.Property(c => c.UsedImagesCurrentMonth)
+               .HasColumnName("used_images_current_month")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
         builder.Property(c => c.AllowedModelsJson)
                .HasColumnName("allowed_models_json")
                .HasColumnType("text")

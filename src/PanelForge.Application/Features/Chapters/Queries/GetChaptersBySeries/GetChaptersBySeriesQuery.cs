@@ -50,7 +50,8 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.Scenes.Count,
                 c.Pages.Count,
                 c.Status,
-                c.PublishedAt
+                c.PublishedAt,
+                c.Outline
             ))
             .ToListAsync(cancellationToken);
 

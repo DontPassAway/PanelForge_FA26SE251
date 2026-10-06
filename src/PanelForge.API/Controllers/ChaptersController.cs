@@ -123,7 +123,8 @@ public sealed class ChaptersController : ControllerBase
             UserId: GetCurrentUserId(),
             Title: body.Title,
             TargetReleaseDate: body.TargetReleaseDate,
-            IncrementVersion: body.IncrementVersion
+            IncrementVersion: body.IncrementVersion,
+            Outline: body.Outline
         );
 
         var result = await _mediator.Send(command, cancellationToken);

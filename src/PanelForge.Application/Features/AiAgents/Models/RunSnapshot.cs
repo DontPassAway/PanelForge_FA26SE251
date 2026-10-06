@@ -17,7 +17,9 @@ public sealed record RunSnapshot(
     Guid? LayoutRevisionId = null,
     ArtistContext? Artist = null,
     LetteringContext? Lettering = null,
-    ProgressContext? Progress = null)
+    ProgressContext? Progress = null,
+    string? SeriesStoryArc = null,
+    string? ChapterOutline = null)
 {
     public WorkflowInputs Inputs => new(
         BaselineScript.Count > 0, ExistingLayout is not null, Artist?.Panels.Count > 0, Lettering?.Lines.Count > 0, Progress is not null);

@@ -63,7 +63,8 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
             Scenes: scenes,
             Pages: pages,
             Status: chapter.Status,
-            PublishedAt: chapter.PublishedAt
+            PublishedAt: chapter.PublishedAt,
+            Outline: chapter.Outline
         );
 
         return Result<ChapterDetailDto>.Success(detail);

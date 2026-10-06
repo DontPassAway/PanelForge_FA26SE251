@@ -35,6 +35,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("synopsis")
                .HasColumnType("text");
 
+        builder.Property(s => s.StoryArc)
+               .HasColumnName("story_arc")
+               .HasColumnType("text");
+
         builder.Property(s => s.ReadingDirection)
                .HasColumnName("reading_direction")
                .HasColumnType("varchar(20)")

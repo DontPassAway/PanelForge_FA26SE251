@@ -54,7 +54,8 @@ public sealed class GetSeriesByIdQueryHandler : IRequestHandler<GetSeriesByIdQue
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,
-            Chapters: chapters
+            Chapters: chapters,
+            StoryArc: series.StoryArc
         );
 
         return Result<SeriesDetailDto>.Success(detail);

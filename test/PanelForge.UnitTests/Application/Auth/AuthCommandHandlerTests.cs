@@ -42,6 +42,9 @@ public class AuthCommandHandlerTests
     {
         SetupRememberedDevices(_rememberedDevices);
         _dbContextMock.Setup(db => db.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(_refreshTokens));
+        // Session policy (V1.2): user chưa thuộc Workspace nào → không bị giới hạn thêm
+        _dbContextMock.Setup(db => db.WorkspaceMembers)
+            .Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workspaces.WorkspaceMember>()));
     }
 
     private void SetupUsers(List<User> users)

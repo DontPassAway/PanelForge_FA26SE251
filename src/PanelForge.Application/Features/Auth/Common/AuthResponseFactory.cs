@@ -30,8 +30,11 @@ internal static class AuthResponseFactory
         string? rememberDeviceToken = null)
     {
         var refreshToken = AuthSecrets.NewRefreshToken();
-        dbContext.RefreshTokens.Add(RefreshToken.Create(
-            user.Id, AuthSecrets.HashToken(refreshToken), DateTime.UtcNow.Add(AuthSecrets.RefreshTokenLifetime)));
+        var now = DateTime.UtcNow;
+        var policy = await SessionPolicy.ForUserAsync(dbContext, user.Id, cancellationToken);
+        var session = RefreshToken.Create(user.Id, AuthSecrets.HashToken(refreshToken), policy.ExpiryFor(now, now));
+        await policy.EnforceMaxSessionsAsync(dbContext, user.Id, session.SessionId, now, cancellationToken);
+        dbContext.RefreshTokens.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken);

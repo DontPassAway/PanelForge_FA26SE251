@@ -53,7 +53,9 @@ public sealed class GetWorkspaceAiConfigQueryHandler : IRequestHandler<GetWorksp
             AllowedModels: models,
             LastResetAt: config.LastResetAt,
             CreatedAt: config.CreatedAt,
-            UpdatedAt: config.UpdatedAt
+            UpdatedAt: config.UpdatedAt,
+            MonthlyImageQuota: config.MonthlyImageQuota,
+            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth
         ));
     }
 }

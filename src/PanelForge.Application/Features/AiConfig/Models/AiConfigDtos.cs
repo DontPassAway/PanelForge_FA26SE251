@@ -11,7 +11,9 @@ public sealed record WorkspaceAiConfigDto(
     IReadOnlyList<string> AllowedModels,
     DateTime? LastResetAt,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    long MonthlyImageQuota = 0,
+    long UsedImagesCurrentMonth = 0
 );
 
 public sealed record UpdateWorkspaceAiConfigRequest(
@@ -19,5 +21,6 @@ public sealed record UpdateWorkspaceAiConfigRequest(
     string? ApiKey,
     bool IsEnabled,
     long MonthlyTokenQuota,
-    IReadOnlyList<string> AllowedModels
+    IReadOnlyList<string> AllowedModels,
+    long? MonthlyImageQuota = null
 );

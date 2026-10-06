@@ -74,6 +74,15 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
 
         var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
 
+        // V1.2: bản đã khoá chỉ được thay bằng bản mới có hiệu lực từ chương khác, không được ghi đè tại chỗ.
+        if (entry.HasLockedRevisionStartingAt(effectiveFrom))
+        {
+            return Result<BibleEntryRevisionDto>.Failure(
+                $"Chương {effectiveFrom} đã có phiên bản được khoá cho mục này, không thể thay tại chỗ. " +
+                "Hãy chọn chương bắt đầu có hiệu lực khác cho phiên bản mới.",
+                ResultErrorCodes.Conflict);
+        }
+
         // Snapshot lấy từ nội dung của CHÍNH revision này, không lấy từ current state của entry,
         // vì bản sửa hồi tố không được thay đổi current state (Append-only BR-01, BR-15).
         var snapshotObj = new

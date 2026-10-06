@@ -13,14 +13,27 @@ public class RefreshToken : BaseEntity
     public DateTime ExpiresAt { get; private set; }
     public DateTime? RevokedAt { get; private set; }
 
+    /// <summary>Một phiên đăng nhập = chuỗi token xoay vòng cùng SessionId; SessionStartedAt giữ nguyên qua các lần xoay (tính thời gian sống tuyệt đối).</summary>
+    public Guid SessionId { get; private set; }
+    public DateTime SessionStartedAt { get; private set; }
+
     public User User { get; private set; } = default!;
 
     private RefreshToken() { }
 
-    public static RefreshToken Create(Guid userId, string tokenHash, DateTime expiresAt)
+    /// <param name="sessionId">Null = phiên mới. Khi xoay vòng truyền SessionId và SessionStartedAt của token cũ.</param>
+    public static RefreshToken Create(
+        Guid userId, string tokenHash, DateTime expiresAt, Guid? sessionId = null, DateTime? sessionStartedAt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
-        return new RefreshToken { UserId = userId, TokenHash = tokenHash, ExpiresAt = expiresAt };
+        return new RefreshToken
+        {
+            UserId = userId,
+            TokenHash = tokenHash,
+            ExpiresAt = expiresAt,
+            SessionId = sessionId ?? Guid.NewGuid(),
+            SessionStartedAt = sessionStartedAt ?? DateTime.UtcNow
+        };
     }
 
     public bool IsExpired => DateTime.UtcNow >= ExpiresAt;

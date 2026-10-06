@@ -87,6 +87,10 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Đã có revision khoá bắt đầu đúng ở chương này: một revision mới ở cùng chương sẽ thay bản khoá tại chỗ (không cho phép).</summary>
+    public bool HasLockedRevisionStartingAt(int chapterNumber)
+        => Revisions.Any(r => r.IsLocked && r.EffectiveFromChapterNumber == chapterNumber);
+
     public BibleEntryRevision AddRevision(
         string summary,
         string snapshotJson,

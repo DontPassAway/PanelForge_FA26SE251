@@ -11,7 +11,8 @@ public sealed record UpdateChapterCommand(
     Guid UserId,
     string? Title,
     DateOnly? TargetReleaseDate,
-    bool IncrementVersion
+    bool IncrementVersion,
+    string? Outline = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterCommand, Result<ChapterDto>>
@@ -33,7 +34,7 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
         if (chapter == null)
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
 
-        chapter.UpdateDetails(command.Title, command.TargetReleaseDate);
+        chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();
 
         if (command.IncrementVersion)
@@ -56,7 +57,8 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             ScenesCount: chapter.Scenes.Count,
             PagesCount: chapter.Pages.Count,
             Status: chapter.Status,
-            PublishedAt: chapter.PublishedAt
+            PublishedAt: chapter.PublishedAt,
+            Outline: chapter.Outline
         ));
     }
 }

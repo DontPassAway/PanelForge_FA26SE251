@@ -15,7 +15,8 @@ public sealed record ChapterDto(
     int ScenesCount,
     int PagesCount,
     ChapterStatus Status = ChapterStatus.InProduction,
-    DateTime? PublishedAt = null
+    DateTime? PublishedAt = null,
+    string? Outline = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -47,7 +48,8 @@ public sealed record ChapterDetailDto(
     IReadOnlyList<ChapterSceneSummaryDto> Scenes,
     IReadOnlyList<ChapterPageSummaryDto> Pages,
     ChapterStatus Status = ChapterStatus.InProduction,
-    DateTime? PublishedAt = null
+    DateTime? PublishedAt = null,
+    string? Outline = null
 );
 
 public sealed record CreateChapterRequest(
@@ -59,5 +61,6 @@ public sealed record CreateChapterRequest(
 public sealed record UpdateChapterRequest(
     string? Title,
     DateOnly? TargetReleaseDate,
-    bool IncrementVersion = false
+    bool IncrementVersion = false,
+    string? Outline = null
 );

@@ -797,6 +797,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_initial_version");
 
+                    b.Property<DateTime?>("LockedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("locked_at");
+
+                    b.Property<Guid?>("LockedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("locked_by_id");
+
                     b.Property<string>("SnapshotJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -935,6 +943,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("Outline")
+                        .HasColumnType("text")
+                        .HasColumnName("outline");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamptz")
@@ -1478,6 +1490,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("release_schedule_json");
 
+                    b.Property<string>("StoryArc")
+                        .HasColumnType("text")
+                        .HasColumnName("story_arc");
+
                     b.Property<string>("Synopsis")
                         .HasColumnType("text")
                         .HasColumnName("synopsis");
@@ -1647,6 +1663,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("revoked_at");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<DateTime>("SessionStartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("session_started_at");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -2542,6 +2566,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<int?>("MaxConcurrentSessions")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_concurrent_sessions");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("varchar(255)")
@@ -2550,6 +2578,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
+
+                    b.Property<int?>("SessionIdleTimeoutMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_idle_timeout_minutes");
+
+                    b.Property<int?>("SessionLifetimeMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_lifetime_minutes");
 
                     b.Property<long>("StorageQuotaBytes")
                         .ValueGeneratedOnAdd()
@@ -2624,6 +2660,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("last_reset_at");
 
+                    b.Property<long>("MonthlyImageQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("monthly_image_quota");
+
                     b.Property<long>("MonthlyTokenQuota")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
@@ -2642,6 +2684,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
+
+                    b.Property<long>("UsedImagesCurrentMonth")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("used_images_current_month");
 
                     b.Property<long>("UsedTokensCurrentMonth")
                         .ValueGeneratedOnAdd()

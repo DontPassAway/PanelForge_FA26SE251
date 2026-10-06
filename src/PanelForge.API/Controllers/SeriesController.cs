@@ -132,7 +132,8 @@ public sealed class SeriesController : ControllerBase
             PipelineDefinitionId: body.PipelineDefinitionId,
             Genre: body.Genre,
             Format: body.Format,
-            ReleaseScheduleJson: body.ReleaseScheduleJson
+            ReleaseScheduleJson: body.ReleaseScheduleJson,
+            StoryArc: body.StoryArc
         );
 
         var result = await _mediator.Send(command, cancellationToken);

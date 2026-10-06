@@ -49,7 +49,8 @@ public sealed class GetSeriesListQueryHandler : IRequestHandler<GetSeriesListQue
                 s.CreatedAt,
                 s.UpdatedAt,
                 s.CreatedBy,
-                s.Chapters.Count
+                s.Chapters.Count,
+                s.StoryArc
             ))
             .ToListAsync(cancellationToken);
 

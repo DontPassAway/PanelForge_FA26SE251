@@ -40,6 +40,10 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
                .HasDefaultValue(0L)
                .IsRequired();
 
+        builder.Property(w => w.SessionLifetimeMinutes).HasColumnName("session_lifetime_minutes").HasColumnType("integer");
+        builder.Property(w => w.SessionIdleTimeoutMinutes).HasColumnName("session_idle_timeout_minutes").HasColumnType("integer");
+        builder.Property(w => w.MaxConcurrentSessions).HasColumnName("max_concurrent_sessions").HasColumnType("integer");
+
         builder.Property(w => w.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

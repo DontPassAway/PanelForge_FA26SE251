@@ -20,6 +20,10 @@ public sealed class WriterAgent
         sb.AppendLine($"[[agent:writer]] [[round:{round}]] [[direction:{ctx.ReadingDirection}]]");
         sb.AppendLine("## Brief (dữ liệu)").AppendLine(ctx.Brief).AppendLine();
         sb.AppendLine("## Scene").AppendLine($"{ctx.SceneHeading} — {ctx.SceneSummary}").AppendLine();
+        if (!string.IsNullOrWhiteSpace(ctx.SeriesStoryArc))
+            sb.AppendLine("## Story arc của Series (dữ liệu)").AppendLine(ctx.SeriesStoryArc).AppendLine();
+        if (!string.IsNullOrWhiteSpace(ctx.ChapterOutline))
+            sb.AppendLine($"## Outline chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(ctx.ChapterOutline).AppendLine();
         sb.AppendLine($"## Bible hiệu lực tại chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(PromptText.BibleBlock(ctx, keys)).AppendLine();
         sb.AppendLine("## Script có sẵn trong scene (dữ liệu)").AppendLine(PromptText.BaselineBlock(ctx, keys)).AppendLine();
 

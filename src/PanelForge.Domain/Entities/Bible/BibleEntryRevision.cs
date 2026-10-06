@@ -18,9 +18,21 @@ public class BibleEntryRevision : BaseEntity
     public int EffectiveFromChapterNumber { get; private set; } = 1;
     public bool IsInitialVersion { get; private set; } = false;
 
+    /// <summary>V1.2: Producer đã duyệt và khoá revision này làm tham chiếu. Chỉ thêm metadata, nội dung (snapshot, hash) vẫn bất biến; không có thao tác mở khoá.</summary>
+    public DateTime? LockedAt { get; private set; }
+    public Guid? LockedById { get; private set; }
+    public bool IsLocked => LockedAt.HasValue;
+
     public BibleEntry BibleEntry { get; private set; } = default!;
 
     private BibleEntryRevision() { }
+
+    public void Lock(Guid userId)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
+        LockedAt = DateTime.UtcNow;
+        LockedById = userId;
+    }
 
     public static BibleEntryRevision Create(
         Guid bibleEntryId,

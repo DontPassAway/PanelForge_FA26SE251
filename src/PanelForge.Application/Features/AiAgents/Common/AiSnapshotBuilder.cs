@@ -37,7 +37,10 @@ internal static class AiSnapshotBuilder
             .Select(l => new BaselineScriptLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection))
             .ToListAsync(ct);
 
-        var snapshot = new RunSnapshot(chapter.ChapterNumber, scene.Heading ?? $"Scene {scene.SceneNumber}", scene.Summary, entries, lines);
+        var storyArc = await db.Series.AsNoTracking()
+            .Where(s => s.Id == chapter.SeriesId).Select(s => s.StoryArc).FirstOrDefaultAsync(ct);
+        var snapshot = new RunSnapshot(chapter.ChapterNumber, scene.Heading ?? $"Scene {scene.SceneNumber}", scene.Summary, entries, lines,
+            SeriesStoryArc: storyArc, ChapterOutline: chapter.Outline);
         if (type is not (AiWorkflowType.Editor or AiWorkflowType.Artist or AiWorkflowType.Letterer)) return snapshot;
 
         var layoutRevision = await AiWorkflowFacts.LatestLayoutAsync(db, scene.Id, ct);

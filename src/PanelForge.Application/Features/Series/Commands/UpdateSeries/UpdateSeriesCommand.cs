@@ -16,7 +16,8 @@ public sealed record UpdateSeriesCommand(
     Guid? PipelineDefinitionId,
     string? Genre = null,
     string? Format = null,
-    string? ReleaseScheduleJson = null
+    string? ReleaseScheduleJson = null,
+    string? StoryArc = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCommand, Result<SeriesDto>>
@@ -45,7 +46,8 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
                 command.ReadingDirection,
                 command.Genre,
                 command.Format,
-                command.ReleaseScheduleJson
+                command.ReleaseScheduleJson,
+                command.StoryArc
             );
             series.SetPipelineDefinition(command.PipelineDefinitionId);
             series.UpdatedBy = command.UserId.ToString();
@@ -70,7 +72,8 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,
-            ChaptersCount: series.Chapters.Count
+            ChaptersCount: series.Chapters.Count,
+            StoryArc: series.StoryArc
         ));
     }
 }

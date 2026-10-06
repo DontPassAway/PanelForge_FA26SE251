@@ -18,6 +18,7 @@ using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspace;
 using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceById;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceMembers;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -180,6 +181,18 @@ public class WorkspacesController : ControllerBase
         {
             message = "Theo quy định nghiệp vụ (UC-02), chỉ Administrator mới có quyền cấu hình AI Provider và hạn mức Token cho Workspace. Producer chỉ có quyền xem (Read-Only)."
         });
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/usage
+    /// Mức dùng storage và token AI so với giới hạn của Workspace (NFR Workspace Resource Governance).
+    /// </summary>
+    [HttpGet("{id:guid}/usage")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceUsageQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>

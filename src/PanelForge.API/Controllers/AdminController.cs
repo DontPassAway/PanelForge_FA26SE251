@@ -36,6 +36,9 @@ using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPi
 using PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspaceSessionPolicy;
+using PanelForge.Application.Features.Workspaces.Models;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceSessionPolicy;
 using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
 using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
 using PanelForge.Application.Features.AiUsage.Queries.ExportAiUsageRecords;
@@ -333,7 +336,8 @@ public class AdminController : ControllerBase
             ApiKey: request.ApiKey,
             IsEnabled: request.IsEnabled,
             MonthlyTokenQuota: request.MonthlyTokenQuota,
-            AllowedModels: request.AllowedModels
+            AllowedModels: request.AllowedModels,
+            MonthlyImageQuota: request.MonthlyImageQuota
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -342,6 +346,36 @@ public class AdminController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    // ─── V1.2: Workspace Session Policy (Admin Only) ──────────────────────────
+
+    /// <summary>GET /api/admin/workspaces/{workspaceId}/session-policy — thời gian sống, idle timeout, số phiên đồng thời.</summary>
+    [HttpGet("workspaces/{workspaceId:guid}/session-policy")]
+    public async Task<IActionResult> GetWorkspaceSessionPolicy(Guid workspaceId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceSessionPolicyQuery(workspaceId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : SessionPolicyError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/session-policy — thay toàn bộ policy (field null = bỏ giới hạn đó).
+    /// Áp dụng ở lần đăng nhập / làm mới token tiếp theo của các thành viên.
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/session-policy")]
+    public async Task<IActionResult> UpdateWorkspaceSessionPolicy(
+        Guid workspaceId,
+        [FromBody] UpdateWorkspaceSessionPolicyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateWorkspaceSessionPolicyCommand(
+            workspaceId, request.SessionLifetimeMinutes, request.IdleTimeoutMinutes, request.MaxConcurrentSessions), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : SessionPolicyError(result);
+    }
+
+    private IActionResult SessionPolicyError<T>(Result<T> result)
+        => result.ErrorCode == ResultErrorCodes.NotFound
+            ? NotFound(new { message = result.ErrorMessage })
+            : BadRequest(new { message = result.ErrorMessage });
 
     // ─── BR-22: Studio Creation Permission ────────────────────────────────────
 

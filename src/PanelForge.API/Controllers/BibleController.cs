@@ -6,6 +6,7 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
+using PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
@@ -148,6 +149,38 @@ public sealed class BibleController : ControllerBase
         );
 
         var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/lock
+    /// Producer duyệt và khoá một revision của character sheet làm tham chiếu (V1.2). Không mở khoá được:
+    /// muốn thay thì thêm revision mới có hiệu lực từ chương khác.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/lock")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> LockBibleEntryRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new LockBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId()), cancellationToken);
         if (!result.IsSuccess)
         {
             return result.ErrorCode switch

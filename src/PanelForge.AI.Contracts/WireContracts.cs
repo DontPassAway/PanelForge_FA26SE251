@@ -44,7 +44,9 @@ public sealed record AgentContext(
     StoryboardLayout? ExistingLayout = null,
     ArtistContext? Artist = null,
     LetteringContext? Lettering = null,
-    ProgressContext? Progress = null)
+    ProgressContext? Progress = null,
+    string? SeriesStoryArc = null,
+    string? ChapterOutline = null)
 {
     /// <summary>Dữ kiện đầu vào code đã kiểm: cơ sở để <see cref="WorkflowRules"/> quyết định hành động hợp lệ.</summary>
     public WorkflowInputs Inputs => new(

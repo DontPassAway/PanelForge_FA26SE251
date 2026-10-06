@@ -12,6 +12,8 @@ public class Series : BaseEntity
     public Guid? PipelineDefinitionId { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Synopsis { get; private set; }
+    /// <summary>V1.2: story arc của Series (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
+    public string? StoryArc { get; private set; }
     public ReadingDirection ReadingDirection { get; private set; }
     public string Genre { get; private set; } = "Action";
     public string Format { get; private set; } = "Manga";
@@ -60,10 +62,12 @@ public class Series : BaseEntity
         ReadingDirection readingDirection,
         string? genre = null,
         string? format = null,
-        string? releaseScheduleJson = null)
+        string? releaseScheduleJson = null,
+        string? storyArc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         Title = title.Trim();
+        if (storyArc != null) StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
         Synopsis = synopsis?.Trim();
         ReadingDirection = readingDirection;
         if (!string.IsNullOrWhiteSpace(genre)) Genre = genre.Trim();

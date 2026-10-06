@@ -50,10 +50,18 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         if (stored.IsExpired || !stored.User.IsActive)
             return Unauthorized();
 
+        // V1.2: session policy theo Workspace. Chỉ từ chối, không thu hồi: token bị từ chối mà bị dùng lại sẽ không bị
+        // coi là "token đã thu hồi bị lộ" và kéo theo thu hồi các phiên khác của user.
+        var now = DateTime.UtcNow;
+        var policy = await SessionPolicy.ForUserAsync(_dbContext, stored.UserId, cancellationToken);
+        if (policy.IsSessionExpired(stored.SessionStartedAt, now) || policy.IsIdle(stored.CreatedAt, now))
+            return Unauthorized();
+
         stored.Revoke();
         var newToken = AuthSecrets.NewRefreshToken();
         _dbContext.RefreshTokens.Add(Domain.Entities.Identity.RefreshToken.Create(
-            stored.UserId, AuthSecrets.HashToken(newToken), DateTime.UtcNow.Add(AuthSecrets.RefreshTokenLifetime)));
+            stored.UserId, AuthSecrets.HashToken(newToken), policy.ExpiryFor(stored.SessionStartedAt, now),
+            stored.SessionId, stored.SessionStartedAt));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(AuthResponseFactory.Build(

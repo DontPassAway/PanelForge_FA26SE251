@@ -70,6 +70,14 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasDefaultValue(false)
                .IsRequired();
 
+        builder.Property(r => r.LockedAt)
+               .HasColumnName("locked_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(r => r.LockedById)
+               .HasColumnName("locked_by_id")
+               .HasColumnType("uuid");
+
         builder.Property(r => r.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

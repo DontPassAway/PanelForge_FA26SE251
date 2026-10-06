@@ -13,6 +13,10 @@ public class WorkspaceAiConfig : BaseEntity
     public bool IsEnabled { get; private set; } = true;
     public long MonthlyTokenQuota { get; private set; } = 1_000_000;
     public long UsedTokensCurrentMonth { get; private set; } = 0;
+
+    /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
+    public long MonthlyImageQuota { get; private set; } = 0;
+    public long UsedImagesCurrentMonth { get; private set; } = 0;
     public string AllowedModelsJson { get; private set; } = "[\"gemini-1.5-flash\",\"gemini-1.5-pro\"]";
     public DateTime? LastResetAt { get; private set; }
 
@@ -74,9 +78,34 @@ public class WorkspaceAiConfig : BaseEntity
         }
     }
 
+    public void SetMonthlyImageQuota(long quota)
+    {
+        MonthlyImageQuota = Math.Max(0, quota);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Còn đủ quota để sinh thêm <paramref name="count"/> ảnh không (gọi TRƯỚC khi sinh, như HasQuotaRemaining với token).</summary>
+    public bool HasImageQuotaFor(long count)
+    {
+        if (!IsEnabled) return false;
+        if (MonthlyImageQuota <= 0) return true; // unlimited
+        return UsedImagesCurrentMonth + count <= MonthlyImageQuota;
+    }
+
+    /// <summary>Ghi nhận ảnh đã sinh thành công (gọi SAU khi sinh, như RecordUsage với token).</summary>
+    public void RecordImages(long count)
+    {
+        if (count > 0)
+        {
+            UsedImagesCurrentMonth += count;
+            UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
     public void ResetMonthlyUsage()
     {
         UsedTokensCurrentMonth = 0;
+        UsedImagesCurrentMonth = 0;
         LastResetAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }

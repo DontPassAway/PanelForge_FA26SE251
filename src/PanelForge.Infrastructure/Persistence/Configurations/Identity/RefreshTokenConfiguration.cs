@@ -17,6 +17,8 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
         builder.HasIndex(t => t.TokenHash).IsUnique().HasDatabaseName("ix_refresh_tokens_token_hash");
         builder.Property(t => t.ExpiresAt).HasColumnName("expires_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(t => t.RevokedAt).HasColumnName("revoked_at").HasColumnType("timestamptz");
+        builder.Property(t => t.SessionId).HasColumnName("session_id").HasColumnType("uuid").IsRequired();
+        builder.Property(t => t.SessionStartedAt).HasColumnName("session_started_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
         builder.Property(t => t.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false).IsRequired();

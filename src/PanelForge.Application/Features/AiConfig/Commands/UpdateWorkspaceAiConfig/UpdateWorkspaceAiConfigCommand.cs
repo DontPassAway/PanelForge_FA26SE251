@@ -15,7 +15,8 @@ public sealed record UpdateWorkspaceAiConfigCommand(
     string? ApiKey,
     bool IsEnabled,
     long MonthlyTokenQuota,
-    IReadOnlyList<string> AllowedModels
+    IReadOnlyList<string> AllowedModels,
+    long? MonthlyImageQuota = null
 ) : IRequest<Result<WorkspaceAiConfigDto>>;
 
 public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<UpdateWorkspaceAiConfigCommand, Result<WorkspaceAiConfigDto>>
@@ -102,6 +103,10 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
             );
         }
 
+        // V1.2: null = giữ nguyên quota ảnh hiện tại
+        if (request.MonthlyImageQuota.HasValue)
+            config.SetMonthlyImageQuota(request.MonthlyImageQuota.Value);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<WorkspaceAiConfigDto>.Success(new WorkspaceAiConfigDto(
@@ -115,7 +120,9 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
             AllowedModels: allowedModels,
             LastResetAt: config.LastResetAt,
             CreatedAt: config.CreatedAt,
-            UpdatedAt: config.UpdatedAt
+            UpdatedAt: config.UpdatedAt,
+            MonthlyImageQuota: config.MonthlyImageQuota,
+            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth
         ));
     }
 }

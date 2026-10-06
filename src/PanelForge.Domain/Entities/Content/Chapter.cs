@@ -10,6 +10,8 @@ public class Chapter : BaseEntity
     public decimal ChapterNumber { get; private set; }
     public string? Title { get; private set; }
     public DateOnly? TargetReleaseDate { get; private set; }
+    /// <summary>V1.2: outline của chương (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
+    public string? Outline { get; private set; }
     public long VersionVector { get; private set; } = 0;
 
     /// <summary>E-02: chuyển trạng thái do CF5 đảm nhiệm; mặc định InProduction.</summary>
@@ -40,10 +42,11 @@ public class Chapter : BaseEntity
         };
     }
 
-    public void UpdateDetails(string? title, DateOnly? targetReleaseDate)
+    public void UpdateDetails(string? title, DateOnly? targetReleaseDate, string? outline = null)
     {
         Title = title?.Trim();
         TargetReleaseDate = targetReleaseDate;
+        if (outline != null) Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
     }
 
     public void IncrementVersion() => VersionVector++;

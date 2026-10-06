@@ -15,7 +15,8 @@ public sealed record SeriesDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    int ChaptersCount
+    int ChaptersCount,
+    string? StoryArc = null
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -41,7 +42,8 @@ public sealed record SeriesDetailDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    IReadOnlyList<SeriesChapterSummaryDto> Chapters
+    IReadOnlyList<SeriesChapterSummaryDto> Chapters,
+    string? StoryArc = null
 );
 
 public sealed record CreateSeriesRequest(
@@ -56,5 +58,6 @@ public sealed record UpdateSeriesRequest(
     Guid? PipelineDefinitionId,
     string? Genre = null,
     string? Format = null,
-    string? ReleaseScheduleJson = null
+    string? ReleaseScheduleJson = null,
+    string? StoryArc = null
 );

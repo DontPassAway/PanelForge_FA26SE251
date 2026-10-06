@@ -55,6 +55,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("title")
                .HasColumnType("varchar(500)");
 
+        builder.Property(c => c.Outline)
+               .HasColumnName("outline")
+               .HasColumnType("text");
+
         builder.Property(c => c.TargetReleaseDate)
                .HasColumnName("target_release_date")
                .HasColumnType("date");

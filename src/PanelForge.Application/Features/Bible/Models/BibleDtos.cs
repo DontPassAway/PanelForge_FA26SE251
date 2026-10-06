@@ -13,7 +13,10 @@ public sealed record BibleEntryRevisionDto(
     Guid? AssociatedChapterId,
     int EffectiveFromChapterNumber,
     bool IsInitialVersion,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    bool IsLocked = false,
+    DateTime? LockedAt = null,
+    Guid? LockedById = null
 );
 
 public sealed record BibleEntryDto(
