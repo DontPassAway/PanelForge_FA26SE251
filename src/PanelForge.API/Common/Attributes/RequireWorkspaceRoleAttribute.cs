@@ -77,6 +77,33 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
             workspaceId = chapterWsId.Value;
         }
 
+        else if (context.RouteData.Values.TryGetValue("pageId", out var pageVal) && pageVal is string pageStr && Guid.TryParse(pageStr, out var parsedPageId))
+        {
+            var pageWsId = await _authorizationService.GetWorkspaceIdOfPageAsync(
+                parsedPageId, context.HttpContext.RequestAborted);
+
+            if (pageWsId == null)
+            {
+                context.Result = new NotFoundObjectResult(new { message = "Không tìm thấy Page tương ứng." });
+                return;
+            }
+
+            workspaceId = pageWsId.Value;
+        }
+        else if (context.RouteData.Values.TryGetValue("panelId", out var panelVal) && panelVal is string panelStr && Guid.TryParse(panelStr, out var parsedPanelId))
+        {
+            var panelWsId = await _authorizationService.GetWorkspaceIdOfPanelAsync(
+                parsedPanelId, context.HttpContext.RequestAborted);
+
+            if (panelWsId == null)
+            {
+                context.Result = new NotFoundObjectResult(new { message = "Không tìm thấy Panel tương ứng." });
+                return;
+            }
+
+            workspaceId = panelWsId.Value;
+        }
+
         if (workspaceId == Guid.Empty)
         {
             context.Result = new BadRequestObjectResult(new { message = "Không tìm thấy tham số Workspace ID, Series ID hoặc Chapter ID hợp lệ trên đường dẫn." });

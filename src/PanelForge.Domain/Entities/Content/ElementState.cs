@@ -16,6 +16,18 @@ public sealed class ElementState
     public string? Content { get; set; }  // Text nội dung (balloon/narration)
     public string? AssetId { get; set; } // Asset ID (artwork layer)
 
+    // BR-05: liên kết text element ↔ ScriptLine
+    public Guid? ScriptLineId { get; set; }
+    public Guid? SpeakerId { get; set; }
+    public string? RenderedText { get; set; }
+    public string? SourceLineText { get; set; }
+
+    // BR-20: lý do Letterer xác nhận cảnh báo tràn chữ (mất hiệu lực khi đổi chữ hoặc kích thước hộp)
+    public string? OverflowAckReason { get; set; }
+
+    // Thứ tự đọc do Letterer ghi đè (null = suy từ vị trí và hướng đọc của Series)
+    public int? ReadingOrder { get; set; }
+
     /// <summary>
     /// TRUE = Element đã bị "xóa" (Soft Delete via ElementRemovedEvent).
     /// Không bao giờ hard delete khỏi Event Store.

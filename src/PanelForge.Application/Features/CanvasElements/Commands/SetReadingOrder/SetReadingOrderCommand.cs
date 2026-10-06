@@ -1,0 +1,34 @@
+using MediatR;
+using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Persistence;
+
+namespace PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
+
+/// <summary>Letterer ghi đè thứ tự đọc của một text element (≥ 1), hoặc bỏ ghi đè bằng null.</summary>
+public sealed record SetReadingOrderCommand(Guid PageId, Guid ElementId, int? ReadingOrder, Guid UserId)
+    : IRequest<Result<bool>>;
+
+public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOrderCommand, Result<bool>>
+{
+    private readonly IPageRepository _pages;
+
+    public SetReadingOrderCommandHandler(IPageRepository pages) => _pages = pages;
+
+    public async Task<Result<bool>> Handle(SetReadingOrderCommand cmd, CancellationToken ct)
+    {
+        var page = await _pages.GetAsync(cmd.PageId, ct);
+        if (page is null) return Result<bool>.Failure($"Page {cmd.PageId} không tồn tại.");
+
+        try
+        {
+            page.SetReadingOrder(cmd.ElementId, cmd.ReadingOrder, cmd.UserId);
+            await _pages.SaveAsync(page, ct);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or ConcurrentPageUpdateException)
+        {
+            return Result<bool>.Failure(ex.Message);
+        }
+
+        return Result<bool>.Success(true);
+    }
+}

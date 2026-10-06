@@ -5,6 +5,7 @@ using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
+using PanelForge.UnitTests.Common;
 using Xunit;
 
 namespace PanelForge.UnitTests.Application.CanvasElements;
@@ -17,7 +18,7 @@ public class GetPageSnapshotQueryHandlerTests
     public GetPageSnapshotQueryHandlerTests()
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new GetPageSnapshotQueryHandler(_pageRepositoryMock.Object);
+        _handler = new GetPageSnapshotQueryHandler(_pageRepositoryMock.Object, InMemoryDb.Create());
     }
 
     [Fact]

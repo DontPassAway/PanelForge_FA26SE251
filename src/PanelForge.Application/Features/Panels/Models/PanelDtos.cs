@@ -9,7 +9,8 @@ public sealed record PanelDto(
     Guid? CurrentStageId,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? CreatedBy
+    string? CreatedBy,
+    Guid? SceneId = null
 );
 
 public sealed record PanelDetailDto(
@@ -21,8 +22,14 @@ public sealed record PanelDetailDto(
     Guid? CurrentStageId,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? CreatedBy
+    string? CreatedBy,
+    Guid? SceneId = null,
+    IReadOnlyList<Guid>? ScriptLineIds = null   // dòng thoại đang neo vào panel này (V1.2)
 );
+
+public sealed record AssignPanelSceneRequest(Guid? SceneId);
+
+public sealed record AssignPanelScriptLinesRequest(IReadOnlyList<Guid> ScriptLineIds);
 
 public sealed record CreatePanelRequest(
     int? PanelNumber = null,

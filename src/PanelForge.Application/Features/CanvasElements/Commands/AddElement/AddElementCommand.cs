@@ -17,11 +17,14 @@ public sealed record AddElementCommand(
     int ZIndex,
     string? Content,      // Text (dùng cho DialogueBalloon, NarrationBox)
     string? AssetId,      // Asset ID (dùng cho ArtworkLayer)
-    Guid AddedByUserId
+    Guid AddedByUserId,
+    Guid? ScriptLineId = null  // BR-05: balloon/caption/SFX gắn đúng một ScriptLine; speaker lấy từ dòng đó
 ) : IRequest<Result<AddElementResponse>>;
 
 public sealed record AddElementResponse(
     Guid ElementId,
     Guid PageId,
-    string ElementType
+    string ElementType,
+    Guid? ScriptLineId = null,
+    Guid? SpeakerId = null
 );

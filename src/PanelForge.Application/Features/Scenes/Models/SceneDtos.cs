@@ -18,7 +18,8 @@ public sealed record SceneScriptLineSummaryDto(
     int LineOrder,
     string? DialogueText,
     string? StageDirection,
-    Guid? SpeakerCharacterId
+    Guid? SpeakerCharacterId,
+    Guid? PanelId = null   // V1.2: Panel mà dòng được neo vào (null = chưa gán)
 );
 
 public sealed record SceneDetailDto(

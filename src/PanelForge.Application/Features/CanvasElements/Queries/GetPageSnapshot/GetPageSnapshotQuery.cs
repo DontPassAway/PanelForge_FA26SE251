@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 
@@ -18,7 +19,8 @@ public sealed record PageSnapshotDto(
     Guid PageId,
     long Version,
     int PageNumber,
-    IReadOnlyList<ElementSnapshotDto> Elements
+    IReadOnlyList<ElementSnapshotDto> Elements,
+    IReadOnlyList<ElementWarningDto>? Warnings = null  // BR-20: cảnh báo bằng code, không chặn nộp
 );
 
 public sealed record ElementSnapshotDto(
@@ -31,5 +33,12 @@ public sealed record ElementSnapshotDto(
     double Height,
     string? Content,
     string? AssetId,
-    bool IsRemoved
+    bool IsRemoved,
+    Guid? ScriptLineId = null,
+    Guid? SpeakerId = null,
+    string? RenderedText = null,
+    string? CurrentLineText = null,  // thoại hiện tại của ScriptLine (null nếu không gắn / dòng đã xóa)
+    bool IsStale = false,            // true khi Writer đã sửa thoại/speaker hoặc xóa dòng sau lúc gắn
+    int? ReadingOrder = null,        // thứ tự đọc Letterer ghi đè (null = suy từ vị trí)
+    string? OverflowAcknowledgedReason = null  // lý do xác nhận cảnh báo tràn chữ (BR-20), null = chưa xác nhận
 );

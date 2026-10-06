@@ -27,6 +27,9 @@ public class Assignment : BaseEntity
     public AssignmentPriority Priority { get; private set; } = AssignmentPriority.Medium;
     public AssignmentStatus Status { get; private set; } = AssignmentStatus.Assigned;
 
+    /// <summary>CF2: việc phải được Approved trước khi việc này bắt đầu (cùng Chapter, tối đa một; không được tạo chu trình).</summary>
+    public Guid? DependsOnAssignmentId { get; private set; }
+
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
     public string? LastFeedbackComment { get; private set; }
@@ -50,7 +53,8 @@ public class Assignment : BaseEntity
         string? referenceNotes = null,
         string? referenceAssetUrlsJson = null,
         DateTime? dueDate = null,
-        AssignmentPriority priority = AssignmentPriority.Medium)
+        AssignmentPriority priority = AssignmentPriority.Medium,
+        Guid? dependsOnAssignmentId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(brief);
 
@@ -68,6 +72,7 @@ public class Assignment : BaseEntity
             ReferenceAssetUrlsJson = string.IsNullOrWhiteSpace(referenceAssetUrlsJson) ? "[]" : referenceAssetUrlsJson.Trim(),
             DueDate = dueDate,
             Priority = priority,
+            DependsOnAssignmentId = dependsOnAssignmentId,
             Status = AssignmentStatus.Assigned,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -96,6 +101,16 @@ public class Assignment : BaseEntity
             throw new InvalidOperationException($"Không thể nộp tác vụ đang ở trạng thái {Status}.");
 
         Status = AssignmentStatus.Submitted;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>CF3 bước 2: Editor mở việc đã nộp để review (Submitted → UnderReview).</summary>
+    public void OpenReview()
+    {
+        if (Status != AssignmentStatus.Submitted)
+            throw new InvalidOperationException($"Chỉ mở review được việc đã nộp, hiện: {Status}.");
+
+        Status = AssignmentStatus.UnderReview;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -128,6 +143,16 @@ public class Assignment : BaseEntity
     {
         AssigneeUserId = newAssigneeUserId;
         AssignedRole = newRole;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Đặt hoặc bỏ dependency. Việc kiểm tra chu trình do handler làm (cần dữ liệu của cả Chapter).</summary>
+    public void SetDependency(Guid? dependsOnAssignmentId)
+    {
+        if (dependsOnAssignmentId == Id)
+            throw new InvalidOperationException("Assignment không thể phụ thuộc vào chính nó.");
+
+        DependsOnAssignmentId = dependsOnAssignmentId;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -22,10 +22,6 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .HasColumnType("uuid")
                .IsRequired();
 
-        builder.Property(p => p.SceneId)
-               .HasColumnName("scene_id")
-               .HasColumnType("uuid");
-
         builder.Property(p => p.PageNumber)
                .HasColumnName("page_number")
                .HasColumnType("int")
@@ -73,11 +69,6 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .WithMany(c => c.Pages)
                .HasForeignKey(p => p.ChapterId)
                .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasOne(p => p.Scene)
-               .WithMany(s => s.Pages)
-               .HasForeignKey(p => p.SceneId)
-               .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasMany(p => p.Panels)
                .WithOne(p => p.Page)

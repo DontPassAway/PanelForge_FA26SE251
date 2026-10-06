@@ -61,6 +61,9 @@ public static class DependencyInjection
                 typeof(ElementAddedEvent),
                 typeof(ElementMovedEvent),
                 typeof(ElementRemovedEvent),
+                typeof(ElementTextUpdatedEvent),
+                typeof(ElementOverflowAcknowledgedEvent),
+                typeof(ElementReadingOrderSetEvent),
                 typeof(PageDeletedEvent)
             });
 
@@ -85,6 +88,10 @@ public static class DependencyInjection
 
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
+
+        // ── Artwork assets: lưu file cục bộ + link tải ngắn hạn ký bằng Data Protection (BR-04, BR-13, BR-16) ──
+        services.AddSingleton<IAssetStorage, LocalAssetStorage>();
+        services.AddSingleton<IAssetLinkSigner, DataProtectionAssetLinkSigner>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
         services.AddDataProtection();

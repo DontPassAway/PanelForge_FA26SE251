@@ -29,7 +29,6 @@ public sealed class GetPageByIdQueryHandler
         return Result<PageDetailDto>.Success(new PageDetailDto(
             Id:                  page.Id,
             ChapterId:           page.ChapterId,
-            SceneId:             page.SceneId,
             PageNumber:          page.PageNumber,
             LayoutFormat:        page.LayoutFormat.ToString(),
             WidthPx:             page.WidthPx,

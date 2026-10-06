@@ -1,10 +1,16 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common.Attributes;
+using PanelForge.Application.Features.CanvasElements.Commands.AcknowledgeOverflow;
 using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
+using PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
+using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
 using PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
+using PanelForge.Domain.Entities.Content;
 using System.Security.Claims;
 
 namespace PanelForge.API.Controllers;
@@ -37,6 +43,7 @@ public sealed class ElementsController : ControllerBase
     /// Read Model được rebuild bằng cách replay event stream.
     /// </summary>
     [HttpGet]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(PageSnapshotDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPageSnapshot(
@@ -70,6 +77,7 @@ public sealed class ElementsController : ControllerBase
     ///   INSERT INTO mt_events (stream_id, type, data) VALUES (pageId, 'element_added', '{...}')
     /// </summary>
     [HttpPost]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(typeof(AddElementResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -88,18 +96,69 @@ public sealed class ElementsController : ControllerBase
             ZIndex:        request.ZIndex,
             Content:       request.Content,
             AssetId:       request.AssetId,
-            AddedByUserId: GetCurrentUserId()
+            AddedByUserId: GetCurrentUserId(),
+            ScriptLineId:  request.ScriptLineId
         );
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess)
-            return result.ErrorMessage!.Contains("không tồn tại")
-                ? NotFound(new { message = result.ErrorMessage })
-                : BadRequest(new { message = result.ErrorMessage });
+        if (!result.IsSuccess) return Failure(result.ErrorMessage);
 
         // 202 Accepted — Event đã được append thành công
         return Accepted(result.Value);
+    }
+
+    // ── PUT — Sửa chữ / làm mới chữ lỗi thời / gắn lại ScriptLine (BR-05) ───
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/elements/{elementId}/text
+    /// Body: { "content": "chữ mới (bỏ trống = nguyên văn dòng thoại)", "scriptLineId": "guid? (bỏ trống = giữ dòng hiện tại)" }
+    /// </summary>
+    [HttpPut("{elementId:guid}/text")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(UpdateElementTextResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateElementText(
+        Guid pageId, Guid elementId, [FromBody] UpdateElementTextRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId()),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage);
+    }
+
+    // ── POST — Xác nhận cảnh báo tràn chữ kèm lý do (BR-20) ─────────────────
+
+    /// <summary>POST /api/pages/{pageId}/elements/{elementId}/overflow-ack — Body: { "reason": "..." } (bắt buộc, ≤ 500 ký tự)</summary>
+    [HttpPost("{elementId:guid}/overflow-ack")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AcknowledgeOverflow(
+        Guid pageId, Guid elementId, [FromBody] AcknowledgeOverflowRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new AcknowledgeOverflowCommand(pageId, elementId, request.Reason, GetCurrentUserId()), cancellationToken);
+        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ." }) : Failure(result.ErrorMessage);
+    }
+
+    // ── PUT — Ghi đè thứ tự đọc (Letterer) ───────────────────────────────────
+
+    /// <summary>PUT /api/pages/{pageId}/elements/{elementId}/reading-order — Body: { "readingOrder": 3 } hoặc null để bỏ ghi đè</summary>
+    [HttpPut("{elementId:guid}/reading-order")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetReadingOrder(
+        Guid pageId, Guid elementId, [FromBody] SetReadingOrderRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId()), cancellationToken);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage);
     }
 
     // ── PUT — Di chuyển / Resize Element (Update → ElementMovedEvent APPEND) ─
@@ -118,6 +177,7 @@ public sealed class ElementsController : ControllerBase
     /// APPEND ElementMovedEvent vào stream với vị trí cũ và mới (audit trail).
     /// </summary>
     [HttpPut("{elementId:guid}/position")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -165,6 +225,7 @@ public sealed class ElementsController : ControllerBase
     /// Để xem Element đã "xóa": GET /elements?includeRemoved=true
     /// </summary>
     [HttpDelete("{elementId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -198,6 +259,18 @@ public sealed class ElementsController : ControllerBase
     }
 
     // ── Helper ─────────────────────────────────────────────────────────────
+    private IActionResult Failure(string? message)
+    {
+        message ??= "Yêu cầu không hợp lệ.";
+        if (message.Contains(Page.DuplicateBindingCode))
+            return Conflict(new { message, code = Page.DuplicateBindingCode });
+        if (message.Contains("Xung đột"))
+            return Conflict(new { message });
+        return message.Contains("không tồn tại")
+            ? NotFound(new { message })
+            : BadRequest(new { message });
+    }
+
     private Guid GetCurrentUserId()
     {
         var str = User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -217,8 +290,15 @@ public sealed record AddElementRequest(
     double Height,
     int ZIndex,
     string? Content,
-    string? AssetId
+    string? AssetId,
+    Guid? ScriptLineId = null  // BR-05: chỉ cho SPEECH_BALLOON | THOUGHT_BALLOON | NARRATION_BOX | SOUND_EFFECT
 );
+
+public sealed record UpdateElementTextRequest(string? Content, Guid? ScriptLineId);
+
+public sealed record AcknowledgeOverflowRequest(string Reason);
+
+public sealed record SetReadingOrderRequest(int? ReadingOrder);
 
 public sealed record MoveElementRequest(
     double NewX,

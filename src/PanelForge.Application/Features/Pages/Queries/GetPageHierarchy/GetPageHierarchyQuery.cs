@@ -36,14 +36,14 @@ public sealed class GetPageHierarchyQueryHandler : IRequestHandler<GetPageHierar
                 BoundingBox: p.BoundingBox,
                 ReadingOrder: p.ReadingOrder,
                 CurrentStageId: p.CurrentStageId,
-                CreatedAt: p.CreatedAt
+                CreatedAt: p.CreatedAt,
+                SceneId: p.SceneId
             ))
             .ToList();
 
         var hierarchy = new PageContentHierarchyDto(
             Id: page.Id,
             ChapterId: page.ChapterId,
-            SceneId: page.SceneId,
             PageNumber: page.PageNumber,
             LayoutFormat: page.LayoutFormat.ToString(),
             WidthPx: page.WidthPx,

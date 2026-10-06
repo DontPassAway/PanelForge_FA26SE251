@@ -1,0 +1,132 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Assets.Models;
+using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Domain.Entities.Assets;
+using PanelForge.Domain.Enums;
+
+namespace PanelForge.Application.Features.Assets.Commands.UploadArtwork;
+
+/// <summary>
+/// CF2 bước 10: Artist tải artwork của một Page ở một Stage. BR-04: server tự tính SHA-256 và so với hash client gửi.
+/// BR-13: nội dung trùng trong Workspace thì dùng lại Asset (không lưu thêm byte, không tốn quota), chỉ tạo AssetReference mới.
+/// Chỉ người đang giữ việc InProgress ở đúng stage cho Page này mới tải lên được.
+/// </summary>
+public sealed record UploadArtworkCommand(
+    Guid ChapterId,
+    Guid PageId,
+    Guid StageId,
+    Guid UserId,
+    byte[] Content,
+    string? FileName,
+    string? ClientSha256,
+    string? LayerType
+) : IRequest<Result<AssetReferenceDto>>;
+
+public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkCommand, Result<AssetReferenceDto>>
+{
+    private readonly IPanelForgeDbContext _db;
+    private readonly IAssetStorage _storage;
+
+    public UploadArtworkCommandHandler(IPanelForgeDbContext db, IAssetStorage storage)
+    {
+        _db = db;
+        _storage = storage;
+    }
+
+    public async Task<Result<AssetReferenceDto>> Handle(UploadArtworkCommand cmd, CancellationToken ct)
+    {
+        static Result<AssetReferenceDto> Fail(string msg, string code = ResultErrorCodes.Validation) =>
+            Result<AssetReferenceDto>.Failure(msg, code);
+
+        // ── Kiểm nội dung (không cần DB) ──
+        if (cmd.Content.Length == 0)
+            return Fail("File rỗng.");
+        if (cmd.Content.Length > AssetRules.MaxArtworkBytes)
+            return Fail($"File vượt giới hạn {AssetRules.MaxArtworkBytes / (1024 * 1024)} MB.");
+
+        var clientHash = AssetRules.NormalizeSha256(cmd.ClientSha256);
+        if (clientHash is null)
+            return Fail("clientSha256 phải là SHA-256 dạng 64 ký tự hex.");
+
+        var contentType = AssetRules.DetectImageContentType(cmd.Content);
+        if (contentType is null)
+            return Fail("Chỉ nhận ảnh PNG, JPEG hoặc WebP.");
+
+        // BR-04: hash client chỉ để tham khảo, server tính lại và từ chối nếu lệch
+        var hash = AssetRules.ComputeSha256(cmd.Content);
+        if (hash != clientHash)
+            return Fail("SHA-256 client gửi không khớp nội dung server nhận được, file bị từ chối (BR-04).");
+
+        // ── Ngữ cảnh: Chapter, Page, Stage (BR-03, BR-12) ──
+        var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
+        if (chapter is null)
+            return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
+        if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
+            return Fail(locked, ResultErrorCodes.Conflict);
+
+        if (!await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == cmd.PageId && p.ChapterId == chapter.Id, ct))
+            return Fail("Page không thuộc Chapter.", ResultErrorCodes.NotFound);
+
+        var pipelineIds = await _db.PipelineDefinitions.AsNoTracking()
+            .Where(d => d.SeriesId == chapter.SeriesId).Select(d => d.Id).ToListAsync(ct);
+        if (!await _db.PipelineStages.AsNoTracking().AnyAsync(
+                s => s.Id == cmd.StageId && pipelineIds.Contains(s.PipelineDefinitionId), ct))
+            return Fail("Stage không thuộc pipeline của Series.");
+
+        // Layer khai báo phải là một loại Element có thật
+        var layerType = string.IsNullOrWhiteSpace(cmd.LayerType) ? null : cmd.LayerType.Trim();
+        if (layerType is not null && !await _db.ElementTypes.AnyAsync(t => t.Code == layerType, ct))
+            return Fail($"Loại layer '{layerType}' không tồn tại.");
+
+        // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage cho Page này ──
+        var panelIds = await _db.Panels.AsNoTracking().Where(p => p.PageId == cmd.PageId).Select(p => p.Id).ToListAsync(ct);
+        var holdsTheWork = await _db.Assignments.AnyAsync(a =>
+            a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
+            a.Status == AssignmentStatus.InProgress &&
+            ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
+             (a.EntityType == WorkflowEntityType.Panel && panelIds.Contains(a.TargetEntityId))), ct);
+        if (!holdsTheWork)
+            return Fail("Chỉ người đang làm việc (InProgress) ở stage này cho Page này mới được tải artwork.", ResultErrorCodes.Forbidden);
+
+        // ── BR-13: dùng lại Asset nếu nội dung đã có; ngược lại giữ chỗ quota rồi lưu ──
+        var workspaceId = await _db.Series.AsNoTracking()
+            .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+
+        var asset = await _db.Assets.FirstOrDefaultAsync(a => a.WorkspaceId == workspaceId && a.Sha256 == hash, ct);
+        var reused = asset is not null;
+        if (asset is null)
+        {
+            var workspace = await _db.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, ct);
+            if (workspace is null)
+                return Fail("Workspace không tồn tại.", ResultErrorCodes.NotFound);
+            if (!workspace.TryReserveStorage(cmd.Content.Length))
+                return Fail("Vượt quota dung lượng của Workspace, không thể tải thêm.", ResultErrorCodes.Conflict);
+
+            asset = Asset.Create(workspaceId, hash, cmd.Content.Length, contentType);
+            // Lưu file trước khi ghi DB: nếu Save lỗi chỉ để lại file mồ côi theo hash, vô hại và dùng lại được
+            await _storage.SaveAsync(asset.StorageKey, cmd.Content, ct);
+            _db.Assets.Add(asset);
+        }
+
+        // Phiên bản mới của (Page, Stage), chỉ thêm (BR-01)
+        var versions = await _db.AssetReferences.AsNoTracking()
+            .Where(r => r.PageId == cmd.PageId && r.PipelineStageId == cmd.StageId)
+            .Select(r => r.VersionNumber).ToListAsync(ct);
+
+        var reference = AssetReference.Create(
+            asset.Id, workspaceId, chapter.Id, cmd.PageId, cmd.StageId,
+            versions.Count == 0 ? 1 : versions.Max() + 1,
+            layerType, AssetRules.SanitizeFileName(cmd.FileName), cmd.UserId);
+        reference.CreatedBy = cmd.UserId.ToString();
+
+        _db.AssetReferences.Add(reference);
+        await _db.SaveChangesAsync(ct);
+
+        return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
+    }
+}

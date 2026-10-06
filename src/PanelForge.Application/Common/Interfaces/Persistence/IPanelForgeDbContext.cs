@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Entities.Bible;
@@ -44,6 +45,13 @@ public interface IPanelForgeDbContext
     DbSet<PipelineStage> PipelineStages { get; }
     DbSet<StageTransition> StageTransitions { get; }
     DbSet<Assignment> Assignments { get; }
+    DbSet<StageProgress> StageProgresses { get; }
+    DbSet<Notification> Notifications { get; }
+    DbSet<Submission> Submissions { get; }
+    DbSet<ChangeRequest> ChangeRequests { get; }
+    DbSet<Asset> Assets { get; }
+    DbSet<AssetReference> AssetReferences { get; }
+    DbSet<AssetAccessLog> AssetAccessLogs { get; }
     DbSet<Chapter> Chapters { get; }
     DbSet<Scene> Scenes { get; }
     DbSet<ScriptLine> ScriptLines { get; }

@@ -10,6 +10,5 @@ public sealed record CreatePageCommand(
     string? LayoutFormat = "StandardPage",
     int WidthPx = 1200,
     int HeightPx = 1800,
-    int Dpi = 300,
-    Guid? SceneId = null
+    int Dpi = 300
 ) : IRequest<Result<PageDto>>;

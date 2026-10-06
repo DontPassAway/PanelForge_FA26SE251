@@ -26,8 +26,7 @@ public class PageProjectionTests
             LayoutFormat: LayoutFormat.StandardPage,
             WidthPx: 800,
             HeightPx: 1200,
-            Dpi: 300,
-            SceneId: null
+            Dpi: 300
         );
 
         var page = _projection.Create(createdEvent);

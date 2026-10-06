@@ -43,7 +43,8 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
                .HasForeignKey(l => l.SceneId)
                .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(s => s.Pages)
+        // V1.2: Panel thuộc tối đa một Scene; xoá Scene thì Panel giữ lại (mất liên kết)
+        builder.HasMany(s => s.Panels)
                .WithOne(p => p.Scene)
                .HasForeignKey(p => p.SceneId)
                .OnDelete(DeleteBehavior.SetNull);

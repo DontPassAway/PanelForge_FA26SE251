@@ -337,19 +337,19 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
         // Các ScriptLine mà layout trỏ tới phải thật sự tồn tại trong Scene (BR-03)
         var lineIds = script.Lines.Select(l => l.LineId).ToList();
-        var liveCount = await _db.ScriptLines.CountAsync(l => l.SceneId == s.SceneId && lineIds.Contains(l.Id), ct);
-        if (liveCount != lineIds.Count)
+        var liveLines = await _db.ScriptLines.Where(l => l.SceneId == s.SceneId && lineIds.Contains(l.Id)).ToListAsync(ct);
+        if (liveLines.Count != lineIds.Count)
             return Applied.Fail("Script của Scene không còn khớp script đã Accept (đã bị sửa).", ResultErrorCodes.Conflict);
 
-        // Không ghi đè/xoá Page có sẵn của Scene: layout AI chỉ thêm vào Scene chưa có Page
-        if (await _db.Pages.AnyAsync(p => p.SceneId == s.SceneId, ct))
-            return Applied.Fail("Scene đã có Page; xoá thủ công trước khi áp dụng layout AI.", ResultErrorCodes.Conflict);
+        // V1.2: Scene không chứa Page. Không ghi đè/xoá Panel có sẵn của Scene: layout AI chỉ thêm vào Scene chưa có Panel
+        if (await _db.Panels.AnyAsync(p => p.SceneId == s.SceneId, ct))
+            return Applied.Fail("Scene đã có Panel; xoá hoặc gỡ gán thủ công trước khi áp dụng layout AI.", ResultErrorCodes.Conflict);
 
         var maxPage = await _db.Pages.Where(p => p.ChapterId == chapter.Id).MaxAsync(p => (int?)p.PageNumber, ct) ?? 0;
         var mapping = new List<object>();
         foreach (var lp in layout.Pages.OrderBy(p => p.PageNumber))
         {
-            var page = Page.CreateNew(chapter.Id, maxPage + lp.PageNumber, LayoutFormat.StandardPage, PageWidthPx, PageHeightPx, 300, s.SceneId);
+            var page = Page.CreateNew(chapter.Id, maxPage + lp.PageNumber, LayoutFormat.StandardPage, PageWidthPx, PageHeightPx, 300);
             await _pages.SaveAsync(page, ct);
             _db.Pages.Add(page);
 
@@ -368,8 +368,11 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
                     unit = "px", pageWidthPx = PageWidthPx, pageHeightPx = PageHeightPx,
                     normalized = new { x = b.X, y = b.Y, w = b.W, h = b.H, coordinateSpace = lpPanel.CoordinateSpace }
                 });
-                var panel = Panel.Create(page.Id, lpPanel.PanelNumber, rank, bbox);
+                var panel = Panel.Create(page.Id, lpPanel.PanelNumber, rank, bbox, s.SceneId);
                 _db.Panels.Add(panel);
+                // Neo ScriptLine vào Panel (tối đa một Panel mỗi dòng: dòng xuất hiện ở nhiều panel thì giữ panel đầu theo thứ tự đọc)
+                foreach (var line in liveLines.Where(l => l.PanelId is null && lpPanel.SourceScriptLineIds.Contains(l.Id)))
+                    line.AssignToPanel(panel.Id);
                 panelMap.Add(new
                 {
                     panelNumber = lpPanel.PanelNumber, panelId = panel.Id, camera = lpPanel.Camera,

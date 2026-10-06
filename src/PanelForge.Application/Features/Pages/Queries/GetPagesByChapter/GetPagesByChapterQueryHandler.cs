@@ -32,7 +32,6 @@ public sealed class GetPagesByChapterQueryHandler
             .Select(p => new PageDto(
                 p.Id,
                 p.ChapterId,
-                p.SceneId,
                 p.PageNumber,
                 p.LayoutFormat.ToString(),
                 p.WidthPx,

@@ -48,8 +48,7 @@ public sealed class PagesController : ControllerBase
             LayoutFormat: body.LayoutFormat ?? "StandardPage",
             WidthPx:      body.WidthPx > 0 ? body.WidthPx : 1200,
             HeightPx:     body.HeightPx > 0 ? body.HeightPx : 1800,
-            Dpi:          body.Dpi > 0 ? body.Dpi : 300,
-            SceneId:      body.SceneId
+            Dpi:          body.Dpi > 0 ? body.Dpi : 300
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -218,8 +217,7 @@ public sealed record CreatePageRequestBody(
     string? LayoutFormat = "StandardPage",
     int WidthPx = 1200,
     int HeightPx = 1800,
-    int Dpi = 300,
-    Guid? SceneId = null
+    int Dpi = 300
 );
 
 public sealed record UpdateCanvasRequestBody(

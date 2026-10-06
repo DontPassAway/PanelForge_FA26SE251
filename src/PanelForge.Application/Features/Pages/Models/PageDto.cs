@@ -3,7 +3,6 @@ namespace PanelForge.Application.Features.Pages.Models;
 public sealed record PageDto(
     Guid Id,
     Guid ChapterId,
-    Guid? SceneId,
     int PageNumber,
     string LayoutFormat,
     int WidthPx,
@@ -15,7 +14,6 @@ public sealed record PageDto(
 public sealed record PageDetailDto(
     Guid Id,
     Guid ChapterId,
-    Guid? SceneId,
     int PageNumber,
     string LayoutFormat,
     int WidthPx,
@@ -28,7 +26,6 @@ public sealed record PageDetailDto(
 public sealed record PageContentHierarchyDto(
     Guid Id,
     Guid ChapterId,
-    Guid? SceneId,
     int PageNumber,
     string LayoutFormat,
     int WidthPx,
@@ -46,7 +43,8 @@ public sealed record PagePanelDetailDto(
     string BoundingBox,
     int ReadingOrder,
     Guid? CurrentStageId,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    Guid? SceneId = null
 );
 
 public sealed record ReorderPageRequest(

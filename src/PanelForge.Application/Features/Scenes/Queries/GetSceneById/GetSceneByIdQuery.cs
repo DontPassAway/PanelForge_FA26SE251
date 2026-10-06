@@ -34,7 +34,8 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 l.LineOrder,
                 l.DialogueText,
                 l.StageDirection,
-                l.SpeakerCharacterId
+                l.SpeakerCharacterId,
+                l.PanelId
             ))
             .ToList();
 

@@ -11,7 +11,11 @@ public class ScriptLine : BaseEntity
     public string? DialogueText { get; private set; }
     public string? StageDirection { get; private set; }
 
+    /// <summary>Panel mà dòng được neo vào sau breakdown (tối đa một). Phân trang lại chỉ đổi giá trị này, dòng giữ nguyên.</summary>
+    public Guid? PanelId { get; private set; }
+
     public Scene Scene { get; private set; } = default!;
+    public Panel? Panel { get; private set; }
     public BibleEntry? SpeakerCharacter { get; private set; }
 
     private ScriptLine() { }
@@ -47,6 +51,8 @@ public class ScriptLine : BaseEntity
         StageDirection = stageDirection?.Trim();
         SpeakerCharacterId = speakerCharacterId;
     }
+
+    public void AssignToPanel(Guid? panelId) => PanelId = panelId;
 
     public void Reorder(int newOrder)
     {

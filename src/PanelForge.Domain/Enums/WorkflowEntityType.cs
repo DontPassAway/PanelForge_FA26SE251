@@ -7,5 +7,7 @@ namespace PanelForge.Domain.Enums;
 public enum WorkflowEntityType
 {
     Page = 1,
-    Panel = 2
+    Panel = 2,
+    /// <summary>CF2 bước 1: giao việc cho cả Chapter (TargetEntityId = ChapterId). Cột lưu dạng chuỗi nên không cần migration.</summary>
+    Chapter = 3
 }

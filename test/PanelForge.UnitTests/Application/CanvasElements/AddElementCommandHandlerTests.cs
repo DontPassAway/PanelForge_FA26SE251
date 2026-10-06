@@ -5,6 +5,7 @@ using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
+using PanelForge.UnitTests.Common;
 using Xunit;
 
 namespace PanelForge.UnitTests.Application.CanvasElements;
@@ -17,7 +18,7 @@ public class AddElementCommandHandlerTests
     public AddElementCommandHandlerTests()
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new AddElementCommandHandler(_pageRepositoryMock.Object);
+        _handler = new AddElementCommandHandler(_pageRepositoryMock.Object, InMemoryDb.Create());
     }
 
     [Fact]

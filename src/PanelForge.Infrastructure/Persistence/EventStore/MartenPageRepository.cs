@@ -69,21 +69,31 @@ public sealed class MartenPageRepository : IPageRepository
             return;
 
         var efTransaction = _dbContext.Database.CurrentTransaction;
+        var appended = page.UncommittedEvents.Count;
 
-        if (efTransaction is null)
+        try
         {
-            await AppendAndSaveAsync(_session, page, ct);
+            if (efTransaction is null)
+            {
+                await AppendAndSaveAsync(_session, page, ct);
+            }
+            else
+            {
+                // shouldAutoCommit: false → Marten không commit; transaction do IUnitOfWork quản lý
+                var npgsqlTransaction = (NpgsqlTransaction)efTransaction.GetDbTransaction();
+                await using var session = _store.LightweightSession(
+                    SessionOptions.ForTransaction(npgsqlTransaction, shouldAutoCommit: false));
+
+                await AppendAndSaveAsync(session, page, ct);
+            }
         }
-        else
+        catch (Exception ex) when (IsStreamConcurrencyFailure(ex))
         {
-            // shouldAutoCommit: false → Marten không commit; transaction do IUnitOfWork quản lý
-            var npgsqlTransaction = (NpgsqlTransaction)efTransaction.GetDbTransaction();
-            await using var session = _store.LightweightSession(
-                SessionOptions.ForTransaction(npgsqlTransaction, shouldAutoCommit: false));
-
-            await AppendAndSaveAsync(session, page, ct);
+            throw new ConcurrentPageUpdateException(page.Id, ex);
         }
 
+        // Giữ Version khớp stream sau khi lưu để lần SaveAsync tiếp theo của cùng instance không tự xung đột
+        page.SetVersion(Math.Max(page.Version, 0) + appended);
         page.ClearUncommittedEvents();
     }
 
@@ -98,11 +108,23 @@ public sealed class MartenPageRepository : IPageRepository
         }
         else
         {
-            // FetchForWriting: load stream đúng cách cho write path, tránh conflict session tracking
-            var stream = await session.Events.FetchForWriting<Page>(page.Id, ct);
+            // Expected version = version lúc handler load Page: nếu request khác đã append từ đó thì Marten từ chối
+            // (unique (stream_id, version) trong mt_events). Đây là chốt chặn mức DB cho BR-05 khi hai request cùng gắn một ScriptLine.
+            var stream = await session.Events.FetchForWriting<Page>(page.Id, page.Version, ct);
             stream.AppendMany(events);
         }
 
         await session.SaveChangesAsync(ct);
+    }
+
+    // Tên kiểu thay vì catch trực tiếp: Marten đổi tên/namespace các exception này giữa các phiên bản lớn
+    private static bool IsStreamConcurrencyFailure(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            var name = e.GetType().Name;
+            if (name.Contains("Concurrency") || name.Contains("UnexpectedMaxEventId")) return true;
+        }
+        return false;
     }
 }

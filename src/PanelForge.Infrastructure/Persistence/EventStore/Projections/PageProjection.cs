@@ -22,5 +22,8 @@ public class PageProjection : SingleStreamProjection<Page, Guid>
     public void Apply(Page page, ElementAddedEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementMovedEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementRemovedEvent @event) => page.Apply(@event);
+    public void Apply(Page page, ElementTextUpdatedEvent @event) => page.Apply(@event);
+    public void Apply(Page page, ElementOverflowAcknowledgedEvent @event) => page.Apply(@event);
+    public void Apply(Page page, ElementReadingOrderSetEvent @event) => page.Apply(@event);
     public void Apply(Page page, PageDeletedEvent @event) => page.Apply(@event);
 }

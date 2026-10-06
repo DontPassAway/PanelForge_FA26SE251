@@ -69,7 +69,6 @@ public sealed class ReorderPageCommandHandler : IRequestHandler<ReorderPageComma
         return Result<PageDto>.Success(new PageDto(
             Id: page.Id,
             ChapterId: page.ChapterId,
-            SceneId: page.SceneId,
             PageNumber: page.PageNumber,
             LayoutFormat: page.LayoutFormat.ToString(),
             WidthPx: page.WidthPx,

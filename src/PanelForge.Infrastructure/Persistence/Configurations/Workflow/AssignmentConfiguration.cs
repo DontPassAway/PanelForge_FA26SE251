@@ -107,6 +107,16 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
         builder.HasIndex(a => a.Status)
                .HasDatabaseName("ix_assignments_status");
 
+        builder.Property(a => a.DependsOnAssignmentId)
+               .HasColumnName("depends_on_assignment_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(a => a.DependsOnAssignmentId)
+               .HasDatabaseName("ix_assignments_depends_on_assignment_id");
+        builder.HasOne<Assignment>()
+               .WithMany()
+               .HasForeignKey(a => a.DependsOnAssignmentId)
+               .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(a => a.StartedAt)
                .HasColumnName("started_at")
                .HasColumnType("timestamptz");

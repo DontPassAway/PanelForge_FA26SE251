@@ -150,10 +150,15 @@ public class ReviewSuggestionCommandTests
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         var layout = AiJson.Deserialize<StoryboardLayout>(layoutSuggestion.PayloadJson)!;
-        var pages = await h.Db.Pages.Where(p => p.SceneId == AiDemoSeeder.SceneId).ToListAsync();
+        var pages = await h.Db.Pages.Where(p => p.ChapterId == AiDemoSeeder.ChapterId).ToListAsync();
         pages.Should().HaveCount(layout.Pages.Count);
         var panels = await h.Db.Panels.ToListAsync();
         panels.Should().HaveCount(layout.Pages.Sum(p => p.Panels.Count));
+        // V1.2: Scene không chứa Page; Panel mang SceneId và ScriptLine được neo vào đúng một Panel
+        panels.Should().OnlyContain(p => p.SceneId == AiDemoSeeder.SceneId);
+        var anchored = await h.Db.ScriptLines.Where(l => l.PanelId != null).ToListAsync();
+        anchored.Should().NotBeEmpty();
+        anchored.Should().OnlyContain(l => panels.Any(p => p.Id == l.PanelId));
         panels.Select(p => p.BoundingBox).Should().OnlyContain(b => b.Contains("page-normalized") && b.Contains("\"width\"") && b.Contains("\"normalized\""));
         h.Pages.Verify(p => p.SaveAsync(It.IsAny<Page>(), default), Times.Exactly(layout.Pages.Count));
 

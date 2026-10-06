@@ -45,6 +45,13 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");
 
+        builder.Property(p => p.SceneId)
+               .HasColumnName("scene_id")
+               .HasColumnType("uuid");
+
+        builder.HasIndex(p => p.SceneId)
+               .HasDatabaseName("ix_panels_scene");
+
         builder.HasOne(p => p.CurrentStage)
                .WithMany()
                .HasForeignKey(p => p.CurrentStageId)

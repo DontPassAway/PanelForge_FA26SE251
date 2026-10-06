@@ -85,7 +85,7 @@ internal sealed record AiWorkflowFacts(
             lines = await db.ScriptLines.AsNoTracking().CountAsync(l => l.SceneId == scene.Id, ct);
             dialogue = await db.ScriptLines.AsNoTracking().CountAsync(
                 l => l.SceneId == scene.Id && l.DialogueText != null && l.DialogueText != "", ct);
-            pages = await db.Pages.AsNoTracking().CountAsync(p => p.SceneId == scene.Id, ct);
+            pages = await db.Panels.AsNoTracking().Where(p => p.SceneId == scene.Id).Select(p => p.PageId).Distinct().CountAsync(ct);
             var layout = await LatestLayoutAsync(db, scene.Id, ct);
             if (layout is not null)
             {

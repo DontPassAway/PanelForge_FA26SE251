@@ -26,6 +26,13 @@ public sealed class GetPanelByIdQueryHandler : IRequestHandler<GetPanelByIdQuery
         if (panel == null)
             return Result<PanelDetailDto>.Failure($"Panel {query.PanelId} không tồn tại.");
 
+        var lineIds = await _dbContext.ScriptLines
+            .AsNoTracking()
+            .Where(l => l.PanelId == panel.Id)
+            .OrderBy(l => l.LineOrder)
+            .Select(l => l.Id)
+            .ToListAsync(cancellationToken);
+
         var detail = new PanelDetailDto(
             Id: panel.Id,
             PageId: panel.PageId,
@@ -35,7 +42,9 @@ public sealed class GetPanelByIdQueryHandler : IRequestHandler<GetPanelByIdQuery
             CurrentStageId: panel.CurrentStageId,
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
-            CreatedBy: panel.CreatedBy
+            CreatedBy: panel.CreatedBy,
+            SceneId: panel.SceneId,
+            ScriptLineIds: lineIds
         );
 
         return Result<PanelDetailDto>.Success(detail);
