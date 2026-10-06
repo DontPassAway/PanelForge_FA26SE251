@@ -36,7 +36,7 @@ PanelForge_FA26SE251/
 | `IDomainEvent` interface | `Domain/Common/IDomainEvent.cs` | ✅ Hoàn thiện |
 | `BaseEntity` | `Domain/Common/BaseEntity.cs` | ✅ Hoàn thiện |
 
-**Domain Entities — Content Hierarchy (Series → Chapter → Scene → Page → Panel → Element):**
+**Domain Entities — Content Hierarchy (Series → Chapter → Scene → Page → Panel → Element)** *(trạng thái code hiện tại; phiếu V1.2 đổi sang Page → Panel → Element song song với Scene → ScriptLine và chưa triển khai, xem `HANDOFF.md`)*:
 
 | Entity | File | Trạng thái |
 |---|---|---|

@@ -11,7 +11,7 @@
 ```
 Studio Workspace            ← ranh giới tenant: thành viên, role, cấu hình AI
   └── Series (nhiều series)  ← mỗi series có pipeline, Series Bible, chương riêng
-       └── Chapter → Scene → Page → Panel → Element
+       └── Chapter → Page → Panel → Element       (cây vật lý; phiếu V1.2: Scene → ScriptLine là cấu trúc tự sự song song, Scene không chứa Page)
 ```
 
 Xác nhận từ code: `StudioWorkspace` chứa `ICollection<Series>`, `Series` có `WorkspaceId`.
@@ -89,12 +89,12 @@ Hệ thống biết nhờ **metadata**, không nhờ phân tích pixel: ảnh đ
 
 ### 3.1 Writer / WriterAgent
 - **Người:** viết cốt truyện, scene, mô tả panel, shot note, thoại, gán người nói, liên kết Series Bible.
-- **AI:** chia script thành Scene → Page → Panel (requirements 5.1); kiểm tra nhất quán với Bible (5.2); gợi ý hội thoại.
+- **AI:** Writer Agent viết script scene, Storyboard Agent chia script đã duyệt thành Page → Panel kèm liên kết ScriptLine (requirements 5.1); kiểm tra nhất quán với Bible (5.2); gợi ý hội thoại.
 - **Đầu ra:** script nháp có cấu trúc, kèm lý do, chờ Writer duyệt.
 
 ### 3.2 Artist / ArtistAgent
 - **Người:** tạo thumbnail và layout, **tải artwork lên theo phiên bản**, **tách nền ảnh đã tải**, nộp panel để review, trả lời change request.
-- **AI:** đề xuất layout (5.3); **tạo ảnh nháp** (5.8); **tách nền** (5.9); so sánh ngoại hình nhân vật (5.4).
+- **AI:** đề xuất layout (5.3); **sinh ảnh nhân vật từ sketch và character sheet** (5.8, 5.10; lõi theo phiếu V1.2); **tách nền** (5.9); so sánh ngoại hình nhân vật (5.4).
 - **Đầu ra:** phương án layout, ảnh nháp và ảnh tách nền, đều là Suggestion/asset dẫn xuất gắn với Panel.
 
 ### 3.3 Letterer / LettererAgent

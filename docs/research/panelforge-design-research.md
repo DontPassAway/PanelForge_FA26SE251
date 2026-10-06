@@ -36,7 +36,7 @@
 | Điểm | Bằng chứng |
 |---|---|
 | Hai tầng quyền: `SystemRole` (Admin, User) và `WorkspaceRole` (5 role) | **[Spec]** BR-07, E-11, E-12, E-35. **[Code]** `Domain/Enums/SystemRole.cs`, `WorkspaceRole.cs` |
-| Cây Workspace → Series → Chapter → Scene → Page → Panel → Element | **[Spec]** BR-03, FR-01. **[Code]** `Series.WorkspaceId`, `Scene.Pages`, `Page.Panels` |
+| Cây Workspace → Series → Chapter → Scene → Page → Panel → Element (**phiếu V1.2 đã đổi:** Page → Panel → Element song song với Scene → ScriptLine) | **[Spec]** BR-03, FR-01. **[Code]** `Series.WorkspaceId`, `Scene.Pages`, `Page.Panels` |
 | Pipeline cấu hình theo Series, 8 stage mẫu, transition có điều kiện, reject bắt buộc comment | **[Spec]** BR-06, BR-20. **[Code]** `PipelineDefinition.RebuildDefaultTransitions`, `StageTransition.RequiresComment` |
 | Series Bible có revision, hiệu lực theo chương, truy vấn "Bible tại chương N" | **[Spec]** BR-15. **[Code]** `BibleEntryRevision.EffectiveFromChapterNumber`, `GetBibleEntriesAtChapterQuery` |
 | `ContentRevision` bất biến cho Script/Layout/ImagePrompt, có hash | **[Code]** `Domain/Entities/Content/ContentRevision.cs` |
@@ -48,7 +48,7 @@
 | # | Vấn đề | Bằng chứng | Mức độ | Đề xuất ngắn |
 |---|---|---|---|---|
 | M1 | **`SeriesMember` không tồn tại.** Prompt nêu "SeriesMember kiểm soát thành viên theo bộ truyện" | **[Spec]** BR-07, E-12, E-35: role lưu theo *Workspace*, `WorkspaceMember` chỉ có `workspace_id, user_id, role`. **[Code]** không có `SeriesMember` trong Domain, migration hay controller (đã grep) | Cao | Chốt: MVP dùng **Assignment** để giới hạn phạm vi theo việc, không thêm `SeriesMember`. Nếu bắt buộc, xem 2.A.4 |
-| M2 | **Page thuộc đúng một Scene** nhưng thực tế một cảnh có thể bắt đầu giữa trang | **[Spec]** BR-03, E-04. **[Code]** `Page.SceneId` là `Guid?` (nullable), đồng thời `Chapter.Pages` và `Scene.Pages` cùng tồn tại | Cao | Chốt mô hình ở 2.B.1 |
+| M2 | **[Phiếu V1.2 đã chọn `Panel.SceneId`]** **Page thuộc đúng một Scene** nhưng thực tế một cảnh có thể bắt đầu giữa trang | **[Spec]** BR-03, E-04. **[Code]** `Page.SceneId` là `Guid?` (nullable), đồng thời `Chapter.Pages` và `Scene.Pages` cùng tồn tại | Cao | Chốt mô hình ở 2.B.1 |
 | M3 | **`ScriptLine` neo vào Panel?** Spec nói neo vào một Panel sau breakdown, code chỉ có `SceneId` | **[Spec]** E-21. **[Code]** `ScriptLine` không có `PanelId` | Trung bình | Thêm neo nhẹ ở 2.B.2 |
 | M4 | **Element chưa có liên kết thoại.** BR-05 (một dòng một balloon) không thể thi hành khi element không có trường liên kết | **[Code]** `Page.AddElement(...)` và `ElementAddedEvent` chỉ có `Content`, `AssetId`, tọa độ; không có `ScriptLineId` hay `SpeakerId`. `ai-multi-agent-demo.md` cũng ghi "canvas không có liên kết cứng". `role-flow-examples.md` (do mình viết) mô tả element lưu `ScriptLineId`: đó là **thiết kế**, không phải code | **Cao** | P0: thêm `ScriptLineId` vào event hoặc bảng liên kết |
 | M5 | **Bốn chữ "Approved" khác nghĩa**: stage `Approved`, `AssignmentStatus.Approved`, `ChapterStatus.Approved`, `StageProgress` `Approved` | **[Code]** `AssignmentStatus`, `ChapterStatus`; **[Spec]** E-34 | Cao (gây lỗi nghiệp vụ và tài liệu) | Đổi tên ở 3.3 |
@@ -150,7 +150,7 @@ Ma trận chi tiết ở mục 3.1. Về `SeriesMember`:
 | P2. **Panel tham chiếu Scene** (`Panel.SceneId`), Page thuộc Chapter | Cảnh có thể bắt đầu giữa trang, trang chứa nhiều cảnh | Khớp thực tế hơn; script vẫn thuộc Scene | Đổi BR-03 và E-04; thêm truy vấn "các trang của một cảnh" |
 | P3. Scene là khoảng `[panel đầu, panel cuối]` | Rất linh hoạt | Dễ sai khi chèn panel | Phức tạp, không có lợi hơn P2 |
 
-**Khuyến nghị:** MVP **giữ P1** (đúng spec, ít rủi ro) nhưng thiết kế để chuyển sang **P2** nếu phỏng vấn xác nhận cảnh thường vắt qua trang: `Page.SceneId` đã nullable, nên bước chuyển chỉ là thêm `Panel.SceneId`. **Đánh đổi:** P1 nhanh nhưng có thể phải làm lại khi gặp cảnh vắt trang; P2 đúng hơn nhưng cần sửa spec và hỏi giảng viên.
+**Khuyến nghị:** **[Cập nhật phiếu V1.2: đã chọn P2, `Panel.SceneId` và Page thuộc Chapter; khuyến nghị bên dưới là của bản trước V1.2]** MVP **giữ P1** (đúng spec, ít rủi ro) nhưng thiết kế để chuyển sang **P2** nếu phỏng vấn xác nhận cảnh thường vắt qua trang: `Page.SceneId` đã nullable, nên bước chuyển chỉ là thêm `Panel.SceneId`. **Đánh đổi:** P1 nhanh nhưng có thể phải làm lại khi gặp cảnh vắt trang; P2 đúng hơn nhưng cần sửa spec và hỏi giảng viên.
 
 ### B.2 Script line thuộc Scene hay Panel? Liên kết thoại, speaker, text element
 

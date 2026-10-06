@@ -3,6 +3,8 @@
 > **Dự án:** PanelForge: An AI-Assisted Manga Production Management Platform with a Structured Content Model and Full Revision Provenance  
 > **Tài liệu:** Luồng nghiệp vụ chi tiết của từng vai trò (Role Flows) & Vòng đời sản xuất chương truyện (Chapter Production Lifecycle)  
 > **Cập nhật:** 04/10/2026
+>
+> **Đối chiếu phiếu đăng ký V1.2 (06/10/2026):** mô hình Scene/Page/Panel đã đổi (Scene không chứa Page; Panel tham chiếu ScriptLine); Producer và Writer ghi synopsis, story arc và chapter outline; sinh ảnh nhân vật từ character sheet khoá là lõi; Letterer Agent rút gọn thoại là lõi; lõi demo trắng đen; publisher là external reviewer, Producer không có quan hệ với nhà xuất bản. Vai trò Public Reader là tính năng thêm ngoài phạm vi đăng ký (nhóm quyết định giữ). Các luồng dưới đây gồm hành vi đã triển khai và yêu cầu; chỗ chưa khớp được ghi chú tại chỗ.
 
 ---
 
@@ -10,18 +12,18 @@
 
 Hệ thống phân quyền trong PanelForge được chia làm 2 cấp:
 1. **System Roles (Cấp toàn hệ thống):**
-   - `Admin`: Quản trị hạ tầng, tài khoản, quota tài nguyên, audit log.
+   - `Admin`: Quản trị hạ tầng, tài khoản, quota tài nguyên, audit log. Cấp hoặc thu hồi quyền tạo Studio Workspace; đặt giới hạn cho từng Workspace (storage GB, quota token AI, quota ảnh, session policy); không tham gia sản xuất.
    - `User`: Người dùng thông thường đã xác thực.
 2. **Workspace Roles (Cấp Studio Workspace, enum `WorkspaceRole` trong code):**
    - `Producer / Series Owner`: Quản lý dự án, cấu hình quy trình, Series Bible, phân công, phê duyệt và xuất bản. Là role duy nhất được tạo Series trong Workspace.
-   - `Writer`: Soạn thảo kịch bản cấu trúc, AI Breakdown, liên kết Series Bible.
-   - `Artist`: Lên layout khung hình, vẽ và upload artwork theo từng công đoạn (Thumbnail, Pencil, Ink, Color), tách nền ảnh đã tải lên, yêu cầu AI tạo ảnh nháp. Trong code chỉ có một role `Artist`; `Penciler`, `Inker`, `Colorist` là cách gọi theo công đoạn chứ không phải role riêng.
-   - `Letterer`: Đặt bóng thoại, hộp thoại, hiệu ứng âm thanh (SFX), liên kết kịch bản.
+   - `Writer`: Cùng Producer ghi synopsis và story arc, lập chapter outline, soạn thảo kịch bản cấu trúc, AI Breakdown, liên kết Series Bible.
+   - `Artist`: Lên layout khung hình, vẽ và upload artwork theo từng công đoạn (Thumbnail, Pencil, Ink, Color), tách nền ảnh đã tải lên, upload sketch nhân vật vào Series Bible và yêu cầu AI sinh ảnh nhân vật (pipeline ảnh nhân vật theo phiếu V1.2; code hiện mới có ảnh nháp). Trong code chỉ có một role `Artist`; `Penciler`, `Inker`, `Colorist` là cách gọi theo công đoạn chứ không phải role riêng.
+   - `Letterer`: Đặt bóng thoại, hộp thoại, hiệu ứng âm thanh (SFX), liên kết kịch bản; nhờ Letterer Agent rút gọn thoại cho vừa balloon (lõi), dịch thoại là mở rộng.
    - `Editor / Reviewer`: Soát lỗi, gắn ghi chú khoanh vùng (Region Annotation), kiểm tra logic với Series Bible, phê duyệt hoặc yêu cầu sửa đổi (Change Request).
 
 3. **Người ngoài (không phải role trong Workspace):**
    - `External Reviewer` (người xem thử): Không có tài khoản sản xuất và không thuộc `WorkspaceRole`. Truy cập qua link xem thử (`ExternalPreviewLink`) chỉ cấp cho **chương đã khóa**, gắn email người nhận, có watermark, hết hạn, thu hồi được, ghi log mọi lần truy cập (BR-09, BR-17).
-   - `Public Reader` (độc giả công khai): Dùng tài khoản Reader riêng trên app, duyệt catalog và đọc chương `Published`; có thể theo dõi hoặc đăng ký Series (BR-24, US-30). Tách biệt hoàn toàn khỏi truy cập Workspace và khỏi link xem thử.
+   - `Public Reader` (độc giả công khai): Dùng tài khoản Reader riêng trên app, duyệt catalog và đọc chương `Published`; có thể theo dõi hoặc đăng ký Series (BR-24, US-30). Tách biệt hoàn toàn khỏi truy cập Workspace và khỏi link xem thử. **Tính năng thêm, ngoài phạm vi đăng ký V1.2:** phiếu ghi xuất bản làm ngoài hệ thống và không có Public Reader; nhóm quyết định giữ vai trò này, không thuộc nghiệm thu.
 
 Một Studio Workspace chứa **nhiều Series**; mỗi Series có pipeline, Series Bible và chương riêng.
 
@@ -169,7 +171,7 @@ sequenceDiagram
 [1. Soạn thảo thủ công]                          [2. AI Assistance Layer]
   ├─ Tạo khối Scene (Bối cảnh, Thời gian)          ├─ Bấm "Request AI Script Breakdown"
   ├─ Viết Panel Description & Shot Notes           ├─ Hệ thống LLM tự động bóc tách kịch bản
-  ├─ Viết thoại (Dialogue Line) & gán Speaker      │  thành Scene -> Page -> Panel -> Dialogue
+  ├─ Viết thoại (Dialogue Line) & gán Speaker      │  thành Page -> Panel (kèm liên kết ScriptLine)
   └─ Viết Narration & Sound Effect (SFX)           ├─ Writer kiểm tra bảng đề xuất:
                                                    │    • Chấp nhận (Accept) -> Ghi vào Event Store kèm Provenance
                                                    │    • Chỉnh sửa (Edit) -> Lưu kèm dấu vết chỉnh sửa

@@ -2,6 +2,8 @@
 
 Nguồn thiết kế: `HuongDan/AI_Research/AI_MultiAgent_TongHop.md`. Tài liệu này mô tả **phần đã triển khai thật** trong Backend + Frontend, cách chạy và những chỗ khác với tài liệu thiết kế. Hướng B (Gemini làm Supervisor) vẫn là nền; bản này mở rộng từ một workflow demo (Writer → Continuity → Storyboard → Editor) sang **7 agent** và **7 loại nhiệm vụ**.
 
+> **Đối chiếu phiếu V1.2 (06/10/2026):** Artist Agent hiện chỉ soạn prompt ảnh, chưa sinh ảnh; pipeline ảnh nhân vật (character sheet khoá, sinh ảnh từ sketch, tách nền, so tương đồng) là lõi nhưng chưa triển khai. Letterer Agent rút gọn thoại là lõi; dịch thoại và Producer Agent là mở rộng. Layout hiện áp dụng vào Scene chưa có Page (mô hình cũ `Page.SceneId`); phiếu V1.2 đổi sang Panel tham chiếu Scene.
+
 - AI chỉ **đề xuất**. Accept/Reject/RequestChanges là quyết định của người có quyền. Accept chỉ tạo content revision; **không** Approve Chapter, **không** chuyển production stage.
 - Backend chính (`PanelForge.API`, :5044) sở hữu quyền, quota, dữ liệu, provenance và quyết định. `PanelForge.AI` (:5055, chỉ nghe `127.0.0.1`) chạy workflow, gọi model và báo từng step về Backend; **không truy cập PostgreSQL**. `PanelForge.AI.Contracts` là hợp đồng dùng chung.
 

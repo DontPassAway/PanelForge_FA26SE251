@@ -203,7 +203,7 @@ PanelForge_FA26SE251/
 **Được đặt:**
 - Entity/Aggregate có **hành vi**: `chapter.Approve(...)`, `chapter.Lock()`, `page.AddElement(...)`, `bibleEntry.AddRevision(...)`.
 - Invariant của Business Rule, ví dụ:
-  - BR-03: phân cấp chứa đựng Series → Chapter → Scene → Page → Panel → Element.
+  - BR-03 (phiếu V1.2): cây vật lý Series → Chapter → Page → Panel → Element song song với Scene → ScriptLine; Panel thuộc một Page, tối đa một Scene và tham chiếu ScriptLine. Code hiện còn `Page.SceneId` và cần đổi (xem `HANDOFF.md`).
   - BR-05: mỗi ScriptLine gắn tối đa một text Element.
   - BR-06, BR-12: không sửa khi Chapter đang `Locked`.
 - Enum, Domain Event, Value Object, DomainException.
@@ -347,7 +347,7 @@ Khi bắt đầu cần loại thứ hai (CF2 Notification, CF5 Publish), tách r
 
 Reader trên Mobile có thể:
 - **Đăng ký và đăng nhập** bằng `ReaderAccount`. Đây là tài khoản **tách biệt** với `User` của Studio.
-- **Duyệt catalog công khai** các Series đã Published. API `GET /api/catalog/...` ✅ đã có.
+- **Duyệt catalog công khai** các Series đã Published. API `GET /api/catalog/...` ✅ đã có. *(Tính năng thêm ngoài phạm vi đăng ký V1.2: phiếu ghi xuất bản làm ngoài hệ thống và không có Public Reader; nhóm quyết định giữ phần này, không thuộc nghiệm thu.)*
 - **Đăng ký theo dõi (subscribe)** một Series. Nếu Series yêu cầu trả phí thì cần subscription còn hiệu lực (phần mở rộng).
 - **Đọc** các Chapter `Published`, theo `ReadingDirection` của Series.
 - **Gửi feedback** ở cấp chapter. Feedback này đi vào luồng triage giống PreviewLink (CF5 bước 6).

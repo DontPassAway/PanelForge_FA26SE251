@@ -252,7 +252,7 @@ Ví dụ phần `DetailsJson` của mục nhân vật An (minh họa, giá trị
 }
 ```
 
-Kiểm tra bằng thị giác (ví dụ sẹo, màu mắt trong tranh) vẫn là **phạm vi mở rộng** theo spec (FR-04).
+Kiểm tra bằng thị giác (ví dụ sẹo, màu mắt trong tranh) theo phiếu V1.2 là lớp thứ ba (hình ảnh) của kiểm tra nhất quán nhân vật và thuộc **lõi** (xem `requirements.md` 5.11); code hiện chưa triển khai.
 
 ---
 

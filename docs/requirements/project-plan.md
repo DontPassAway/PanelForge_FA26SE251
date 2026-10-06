@@ -1,5 +1,7 @@
 # PanelForge - Project Plan & Scope
 
+> **Updated to match the capstone registration form V1.2 (06/10/2026).** The mandatory MVP, extended scope, out-of-scope items and work-package split below follow that form. Acceptance values (timeout 30 seconds, precision and recall of at least 70%, similarity threshold 0.75, Task Success Rate of at least 80%) are proposals to be confirmed with the supervisor.
+
 ---
 
 ## Table of Contents
@@ -58,16 +60,13 @@ Studio Workspace
   ↓
 Series (many per Workspace)
   ↓
-Chapter
-  ↓
-Scene
-  ↓
-Page
-  ↓
-Panel
-  ↓
-Element
+Chapter ─┬─ Page ── Panel ── Element        (physical tree)
+         └─ Scene ── Script block           (narrative structure)
+
+Panel ──references──▶ Script block
 ```
+
+A Scene does not contain Pages. A Page may hold Panels of different Scenes, and a Scene may span several Pages. A Scene is optional for manual work; the agent workflows operate on a Scene.
 
 ---
 
@@ -143,6 +142,36 @@ The MVP should use Series Bible information to support consistency checking.
 
 ---
 
+## 2.8 Workspace Governance
+
+The Administrator grants and revokes the right to create Studio Workspaces and sets, for each Workspace, a storage limit (GB), a monthly AI token quota with AI enablement, an image-generation quota and a session policy. Limits are checked before the operation they govern, and a usage screen shows the Producer and the Administrator the amount used against each limit.
+
+---
+
+## 2.9 Multi-Agent AI Workflow
+
+Role-based agents share one model through a single gateway: Writer, Continuity, Storyboard and Editor in an explicit workflow (at most two repair loops back to Writer), plus the Artist Agent for the character image flow. Agents only suggest; a human accepts, edits or rejects every output. In the first stage the Editor Agent only assembles findings and a checklist prepared by code. The AI provenance chain runs from Workflow Run to Agent Step, Suggestion, Human Decision and Content Revision. The Series Bible is read as versioned memory: the entries in the revision in force at the chapter are put into the agent context through a structured query, and vector retrieval is added only when that context exceeds the model context budget (threshold to be agreed with the supervisor).
+
+---
+
+## 2.10 Character Consistency and Character Image Pipeline
+
+Locked character sheets (versioned per chapter), a three-layer consistency check (textual, rule-based by code, visual), and sketch-to-image generation demonstrated on at least one character, followed by cut-out of the character from a simple background and a similarity check against the reference sheet. Image generation sits behind a replaceable adapter and may use the API of a hosted provider other than Gemini.
+
+---
+
+## 2.11 Series Synopsis, Story Arcs and Chapter Outline
+
+The Producer records the synopsis and story arcs of a Series; the Writer outlines each chapter and writes scene scripts from the outline.
+
+---
+
+## 2.12 Dialogue Shortening and Black-and-White Demonstration
+
+Balloon-overflow warnings are computed by code, and the Letterer Agent shortens dialogue to fit a balloon within a length limit. The core demonstration is black-and-white manga.
+
+---
+
 # 3. Extended Scope
 
 Features that may be implemented after the mandatory MVP include:
@@ -151,9 +180,13 @@ Features that may be implemented after the mandatory MVP include:
 
 AI-assisted panel planning and layout recommendations.
 
+> V1.2: the Storyboard Agent (Pages and Panels with reading order and shot scale) is part of the core workflow. Only advanced layout optimisation remains extended.
+
 ## 3.2 Vision-Based Character Continuity
 
 Similarity-based checking of character appearance across panels or chapters.
+
+> V1.2: this is the visual layer of the three-layer character consistency check and belongs to the core (section 2.10).
 
 ## 3.3 Balloon-Fit Analysis
 
@@ -163,6 +196,8 @@ Automated detection of:
 - Artwork overlap
 - Poor placement
 - Reading-order issues
+
+> V1.2: overflow, overlap and reading-order warnings are computed by code and belong to the core. Translation of dialogue into other languages within the balloon length limit is extended.
 
 ## 3.4 Advanced Collaboration
 
@@ -194,6 +229,8 @@ AI may generate draft or reference images for a Panel.
 
 This is lower priority than the mandatory MVP and the AI features in sections 2.6 and 2.7.
 
+> V1.2: generation of **character images** from a locked character sheet and a sketch is part of the core (section 2.10). Draft images for a whole Panel, a whole scene or a whole page remain extended or out of scope.
+
 See `requirements.md` section 5.8.
 
 ---
@@ -204,11 +241,12 @@ See `requirements.md` section 5.8.
 
 PanelForge is not intended to become a generative artwork platform.
 
-AI-generated images are allowed only as human-reviewed drafts (section 3.6). The following remain out of scope:
+AI-generated images are allowed only as human-reviewed output (character images in the core, section 2.10; drafts, section 3.6). AI generates character images only; backgrounds, page layout and balloons are assembled in the editor from structured Elements. The following remain out of scope:
 
 - Publishing AI-generated artwork without human review
 - Replacing the Artist's production stages with AI output
 - Fully automated page or chapter generation
+- Generating a whole scene with characters and background
 
 AI primarily focuses on:
 
@@ -241,6 +279,14 @@ Human review remains part of the production workflow.
 
 ---
 
+## 4.4 Publication, Free Drawing and Unsupported Structures
+
+- **Publication** takes place outside the platform. PanelForge prepares chapter versions and an export package; a publisher is an external reviewer who gives feedback through a time-limited preview link. The Producer has no relationship with a publisher. (The existing Public Reader and public catalog, BR-23 and BR-24, go beyond the registration form. The team keeps them as an extra feature that is outside the registered scope and not part of acceptance.)
+- **No free-drawing tool.** Artists draw in external software and upload their work.
+- **Not supported:** interleaved scenes, an infinite vertical-scroll webtoon editing canvas (pages built in the editor can still be exported as vertical-scroll images), and free-form panels whose reading order cannot be inferred.
+
+---
+
 # 5. Work Packages
 
 The project is divided into five major work packages.
@@ -265,13 +311,15 @@ Content Schema
 - Manga production workflow analysis
 - User roles
 - Review practices
-- Content hierarchy
+- Content hierarchy (Workspace, Series, Chapter, the Page/Panel/Element tree, and the Scene/Script block structure)
 - Series Bible structure
 - Business rules
 - Validation rules
 - Architecture planning
 - Event-store design
-- Usability evaluation
+- Workspace governance rules and agent specifications
+- Test plan, system-level and acceptance testing (developers write the unit and integration tests of their own packages)
+- Usability evaluation (protocol and execution with target users)
 - Documentation
 - Demonstration dataset
 - Final presentation package
@@ -294,6 +342,7 @@ Persistence
 - Series aggregate
 - Chapter aggregate
 - Scene aggregate
+- Script block
 - Page aggregate
 - Panel aggregate
 - Element aggregate
@@ -306,12 +355,13 @@ Persistence
 - Version history
 - Diff
 - Rollback
-- AI provenance
+- AI provenance (workflow run, agent step, suggestion, decision, content revision)
 - Schema migration
+- Rendering and export pipeline (page images, PDF, CBZ, vertical-scroll images, structured JSON), once the content domain has stabilised
 
 ---
 
-## WP3 — Production Pipeline, Access Control and Delivery
+## WP3 — Production Pipeline, Access Control and Deployment
 
 ### Primary Focus
 
@@ -319,7 +369,7 @@ Persistence
 Workflow
 Authorization
 Notifications
-Export
+Deployment
 ```
 
 ### Responsibilities
@@ -338,8 +388,13 @@ Export
 - External reviewer access
 - Asset access control
 - Audit trail
-- Rendering
-- Export
+- Workspace limit enforcement (storage, AI quota, session policy) and authorisation of Workspace creation
+- Preview links for external reviewers
+- Containerization
+- CI/CD
+- Cloud deployment
+- Monitoring
+- Backup
 
 ---
 
@@ -368,41 +423,33 @@ Review Interface
 - Personal task queue
 - Reading mode
 - Preview mode
+- Workspace usage screen
+- Character sheet and frame template screens
 
 ---
 
-## WP5 — AI Assistance, QA and Deployment
+## WP5 — AI Assistance Services and AI Evaluation
 
 ### Primary Focus
 
 ```text
 AI
-Testing
-Deployment
-DevOps
+Agents
+Image pipeline
+Evaluation
 ```
 
 ### Responsibilities
 
-- Script-to-structure breakdown
-- Series Bible retrieval
-- Consistency checking
-- Character continuity
-- Balloon-fit analysis
-- Background removal service
-- AI draft image generation (extended scope)
-- AI provenance
-- Provider fallback
-- Unit testing
-- Integration testing
-- Security testing
-- Concurrency testing
-- Usability testing
-- Containerization
-- CI/CD
-- Cloud deployment
-- Monitoring
-- Backup
+- Multi-agent AI service: Writer, Continuity, Storyboard and Editor workflow with bounded repair loops, plus the Artist Agent and the Letterer Agent (dialogue shortening)
+- Single LLM gateway with quota, usage and provider fallback
+- Series Bible memory (entries in the revision in force at the chapter, read through a structured query; vector retrieval only when the context exceeds the model context budget) and grounded consistency checking
+- Character image pipeline (locked sheets, sketch-to-image through a replaceable adapter, cut-out, visual consistency check)
+- Suggestion review boundary with provenance capture
+- AI suggestion review screen and AI provenance view
+- Evaluation of the agents on a seeded-defect dataset against a single-prompt baseline
+- Balloon-fit analysis (deterministic checks by code)
+- Extended scope: translation of dialogue, Producer Agent, whole-page generation
 
 ---
 
@@ -596,8 +643,8 @@ A separately manageable AI assistance service supporting:
 - Script breakdown
 - Series Bible consistency checking
 - Character continuity
-- Layout suggestions where implemented
-- Background removal and draft image generation where implemented
+- Multi-agent workflow (Writer, Continuity, Storyboard, Editor, Artist; Letterer for dialogue shortening)
+- Character image pipeline (sketch-to-image generation, cut-out, visual consistency check)
 - AI provenance
 
 ---
@@ -625,6 +672,7 @@ Event Store Design
 API Documentation
 Test Plan
 Test Report
+AI Evaluation Report
 Deployment Guide
 User Manual
 ```
@@ -641,7 +689,7 @@ The project should provide at least:
 3 fully structured Manga chapters
 ```
 
-with production history.
+with production history, including a locked character sheet with images generated from the artist's sketches, AI-assisted steps with their provenance, and at least one chapter version created from feedback.
 
 ---
 
@@ -678,15 +726,8 @@ The dataset should demonstrate:
 ```text
 Series
  ↓
-Chapters
- ↓
-Scenes
- ↓
-Pages
- ↓
-Panels
- ↓
-Elements
+Chapters ─┬─ Pages ── Panels ── Elements
+          └─ Scenes ── Script blocks
 ```
 
 It should also demonstrate:
@@ -725,6 +766,8 @@ Evaluate:
 ---
 
 ## 9.2 Usability Evaluation
+
+Usability is judged by a Task Success Rate of at least 80% on the main flows (proposed and to be confirmed with the supervisor).
 
 Potential evaluation participants include:
 
@@ -786,6 +829,8 @@ PanelForge should be considered successful when it demonstrates the following.
 - Consistency checking uses Series Bible grounding.
 - Human review is mandatory.
 - AI failure does not block manual work.
+- Character consistency is measured on a seeded-defect set (precision and recall) and by a similarity score against the reference sheet; deviations are surfaced, never hidden.
+- Agents are evaluated against a single-prompt baseline.
 
 ## Export
 

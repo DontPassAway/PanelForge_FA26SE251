@@ -4,15 +4,15 @@ Mục lục các tài liệu, sắp xếp theo thư mục.
 
 | Thư mục | Nội dung | File |
 |---|---|---|
-| [`requirements/`](requirements/) | Yêu cầu, phạm vi, đặc tả gốc, từ khóa và quy tắc | [`requirements.md`](requirements/requirements.md), [`project-plan.md`](requirements/project-plan.md), [`PanelForge_Capstone_Content.md`](requirements/PanelForge_Capstone_Content.md) (BR, US, UC, FR, NFR gốc), [`glossary-and-rules.md`](requirements/glossary-and-rules.md) (từ khóa và quy tắc bằng tiếng Việt) |
+| [`requirements/`](requirements/) | Yêu cầu, phạm vi, đặc tả gốc, từ khóa và quy tắc | [`requirements.md`](requirements/requirements.md), [`project-plan.md`](requirements/project-plan.md), [`PanelForge_Capstone_Content.md`](requirements/PanelForge_Capstone_Content.md) (BR, US, UC, FR, NFR gốc), [`PanelForge_5_Core_Flows.md`](requirements/PanelForge_5_Core_Flows.md) (5 core flow, cập nhật theo research), [`glossary-and-rules.md`](requirements/glossary-and-rules.md) (từ khóa và quy tắc bằng tiếng Việt) |
 | [`roles/`](roles/) | Các role và luồng làm việc | [`role-workflows.md`](roles/role-workflows.md) (luồng theo từng role), [`role-flow-examples.md`](roles/role-flow-examples.md) (ví dụ xuyên suốt) |
 | [`domain/`](domain/) | Mô hình nội dung và nghiệp vụ | [`series-bible.md`](domain/series-bible.md) |
 | [`architecture/`](architecture/) | Kiến trúc và triển khai | [`clean-architecture-structure.md`](architecture/clean-architecture-structure.md), [`implementation-qa.md`](architecture/implementation-qa.md) |
 | [`storage/`](storage/) | Lưu trữ ảnh, cốt truyện và luồng lưu trữ | [`storage-architecture.md`](storage/storage-architecture.md), [`storage-strategy.md`](storage/storage-strategy.md), [`image_storage_architecture.md`](storage/image_storage_architecture.md) |
 | [`ai/`](ai/) | AI multi-agent | [`ai-multi-agent-demo.md`](ai/ai-multi-agent-demo.md) |
 | [`database/`](database/) | Cài đặt cơ sở dữ liệu | [`setup-database.md`](database/setup-database.md) |
-| [`implementation/`](implementation/) | Nhật ký triển khai và báo cáo tiến độ | `CF1_PHASE1/2/3_IMPLEMENTATION.md`, [`CF1_implementation_handoff.md`](implementation/CF1_implementation_handoff.md), [`panelforge_progress_report.md`](implementation/panelforge_progress_report.md) |
-| [`research/`](research/) | Nghiên cứu công cụ, role và quyết định thiết kế | [`RESEARCH_ROLES_AND_TOOLS.md`](research/RESEARCH_ROLES_AND_TOOLS.md) (công cụ ngoài), [`panelforge-design-research.md`](research/panelforge-design-research.md) (quy trình, mô hình dữ liệu, pipeline, versioning, AI; có bằng chứng và backlog), [`consistency-design.md`](research/consistency-design.md) (thiết kế kiểm tra nhất quán: quy tắc, dữ liệu, triage, kiểm thử) |
+| [`implementation/`](implementation/) | Nhật ký triển khai và báo cáo tiến độ | [`PanelForge_Scope_V1.2.md`](implementation/PanelForge_Scope_V1.2.md) (toàn bộ scope theo phiếu đăng ký V1.2: flow, role, actor, AI), [`panelforge_progress_report.md`](implementation/panelforge_progress_report.md) |
+| [`research/`](research/) | Nghiên cứu công cụ, role và quyết định thiết kế | [`RESEARCH_ROLES_AND_TOOLS.md`](research/RESEARCH_ROLES_AND_TOOLS.md) (công cụ ngoài), [`panelforge-design-research.md`](research/panelforge-design-research.md) (quy trình, mô hình dữ liệu, pipeline, versioning, AI; có bằng chứng và backlog), [`consistency-design.md`](research/consistency-design.md) (thiết kế kiểm tra nhất quán: quy tắc, dữ liệu, triage, kiểm thử), [`PanelForge_Research_Cau_Truc_Pipeline.md`](research/PanelForge_Research_Cau_Truc_Pipeline.md) (mô hình cấu trúc nội dung Scene/Page/Panel và pipeline sản xuất), [`PanelForge_Research_Nghiep_Vu.md`](research/PanelForge_Research_Nghiep_Vu.md) (nghiệp vụ, giá trị, nhóm người dùng) |
 
 ## Nên đọc theo thứ tự nào
 

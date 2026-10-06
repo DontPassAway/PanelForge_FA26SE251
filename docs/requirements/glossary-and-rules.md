@@ -1,7 +1,7 @@
 # Từ khóa và quy tắc của PanelForge
 
 > **Tài liệu:** Giải thích mọi từ khóa dùng trong dự án và toàn bộ quy tắc vận hành.
-> **Cập nhật:** 04/10/2026
+> **Cập nhật:** 06/10/2026 (đối chiếu lại với phiếu đăng ký V1.2)
 > **Nguồn:** `PanelForge_Capstone_Content.md` (BR-01 đến BR-24, US, UC, FR, NFR, E-xx), `requirements.md`, `project-plan.md`, `ai-multi-agent-demo.md`, `storage-architecture.md`, `storage-strategy.md`, `CLAUDE.md` của Backend, và code domain.
 > **Cấu trúc:** Phần 1 là từ khóa (ý nghĩa và tác dụng). Phần 2 là quy tắc của dự án.
 > Các ví dụ (tên người, số liệu) chỉ để minh họa.
@@ -17,14 +17,20 @@
 | **Studio Workspace** | Một "xưởng" làm truyện, gồm thành viên, role, cấu hình AI và nhiều Series | Là ranh giới tenant: dữ liệu của Studio này không lẫn sang Studio khác |
 | **Series** | Một bộ truyện | Có pipeline, Series Bible, chương, preset typography và luật nhất quán riêng |
 | **Chapter** | Một chương của Series | Đơn vị duyệt, khóa, xem thử và phát hành |
-| **Scene** | Một cảnh trong chương | Gom script và các trang của cảnh đó |
+| **Scene** | Khối tự sự liền mạch trong chương, không chồng lấn và tuỳ chọn khi làm tay | Gom các Script block. **Không chứa Page** (theo phiếu V1.2): một Page có thể có Panel của nhiều Scene, và một Scene có thể trải qua nhiều Page. Các luồng agent chạy trên một Scene |
+| **Script block** | Một dòng hành động, thoại, caption hoặc SFX của script, có thứ tự, thuộc một Scene | Có thể tồn tại trước khi có Page hay Panel; Panel tham chiếu các block nó mang, nên Scene của Panel được suy ra từ block. Phân trang lại chỉ đổi panel được gán |
+| **Chapter outline** | Dàn ý của một chapter, lập từ synopsis và story arc của Series | Writer dùng làm đầu vào cho Writer Agent |
+| **Synopsis / Story arc** | Tóm tắt và các mạch truyện lớn của Series | Producer hoặc Writer ghi; Writer lập chapter outline từ đó |
+| **Frame template** | Mẫu bố cục trang dùng lại, do Admin quản lý | Chỉ là cấu hình khởi đầu: khởi tạo các Panel của Page mới, sau đó Panel là entity độc lập và đổi template không làm đổi Page đã có |
+| **Double-page spread / Splash** | Trang đôi / trang một khung | Trang đôi là liên kết giữa hai Page; splash là Page chỉ có một Panel; panel không viền là thuộc tính hiển thị |
+| **Character sheet** | Bản tham chiếu của nhân vật: sketch hành động, cảm xúc, chuyển động, tính cách, cách nói, phong cách vẽ, chế độ màu | Được duyệt và khoá, versioned theo chương; chỉ thay thế bằng bản mới, không sửa. Lõi là trắng đen, màu là mở rộng |
 | **Page** | Một trang truyện | Có kích thước, DPI, chiều đọc; chứa các Panel |
 | **Panel** | Một khung tranh trong trang | Đơn vị nhỏ nhất theo dõi tiến độ (panel-level progress) |
 | **Element** | Một phần tử trên khung: balloon, khung dẫn, SFX, layer ảnh, nhân vật, đạo cụ | Là thứ Artist và Letterer kéo thả trên canvas |
 | **ScriptLine** | Một dòng kịch bản: thoại, chỉ dẫn, người nói | Cho phép biết "câu thoại nào, ai nói, thuộc cảnh nào" |
 | **Series Bible** | Kho sự thật cố định của bộ truyện (xem `series-bible.md`) | Tham chiếu cho người, nền kiểm tra cho AI |
 | **Canvas** | Vùng làm việc kéo thả của một trang | Nơi dựng layout và đặt chữ |
-| **Reading order / Reading direction** | Thứ tự đọc panel và chữ; hướng đọc (manga phải sang trái RTL, trái sang phải LTR, webtoon cuộn dọc) | Quyết định cách sắp xếp và kiểm tra chữ |
+| **Reading order / Reading direction** | Thứ tự đọc panel và chữ, là thuộc tính riêng không suy từ quan hệ chứa; hướng đọc là cờ của Series (manga phải sang trái RTL, trái sang phải LTR). Webtoon chỉ có ở dạng xuất ảnh cuộn dọc, không có canvas cuộn vô hạn | Quyết định cách sắp xếp và kiểm tra chữ |
 | **Key Artwork Region** | Vùng quan trọng của tranh do Artist đánh dấu (ví dụ khuôn mặt) | Để Letterer không đặt balloon đè lên |
 | **DPI** | Độ phân giải của trang | Cần cho in ấn và xuất bản |
 
@@ -33,18 +39,19 @@
 | Từ khóa | Ý nghĩa | Tác dụng |
 |---|---|---|
 | **SystemRole** | Role cấp hệ thống, chỉ gồm `Admin` và `User` | Phân biệt người quản trị nền tảng với tài khoản thường. **Không tự cấp quyền nội dung** |
-| **Admin** | Quản trị viên hệ thống | Quản lý tài khoản, quyền tạo Studio, cấu hình AI/lưu trữ, audit. Không mời thành viên, không đọc nội dung Workspace |
+| **Admin** | Quản trị viên hệ thống | Quản lý tài khoản, quyền tạo Studio, cấu hình AI, đặt giới hạn cho từng Workspace (storage, quota token, quota ảnh, session policy), retention, backup, master data, audit và usage. Không mời thành viên, không đọc nội dung Workspace, không tham gia sản xuất |
 | **User** | Tài khoản đã đăng nhập | Dùng được các chức năng chung; vào Workspace khi có membership |
 | **WorkspaceRole** | Role trong một Studio: `Producer`, `Writer`, `Artist`, `Letterer`, `Editor` | Quyết định hành động được làm trong Studio đó |
 | **WorkspaceMember** | Dòng nối giữa User và Workspace, mang theo WorkspaceRole | Không có dòng này thì không có quyền nào (không có truy cập ngầm) |
-| **Producer** | Nhà sản xuất / chủ Series | Tạo Series, mời thành viên, giao việc, khóa chương, phát hành |
+| **Producer** | Nhà sản xuất / chủ Series | Tạo Series (ghi synopsis, story arc), mời thành viên, giao việc, duyệt và khoá character sheet, theo dõi usage so với giới hạn, khóa chương, tạo preview link và gói xuất. Việc xuất bản làm ngoài hệ thống (xem BR-24); Producer không có quan hệ với nhà xuất bản |
 | **Writer** | Biên kịch | Viết script, đề xuất cấu trúc và nhịp kể |
 | **Artist** | Họa sĩ | Chốt layout, vẽ, tải artwork |
 | **Letterer** | Người đặt chữ | Balloon, font, vị trí chữ |
 | **Editor** | Biên tập viên | Review, yêu cầu sửa, duyệt cổng stage |
-| **External Reviewer** | Người xem thử qua link | Xem chương đã khóa và phản hồi; không có tài khoản |
-| **Public Reader** | Độc giả công khai (tài khoản Reader trên app) | Đọc chương đã phát hành |
+| **External Reviewer** | Người xem thử qua link; nhà xuất bản (publisher) là một External Reviewer | Xem chương đã khóa và phản hồi ở cấp chương, trang hoặc panel, gắn đúng phiên bản đang xem; không có tài khoản, không có quyền sản xuất |
+| **Public Reader** | Độc giả công khai (tài khoản Reader trên app) | Đọc chương đã phát hành. **Tính năng thêm ngoài phạm vi đăng ký V1.2**, không thuộc nghiệm thu (xem BR-24) |
 | **CanCreateStudio** | Quyền do Admin cấp cho một User | Cho phép User tạo Studio; người tạo tự thành Producer |
+| **Session policy** | Luật phiên đăng nhập của Workspace do Admin đặt: thời gian sống, idle timeout, số phiên đồng thời | Được kiểm khi đăng nhập hoặc làm mới token; user thuộc nhiều Workspace chịu giá trị chặt nhất |
 | **RBAC / ABAC** | Phân quyền theo role / theo thuộc tính (assignment, trạng thái tài nguyên) | Kiểm quyền chi tiết ở server |
 
 ## 1.3 Sản xuất và quy trình
@@ -57,7 +64,7 @@
 | **Thumbnail** | Bản phác bố cục rất thô | Chốt chia khung và vị trí nhân vật; sửa ở đây rẻ nhất |
 | **Pencil** | Vẽ chì chi tiết | Hình dáng, biểu cảm, bối cảnh |
 | **Ink** | Đi nét mực đè lên nét chì | Ra bản đen trắng sạch |
-| **Color** | Tô màu | Có thể bỏ với truyện đen trắng |
+| **Color** | Tô màu | Lõi demo là manga trắng đen nên bỏ stage này; chỉ bật khi dùng chế độ màu (mở rộng, không thuộc nghiệm thu) |
 | **Letter** | Đặt balloon và chữ | Hoàn thiện lời thoại trên tranh |
 | **Review** | Stage duyệt (cổng duyệt) | Editor kiểm tra chất lượng và nhất quán |
 | **Approved** | Stage cuối của pipeline | Item hoàn tất sản xuất (khác với chương được duyệt và khóa) |
@@ -74,7 +81,7 @@
 | **Rework** | Làm lại sau change request | Assignment sang `ReworkRequired` |
 | **Trạng thái Chapter** | `InProduction`, `Approved`, `Locked`, `Published` | Điều khiển cho phép sửa, xem thử, phát hành |
 | **Lock / Reopen** | Khóa chương (chỉ đọc) / mở lại kèm lý do | Bảo vệ chương đã duyệt khỏi sửa nhầm |
-| **Preview link** | Link xem thử có hạn cho người ngoài | Chỉ cấp cho chương đã khóa |
+| **Preview link** | Link xem thử có hạn cho người ngoài, gắn một email người nhận, có watermark hiện người nhận | Chỉ cấp cho chương đã khóa; thu hồi được; feedback gắn đúng phiên bản đang xem |
 | **Export** | Xuất chương ra PDF, CBZ, webtoon, JSON | Giao bản hoàn chỉnh |
 
 ## 1.4 Phiên bản, truy vết và đồng thời
@@ -108,9 +115,9 @@
 | **Pre-signed URL** | URL ký có hạn ngắn để tải lên hoặc xem file | Không có link công khai cố định |
 | **Variant** | Bản phái sinh của ảnh: ảnh hiển thị WebP, thumbnail | Canvas và danh sách chạy nhẹ |
 | **Derived asset** | Asset sinh từ asset khác (tách nền, ảnh AI) | Giữ ảnh gốc, truy được nguồn |
-| **Background removal** | Tách nền ảnh | Ghép nhân vật vào panel khác |
+| **Background removal / Cut-out** | Tách nền ảnh; trong pipeline ảnh nhân vật là bước tách nhân vật khỏi nền đơn giản | Ghép nhân vật vào panel khác. Với ảnh đã gộp phẳng chỉ tách nhân vật và có người kiểm tra; không tự phân rã cả trang thành Element |
 | **Watermark** | Dấu chìm hiển thị người xem | Truy ra người làm rò rỉ |
-| **Storage quota / Retention policy** | Hạn mức dung lượng / chính sách giữ file | Admin kiểm soát chi phí và dọn dẹp |
+| **Storage quota / Retention policy** | Hạn mức dung lượng (GB) theo Workspace / chính sách giữ file | Admin kiểm soát chi phí và dọn dẹp; vượt hạn mức thì upload bị từ chối kèm lỗi rõ ràng |
 
 ## 1.6 AI
 
@@ -120,18 +127,23 @@
 | **Human-in-the-loop** | Người luôn quyết định cuối | AI không tự duyệt |
 | **Grounding** | Neo kết quả AI vào dữ liệu thật (Series Bible) | Giảm bịa, có bằng chứng |
 | **Supervisor** | Thành phần điều phối chọn agent kế tiếp | Không viết nội dung, không duyệt, không chuyển stage; không phải role |
-| **Agent** | Một tác nhân AI chuyên môn: Writer, Continuity, Storyboard, Artist, Letterer, Editor, Producer | Mỗi agent một việc, có prompt và bộ kiểm riêng |
+| **Agent** | Một tác nhân AI chuyên môn. Lõi: Writer, Continuity, Storyboard, Editor, Artist, và Letterer (rút gọn thoại). Mở rộng: Producer, và dịch thoại của Letterer | Mỗi agent một việc, có prompt và bộ kiểm riêng; không đổi stage, không duyệt cổng |
 | **Workflow type** | Loại nhiệm vụ AI: `FullScene`, `Script`, `Storyboard`, `Artist`, `Letterer`, `Editor`, `Producer` | Quy định chuỗi agent hợp lệ và ai được chạy |
 | **Guardrail (WorkflowRules)** | Luật bằng code giới hạn hành động của AI | Supervisor chọn sai thì bị ghi đè bằng hành động an toàn |
 | **StopForHuman / WaitingForHuman** | AI dừng chờ người xử lý | Khi thiếu dữ liệu hoặc còn lỗi chặn |
 | **Continuity check** | Kiểm tra nhất quán với Bible | Bắt lỗi cốt truyện, kèm bằng chứng |
 | **Finding / Triage** | Một phát hiện của AI / việc phân loại nó | Mỗi finding kết thúc là Confirmed, Rejected, Ignored hoặc Needs clarification |
-| **Script breakdown** | AI chia script thành Scene, Page, Panel | Tăng tốc dựng cấu trúc |
+| **Script breakdown** | Storyboard Agent chia script đã duyệt thành Page và Panel, kèm thứ tự đọc, shot scale và liên kết tới dòng script nguồn | Tăng tốc dựng cấu trúc |
 | **Layout suggestion** | AI gợi ý bố cục trang | Điểm khởi đầu cho Artist |
-| **Balloon-fit / Overflow** | Phát hiện chữ tràn khung, đè tranh, sai thứ tự đọc | Cảnh báo cho Letterer |
-| **Image prompt** | Câu mô tả ảnh cho từng panel | ArtistAgent soạn, không sinh ảnh |
+| **Balloon-fit / Overflow** | Phát hiện chữ tràn khung, đè tranh, sai thứ tự đọc; do **code** tính, không phải mô hình | Cảnh báo cho Letterer |
+| **Dialogue shortening** | Letterer Agent rút gọn thoại cho vừa balloon trong giới hạn độ dài (lõi); dịch thoại sang ngôn ngữ khác là mở rộng | Thoại đổi nghĩa phải được Writer hoặc Editor duyệt |
+| **Character image pipeline** | Pipeline 7 bước: chọn character sheet khoá, upload sketch, yêu cầu ảnh (tư thế, cảm xúc, cỡ cảnh, phong cách, chế độ màu), tách nền, chấm điểm tương đồng, Artist accept/edit/reject, lưu thành Element lớp artwork độc lập | Sinh ảnh nhân vật qua adapter thay được; chỉ sinh nhân vật, không sinh cả cảnh; nền tảng vẫn dùng được khi không có sinh ảnh |
+| **Similarity score** | Điểm tương đồng (0 đến 1) giữa một hình nhân vật với character sheet tham chiếu | Dưới ngưỡng cấu hình (0.75, đề xuất chờ giảng viên) thì gắn cờ cho người xem |
+| **Three-layer consistency** | Nhất quán nhân vật ở ba lớp: văn bản (Continuity Agent, có trích bằng chứng), luật bằng code, hình ảnh (so với character sheet) | Mục tiêu chất lượng trung tâm; độ lệch được nêu ra, không bị giấu |
+| **Seeded-defect set** | Tập dữ liệu gài sẵn lỗi văn bản và hình ảnh để đo | Đo precision và recall (tối thiểu 70% mỗi loại, đề xuất chờ giảng viên) so với baseline một prompt |
+| **Image prompt** | Câu mô tả ảnh cho từng panel | ArtistAgent soạn. Hiện code chưa sinh ảnh; việc sinh ảnh thuộc pipeline ảnh nhân vật (lõi theo phiếu V1.2) |
 | **Provider (Gemini, Mock)** | Nhà cung cấp mô hình AI; Mock là bản giả lập không cần khóa | Chạy thật hoặc demo/test |
-| **Quota (AI)** | Hạn mức sử dụng AI theo Workspace | Admin kiểm soát chi phí |
+| **Quota (AI)** | Hạn mức sử dụng AI theo Workspace: token hằng tháng, và quota sinh ảnh (số ảnh hoặc ngân sách, vì token LLM không phản ánh chi phí mô hình ảnh) | Admin kiểm soát chi phí; kiểm trước khi gọi AI hoặc sinh ảnh |
 | **Prompt injection** | Nội dung trong dữ liệu cố điều khiển AI | Dữ liệu đưa vào prompt luôn được coi là dữ liệu, không phải lệnh |
 | **Snapshot (RunSnapshot)** | Bản chụp bất biến ngữ cảnh lúc chạy AI | Truy vết AI đã đọc gì |
 
@@ -173,13 +185,15 @@
 
 Các quy tắc nghiệp vụ BR-01 đến BR-24 lấy từ đặc tả. Phần giải thích và ví dụ do tài liệu này thêm.
 
+> **Ghi chú theo phiếu đăng ký V1.2:** (1) BR-03 đã đổi mô hình Scene/Page/Panel, xem bên dưới. (2) Lõi demo là manga trắng đen; chế độ màu là mở rộng. (3) Rút gọn thoại cho vừa balloon (Letterer Agent) thuộc lõi, dịch thoại là mở rộng. (4) Publisher là external reviewer, Producer không có quan hệ với nhà xuất bản, xuất bản làm ngoài hệ thống; xem ghi chú ở BR-24. (5) Các giá trị nghiệm thu (timeout 30 giây, precision/recall tối thiểu 70%, ngưỡng tương đồng 0.75) là đề xuất chờ xác nhận.
+
 ## 2.1 Quy tắc nghiệp vụ (BR-01 đến BR-24)
 
 ### Nhóm A. Cấu trúc nội dung và dữ liệu
 
 | Mã | Quy tắc | Giải thích | Ví dụ |
 |---|---|---|---|
-| **BR-03** | Chứa nhau theo đúng cây | `Series → Chapter → Scene → Page → Panel → Element`. Mỗi thứ thuộc đúng một cha, không có đối tượng mồ côi | Không tạo Panel khi chưa có Page chứa nó |
+| **BR-03** | Chứa nhau theo đúng cây | Cây vật lý `Series → Chapter → Page → Panel → Element` song song với cấu trúc tự sự `Chapter → Scene → Script block`. Mỗi thứ thuộc đúng một cha, không có đối tượng mồ côi. Panel thuộc đúng một Page, tối đa một Scene và tham chiếu các Script block (phiếu V1.2; code hiện còn `Page.SceneId`, cần đổi) | Không tạo Panel khi chưa có Page chứa nó |
 | **BR-05** | Một dòng thoại, một text | Mỗi dòng script gắn tối đa một Balloon/Text element | Không kéo cùng câu thoại vào hai bubble; muốn hai bóng thì tách dòng thoại |
 | **BR-04** | Bất biến theo hash (CAS) | Mọi file có SHA-256; client tính, server tính lại và đối chiếu trước khi nhận | File tải lên không khớp hash bị từ chối |
 | **BR-13** | Chống lưu trùng asset | Cùng hash thì dùng lại asset đã có, trong phạm vi quyền | Hai panel dùng chung ảnh nền thì trỏ về một asset |
@@ -227,7 +241,7 @@ Các quy tắc nghiệp vụ BR-01 đến BR-24 lấy từ đặc tả. Phần g
 |---|---|---|---|
 | **BR-09** | Link xem thử hết hạn | Hết hạn thì vô hiệu vĩnh viễn, bất kể ai giữ URL | Link hết hạn thì mất quyền xem |
 | **BR-17** | Xem thử gắn người nhận | Chỉ cấp cho chương đã khóa, cho một email cụ thể; watermark hiện người nhận; Producer thu hồi được trước hạn; mọi lần truy cập, kể cả bị từ chối, đều ghi log | Bình chỉ xem chương được chia sẻ; email khác mở link bị từ chối |
-| **BR-24** | Đọc công khai | Series có chương Published nằm trong catalog công khai độc lập với Workspace; tài khoản Reader tách riêng; khác với link xem thử | Độc giả không thấy bản thảo đang sản xuất |
+| **BR-24** | Đọc công khai | Series có chương Published nằm trong catalog công khai độc lập với Workspace; tài khoản Reader tách riêng; khác với link xem thử | Độc giả không thấy bản thảo đang sản xuất. **Tính năng thêm, ngoài phạm vi đăng ký V1.2:** phiếu nói xuất bản làm ở ngoài hệ thống và không có Public Reader; nhóm quyết định giữ BR này như tính năng thêm, không thuộc nghiệm thu |
 
 ### Ba đường truy cập tách biệt
 Truy cập nội bộ Workspace, link xem thử, và đọc công khai là **ba đường riêng**; không dùng quyền của đường này cho đường khác (BR-24).
@@ -288,7 +302,9 @@ Chương đi qua: `InProduction → Approved → Locked → Published`; mở l�
 | Nội dung lời thoại sau khi đổi | **Writer** hoặc **Editor** duyệt | Letterer đề xuất rút gọn |
 | Yêu cầu sửa, duyệt cổng stage | **Editor** | Role thực hiện sửa |
 | Giao việc, khóa chương, mở lại, phát hành | **Producer** | Theo cổng đã cấu hình |
-| Tài khoản, quyền tạo Studio, cấu hình AI và lưu trữ | **Admin** | Không có quyền nội dung |
+| Duyệt và khoá character sheet | **Producer** | Artist cung cấp sketch; Writer và Editor xem |
+| Chấp nhận, sửa hoặc từ chối ảnh nhân vật do AI sinh | **Artist** | Editor triage báo cáo nhất quán hình ảnh |
+| Tài khoản, quyền tạo Studio, cấu hình AI, giới hạn Workspace (storage, quota token, quota ảnh, session policy), retention và backup | **Admin** | Không có quyền nội dung |
 | Mời thành viên vào Workspace và gán WorkspaceRole | **Producer** | Admin không làm việc này |
 
 ---
@@ -306,7 +322,9 @@ Chương đi qua: `InProduction → Approved → Locked → Published`; mở l�
 - Output của agent được kiểm bằng code ở AI service rồi kiểm lại ở Backend: ID do code cấp, mô hình chỉ trả khóa ngắn (`L1`, `B2`, `P3`, `F4`); mọi con số `%` do code tính; giới hạn chữ của Letterer do code ước lượng.
 - Dữ liệu đưa vào prompt được coi là dữ liệu, không phải lệnh. Tên và email thành viên không được đưa cho mô hình, chỉ dùng vai trò và stage.
 - Mỗi lần chạy lưu step, output, phiên bản prompt kèm hash, usage, provenance; không ghi đè lịch sử.
-- AI tắt, chậm, hết quota hoặc lỗi thì **quy trình thủ công vẫn dùng được**.
+- AI tắt, chậm, hết quota hoặc lỗi thì **quy trình thủ công vẫn dùng được**. Service AI chạy tách biệt, không gọi trong request nghiệp vụ lõi, có timeout (30 giây, đề xuất chờ giảng viên), circuit breaker và provider dự phòng; run bị gián đoạn giữ các bước đã xong và chạy tiếp từ bước lỗi.
+- Editor Agent ở giai đoạn đầu chỉ tổng hợp finding và checklist do code chuẩn bị rồi nháp review report và comment từ chối; quyết định duyệt hoặc từ chối luôn do Editor.
+- Output gốc của AI không bị sửa: chỉnh sửa tạo revision dẫn xuất; đề xuất bị từ chối cũng được lưu.
 - Khi tích hợp ảnh: ảnh AI tạo ra và ảnh tách nền là **asset dẫn xuất** có nguồn, chỉ vào panel sau khi người chấp nhận.
 
 ---
@@ -366,9 +384,23 @@ Mức thấp không bao giờ ghi đè mức cao.
 
 ---
 
-## 2.10 Tóm tắt
+## 2.10 Quy tắc bổ sung theo phiếu V1.2 (ngoài BR-01 đến BR-24)
 
-- **Cấu trúc:** Workspace → Series → Chapter → Scene → Page → Panel → Element, không có đối tượng mồ côi.
+Các quy tắc sau nằm trong phiếu đăng ký nhưng chưa có mã BR riêng:
+
+- **Character sheet khoá.** Producer duyệt và khoá một phiên bản làm tham chiếu duy nhất, versioned theo chương. Bản mới có hiệu lực từ chương được chọn; đã khoá thì chỉ thay thế bằng bản mới, không sửa. Agent và các kiểm tra luôn đọc bản hiệu lực tại chương đang làm.
+- **Giới hạn Workspace do Admin đặt** (storage GB, token AI hằng tháng, quota sinh ảnh, session policy) được kiểm **trước** thao tác nó điều khiển (upload, gọi AI, sinh ảnh, đăng nhập hoặc làm mới token). Vượt giới hạn thì trả lỗi rõ ràng, không lỗi ngầm và không chi phí vô hạn. Producer và Admin đều xem được mức dùng.
+- **Nhất quán nhân vật ba lớp** (văn bản, luật bằng code, hình ảnh) là mục tiêu chất lượng trung tâm. Chất lượng được **đo** trên tập lỗi gài sẵn; precision và recall tối thiểu 70% và ngưỡng tương đồng 0.75 là **đề xuất chờ giảng viên xác nhận**.
+- **Ảnh nhân vật do AI sinh** đi qua adapter thay được, luôn qua bước Accept, Edit hoặc Reject có provenance, và chỉ là nhân vật (nền, bố cục, balloon lắp trong editor từ Element có cấu trúc). Không có công cụ vẽ tự do.
+- **Lõi demo là manga trắng đen.** Chế độ màu (stage Color, kiểm nhất quán màu) là cấu hình mở rộng và không thuộc nghiệm thu.
+- **Rút gọn thoại cho vừa balloon** thuộc lõi; dịch thoại và Producer Agent là mở rộng.
+- **Xuất bản làm ngoài hệ thống.** Publisher là external reviewer; Producer không có quan hệ với nhà xuất bản.
+
+---
+
+## 2.11 Tóm tắt
+
+- **Cấu trúc:** Workspace → Series → Chapter, trong Chapter là cây vật lý Page → Panel → Element và cấu trúc tự sự Scene → Script block song song; Panel tham chiếu Script block; không có đối tượng mồ côi.
 - **Quyền:** hai tầng, không có membership thì không có quyền; Admin không đọc nội dung, chỉ Producer mời thành viên.
 - **Sản xuất:** pipeline có cổng duyệt, dependency theo từng Page/Panel, chương khóa chỉ đọc.
 - **Lịch sử:** chỉ thêm, khôi phục là tạo bản mới, xung đột phải báo.

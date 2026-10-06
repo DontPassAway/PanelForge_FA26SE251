@@ -2,6 +2,8 @@
 
 > **Tài liệu:** Bổ sung cho `role-workflows.md`. Tài liệu kia mô tả luồng theo từng role; tài liệu này đi qua **một ví dụ xuyên suốt** để thấy từng role làm gì, ở bước nào, và chuyện gì xảy ra khi có lỗi.
 > **Cập nhật:** 04/10/2026
+>
+> **Đối chiếu phiếu đăng ký V1.2 (06/10/2026):** ví dụ này mô tả hành vi đã triển khai. Các điểm khác phiếu: Scene không chứa Page; Artist Agent hiện chỉ soạn prompt ảnh (pipeline ảnh nhân vật là lõi nhưng chưa làm); Letterer rút gọn thoại là lõi; Public Reader là tính năng thêm ngoài phạm vi đăng ký (nhóm quyết định giữ). Chi tiết ở `docs/implementation/PanelForge_Scope_V1.2.md`.
 > **Nguồn đặc tả:** `docs/requirements/PanelForge_Capstone_Content.md` (BR, US, UC), `requirements.md`, `role-workflows.md`, `storage-architecture.md`, `storage-strategy.md`, `ai-multi-agent-demo.md`. Các mã BR/US/UC trong ngoặc là mã trong đặc tả.
 
 ---
@@ -28,7 +30,8 @@ Cấu trúc nội dung:
 ```
 Studio Workspace "Moonlight"
   └── Series "Thành phố mưa"      (một Workspace có thể có nhiều Series)
-       └── Chapter 3 → Scene 1 → Page → Panel → Element
+       └── Chapter 3 ─┬─ Page → Panel → Element      (cây vật lý)
+                  └─ Scene 1 → ScriptLine         (cấu trúc tự sự; Panel tham chiếu ScriptLine)
 ```
 
 Pipeline 8 stage của Series (sao chép từ template `STANDARD_MANGA`):
@@ -100,7 +103,7 @@ sequenceDiagram
 1. Tạo tài khoản; khóa hoặc mở khóa tài khoản.
 2. Cấp hoặc thu hồi quyền tạo Studio (`CanCreateStudio`, BR-22).
 3. Sau khi một người có quyền tạo Studio, người đó tự tạo Workspace và tự thành Producer (BR-22). Admin không mời thành viên vào Workspace.
-4. Cấu hình AI cho Workspace: provider, model được phép, khóa, quota.
+4. Cấu hình AI cho Workspace: provider, model được phép, khóa, quota. Theo phiếu V1.2, Admin còn đặt giới hạn storage (GB), quota ảnh và session policy cho từng Workspace.
 5. Cấu hình lưu trữ, danh mục dùng chung (template pipeline, element type, export preset).
 6. Xem audit log và mức sử dụng AI.
 
@@ -208,7 +211,7 @@ sequenceDiagram
 - **Nhận việc.** Hà thấy: "Chapter 3, Pencil, hạn 18/10, ưu tiên Cao, brief: panel 4 là cận cảnh gói vải rơi xuống vũng nước".
 - **Tra Bible.** Hà mở hồ sơ An để xem model sheet và bảng màu.
 - **Chốt layout.** Storyboard AI gợi ý 5 panel; Hà chọn giữ 5 panel nhưng phóng to panel 4 và chừa khoảng trống phía trên cho balloon. Cô đánh dấu khuôn mặt An ở panel 2 là vùng quan trọng. Layout cuối do Hà chốt.
-- **Prompt ảnh bằng AI.** Hà chạy nhiệm vụ **Artist** (chỉ Artist chạy được). ArtistAgent soạn prompt cho từng panel của layout đã duyệt, kèm reference lấy từ Bible. Ví dụ panel 4: "Cận cảnh gói vải xám rơi xuống vũng nước, mưa rơi, tông xanh lạnh", reference: entry Bible "Ga Mưa". Mọi nhân vật trong panel phải được tham chiếu. Hà Accept để tạo revision `ImagePrompt`. Agent chỉ soạn prompt, không sinh ảnh.
+- **Prompt ảnh bằng AI.** Hà chạy nhiệm vụ **Artist** (chỉ Artist chạy được). ArtistAgent soạn prompt cho từng panel của layout đã duyệt, kèm reference lấy từ Bible. Ví dụ panel 4: "Cận cảnh gói vải xám rơi xuống vũng nước, mưa rơi, tông xanh lạnh", reference: entry Bible "Ga Mưa". Mọi nhân vật trong panel phải được tham chiếu. Hà Accept để tạo revision `ImagePrompt`. Agent chỉ soạn prompt, không sinh ảnh. *(Theo phiếu V1.2, pipeline ảnh nhân vật gồm character sheet khoá, sinh ảnh từ sketch, tách nền và so tương đồng thuộc lõi nhưng chưa triển khai; đoạn này mô tả hành vi hiện tại.)*
 - **Tải artwork lên.** Hà vẽ Pencil cả trang trong Clip Studio, tải lên, chọn stage "Pencil". Hệ thống tính SHA-256; nếu cùng file đã có trong Workspace thì dùng lại, không lưu trùng (BR-04, BR-13). Mỗi lần tải lại là một **phiên bản artwork mới**, bản cũ vẫn truy cập được.
 - **Tách nền.** Hà tải ảnh người lạ, bấm "Tách nền" để ghép sang panel khác. Ảnh gốc giữ nguyên, kết quả là asset mới liên kết về ảnh gốc; Hà xem rồi mới chấp nhận (`requirements.md` 5.9).
 - **AI tạo ảnh nháp.** Hà yêu cầu ảnh nháp cho panel 1; kết quả là đề xuất, chỉ vào panel khi Hà Accept (`requirements.md` 5.8).
@@ -316,6 +319,8 @@ sequenceDiagram
 ---
 
 ### 3.8 Độc giả công khai (Public Reader): Chi
+
+> **Tính năng thêm, ngoài phạm vi đăng ký V1.2:** phiếu ghi xuất bản làm ngoài hệ thống và không có Public Reader; nhóm quyết định giữ mục này, không thuộc nghiệm thu.
 
 **Việc của độc giả công khai:** đọc truyện **đã phát hành** qua catalog công khai và app, bằng tài khoản Reader riêng. Đây là luồng truy cập thứ ba, tách biệt khỏi truy cập nội bộ Workspace và khỏi link xem thử (BR-24).
 
