@@ -32,6 +32,12 @@ internal static class AssignmentNotifications
         cr.ResponsibleUserId, NotificationType.ChangeRequestReopened, "Yêu cầu sửa bị mở lại, chưa đạt",
         cr.ReviewerComment ?? cr.Description, cr.AssignmentId, cr.ChapterId);
 
+    public static Notification DueSoon(Assignment a) => Notification.Create(
+        a.AssigneeUserId, NotificationType.AssignmentDueSoon, "Việc sắp đến hạn", Describe(a), a.Id, a.ChapterId);
+
+    public static Notification Overdue(Assignment a) => Notification.Create(
+        a.AssigneeUserId, NotificationType.AssignmentOverdue, "Việc đã quá hạn", Describe(a), a.Id, a.ChapterId);
+
     private static string Describe(Assignment a)
     {
         var brief = a.Brief.Length > 200 ? a.Brief[..200] + "…" : a.Brief;

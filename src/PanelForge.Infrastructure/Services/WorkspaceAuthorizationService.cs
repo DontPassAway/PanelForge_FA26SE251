@@ -113,6 +113,12 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
             .Select(p => (Guid?)p.Page.Chapter.Series.WorkspaceId)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<Guid?> GetWorkspaceIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default)
+        => _dbContext.Scenes
+            .Where(s => s.Id == sceneId)
+            .Select(s => (Guid?)s.Chapter.Series.WorkspaceId)
+            .FirstOrDefaultAsync(cancellationToken);
+
     // BR-07: Administrator không bao giờ có quyền cấp Workspace.
     private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken)
         => _dbContext.Users.AnyAsync(u => u.Id == userId && u.Role == SystemRole.Admin, cancellationToken);

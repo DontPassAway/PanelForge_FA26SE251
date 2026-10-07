@@ -50,9 +50,10 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
     {
         var pageIndex = Math.Max(1, q.PageIndex);
         var pageSize = Math.Clamp(q.PageSize, 1, 50);
+        var now = DateTime.UtcNow; // chương lên lịch (PublishedAt tương lai) chưa lộ ra cho Reader
 
         var query = _dbContext.Series.AsNoTracking()
-            .Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.Published));
+            .Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now));
 
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
@@ -71,7 +72,7 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
         // Sắp xếp + phân trang trên entity TRƯỚC khi projection vào positional record:
         // EF Core không dịch được OrderBy theo member của record (LatestPublishedAt) sau khi đã Select.
         var items = await query
-            .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.Published).Max(c => c.PublishedAt))
+            .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt))
             .ThenBy(s => s.Title)
             .Skip((pageIndex - 1) * pageSize)
             .Take(pageSize)
@@ -83,8 +84,8 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
                 s.Format,
                 s.ReadingDirection,
                 s.Workspace.Name,
-                s.Chapters.Count(c => c.Status == ChapterStatus.Published),
-                s.Chapters.Where(c => c.Status == ChapterStatus.Published).Max(c => c.PublishedAt)))
+                s.Chapters.Count(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now),
+                s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt)))
             .ToListAsync(ct);
 
         return Result<PagedResult<PublicSeriesDto>>.Success(new PagedResult<PublicSeriesDto>(
@@ -103,6 +104,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
 
     public async Task<Result<PublicSeriesDetailDto>> Handle(GetPublicSeriesDetailQuery q, CancellationToken ct)
     {
+        var now = DateTime.UtcNow;
         var series = await _dbContext.Series.AsNoTracking()
             .Where(s => s.Id == q.SeriesId)
             .Select(s => new
@@ -115,7 +117,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 s.ReadingDirection,
                 StudioName = s.Workspace.Name,
                 Chapters = s.Chapters
-                    .Where(c => c.Status == ChapterStatus.Published)
+                    .Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now)
                     .OrderBy(c => c.ChapterNumber)
                     .Select(c => new PublicChapterDto(c.Id, c.ChapterNumber, c.Title, c.PublishedAt))
                     .ToList()

@@ -21,4 +21,5 @@ public interface IWorkspaceAuthorizationService
 
     /// <summary>Workspace chứa Panel (qua Page, Chapter, Series); null nếu Panel không tồn tại.</summary>
     Task<Guid?> GetWorkspaceIdOfPanelAsync(Guid panelId, CancellationToken cancellationToken = default);
+    Task<Guid?> GetWorkspaceIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default);
 }

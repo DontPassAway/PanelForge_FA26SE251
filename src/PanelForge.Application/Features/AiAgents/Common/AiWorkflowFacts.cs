@@ -112,7 +112,7 @@ internal sealed record AiWorkflowFacts(
     /// Nếu Chapter đã giao việc cho vai trò này thì người gọi phải là người được giao và assignment phải đang ở trạng thái làm việc,
     /// stage hiện tại phải dành cho vai trò đó. Chapter chưa giao việc cho vai trò này → việc mở cho mọi thành viên cùng vai trò.
     /// </summary>
-    private static async Task<AssignmentGate> EvaluateAssignmentAsync(
+    internal static async Task<AssignmentGate> EvaluateAssignmentAsync(
         IPanelForgeDbContext db, Guid userId, Chapter chapter, WorkspaceRole role, CancellationToken ct)
     {
         var all = await db.Assignments.AsNoTracking()

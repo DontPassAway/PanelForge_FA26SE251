@@ -35,6 +35,7 @@ public static class DevUserSeeder
         new(Guid.Parse("66666666-6666-6666-6666-666666666666"), "letterer@panelforge.com", "David Letterer", "0900000006"),
         new(Guid.Parse("77777777-7777-7777-7777-777777777777"), "editor@panelforge.com", "Emma Editor", "0900000007"),
         new(Guid.Parse("88888888-8888-8888-8888-888888888888"), "reader@panelforge.com", "Frank Reader", "0900000008"),
+        new(Guid.Parse("99999999-9999-9999-9999-999999999999"), "publisher@panelforge.com", "Grace Publisher", "0900000009"),
         new(Guid.Parse("78780b6e-314f-4cdd-b813-2cbf24da0697"), "nguyentotrungkien.game@gmail.com", "Nguyen To Trung Kien", "0974867471"),
     ];
 

@@ -90,6 +90,19 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
             workspaceId = pageWsId.Value;
         }
+        else if (context.RouteData.Values.TryGetValue("sceneId", out var sceneVal) && sceneVal is string sceneStr && Guid.TryParse(sceneStr, out var parsedSceneId))
+        {
+            var sceneWsId = await _authorizationService.GetWorkspaceIdOfSceneAsync(
+                parsedSceneId, context.HttpContext.RequestAborted);
+
+            if (sceneWsId == null)
+            {
+                context.Result = new NotFoundObjectResult(new { message = "Không tìm thấy Scene tương ứng." });
+                return;
+            }
+
+            workspaceId = sceneWsId.Value;
+        }
         else if (context.RouteData.Values.TryGetValue("panelId", out var panelVal) && panelVal is string panelStr && Guid.TryParse(panelStr, out var parsedPanelId))
         {
             var panelWsId = await _authorizationService.GetWorkspaceIdOfPanelAsync(

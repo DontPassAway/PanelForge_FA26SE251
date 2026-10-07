@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common.Attributes;
+using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Features.Pages.Commands.CreatePage;
 using PanelForge.Application.Features.Pages.Commands.DeletePage;
@@ -13,6 +16,7 @@ using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 namespace PanelForge.API.Controllers;
 
 [ApiController]
+[Authorize]
 public sealed class PagesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -34,6 +38,7 @@ public sealed class PagesController : ControllerBase
     /// Khởi tạo Stream mới trên Marten Event Store và lưu Read Model vào EF Core.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/pages")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
     [ProducesResponseType(typeof(PageDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -73,6 +78,7 @@ public sealed class PagesController : ControllerBase
     /// Lấy danh sách tất cả các trang của một chương, sắp xếp theo thứ tự trang.
     /// </summary>
     [HttpGet("api/chapters/{chapterId:guid}/pages")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<PageDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPagesByChapter(
@@ -93,6 +99,7 @@ public sealed class PagesController : ControllerBase
     /// Lấy thông tin chi tiết của một trang (rebuilt từ Marten Event Store).
     /// </summary>
     [HttpGet("api/pages/{pageId:guid}")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(PageDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPageById(
@@ -113,6 +120,7 @@ public sealed class PagesController : ControllerBase
     /// Lấy toàn bộ cấu trúc phân cấp của trang bao gồm Panels và Elements bên trong.
     /// </summary>
     [HttpGet("api/pages/{pageId:guid}/hierarchy")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(PageContentHierarchyDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPageHierarchy(
@@ -133,6 +141,7 @@ public sealed class PagesController : ControllerBase
     /// Cập nhật đổi thứ tự trang trong chương.
     /// </summary>
     [HttpPut("api/pages/{pageId:guid}/reorder")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
     [ProducesResponseType(typeof(PageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -160,6 +169,7 @@ public sealed class PagesController : ControllerBase
     /// Cập nhật thông số khổ giấy / canvas của trang.
     /// </summary>
     [HttpPut("api/pages/{pageId:guid}/canvas-settings")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -194,6 +204,7 @@ public sealed class PagesController : ControllerBase
     /// Xóa mềm một trang truyện khỏi chương (Soft-delete).
     /// </summary>
     [HttpDelete("api/pages/{pageId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePage(

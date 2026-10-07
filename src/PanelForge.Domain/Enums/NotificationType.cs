@@ -18,5 +18,15 @@ public enum NotificationType
     /// <summary>Gửi người tạo yêu cầu sửa khi người chịu trách nhiệm báo đã sửa.</summary>
     ChangeRequestResolved = 7,
     /// <summary>Gửi người chịu trách nhiệm khi Editor mở lại yêu cầu sửa vì chưa đạt.</summary>
-    ChangeRequestReopened = 8
+    ChangeRequestReopened = 8,
+    /// <summary>Gửi Publisher của Workspace khi Producer duyệt chương, chờ duyệt xuất bản.</summary>
+    ChapterReadyForPublication = 9,
+    /// <summary>Gửi Producer khi chương bị mở lại (Publisher từ chối kèm lý do).</summary>
+    ChapterReopened = 10,
+    /// <summary>Gửi Producer khi Publisher duyệt và lên lịch phát hành.</summary>
+    ChapterPublished = 11,
+    /// <summary>Gửi người nhận khi việc chưa xong và hạn còn trong khoảng nhắc (mặc định 24 giờ). BR-14, UC-14.</summary>
+    AssignmentDueSoon = 12,
+    /// <summary>Gửi người nhận một lần khi việc chưa xong đã quá hạn.</summary>
+    AssignmentOverdue = 13
 }

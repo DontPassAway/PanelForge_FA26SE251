@@ -3,12 +3,17 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
+using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
+using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
+using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
+using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
 using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 using PanelForge.Domain.Enums;
 
@@ -159,4 +164,50 @@ public sealed class ChaptersController : ControllerBase
 
         return Ok(new { message = $"Chương {chapterId} đã được xóa thành công." });
     }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/approve
+    /// Producer duyệt bản hoàn chỉnh (InProduction → Approved) và chuyển cho Publisher.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/approve")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApproveChapter([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new ApproveChapterCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/reopen
+    /// Producer mở lại, hoặc Publisher từ chối xuất bản: Approved → InProduction, bắt buộc lý do.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/reopen")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Publisher)]
+    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReopenChapter(
+        [FromRoute] Guid chapterId, [FromBody] ReopenChapterRequest body, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new ReopenChapterCommand(chapterId, GetCurrentUserId(), body.Comment), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/publish
+    /// Publisher duyệt xuất bản và lên lịch (Approved → Published). publishAt bỏ trống = phát hành ngay.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/publish")]
+    [RequireWorkspaceRole(WorkspaceRole.Publisher)]
+    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PublishChapter(
+        [FromRoute] Guid chapterId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new PublishChapterCommand(chapterId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/reviews — lịch sử phê duyệt cấp Chapter (thành viên Workspace).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/reviews")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ChapterReviewDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChapterReviews([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterReviewsQuery(chapterId), cancellationToken));
+
+    private IActionResult ToActionResult<T>(Result<T> result) => result.IsSuccess ? Ok(result.Value) : result.ErrorCode switch
+    {
+        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+        ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+        _ => BadRequest(new { error = result.ErrorMessage })
+    };
 }

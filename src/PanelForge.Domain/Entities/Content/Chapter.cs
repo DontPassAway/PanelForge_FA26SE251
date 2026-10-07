@@ -50,4 +50,35 @@ public class Chapter : BaseEntity
     }
 
     public void IncrementVersion() => VersionVector++;
+
+    /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → Approved), chờ Publisher.</summary>
+    public void Approve()
+    {
+        RequireStatus(ChapterStatus.InProduction, "duyệt");
+        Status = ChapterStatus.Approved;
+    }
+
+    /// <summary>Mở lại để sửa (Approved → InProduction). Chương đã Published là bản cuối nên không mở lại.</summary>
+    public void Reopen()
+    {
+        RequireStatus(ChapterStatus.Approved, "mở lại");
+        Status = ChapterStatus.InProduction;
+    }
+
+    /// <summary>Publisher duyệt xuất bản (Approved → Published). <paramref name="publishAt"/> ở tương lai = lên lịch; Reader chỉ thấy từ lúc đó.</summary>
+    public void Publish(DateTime publishAt)
+    {
+        RequireStatus(ChapterStatus.Approved, "phát hành");
+        Status = ChapterStatus.Published;
+        PublishedAt = publishAt;
+    }
+
+    /// <summary>Reader chỉ thấy chương Published đã đến giờ phát hành.</summary>
+    public bool IsVisibleToReaders(DateTime utcNow) => Status == ChapterStatus.Published && PublishedAt <= utcNow;
+
+    private void RequireStatus(ChapterStatus expected, string action)
+    {
+        if (Status != expected)
+            throw new InvalidOperationException($"Chỉ {action} được chương ở trạng thái {expected}, hiện là {Status}.");
+    }
 }

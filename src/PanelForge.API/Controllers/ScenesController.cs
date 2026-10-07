@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common.Attributes;
+using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Scenes.Commands.CreateScene;
 using PanelForge.Application.Features.Scenes.Commands.DeleteScene;
 using PanelForge.Application.Features.Scenes.Commands.ReorderScenes;
@@ -12,6 +15,7 @@ using PanelForge.Application.Features.Scenes.Queries.GetScenesByChapter;
 namespace PanelForge.API.Controllers;
 
 [ApiController]
+[Authorize]
 public sealed class ScenesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -32,6 +36,7 @@ public sealed class ScenesController : ControllerBase
     /// Tạo một phân cảnh mới phân rã từ Chapter.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/scenes")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(SceneDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -65,6 +70,7 @@ public sealed class ScenesController : ControllerBase
     /// Lấy danh sách phân cảnh của một Chapter, sắp xếp theo thứ tự SceneNumber.
     /// </summary>
     [HttpGet("api/chapters/{chapterId:guid}/scenes")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<SceneDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetScenesByChapter(
         [FromRoute] Guid chapterId,
@@ -80,6 +86,7 @@ public sealed class ScenesController : ControllerBase
     /// Lấy thông tin chi tiết của một Scene kèm danh sách dòng kịch bản.
     /// </summary>
     [HttpGet("api/scenes/{sceneId:guid}")]
+    [RequireWorkspaceRole]
     [ProducesResponseType(typeof(SceneDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSceneById(
@@ -100,6 +107,7 @@ public sealed class ScenesController : ControllerBase
     /// Cập nhật nội dung tiêu đề kịch bản và tóm tắt phân cảnh.
     /// </summary>
     [HttpPut("api/scenes/{sceneId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(SceneDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -132,6 +140,7 @@ public sealed class ScenesController : ControllerBase
     /// Sắp xếp lại thứ tự danh sách phân cảnh trong Chapter.
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}/scenes/reorder")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ReorderScenes(
@@ -153,6 +162,7 @@ public sealed class ScenesController : ControllerBase
     /// Xóa mềm một phân cảnh (Soft-delete).
     /// </summary>
     [HttpDelete("api/scenes/{sceneId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteScene(

@@ -19,6 +19,7 @@ using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissio
 using PanelForge.Application.Features.Assignments.Queries.GetChangeRequestsByChapter;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentsByChapter;
+using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
 using PanelForge.Application.Features.Progress.Queries.GetStageProgressByChapter;
 using PanelForge.Domain.Enums;
 
@@ -203,6 +204,16 @@ public sealed class AssignmentsController : ControllerBase
     public async Task<IActionResult> GetStageProgress(Guid chapterId, [FromQuery] Guid? pageId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetStageProgressByChapterQuery(chapterId, pageId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/progress — tổng hợp tiến độ Series cho Producer (UC-16): theo stage/panel, khối lượng việc, quá hạn, burndown.</summary>
+    [HttpGet("api/series/{seriesId:guid}/progress")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(SeriesProgressDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSeriesProgress(Guid seriesId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetSeriesProgressQuery(seriesId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

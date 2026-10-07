@@ -77,6 +77,9 @@ builder.Services.AddAuthorization();
 // ── AI Multi-Agent: đánh dấu run dở (AI service chết/restart) là Interrupted ──────────
 builder.Services.AddHostedService<AiRunSweeper>();
 
+// ── UC-14: nhắc người nhận việc sắp đến hạn / quá hạn ─────────────────────────────────
+builder.Services.AddHostedService<AssignmentReminderWorker>();
+
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>

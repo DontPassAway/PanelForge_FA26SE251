@@ -111,6 +111,17 @@ internal static class StageProgressRules
 
             var analysis = await LetteringPageAnalysis.AnalyzeAsync(db, page, ct);
             if (analysis.SubmissionBlockReason(page.PageNumber) is { } reason) return reason;
+
+            // CF2 mục "Điều kiện nộp": mọi dòng thoại đã neo vào Panel của trang phải có balloon/caption/SFX đang hoạt động
+            var bound = page.Elements.Values.Where(e => !e.IsRemoved && e.ScriptLineId.HasValue)
+                .Select(e => e.ScriptLineId!.Value).ToHashSet();
+            var anchored = await db.ScriptLines.AsNoTracking()
+                .Where(l => l.PanelId != null && l.DialogueText != null && l.DialogueText.Trim() != "" &&
+                            db.Panels.Any(p => p.Id == l.PanelId && p.PageId == pageId))
+                .Select(l => l.Id).ToListAsync(ct);
+            var unlettered = anchored.Count(id => !bound.Contains(id));
+            if (unlettered > 0)
+                return $"Trang {page.PageNumber} chưa thể nộp Lettering: {unlettered} dòng thoại của panel chưa có balloon.";
         }
 
         return null;

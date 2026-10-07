@@ -53,6 +53,7 @@ public interface IPanelForgeDbContext
     DbSet<AssetReference> AssetReferences { get; }
     DbSet<AssetAccessLog> AssetAccessLogs { get; }
     DbSet<Chapter> Chapters { get; }
+    DbSet<ChapterReview> ChapterReviews { get; }
     DbSet<Scene> Scenes { get; }
     DbSet<ScriptLine> ScriptLines { get; }
     DbSet<Page> Pages { get; }
