@@ -109,6 +109,26 @@ public class ChapterPublishFlowTests
     }
 
     [Fact]
+    public async Task Approve_WhenBlockingConsistencyFindingOpen_ShouldConflict_UntilTriaged()
+    {
+        var blocking = ConsistencyFinding.Create(_chapter.Id, "SPEAKER_NOT_CHARACTER", ConsistencyFindingSeverity.Blocking,
+            "Cảnh 1, dòng 1: người nói không phải nhân vật.", "fp-1");
+        _db.ConsistencyFindings.AddRange(blocking, ConsistencyFinding.Create(
+            _chapter.Id, "SPEAKER_MISSING", ConsistencyFindingSeverity.Warning, "Cảnh 1, dòng 2: thiếu người nói.", "fp-2"));
+        await _db.SaveChangesAsync();
+
+        var blocked = await Approve();
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("1 lỗi nhất quán");
+        _chapter.Status.Should().Be(ChapterStatus.InProduction);
+
+        // Editor bỏ qua có lý do (BR-21) → cổng mở; lỗi Warning còn mở không chặn
+        blocking.Triage(ConsistencyFindingStatus.Ignored, "Cảnh trong mơ", Guid.NewGuid());
+        await _db.SaveChangesAsync();
+        (await Approve()).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Publish_BeforeProducerApproval_ShouldConflict()
     {
         (await Publish()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);

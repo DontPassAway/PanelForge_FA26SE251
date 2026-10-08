@@ -71,7 +71,11 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
         foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, assignment.AssigneeUserId, ct))
             _db.Notifications.Add(AssignmentNotifications.Submitted(assignment, reviewerId));
 
-        await ChangeRequestRules.RecordSubmissionAsync(_db, assignment.Id, chapter.Id, cmd.UserId, ct);
+        // Gắn lần nộp với đúng bản được nộp (CF3: mọi phê duyệt gắn với một revision cụ thể)
+        var artworkIds = await ChangeRequestRules.LatestArtworkIdsAsync(
+            _db, assignment.PipelineStageId, panels.Select(p => p.PageId), ct);
+        await ChangeRequestRules.RecordSubmissionAsync(
+            _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector);
 
         assignment.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);

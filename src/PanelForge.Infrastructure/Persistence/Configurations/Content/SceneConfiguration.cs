@@ -28,6 +28,7 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
 
         builder.HasIndex(s => new { s.ChapterId, s.SceneNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự
                .HasDatabaseName("ix_scenes_chapter_number");
 
         builder.Property(s => s.Heading)

@@ -12,5 +12,6 @@ public sealed record RemoveElementCommand(
     Guid PageId,
     Guid ElementId,
     string Reason,               // "USER_DELETE" | "REPLACED" | "OUT_OF_FRAME"
-    Guid RemovedByUserId
+    Guid RemovedByUserId,
+    int? ExpectedElementVersion = null  // BR-11
 ) : IRequest<Result<bool>>;

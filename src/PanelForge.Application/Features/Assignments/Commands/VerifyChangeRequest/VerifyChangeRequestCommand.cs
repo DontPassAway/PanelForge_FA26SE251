@@ -7,7 +7,7 @@ using PanelForge.Application.Features.Assignments.Models;
 namespace PanelForge.Application.Features.Assignments.Commands.VerifyChangeRequest;
 
 /// <summary>CF3 bước 8: Editor xác minh đã đạt (Resolved → Verified). Người xác minh phải khác người chịu trách nhiệm.</summary>
-public sealed record VerifyChangeRequestCommand(Guid ChapterId, Guid ChangeRequestId, Guid UserId)
+public sealed record VerifyChangeRequestCommand(Guid ChapterId, Guid ChangeRequestId, Guid UserId, string? Comment = null)
     : IRequest<Result<ChangeRequestDto>>;
 
 public sealed class VerifyChangeRequestCommandHandler : IRequestHandler<VerifyChangeRequestCommand, Result<ChangeRequestDto>>
@@ -26,7 +26,7 @@ public sealed class VerifyChangeRequestCommandHandler : IRequestHandler<VerifyCh
         if (cr.ResponsibleUserId == cmd.UserId)
             return Result<ChangeRequestDto>.Failure("Không thể tự xác minh yêu cầu sửa của chính mình.", ResultErrorCodes.Forbidden);
 
-        try { cr.Verify(cmd.UserId); }
+        try { cr.Verify(cmd.UserId, cmd.Comment); }
         catch (InvalidOperationException ex) { return Result<ChangeRequestDto>.Failure(ex.Message, ResultErrorCodes.Conflict); }
 
         cr.UpdatedBy = cmd.UserId.ToString();

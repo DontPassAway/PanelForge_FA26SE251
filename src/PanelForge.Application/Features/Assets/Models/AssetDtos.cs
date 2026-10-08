@@ -20,11 +20,12 @@ public sealed record AssetReferenceDto(
     string Sha256,
     bool Reused,
     Guid UploadedByUserId,
-    DateTime CreatedAt)
+    DateTime CreatedAt,
+    Guid? PanelId = null)  // null = artwork cả trang
 {
     public static AssetReferenceDto From(AssetReference r, Asset a, bool reused = false) => new(
         r.Id, r.AssetId, r.ChapterId, r.PageId, r.PipelineStageId, r.VersionNumber, r.LayerType, r.FileName,
-        a.ContentType, a.SizeBytes, a.Sha256, reused, r.UploadedByUserId, r.CreatedAt);
+        a.ContentType, a.SizeBytes, a.Sha256, reused, r.UploadedByUserId, r.CreatedAt, r.PanelId);
 }
 
 /// <summary>Link tải ngắn hạn: <c>Url</c> là đường dẫn tương đối của API, hết hạn lúc <c>ExpiresAtUtc</c> (BR-16).</summary>

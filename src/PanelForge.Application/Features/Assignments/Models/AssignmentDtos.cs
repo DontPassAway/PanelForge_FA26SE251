@@ -44,12 +44,19 @@ public sealed record CreateAssignmentRequest(
     Guid? DependsOnAssignmentId = null);
 
 /// <summary>Một yêu cầu sửa cụ thể. RegionJson tuỳ chọn: <c>{ "x", "y", "w", "h" }</c> chuẩn hóa 0–1.</summary>
-public sealed record ChangeRequestItemRequest(string Description, string? RegionJson = null, DateTime? DueDate = null);
+/// <summary>AssetReferenceId: phiên bản artwork (của Chapter) mà RegionJson khoanh trên đó; PanelId: Panel của vùng (thuộc Chapter). Đều tuỳ chọn.</summary>
+public sealed record ChangeRequestItemRequest(
+    string Description, string? RegionJson = null, DateTime? DueDate = null, Guid? AssetReferenceId = null,
+    Guid? PanelId = null);
 
 /// <summary>
 /// Trả về bắt buộc có comment (BR-06). Changes bỏ trống = tạo một ChangeRequest từ chính comment.
 /// </summary>
-public sealed record RequestAssignmentChangesRequest(string? Comment, IReadOnlyList<ChangeRequestItemRequest>? Changes = null);
+public sealed record RequestAssignmentChangesRequest(
+    string? Comment, IReadOnlyList<ChangeRequestItemRequest>? Changes = null, Guid? ExpectedSubmissionId = null);
+
+/// <summary>Body tuỳ chọn khi duyệt: ExpectedSubmissionId = lần nộp Editor đang xem; lệch lần nộp đang chờ thì 409.</summary>
+public sealed record ApproveAssignmentRequest(Guid? ExpectedSubmissionId = null);
 
 /// <summary>Người chịu trách nhiệm báo đã sửa, ghi chú tuỳ chọn.</summary>
 public sealed record ResolveChangeRequestRequest(string? Note);
@@ -67,11 +74,13 @@ public sealed record SubmissionDto(
     DateTime SubmittedAt,
     Guid? DecidedByUserId,
     DateTime? DecidedAt,
-    string? DecisionComment)
+    string? DecisionComment,
+    IReadOnlyList<Guid>? ArtworkReferenceIds = null,  // phiên bản artwork (AssetReference.id) của lần nộp này
+    long ChapterVersion = 0)                          // version chương lúc nộp (revision script)
 {
     public static SubmissionDto From(Submission s) => new(
         s.Id, s.AssignmentId, s.ChapterId, s.SubmittedByUserId, s.AttemptNumber, s.Status, s.SubmittedAt,
-        s.DecidedByUserId, s.DecidedAt, s.DecisionComment);
+        s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.ArtworkReferenceIds, s.ChapterVersion);
 }
 
 public sealed record ChangeRequestDto(
@@ -91,12 +100,14 @@ public sealed record ChangeRequestDto(
     Guid? ClosedByUserId,
     DateTime? ClosedAt,
     DateTime CreatedAt,
-    DateTime? UpdatedAt)
+    DateTime? UpdatedAt,
+    Guid? AssetReferenceId = null,  // phiên bản artwork mà vùng khoanh thuộc về
+    Guid? PanelId = null)           // Panel của vùng khoanh
 {
     public static ChangeRequestDto From(ChangeRequest c) => new(
         c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,
         c.RegionJson, c.DueDate, c.Status, c.ResolutionNote, c.ResolvedAt, c.ReviewerComment, c.ClosedByUserId,
-        c.ClosedAt, c.CreatedAt, c.UpdatedAt);
+        c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId);
 }
 
 /// <summary>PUT thay toàn bộ: DependsOnAssignmentId null = bỏ dependency; ReferenceNotes/DueDate null = xoá.</summary>

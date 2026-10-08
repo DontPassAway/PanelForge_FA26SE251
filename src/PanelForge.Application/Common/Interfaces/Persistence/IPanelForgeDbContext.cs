@@ -49,6 +49,10 @@ public interface IPanelForgeDbContext
     DbSet<Notification> Notifications { get; }
     DbSet<Submission> Submissions { get; }
     DbSet<ChangeRequest> ChangeRequests { get; }
+    DbSet<ConsistencyFinding> ConsistencyFindings { get; }
+    DbSet<PanelForge.Domain.Entities.Preview.PreviewLink> PreviewLinks { get; }
+    DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs { get; }
+    DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback { get; }
     DbSet<Asset> Assets { get; }
     DbSet<AssetReference> AssetReferences { get; }
     DbSet<AssetAccessLog> AssetAccessLogs { get; }
@@ -58,6 +62,8 @@ public interface IPanelForgeDbContext
     DbSet<ScriptLine> ScriptLines { get; }
     DbSet<Page> Pages { get; }
     DbSet<Panel> Panels { get; }
+    DbSet<FrameTemplate> FrameTemplates { get; }
+    DbSet<ScriptLineBibleLink> ScriptLineBibleLinks { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

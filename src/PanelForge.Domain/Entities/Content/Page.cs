@@ -18,6 +18,7 @@ public sealed class Page : AggregateRoot
 {
     // ── Internal state rebuilt from events ──────────────────────────────────
     public const string DuplicateBindingCode = "ELEMENT_DUPLICATE_BINDING";
+    public const string ElementVersionConflictCode = "ELEMENT_VERSION_CONFLICT";
 
     /// <summary>ElementType (E-30) được phép gắn ScriptLine: balloon, caption, SFX.</summary>
     public static readonly IReadOnlySet<string> TextElementTypes = new HashSet<string>
@@ -96,7 +97,11 @@ public sealed class Page : AggregateRoot
         string? assetId = null,
         Guid? scriptLineId = null,
         Guid? speakerId = null,
-        string? sourceLineText = null)
+        string? sourceLineText = null,
+        Guid? elementId = null,
+        Guid? panelId = null,
+        double rotation = 0,
+        Guid? bibleEntryId = null)
     {
         if (string.IsNullOrWhiteSpace(elementType))
             throw new ArgumentException("ElementType không được rỗng.", nameof(elementType));
@@ -109,11 +114,14 @@ public sealed class Page : AggregateRoot
             throw new InvalidOperationException(
                 $"{DuplicateBindingCode}: ScriptLine {lineId} đã được gắn vào một element khác trên Page {Id}.");
 
+        if (elementId is { } requested && (requested == Guid.Empty || _elements.ContainsKey(requested)))
+            throw new InvalidOperationException($"ElementId {requested} không hợp lệ hoặc đã tồn tại trên Page {Id}.");
+
         RaiseEvent(new ElementAddedEvent(
             EventId:       Guid.NewGuid(),
             OccurredAt:    DateTimeOffset.UtcNow,
             PageId:        Id,
-            ElementId:     Guid.NewGuid(),
+            ElementId:     elementId ?? Guid.NewGuid(),
             ElementType:   elementType,
             ZIndex:        zIndex,
             X:             x,
@@ -126,7 +134,10 @@ public sealed class Page : AggregateRoot
             ScriptLineId:  scriptLineId,
             SpeakerId:     speakerId,
             RenderedText:  scriptLineId is null ? null : content?.Trim(),
-            SourceLineText: sourceLineText
+            SourceLineText: sourceLineText,
+            PanelId:       panelId,
+            Rotation:      rotation == 0 ? null : rotation,
+            BibleEntryId:  bibleEntryId
         ));
     }
 
@@ -138,13 +149,17 @@ public sealed class Page : AggregateRoot
         Guid elementId,
         double newX, double newY,
         double newWidth, double newHeight,
-        Guid movedByUserId)
+        Guid movedByUserId,
+        double? newRotation = null,
+        int? newZIndex = null)
     {
         var element = GetActiveElementOrThrow(elementId);
 
         // Idempotent: không raise event nếu không có gì thay đổi
         if (element.X == newX && element.Y == newY
-            && element.Width == newWidth && element.Height == newHeight)
+            && element.Width == newWidth && element.Height == newHeight
+            && (newRotation is null || newRotation == element.Rotation)
+            && (newZIndex is null || newZIndex == element.ZIndex))
             return;
 
         RaiseEvent(new ElementMovedEvent(
@@ -158,7 +173,9 @@ public sealed class Page : AggregateRoot
             NewY:          newY,
             NewWidth:      newWidth,
             NewHeight:     newHeight,
-            MovedByUserId: movedByUserId
+            MovedByUserId: movedByUserId,
+            NewRotation:   newRotation,
+            NewZIndex:     newZIndex
         ));
     }
 
@@ -312,7 +329,11 @@ public sealed class Page : AggregateRoot
             SpeakerId      = e.SpeakerId,
             RenderedText   = e.RenderedText,
             SourceLineText = e.SourceLineText,
-            IsRemoved   = false
+            PanelId        = e.PanelId,
+            Rotation       = e.Rotation ?? 0,
+            BibleEntryId   = e.BibleEntryId,
+            IsRemoved   = false,
+            Version     = 1
         };
     }
 
@@ -325,12 +346,16 @@ public sealed class Page : AggregateRoot
         element.Y      = e.NewY;
         element.Width  = e.NewWidth;
         element.Height = e.NewHeight;
+        if (e.NewRotation is { } r) element.Rotation = r;
+        if (e.NewZIndex is { } z) element.ZIndex = z;
+        element.Version++;
     }
 
     internal void Apply(ElementRemovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.IsRemoved = true; // Soft Delete — record vẫn tồn tại trong stream
+        element.Version++;
     }
 
     internal void Apply(ElementTextUpdatedEvent e)
@@ -342,16 +367,21 @@ public sealed class Page : AggregateRoot
         element.RenderedText      = e.ScriptLineId is null ? null : e.Content;
         element.SourceLineText    = e.SourceLineText;
         element.OverflowAckReason = null; // chữ đổi thì xác nhận cũ hết hiệu lực
+        element.Version++;
     }
 
     internal void Apply(ElementOverflowAcknowledgedEvent e)
     {
-        if (_elements.TryGetValue(e.ElementId, out var element)) element.OverflowAckReason = e.Reason;
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.OverflowAckReason = e.Reason;
+        element.Version++;
     }
 
     internal void Apply(ElementReadingOrderSetEvent e)
     {
-        if (_elements.TryGetValue(e.ElementId, out var element)) element.ReadingOrder = e.ReadingOrder;
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.ReadingOrder = e.ReadingOrder;
+        element.Version++;
     }
 
     internal void Apply(PageDeletedEvent e)
@@ -414,6 +444,20 @@ public sealed class Page : AggregateRoot
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// BR-11: từ chối lệnh nếu element đã bị người khác sửa kể từ lúc client tải (expectedVersion lệch).
+    /// expectedVersion = null: không kiểm (client cũ). Sửa element khác trên cùng Page không gây xung đột.
+    /// </summary>
+    public void EnsureElementVersion(Guid elementId, int? expectedVersion)
+    {
+        if (expectedVersion is not { } expected) return;
+        if (!_elements.TryGetValue(elementId, out var element)) return; // để lệnh chính báo "không tồn tại"
+        if (element.Version != expected)
+            throw new InvalidOperationException(
+                $"{ElementVersionConflictCode}: Xung đột phiên bản: element {elementId} đã được người khác sửa " +
+                $"(expected={expected}, actual={element.Version}). Vui lòng tải lại element và chọn giữ bản nào.");
+    }
+
     private ElementState GetActiveElementOrThrow(Guid elementId)
     {
         if (!_elements.TryGetValue(elementId, out var element))

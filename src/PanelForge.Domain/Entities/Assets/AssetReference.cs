@@ -4,7 +4,7 @@ namespace PanelForge.Domain.Entities.Assets;
 
 /// <summary>
 /// Một lần dùng Asset làm artwork của một Page ở một Stage (BR-13). Đây cũng là phiên bản artwork: chỉ thêm, không sửa
-/// hay xoá, nên lịch sử các lần tải lên được giữ nguyên (BR-01). <see cref="VersionNumber"/> tăng dần theo (Page, Stage).
+/// hay xoá, nên lịch sử các lần tải lên được giữ nguyên (BR-01). <see cref="VersionNumber"/> tăng dần theo (Page, Panel, Stage).
 /// </summary>
 public class AssetReference : BaseEntity
 {
@@ -12,6 +12,8 @@ public class AssetReference : BaseEntity
     public Guid WorkspaceId { get; private set; }
     public Guid ChapterId { get; private set; }
     public Guid PageId { get; private set; }
+    /// <summary>Panel mà ảnh này dành cho (Artist upload theo khung); null = artwork của cả Page.</summary>
+    public Guid? PanelId { get; private set; }
     public Guid PipelineStageId { get; private set; }
     public int VersionNumber { get; private set; }
     /// <summary>Mã loại Element mà Artist khai báo cho layer này (vd ARTWORK_LAYER); null = không khai báo.</summary>
@@ -23,7 +25,7 @@ public class AssetReference : BaseEntity
 
     public static AssetReference Create(
         Guid assetId, Guid workspaceId, Guid chapterId, Guid pageId, Guid pipelineStageId,
-        int versionNumber, string? layerType, string fileName, Guid uploadedByUserId)
+        int versionNumber, string? layerType, string fileName, Guid uploadedByUserId, Guid? panelId = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
@@ -34,6 +36,7 @@ public class AssetReference : BaseEntity
             WorkspaceId = workspaceId,
             ChapterId = chapterId,
             PageId = pageId,
+            PanelId = panelId,
             PipelineStageId = pipelineStageId,
             VersionNumber = versionNumber,
             LayerType = string.IsNullOrWhiteSpace(layerType) ? null : layerType.Trim(),

@@ -172,6 +172,85 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task RequestChanges_RegionOnArtworkVersion_StoresVersion_AndRejectsForeignVersion()
+    {
+        var f = new Fixture();
+        var (a, _) = await Submitted(f);
+        await OpenReview(f, a, f.EditorId);
+        f.UploadArtworkFor(a);
+        var artwork = f.AssetReferences.Last();
+        var handler = new RequestAssignmentChangesCommandHandler(f.Db.Object);
+        const string region = """{"x":0.1,"y":0.1,"w":0.2,"h":0.2}""";
+
+        var foreign = await handler.Handle(new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c",
+            [new ChangeRequestItemRequest("Sửa", region, null, Guid.NewGuid())]), CancellationToken.None);
+        foreign.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        f.ChangeRequests.Should().BeEmpty();
+
+        var ok = await handler.Handle(new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c",
+            [new ChangeRequestItemRequest("Mặt Mira lệch", region, null, artwork.Id)]), CancellationToken.None);
+        ok.IsSuccess.Should().BeTrue();
+        f.ChangeRequests.Single().AssetReferenceId.Should().Be(artwork.Id);
+    }
+
+    [Fact]
+    public async Task RequestChanges_RegionOnPanel_StoresPanel_AndRejectsPanelOfAnotherChapter()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var (a, _) = await Submitted(f);
+        await OpenReview(f, a, f.EditorId);
+        var handler = new RequestAssignmentChangesCommandHandler(f.Db.Object);
+
+        var foreign = await handler.Handle(new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c",
+            [new ChangeRequestItemRequest("Sửa", PanelId: Guid.NewGuid())]), CancellationToken.None);
+        foreign.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+
+        var ok = await handler.Handle(new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c",
+            [new ChangeRequestItemRequest("Khung 1 lệch", PanelId: panel.Id)]), CancellationToken.None);
+        ok.IsSuccess.Should().BeTrue();
+        f.ChangeRequests.Single().PanelId.Should().Be(panel.Id);
+    }
+
+    [Fact]
+    public async Task Decisions_WithStaleExpectedSubmission_AreConflict_AndCurrentOneWorks()
+    {
+        var f = new Fixture();
+        var (a, _) = await Submitted(f);
+        await OpenReview(f, a, f.EditorId);
+        var pendingId = f.Submissions.Single().Id;
+
+        var staleReturn = await new RequestAssignmentChangesCommandHandler(f.Db.Object).Handle(
+            new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c", null, Guid.NewGuid()), CancellationToken.None);
+        staleReturn.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.ChangeRequests.Should().BeEmpty();
+
+        var approve = new PanelForge.Application.Features.Assignments.Commands.ApproveAssignment.ApproveAssignmentCommandHandler(f.Db.Object);
+        (await approve.Handle(new(f.Chapter.Id, a.Id, f.EditorId, Guid.NewGuid()), CancellationToken.None))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        a.Status.Should().Be(AssignmentStatus.UnderReview);
+
+        (await approve.Handle(new(f.Chapter.Id, a.Id, f.EditorId, pendingId), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Verify_WithComment_KeepsTheReviewerComment()
+    {
+        var f = new Fixture();
+        var (a, cr) = await Returned(f);
+        await Start(f, a, f.ArtistId);
+        await ResolveCr(f, cr, f.ArtistId, "Đã chỉnh tỉ lệ");
+
+        var result = await new VerifyChangeRequestCommandHandler(f.Db.Object).Handle(
+            new VerifyChangeRequestCommand(f.Chapter.Id, cr.Id, f.EditorId, "  Đạt, tỉ lệ đúng  "), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be(ChangeRequestStatus.Verified);
+        result.Value.ReviewerComment.Should().Be("Đạt, tỉ lệ đúng");
+    }
+
+    [Fact]
     public async Task RequestChanges_WithBlankItemDescription_IsRejected()
     {
         var f = new Fixture();

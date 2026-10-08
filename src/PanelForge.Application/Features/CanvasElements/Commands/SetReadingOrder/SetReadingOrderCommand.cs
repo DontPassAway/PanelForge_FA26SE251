@@ -5,7 +5,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 namespace PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
 
 /// <summary>Letterer ghi đè thứ tự đọc của một text element (≥ 1), hoặc bỏ ghi đè bằng null.</summary>
-public sealed record SetReadingOrderCommand(Guid PageId, Guid ElementId, int? ReadingOrder, Guid UserId)
+public sealed record SetReadingOrderCommand(Guid PageId, Guid ElementId, int? ReadingOrder, Guid UserId, int? ExpectedElementVersion = null)
     : IRequest<Result<bool>>;
 
 public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOrderCommand, Result<bool>>
@@ -21,6 +21,7 @@ public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOr
 
         try
         {
+            page.EnsureElementVersion(cmd.ElementId, cmd.ExpectedElementVersion);
             page.SetReadingOrder(cmd.ElementId, cmd.ReadingOrder, cmd.UserId);
             await _pages.SaveAsync(page, ct);
         }

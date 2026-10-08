@@ -10,11 +10,14 @@ using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterOutline;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
 using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
+using PanelForge.Application.Features.Consistency.Commands;
+using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -204,6 +207,48 @@ public sealed class ChaptersController : ControllerBase
     public async Task<IActionResult> GetChapterReviews([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterReviewsQuery(chapterId), cancellationToken));
 
+    /// <summary>PUT /api/chapters/{chapterId}/outline — Producer/Writer ghi outline chương (rỗng = xoá). Trả outline đã lưu.</summary>
+    [HttpPut("api/chapters/{chapterId:guid}/outline")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetOutline(
+        [FromRoute] Guid chapterId, [FromBody] SetChapterOutlineRequest body, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetChapterOutlineCommand(chapterId, GetCurrentUserId(), body.Outline), cancellationToken);
+        return result.IsSuccess ? Ok(new TextValueResponse(result.Value)) : ToActionResult(result);
+    }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/consistency-check — CF3: chạy kiểm tra nhất quán bằng code trên script của chương
+    /// (so với Series Bible hiệu lực ở chương + ConsistencyRule đang bật). Producer, Editor, Writer.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/consistency-check")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ConsistencyCheckResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RunConsistencyCheck([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RunConsistencyCheckCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/consistency-findings?status= — finding của chương (thành viên Workspace).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/consistency-findings")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ConsistencyFindingDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetConsistencyFindings(
+        [FromRoute] Guid chapterId, [FromQuery] ConsistencyFindingStatus? status, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetConsistencyFindingsQuery(chapterId, status), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/consistency-findings/{findingId}/triage — CF3 bước 5 (BR-21): Editor/Producer phân loại
+    /// finding đang mở. Body { decision: Confirmed|Rejected|Ignored|NeedsClarification, note }.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/consistency-findings/{findingId:guid}/triage")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(ConsistencyFindingDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> TriageConsistencyFinding(
+        [FromRoute] Guid chapterId, [FromRoute] Guid findingId, [FromBody] TriageConsistencyFindingRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new TriageConsistencyFindingCommand(chapterId, findingId, GetCurrentUserId(), body.Decision, body.Note), cancellationToken));
+
     private IActionResult ToActionResult<T>(Result<T> result) => result.IsSuccess ? Ok(result.Value) : result.ErrorCode switch
     {
         ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
@@ -211,3 +256,8 @@ public sealed class ChaptersController : ControllerBase
         _ => BadRequest(new { error = result.ErrorMessage })
     };
 }
+
+public sealed record SetChapterOutlineRequest(string? Outline);
+
+/// <summary>Giá trị text vừa lưu (null = đã xoá).</summary>
+public sealed record TextValueResponse(string? Value);

@@ -19,6 +19,10 @@ public class ChangeRequest : BaseEntity
     public string Description { get; private set; } = default!;
     /// <summary>JSON <c>{ "x", "y", "w", "h" }</c> trong khoảng 0–1; null = áp dụng cho cả item.</summary>
     public string? RegionJson { get; private set; }
+    /// <summary>Phiên bản artwork (AssetReference) mà vùng khoanh thuộc về; null = không gắn ảnh cụ thể (CF3 bước 3).</summary>
+    public Guid? AssetReferenceId { get; private set; }
+    /// <summary>Panel mà vùng khoanh thuộc về (FE suy từ vùng giao lớn nhất); null = không xác định.</summary>
+    public Guid? PanelId { get; private set; }
     public DateTime? DueDate { get; private set; }
     public ChangeRequestStatus Status { get; private set; }
 
@@ -33,7 +37,7 @@ public class ChangeRequest : BaseEntity
 
     public static ChangeRequest Create(
         Guid assignmentId, Guid chapterId, Guid? submissionId, Guid responsibleUserId, Guid createdByUserId,
-        string description, string? regionJson = null, DateTime? dueDate = null)
+        string description, string? regionJson = null, DateTime? dueDate = null, Guid? assetReferenceId = null, Guid? panelId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
         if (ValidateRegion(regionJson) is { } regionError) throw new ArgumentException(regionError, nameof(regionJson));
@@ -47,6 +51,8 @@ public class ChangeRequest : BaseEntity
             CreatedByUserId = createdByUserId,
             Description = description.Trim(),
             RegionJson = string.IsNullOrWhiteSpace(regionJson) ? null : regionJson.Trim(),
+            AssetReferenceId = assetReferenceId,
+            PanelId = panelId,
             DueDate = dueDate,
             Status = ChangeRequestStatus.Open,
             CreatedAt = DateTime.UtcNow
@@ -64,10 +70,10 @@ public class ChangeRequest : BaseEntity
     }
 
     /// <summary>Resolved → Verified (Editor xác minh đã đạt).</summary>
-    public void Verify(Guid byUserId)
+    public void Verify(Guid byUserId, string? comment = null)
     {
         Require(ChangeRequestStatus.Resolved, ChangeRequestStatus.Verified);
-        Close(ChangeRequestStatus.Verified, byUserId, null);
+        Close(ChangeRequestStatus.Verified, byUserId, string.IsNullOrWhiteSpace(comment) ? null : comment.Trim());
     }
 
     /// <summary>Resolved → Open (Editor thấy chưa đạt); comment bắt buộc.</summary>

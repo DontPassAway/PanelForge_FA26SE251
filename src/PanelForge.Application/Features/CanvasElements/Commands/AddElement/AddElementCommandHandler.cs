@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Common;
@@ -28,6 +29,14 @@ public sealed class AddElementCommandHandler
             return Result<AddElementResponse>.Failure(
                 $"Page {command.PageId} không tồn tại.");
 
+        // NFR-09: gửi lại sau mất mạng → trả element đã tạo từ lần trước (idempotent), không thêm bản trùng
+        if (command.ClientElementId is { } clientId && page.Elements.TryGetValue(clientId, out var existing))
+            return existing.ElementType == command.ElementType
+                ? Result<AddElementResponse>.Success(new AddElementResponse(
+                    clientId, command.PageId, existing.ElementType, existing.ScriptLineId, existing.SpeakerId, Replayed: true))
+                : Result<AddElementResponse>.Failure(
+                    $"Xung đột: clientElementId {clientId} đã dùng cho element loại {existing.ElementType} trên Page này.");
+
         // 2. BR-05: nếu gắn ScriptLine thì dòng phải tồn tại, cùng Chapter với Page; speaker lấy từ dòng (không tin client)
         string? content = command.Content;
         Guid? speakerId = null;
@@ -42,6 +51,21 @@ public sealed class AddElementCommandHandler
             speakerId = line.Speaker;
             // Không gửi Content = dùng nguyên văn dòng; gửi Content = Letterer đã rút gọn cho vừa balloon
             content = string.IsNullOrWhiteSpace(content) ? sourceLineText : content;
+        }
+
+        // Panel phải thuộc Page; mục Bible phải thuộc Series của Page (không tin client)
+        if (command.PanelId is { } panelId &&
+            !await _db.Panels.AsNoTracking().AnyAsync(p => p.Id == panelId && p.PageId == page.Id, cancellationToken))
+            return Result<AddElementResponse>.Failure($"Panel {panelId} không thuộc Page {page.Id}.");
+
+        if (command.BibleEntryId is { } entryId)
+        {
+            var seriesId = await _db.Chapters.AsNoTracking()
+                .Where(c => c.Id == page.ChapterId).Select(c => c.SeriesId).FirstOrDefaultAsync(cancellationToken);
+            var inSeries = await _db.BibleEntries.AsNoTracking().AnyAsync(e => e.Id == entryId &&
+                _db.SeriesBibles.Any(b => b.Id == e.SeriesBibleId && b.SeriesId == seriesId), cancellationToken);
+            if (!inSeries)
+                return Result<AddElementResponse>.Failure($"Mục Series Bible {entryId} không thuộc Series của Page.");
         }
 
         // 3. Gọi domain method — Page validate (kể cả unique ScriptLine) và raise ElementAddedEvent
@@ -59,7 +83,11 @@ public sealed class AddElementCommandHandler
                 assetId:        command.AssetId,
                 scriptLineId:   command.ScriptLineId,
                 speakerId:      speakerId,
-                sourceLineText: sourceLineText
+                sourceLineText: sourceLineText,
+                elementId:      command.ClientElementId,
+                panelId:        command.PanelId,
+                rotation:       command.Rotation,
+                bibleEntryId:   command.BibleEntryId
             );
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

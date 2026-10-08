@@ -66,6 +66,37 @@ internal static class ScriptLineRules
         return ok ? null : "Speaker phải là một mục Nhân vật trong Series Bible của Series này.";
     }
 
+    /// <summary>UC-06: mục Bible liên kết phải thuộc Bible của đúng Series, tối đa <see cref="ScriptLineBibleLink.MaxPerLine"/>. Trả lỗi hoặc null.</summary>
+    public static async Task<string?> ValidateBibleEntriesAsync(
+        IPanelForgeDbContext db, Guid seriesId, IReadOnlyList<Guid>? ids, CancellationToken ct)
+    {
+        if (ids is null || ids.Count == 0) return null;
+        var distinct = ids.Distinct().ToList();
+        if (distinct.Count > ScriptLineBibleLink.MaxPerLine)
+            return $"Mỗi dòng script liên kết tối đa {ScriptLineBibleLink.MaxPerLine} mục Bible.";
+        var found = await db.BibleEntries.AsNoTracking().CountAsync(e => distinct.Contains(e.Id) &&
+            db.SeriesBibles.Any(b => b.Id == e.SeriesBibleId && b.SeriesId == seriesId), ct);
+        return found == distinct.Count ? null : "Mục Bible liên kết phải thuộc Series Bible của Series này.";
+    }
+
+    /// <summary>
+    /// Đặt tập liên kết Bible của dòng = <paramref name="ids"/> (null = giữ nguyên, [] = gỡ hết).
+    /// Gỡ = xoá mềm (giữ lịch sử), thêm = tạo mới. Trả danh sách đang hoạt động sau thay đổi.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> SetBibleLinksAsync(
+        IPanelForgeDbContext db, Guid lineId, IReadOnlyList<Guid>? ids, CancellationToken ct)
+    {
+        var current = await db.ScriptLineBibleLinks.Where(k => k.ScriptLineId == lineId).ToListAsync(ct);
+        if (ids is null) return current.Select(k => k.BibleEntryId).ToList();
+
+        var wanted = ids.Distinct().ToList();
+        foreach (var k in current.Where(k => !wanted.Contains(k.BibleEntryId)))
+            db.ScriptLineBibleLinks.Remove(k);
+        foreach (var id in wanted.Except(current.Select(k => k.BibleEntryId)))
+            db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(lineId, id));
+        return wanted;
+    }
+
     public static List<BaselineScriptLine> Snapshot(IEnumerable<ScriptLine> lines) =>
         lines.OrderBy(l => l.LineOrder)
             .Select(l => new BaselineScriptLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection)).ToList();

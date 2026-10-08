@@ -33,7 +33,7 @@ public sealed class ScriptLinesController : ControllerBase
     {
         var result = await _mediator.Send(new CreateScriptLineCommand(
             chapterId, sceneId, GetCurrentUserId(), body.DialogueText, body.StageDirection,
-            body.SpeakerCharacterId, body.LineOrder, body.ExpectedChapterVersion), ct);
+            body.SpeakerCharacterId, body.LineOrder, body.ExpectedChapterVersion, body.BibleEntryIds, body.ClientLineId), ct);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
     }
 
@@ -46,7 +46,7 @@ public sealed class ScriptLinesController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateScriptLineCommand(
             chapterId, lineId, GetCurrentUserId(), body.DialogueText, body.StageDirection,
-            body.SpeakerCharacterId, body.ExpectedChapterVersion), ct);
+            body.SpeakerCharacterId, body.ExpectedChapterVersion, body.BibleEntryIds), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
@@ -97,7 +97,11 @@ public sealed class ElementsController : ControllerBase
             Content:       request.Content,
             AssetId:       request.AssetId,
             AddedByUserId: GetCurrentUserId(),
-            ScriptLineId:  request.ScriptLineId
+            ScriptLineId:  request.ScriptLineId,
+            ClientElementId: request.ClientElementId,
+            PanelId:       request.PanelId,
+            Rotation:      request.Rotation,
+            BibleEntryId:  request.BibleEntryId
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -124,7 +128,7 @@ public sealed class ElementsController : ControllerBase
         Guid pageId, Guid elementId, [FromBody] UpdateElementTextRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId()),
+            new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId(), request.ExpectedElementVersion),
             cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage);
     }
@@ -153,11 +157,12 @@ public sealed class ElementsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SetReadingOrder(
         Guid pageId, Guid elementId, [FromBody] SetReadingOrderRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId()), cancellationToken);
+            new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId(), request.ExpectedElementVersion), cancellationToken);
         return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage);
     }
 
@@ -196,19 +201,15 @@ public sealed class ElementsController : ControllerBase
             NewWidth:            request.NewWidth,
             NewHeight:           request.NewHeight,
             ExpectedPageVersion: request.ExpectedPageVersion,
-            MovedByUserId:       GetCurrentUserId()
+            MovedByUserId:       GetCurrentUserId(),
+            ExpectedElementVersion: request.ExpectedElementVersion,
+            NewRotation:         request.NewRotation,
+            NewZIndex:           request.NewZIndex
         );
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorMessage!.Contains("Xung đột"))
-                return Conflict(new { message = result.ErrorMessage });
-            if (result.ErrorMessage.Contains("không tồn tại"))
-                return NotFound(new { message = result.ErrorMessage });
-            return BadRequest(new { message = result.ErrorMessage });
-        }
+        if (!result.IsSuccess) return Failure(result.ErrorMessage);
 
         return Accepted(new { message = "Element đã được di chuyển thành công." });
     }
@@ -229,26 +230,28 @@ public sealed class ElementsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveElement(
         Guid pageId,
         Guid elementId,
         [FromQuery] string reason = "USER_DELETE",
+        [FromQuery] int? expectedElementVersion = null,
         CancellationToken cancellationToken = default)
     {
         var command = new RemoveElementCommand(
             PageId:          pageId,
             ElementId:       elementId,
             Reason:          reason,
-            RemovedByUserId: GetCurrentUserId()
+            RemovedByUserId: GetCurrentUserId(),
+            ExpectedElementVersion: expectedElementVersion
         );
 
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return result.ErrorMessage!.Contains("không tồn tại") ||
-                   result.ErrorMessage.Contains("đã bị xóa")
+            return result.ErrorMessage!.Contains("đã bị xóa") && !result.ErrorMessage.Contains("Xung đột")
                 ? NotFound(new { message = result.ErrorMessage })
-                : BadRequest(new { message = result.ErrorMessage });
+                : Failure(result.ErrorMessage);
 
         return Accepted(new
         {
@@ -264,8 +267,10 @@ public sealed class ElementsController : ControllerBase
         message ??= "Yêu cầu không hợp lệ.";
         if (message.Contains(Page.DuplicateBindingCode))
             return Conflict(new { message, code = Page.DuplicateBindingCode });
+        if (message.Contains(Page.ElementVersionConflictCode))
+            return Conflict(new { message, code = "CONFLICT", conflict = Page.ElementVersionConflictCode });
         if (message.Contains("Xung đột"))
-            return Conflict(new { message });
+            return Conflict(new { message, code = "CONFLICT" });
         return message.Contains("không tồn tại")
             ? NotFound(new { message })
             : BadRequest(new { message });
@@ -291,19 +296,26 @@ public sealed record AddElementRequest(
     int ZIndex,
     string? Content,
     string? AssetId,
-    Guid? ScriptLineId = null  // BR-05: chỉ cho SPEECH_BALLOON | THOUGHT_BALLOON | NARRATION_BOX | SOUND_EFFECT
+    Guid? ScriptLineId = null,  // BR-05: chỉ cho SPEECH_BALLOON | THOUGHT_BALLOON | NARRATION_BOX | SOUND_EFFECT
+    Guid? ClientElementId = null,  // NFR-09: id client tự sinh (UUID v4) để gửi lại an toàn sau mất mạng
+    Guid? PanelId = null,          // Panel chứa element ảnh (nhân vật, bối cảnh…)
+    double Rotation = 0,           // góc xoay, độ
+    Guid? BibleEntryId = null      // mục Series Bible element thể hiện
 );
 
-public sealed record UpdateElementTextRequest(string? Content, Guid? ScriptLineId);
+public sealed record UpdateElementTextRequest(string? Content, Guid? ScriptLineId, int? ExpectedElementVersion = null);
 
 public sealed record AcknowledgeOverflowRequest(string Reason);
 
-public sealed record SetReadingOrderRequest(int? ReadingOrder);
+public sealed record SetReadingOrderRequest(int? ReadingOrder, int? ExpectedElementVersion = null);
 
 public sealed record MoveElementRequest(
     double NewX,
     double NewY,
     double NewWidth,
     double NewHeight,
-    long ExpectedPageVersion  // Optimistic Concurrency token
+    long? ExpectedPageVersion = null,   // cách cũ: xung đột theo cả Page
+    int? ExpectedElementVersion = null, // BR-11: version element trong GET /elements; chỉ xung đột khi cùng element
+    double? NewRotation = null,         // null = giữ nguyên
+    int? NewZIndex = null               // null = giữ nguyên thứ tự lớp
 );

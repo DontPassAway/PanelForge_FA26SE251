@@ -23,7 +23,6 @@ public static class MasterDataSeeder
 
     private static async Task SeedElementTypesAsync(PanelForgeDbContext dbContext, CancellationToken ct)
     {
-        if (await dbContext.ElementTypes.AnyAsync(ct)) return;
 
         var elementTypes = new[]
         {
@@ -35,10 +34,14 @@ public static class MasterDataSeeder
             ("ARTWORK_LAYER",      "Artwork Layer",      "Background or foreground artwork layer",    """{"blendModes":["normal","multiply","screen"]}"""),
             ("PANEL_BORDER",       "Panel Border",       "Panel frame/border element",                """{"borderStyles":["solid","double","none"]}"""),
             ("PROP",               "Prop",               "Object/prop placed in a scene",             """{}"""),
+            ("BACKGROUND",         "Background",         "Bối cảnh / nền của Panel",                   """{}"""),
+            ("EFFECT",             "Effect",             "Hiệu ứng (mưa, tốc độ, ánh sáng…), thường nền trong suốt", """{"blendModes":["normal","multiply","screen"]}"""),
             ("KEY_ARTWORK_REGION", "Key Artwork Region", "Vùng quan trọng Artist đánh dấu để balloon không đè (BR-20)", """{}"""),
         };
 
-        foreach (var (code, name, desc, props) in elementTypes)
+        // Chỉ thêm loại còn thiếu, để DB cũ cũng nhận loại mới (BACKGROUND, EFFECT…)
+        var existing = await dbContext.ElementTypes.IgnoreQueryFilters().Select(t => t.Code).ToListAsync(ct);
+        foreach (var (code, name, desc, props) in elementTypes.Where(t => !existing.Contains(t.Item1)))
         {
             dbContext.ElementTypes.Add(ElementTypeMasterData.Create(code, name, desc, props));
         }

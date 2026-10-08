@@ -1,4 +1,4 @@
-﻿using PanelForge.Domain.Common;
+using PanelForge.Domain.Common;
 
 namespace PanelForge.Domain.Events;
 
@@ -24,5 +24,9 @@ public sealed record ElementAddedEvent(
     Guid? ScriptLineId = null,
     Guid? SpeakerId = null,
     string? RenderedText = null,    // chữ thực sự vẽ lên element (Letterer có thể rút gọn)
-    string? SourceLineText = null   // thoại gốc lúc gắn, để phát hiện chữ lỗi thời khi Writer sửa
+    string? SourceLineText = null,  // thoại gốc lúc gắn, để phát hiện chữ lỗi thời khi Writer sửa
+    // Element ảnh (nhân vật, bối cảnh, đạo cụ…): Panel chứa nó, góc xoay (độ), mục Series Bible nó thể hiện. Null ở event cũ.
+    Guid? PanelId = null,
+    double? Rotation = null,
+    Guid? BibleEntryId = null
 ) : IDomainEvent;

@@ -90,10 +90,49 @@ public partial class AssignmentTests
         await Start(f, script, f.ArtistId);
 
         (await SubmitWithoutArtwork(f, script)).IsSuccess.Should().BeTrue();
+        f.Submissions.Single().ArtworkReferenceIds.Should().BeEmpty();
+        f.Submissions.Single().ChapterVersion.Should().Be(f.Chapter.VersionVector);
     }
 
-    private static PanelForge.Domain.Entities.Assets.AssetReference Fixture_Reference(Fixture f, Guid pageId, Guid stageId) =>
+    [Fact]
+    public async Task Submit_RecordsLatestArtworkVersionPerPageAndPanel_OfThisStageOnly()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, a, f.ArtistId);
+
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId));            // v1 cả trang
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId));            // v2 cả trang
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, panel.Id));  // ảnh panel
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, Guid.NewGuid()));               // stage khác: bỏ qua
+        (await SubmitWithoutArtwork(f, a)).IsSuccess.Should().BeTrue();
+
+        f.Submissions.Single().ArtworkReferenceIds.Should()
+            .BeEquivalentTo(new[] { f.AssetReferences[1].Id, f.AssetReferences[2].Id });
+    }
+
+    [Fact]
+    public async Task Submit_PanelArtwork_CountsOnlyWhenEveryPanelOfThePageHasOne()
+    {
+        var f = new Fixture();
+        var p1 = f.AddPanel(f.Page, 1);
+        var p2 = f.AddPanel(f.Page, 2);
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, a, f.ArtistId);
+
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, p1.Id));
+        var blocked = await SubmitWithoutArtwork(f, a);
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("mọi Panel");
+
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, p2.Id));
+        (await SubmitWithoutArtwork(f, a)).IsSuccess.Should().BeTrue();
+    }
+
+    private static PanelForge.Domain.Entities.Assets.AssetReference Fixture_Reference(
+        Fixture f, Guid pageId, Guid stageId, Guid? panelId = null) =>
         PanelForge.Domain.Entities.Assets.AssetReference.Create(
             Guid.NewGuid(), f.Series.WorkspaceId, f.Chapter.Id, pageId, stageId,
-            f.AssetReferences.Count + 1, null, "art.png", f.ArtistId);
+            f.AssetReferences.Count + 1, null, "art.png", f.ArtistId, panelId);
 }

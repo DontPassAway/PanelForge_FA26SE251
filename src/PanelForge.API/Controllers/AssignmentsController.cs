@@ -111,9 +111,11 @@ public sealed class AssignmentsController : ControllerBase
     [HttpPost("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/approve")]
     [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(AssignmentDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Approve(Guid chapterId, Guid assignmentId, CancellationToken ct)
+    public async Task<IActionResult> Approve(
+        Guid chapterId, Guid assignmentId, [FromBody] ApproveAssignmentRequest? body, CancellationToken ct)
     {
-        var result = await _mediator.Send(new ApproveAssignmentCommand(chapterId, assignmentId, GetCurrentUserId()), ct);
+        var result = await _mediator.Send(
+            new ApproveAssignmentCommand(chapterId, assignmentId, GetCurrentUserId(), body?.ExpectedSubmissionId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -125,7 +127,8 @@ public sealed class AssignmentsController : ControllerBase
         Guid chapterId, Guid assignmentId, [FromBody] RequestAssignmentChangesRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(
-            new RequestAssignmentChangesCommand(chapterId, assignmentId, GetCurrentUserId(), body.Comment, body.Changes), ct);
+            new RequestAssignmentChangesCommand(
+                chapterId, assignmentId, GetCurrentUserId(), body.Comment, body.Changes, body.ExpectedSubmissionId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -163,13 +166,15 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
-    /// <summary>POST .../change-requests/{changeRequestId}/verify — Editor/Producer xác minh đã đạt (Resolved → Verified).</summary>
+    /// <summary>POST .../change-requests/{changeRequestId}/verify — Editor/Producer xác minh đã đạt (Resolved → Verified), body tuỳ chọn { comment }.</summary>
     [HttpPost("api/chapters/{chapterId:guid}/change-requests/{changeRequestId:guid}/verify")]
     [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ChangeRequestDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> VerifyChangeRequest(Guid chapterId, Guid changeRequestId, CancellationToken ct)
+    public async Task<IActionResult> VerifyChangeRequest(
+        Guid chapterId, Guid changeRequestId, [FromBody] ChangeRequestCommentRequest? body, CancellationToken ct)
     {
-        var result = await _mediator.Send(new VerifyChangeRequestCommand(chapterId, changeRequestId, GetCurrentUserId()), ct);
+        var result = await _mediator.Send(
+            new VerifyChangeRequestCommand(chapterId, changeRequestId, GetCurrentUserId(), body?.Comment), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

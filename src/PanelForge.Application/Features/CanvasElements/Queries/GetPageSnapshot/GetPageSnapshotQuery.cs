@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Common;
 
@@ -40,5 +40,9 @@ public sealed record ElementSnapshotDto(
     string? CurrentLineText = null,  // thoại hiện tại của ScriptLine (null nếu không gắn / dòng đã xóa)
     bool IsStale = false,            // true khi Writer đã sửa thoại/speaker hoặc xóa dòng sau lúc gắn
     int? ReadingOrder = null,        // thứ tự đọc Letterer ghi đè (null = suy từ vị trí)
-    string? OverflowAcknowledgedReason = null  // lý do xác nhận cảnh báo tràn chữ (BR-20), null = chưa xác nhận
+    string? OverflowAcknowledgedReason = null,  // lý do xác nhận cảnh báo tràn chữ (BR-20), null = chưa xác nhận
+    int Version = 0,  // BR-11: gửi lại làm expectedElementVersion khi sửa element này
+    Guid? PanelId = null,
+    double Rotation = 0,
+    Guid? BibleEntryId = null
 );

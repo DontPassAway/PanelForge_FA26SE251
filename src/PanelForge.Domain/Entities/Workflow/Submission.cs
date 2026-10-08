@@ -5,7 +5,8 @@ namespace PanelForge.Domain.Entities.Workflow;
 
 /// <summary>
 /// Một lần nộp của một Assignment (CF3, design-research M7). Quyết định duyệt gắn vào đúng lần nộp này nên lịch sử
-/// các lần nộp và lý do từ chối được giữ nguyên (BR-01). Chưa có <c>revisionRef</c>: artwork chưa có revision riêng.
+/// các lần nộp và lý do từ chối được giữ nguyên (BR-01). Gắn đúng bản được nộp: các phiên bản artwork mới nhất lúc nộp
+/// (<see cref="ArtworkReferenceIds"/>) và version của Chapter (<see cref="ChapterVersion"/>, cho việc Script).
 /// </summary>
 public class Submission : BaseEntity
 {
@@ -16,6 +17,10 @@ public class Submission : BaseEntity
     public int AttemptNumber { get; private set; }
     public SubmissionStatus Status { get; private set; }
     public DateTime SubmittedAt { get; private set; }
+    /// <summary>AssetReference mới nhất của từng (Page, Panel) mà việc bao phủ, ở stage của việc, tại lúc nộp. Rỗng với việc không có artwork.</summary>
+    public List<Guid> ArtworkReferenceIds { get; private set; } = [];
+    /// <summary>Chapter.VersionVector lúc nộp (revision của script).</summary>
+    public long ChapterVersion { get; private set; }
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -23,7 +28,9 @@ public class Submission : BaseEntity
 
     private Submission() { }
 
-    public static Submission Create(Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber)
+    public static Submission Create(
+        Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
+        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
 
@@ -33,6 +40,8 @@ public class Submission : BaseEntity
             ChapterId = chapterId,
             SubmittedByUserId = submittedByUserId,
             AttemptNumber = attemptNumber,
+            ArtworkReferenceIds = artworkReferenceIds?.Distinct().ToList() ?? [],
+            ChapterVersion = chapterVersion,
             Status = SubmissionStatus.Pending,
             SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow

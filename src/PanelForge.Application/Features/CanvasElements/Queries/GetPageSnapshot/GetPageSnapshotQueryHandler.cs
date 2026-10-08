@@ -54,7 +54,11 @@ public sealed class GetPageSnapshotQueryHandler
                     CurrentLineText: line?.Text,
                     IsStale:         analysis.StaleElementIds.Contains(e.ElementId),
                     ReadingOrder:    e.ReadingOrder,
-                    OverflowAcknowledgedReason: e.OverflowAckReason
+                    OverflowAcknowledgedReason: e.OverflowAckReason,
+                    Version:         e.Version,
+                    PanelId:         e.PanelId,
+                    Rotation:        e.Rotation,
+                    BibleEntryId:    e.BibleEntryId
                 );
             })
             .ToList();

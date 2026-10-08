@@ -75,14 +75,17 @@ internal static class StageProgressRules
                 .OrderByDescending(s => s.AttemptNumber)
                 .Select(s => s.DecidedAt).FirstOrDefaultAsync(ct);
 
-            var pagesWithArtwork = await db.AssetReferences.AsNoTracking()
+            var uploads = await db.AssetReferences.AsNoTracking()
                 .Where(r => r.PipelineStageId == a.PipelineStageId && pageIds.Contains(r.PageId) &&
                             (rejectedAt == null || r.CreatedAt >= rejectedAt))
-                .Select(r => r.PageId).Distinct().ToListAsync(ct);
+                .Select(r => new { r.PageId, r.PanelId }).Distinct().ToListAsync(ct);
 
-            var missing = pageIds.Except(pagesWithArtwork).Count();
+            // Trang đủ artwork khi có ảnh cả trang, hoặc mọi Panel (việc bao phủ) của trang đều có ảnh riêng
+            var missing = pageIds.Count(pageId =>
+                !uploads.Any(u => u.PageId == pageId && u.PanelId == null) &&
+                panels.Where(p => p.PageId == pageId).Any(p => !uploads.Any(u => u.PanelId == p.Id)));
             if (missing > 0)
-                return $"{missing} trang chưa có artwork ở stage này (sau lần bị trả về cần bản tải lên mới).";
+                return $"{missing} trang chưa có artwork ở stage này: cần ảnh cả trang hoặc ảnh cho mọi Panel (sau lần bị trả về cần bản tải lên mới).";
         }
 
         return null;

@@ -24,7 +24,8 @@ public sealed record UploadArtworkCommand(
     byte[] Content,
     string? FileName,
     string? ClientSha256,
-    string? LayerType
+    string? LayerType,
+    Guid? PanelId = null  // ảnh cho một Panel (khung) của Page; null = artwork cả trang
 ) : IRequest<Result<AssetReferenceDto>>;
 
 public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkCommand, Result<AssetReferenceDto>>
@@ -72,6 +73,10 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         if (!await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == cmd.PageId && p.ChapterId == chapter.Id, ct))
             return Fail("Page không thuộc Chapter.", ResultErrorCodes.NotFound);
 
+        if (cmd.PanelId is { } panelId &&
+            !await _db.Panels.AsNoTracking().AnyAsync(p => p.Id == panelId && p.PageId == cmd.PageId, ct))
+            return Fail("Panel không thuộc Page.", ResultErrorCodes.NotFound);
+
         var pipelineIds = await _db.PipelineDefinitions.AsNoTracking()
             .Where(d => d.SeriesId == chapter.SeriesId).Select(d => d.Id).ToListAsync(ct);
         if (!await _db.PipelineStages.AsNoTracking().AnyAsync(
@@ -89,7 +94,8 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
             a.Status == AssignmentStatus.InProgress &&
             ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
-             (a.EntityType == WorkflowEntityType.Panel && panelIds.Contains(a.TargetEntityId))), ct);
+             (a.EntityType == WorkflowEntityType.Panel && panelIds.Contains(a.TargetEntityId) &&
+              (cmd.PanelId == null || a.TargetEntityId == cmd.PanelId))), ct);
         if (!holdsTheWork)
             return Fail("Chỉ người đang làm việc (InProgress) ở stage này cho Page này mới được tải artwork.", ResultErrorCodes.Forbidden);
 
@@ -113,15 +119,15 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             _db.Assets.Add(asset);
         }
 
-        // Phiên bản mới của (Page, Stage), chỉ thêm (BR-01)
+        // Phiên bản mới của (Page, Panel, Stage), chỉ thêm (BR-01)
         var versions = await _db.AssetReferences.AsNoTracking()
-            .Where(r => r.PageId == cmd.PageId && r.PipelineStageId == cmd.StageId)
+            .Where(r => r.PageId == cmd.PageId && r.PanelId == cmd.PanelId && r.PipelineStageId == cmd.StageId)
             .Select(r => r.VersionNumber).ToListAsync(ct);
 
         var reference = AssetReference.Create(
             asset.Id, workspaceId, chapter.Id, cmd.PageId, cmd.StageId,
             versions.Count == 0 ? 1 : versions.Max() + 1,
-            layerType, AssetRules.SanitizeFileName(cmd.FileName), cmd.UserId);
+            layerType, AssetRules.SanitizeFileName(cmd.FileName), cmd.UserId, cmd.PanelId);
         reference.CreatedBy = cmd.UserId.ToString();
 
         _db.AssetReferences.Add(reference);

@@ -11,7 +11,7 @@ namespace PanelForge.Application.Features.Assignments.Commands.ApproveAssignment
 /// CF3 bước 6 (BR-06, BR-19): duyệt cổng. Assignment UnderReview → Approved, StageProgress các Panel InReview → Approved,
 /// nhờ đó stage kế tiếp của các Panel đó mở được. Người duyệt phải khác người nhận.
 /// </summary>
-public sealed record ApproveAssignmentCommand(Guid ChapterId, Guid AssignmentId, Guid UserId)
+public sealed record ApproveAssignmentCommand(Guid ChapterId, Guid AssignmentId, Guid UserId, Guid? ExpectedSubmissionId = null)
     : IRequest<Result<AssignmentDto>>;
 
 public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAssignmentCommand, Result<AssignmentDto>>
@@ -27,6 +27,9 @@ public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAss
             return Result<AssignmentDto>.Failure(loaded.ErrorMessage!, loaded.ErrorCode);
 
         var assignment = loaded.Value!;
+
+        if (await ChangeRequestRules.SubmissionMismatchAsync(_db, assignment.Id, cmd.ExpectedSubmissionId, ct) is { } stale)
+            return Result<AssignmentDto>.Failure(stale, ResultErrorCodes.Conflict);
 
         // CF3 "Kết quả": cổng chỉ đạt khi mọi yêu cầu sửa đã đóng; Editor phải xác minh các yêu cầu Resolved trước
         var unclosed = await ChangeRequestRules.UnclosedCountAsync(_db, assignment.Id, includeResolved: true, ct);

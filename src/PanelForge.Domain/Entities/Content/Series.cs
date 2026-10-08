@@ -75,6 +75,9 @@ public class Series : BaseEntity
         if (releaseScheduleJson != null) ReleaseScheduleJson = releaseScheduleJson.Trim();
     }
 
+    /// <summary>Producer/Writer ghi story arc của Series; chuỗi rỗng = xoá.</summary>
+    public void SetStoryArc(string? storyArc) => StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
+
     public void AttachBible(SeriesBible bible)
     {
         ArgumentNullException.ThrowIfNull(bible);

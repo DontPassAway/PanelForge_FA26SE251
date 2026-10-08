@@ -25,7 +25,7 @@ public sealed class GetPageArtworkQueryHandler
         var query = _db.AssetReferences.AsNoTracking().Where(r => r.PageId == q.PageId);
         if (q.StageId is { } stageId) query = query.Where(r => r.PipelineStageId == stageId);
 
-        var refs = await query.OrderBy(r => r.PipelineStageId).ThenBy(r => r.VersionNumber).ToListAsync(ct);
+        var refs = await query.OrderBy(r => r.PipelineStageId).ThenBy(r => r.PanelId).ThenBy(r => r.VersionNumber).ToListAsync(ct);
 
         var assetIds = refs.Select(r => r.AssetId).Distinct().ToList();
         var assets = (await _db.Assets.AsNoTracking().Where(a => assetIds.Contains(a.Id)).ToListAsync(ct))

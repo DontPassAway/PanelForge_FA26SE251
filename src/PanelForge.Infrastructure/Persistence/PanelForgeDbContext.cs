@@ -64,6 +64,10 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Submission> Submissions => Set<Submission>();
     public DbSet<ChangeRequest> ChangeRequests => Set<ChangeRequest>();
+    public DbSet<ConsistencyFinding> ConsistencyFindings => Set<ConsistencyFinding>();
+    public DbSet<PanelForge.Domain.Entities.Preview.PreviewLink> PreviewLinks => Set<PanelForge.Domain.Entities.Preview.PreviewLink>();
+    public DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs => Set<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog>();
+    public DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback => Set<PanelForge.Domain.Entities.Preview.PreviewFeedback>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetReference> AssetReferences => Set<AssetReference>();
     public DbSet<AssetAccessLog> AssetAccessLogs => Set<AssetAccessLog>();
@@ -73,6 +77,8 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
     public DbSet<Page> Pages => Set<Page>();
     public DbSet<Panel> Panels => Set<Panel>();
+    public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();
+    public DbSet<ScriptLineBibleLink> ScriptLineBibleLinks => Set<ScriptLineBibleLink>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using PanelForge.Application.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
@@ -15,6 +15,9 @@ public sealed record MoveElementCommand(
     double NewY,
     double NewWidth,
     double NewHeight,
-    long ExpectedPageVersion,   // Optimistic Concurrency: client gửi version đang giữ
-    Guid MovedByUserId
+    long? ExpectedPageVersion,  // Cách cũ: version cả Page (xung đột cả khi người khác sửa element KHÁC)
+    Guid MovedByUserId,
+    int? ExpectedElementVersion = null,  // BR-11: version của element đang giữ; ưu tiên hơn ExpectedPageVersion
+    double? NewRotation = null,          // null = giữ nguyên góc xoay
+    int? NewZIndex = null                // null = giữ nguyên thứ tự lớp
 ) : IRequest<Result<bool>>;

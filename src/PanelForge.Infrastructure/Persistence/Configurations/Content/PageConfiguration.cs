@@ -29,6 +29,7 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
 
         builder.HasIndex(p => new { p.ChapterId, p.PageNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự
                .HasDatabaseName("ix_pages_chapter_number");
 
         builder.Property(p => p.LayoutFormat)

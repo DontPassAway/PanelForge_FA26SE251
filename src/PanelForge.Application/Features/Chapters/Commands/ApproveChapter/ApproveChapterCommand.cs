@@ -11,7 +11,7 @@ namespace PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 
 /// <summary>
 /// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → Approved, chuyển cho Publisher.
-/// Điều kiện: có ít nhất một Page, mọi việc giao đã Approved, không còn yêu cầu sửa Open/Resolved. Từ đây việc/tiến độ bị khoá (BR-12).
+/// Điều kiện: có ít nhất một Page, mọi việc giao đã Approved, không còn yêu cầu sửa Open/Resolved, không còn lỗi nhất quán Blocking đang mở. Từ đây việc/tiến độ bị khoá (BR-12).
 /// </summary>
 public sealed record ApproveChapterCommand(Guid ChapterId, Guid UserId) : IRequest<Result<ChapterReviewDto>>;
 
@@ -40,6 +40,15 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
             (c.Status == ChangeRequestStatus.Open || c.Status == ChangeRequestStatus.Resolved), ct);
         if (openRequests > 0)
             return Result<ChapterReviewDto>.Failure($"Còn {openRequests} yêu cầu sửa chưa đóng, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
+
+        // CF3 "Cổng Consistency trước khi khóa chương": lỗi nhất quán mức Blocking còn mở (chưa Rejected/Ignored/Resolved) thì chặn
+        var blockingFindings = await _db.ConsistencyFindings.CountAsync(f => f.ChapterId == chapter.Id &&
+            f.Severity == ConsistencyFindingSeverity.Blocking &&
+            (f.Status == ConsistencyFindingStatus.Open || f.Status == ConsistencyFindingStatus.Confirmed ||
+             f.Status == ConsistencyFindingStatus.NeedsClarification), ct);
+        if (blockingFindings > 0)
+            return Result<ChapterReviewDto>.Failure(
+                $"Còn {blockingFindings} lỗi nhất quán mức Blocking chưa xử lý, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
 
         chapter.Approve();
         chapter.UpdatedBy = cmd.UserId.ToString();

@@ -28,6 +28,7 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
 
         builder.HasIndex(p => new { p.PageId, p.PanelNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự
                .HasDatabaseName("ix_panels_page_number");
 
         builder.Property(p => p.BoundingBox)

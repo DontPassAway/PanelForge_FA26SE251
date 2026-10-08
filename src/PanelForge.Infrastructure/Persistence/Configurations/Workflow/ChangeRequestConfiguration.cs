@@ -31,6 +31,14 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
         builder.HasIndex(c => new { c.ChapterId, c.Status })
                .HasDatabaseName("ix_change_requests_chapter_status");
 
+        builder.Property(c => c.AssetReferenceId)
+               .HasColumnName("asset_reference_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.PanelId)
+               .HasColumnName("panel_id")
+               .HasColumnType("uuid");
+
         builder.Property(c => c.SubmissionId)
                .HasColumnName("submission_id")
                .HasColumnType("uuid");

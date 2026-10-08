@@ -10,6 +10,7 @@ using PanelForge.Application.Features.ConsistencyRules.Commands.DeleteConsistenc
 using PanelForge.Application.Features.ConsistencyRules.Queries.GetConsistencyRules;
 using PanelForge.Application.Features.Series.Commands.CreateSeries;
 using PanelForge.Application.Features.Series.Commands.DeleteSeries;
+using PanelForge.Application.Features.Series.Commands.SetSeriesStoryArc;
 using PanelForge.Application.Features.Series.Commands.UpdateSeries;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
@@ -146,6 +147,18 @@ public sealed class SeriesController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    /// <summary>PUT /api/series/{seriesId}/story-arc — Producer/Writer ghi story arc (rỗng = xoá). Trả story arc đã lưu.</summary>
+    [HttpPut("api/series/{seriesId:guid}/story-arc")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetStoryArc(
+        [FromRoute] Guid seriesId, [FromBody] SetSeriesStoryArcRequest body, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetSeriesStoryArcCommand(seriesId, GetCurrentUserId(), body.StoryArc), cancellationToken);
+        return result.IsSuccess ? Ok(new TextValueResponse(result.Value)) : NotFound(new { error = result.ErrorMessage });
     }
 
     /// <summary>
@@ -351,3 +364,5 @@ public sealed class SeriesController : ControllerBase
         return Ok(new { message = result.Value });
     }
 }
+
+public sealed record SetSeriesStoryArcRequest(string? StoryArc);

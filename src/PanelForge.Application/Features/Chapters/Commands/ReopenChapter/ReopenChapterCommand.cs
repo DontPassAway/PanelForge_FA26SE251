@@ -40,6 +40,10 @@ public sealed class ReopenChapterCommandHandler : IRequestHandler<ReopenChapterC
         chapter.Reopen();
         chapter.UpdatedBy = cmd.UserId.ToString();
 
+        // CF5: mở lại thì link xem thử của bản cũ bị thu hồi (BR-17)
+        foreach (var link in await _db.PreviewLinks.Where(l => l.ChapterId == chapter.Id && l.RevokedAt == null).ToListAsync(ct))
+            link.Revoke(cmd.UserId, "Chương được mở lại");
+
         var review = ChapterReview.Create(
             chapter.Id,
             byPublisher ? ChapterReviewAction.PublisherRejected : ChapterReviewAction.ProducerReopened,

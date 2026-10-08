@@ -35,6 +35,7 @@ public class ArtworkUploadTests
         public readonly List<Asset> Assets = [];
         public readonly List<AssetReference> References = [];
         public readonly List<AssetAccessLog> AccessLogs = [];
+        public readonly List<Panel> Panels = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IAssetStorage> Storage = new();
         public readonly Mock<IAssetLinkSigner> Signer = new();
@@ -56,7 +57,7 @@ public class ArtworkUploadTests
             Db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
             Db.Setup(d => d.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { Chapter }));
             Db.Setup(d => d.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page> { Page }));
-            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
+            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(Panels));
             Db.Setup(d => d.PipelineDefinitions).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineDefinition> { def }));
             Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { Stage }));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment> { Assignment }));
@@ -71,10 +72,10 @@ public class ArtworkUploadTests
 
         public Task<Result<AssetReferenceDto>> Upload(
             byte[] content, string? clientHash = null, Guid? userId = null, Guid? stageId = null, Guid? pageId = null,
-            string? layerType = null, string? fileName = "page1.png") =>
+            string? layerType = null, string? fileName = "page1.png", Guid? panelId = null) =>
             new UploadArtworkCommandHandler(Db.Object, Storage.Object).Handle(new UploadArtworkCommand(
                 Chapter.Id, pageId ?? Page.Id, stageId ?? Stage.Id, userId ?? ArtistId, content, fileName,
-                clientHash ?? Hash(content), layerType), CancellationToken.None);
+                clientHash ?? Hash(content), layerType, panelId), CancellationToken.None);
     }
 
     private static string Hash(byte[] content) => Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
@@ -457,5 +458,37 @@ public class ArtworkUploadTests
         var asset = Asset.Create(ws, sha, 10, "image/png");
 
         asset.StorageKey.Should().Be($"{ws:N}/cc/{sha}");
+    }
+
+    // ── Upload theo Panel ──
+
+    [Fact]
+    public async Task Upload_ForPanel_VersionsSeparatelyFromWholePage()
+    {
+        var f = new Fixture();
+        var panel = Panel.Create(f.Page.Id, 1, 1);
+        f.Panels.Add(panel);
+
+        var page = await f.Upload(Png(1));
+        var first = await f.Upload(Png(2), panelId: panel.Id);
+        var second = await f.Upload(Png(3), panelId: panel.Id);
+
+        page.Value!.PanelId.Should().BeNull();
+        page.Value.VersionNumber.Should().Be(1);
+        first.Value!.PanelId.Should().Be(panel.Id);
+        first.Value.VersionNumber.Should().Be(1);
+        second.Value!.VersionNumber.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Upload_ForPanelOfAnotherPage_IsNotFound()
+    {
+        var f = new Fixture();
+        f.Panels.Add(Panel.Create(Guid.NewGuid(), 1, 1));
+
+        var result = await f.Upload(Png(), panelId: f.Panels[0].Id);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        f.References.Should().BeEmpty();
     }
 }

@@ -28,7 +28,7 @@ public sealed class AssetsController : ControllerBase
         Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : Guid.Empty;
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId, clientSha256, layerType?.
+    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId, clientSha256, layerType?, panelId?.
     /// Server tính lại SHA-256 và từ chối nếu lệch (BR-04). Chỉ người đang giữ việc InProgress ở stage đó.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/pages/{pageId:guid}/artwork")]
@@ -48,7 +48,7 @@ public sealed class AssetsController : ControllerBase
 
         var result = await _mediator.Send(new UploadArtworkCommand(
             chapterId, pageId, form.StageId, GetCurrentUserId(), buffer.ToArray(),
-            form.File.FileName, form.ClientSha256, form.LayerType), ct);
+            form.File.FileName, form.ClientSha256, form.LayerType, form.PanelId), ct);
 
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetPageArtwork), new { chapterId, pageId }, result.Value)
@@ -111,4 +111,6 @@ public sealed class UploadArtworkForm
     public Guid StageId { get; set; }
     public string? ClientSha256 { get; set; }
     public string? LayerType { get; set; }
+    /// <summary>Tuỳ chọn: ảnh cho một Panel của Page; bỏ trống = artwork cả trang.</summary>
+    public Guid? PanelId { get; set; }
 }

@@ -27,6 +27,7 @@ public sealed class RemoveElementCommandHandler
         // 2. Domain method — validate element tồn tại và chưa bị xóa
         try
         {
+            page.EnsureElementVersion(command.ElementId, command.ExpectedElementVersion);
             page.RemoveElement(
                 elementId:       command.ElementId,
                 reason:          command.Reason,
@@ -39,7 +40,14 @@ public sealed class RemoveElementCommandHandler
         }
 
         // 3. Persist ElementRemovedEvent — thao tác APPEND duy nhất, KHÔNG có DELETE SQL
-        await _pageRepository.SaveAsync(page, cancellationToken);
+        try
+        {
+            await _pageRepository.SaveAsync(page, cancellationToken);
+        }
+        catch (ConcurrentPageUpdateException ex)
+        {
+            return Result<bool>.Failure(ex.Message);
+        }
 
         return Result<bool>.Success(true);
     }

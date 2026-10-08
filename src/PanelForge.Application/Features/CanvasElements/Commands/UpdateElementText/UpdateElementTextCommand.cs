@@ -10,7 +10,7 @@ namespace PanelForge.Application.Features.CanvasElements.Commands.UpdateElementT
 /// ScriptLineId = null: giữ dòng đang gắn (nếu có). Content bỏ trống và element có dòng: lấy nguyên văn dòng hiện tại.
 /// </summary>
 public sealed record UpdateElementTextCommand(
-    Guid PageId, Guid ElementId, string? Content, Guid? ScriptLineId, Guid UserId)
+    Guid PageId, Guid ElementId, string? Content, Guid? ScriptLineId, Guid UserId, int? ExpectedElementVersion = null)
     : IRequest<Result<UpdateElementTextResponse>>;
 
 public sealed record UpdateElementTextResponse(Guid ElementId, string? Content, Guid? ScriptLineId, Guid? SpeakerId);
@@ -35,6 +35,8 @@ public sealed class UpdateElementTextCommandHandler
         if (page is null) return Fail($"Page {cmd.PageId} không tồn tại.");
         if (!page.Elements.TryGetValue(cmd.ElementId, out var element) || element.IsRemoved)
             return Fail($"Element {cmd.ElementId} không tồn tại trên Page {cmd.PageId}.");
+        try { page.EnsureElementVersion(cmd.ElementId, cmd.ExpectedElementVersion); }
+        catch (InvalidOperationException ex) { return Fail(ex.Message); }
 
         var lineId = cmd.ScriptLineId ?? element.ScriptLineId;
         var content = cmd.Content;

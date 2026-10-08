@@ -67,6 +67,17 @@ internal sealed class SubmissionConfiguration : IEntityTypeConfiguration<Submiss
                .HasColumnName("decision_comment")
                .HasColumnType("text");
 
+        // Bản được nộp: các AssetReference (uuid[]) và version chương lúc nộp
+        builder.Property(s => s.ArtworkReferenceIds)
+               .HasColumnName("artwork_reference_ids")
+               .HasColumnType("uuid[]")
+               .IsRequired();
+
+        builder.Property(s => s.ChapterVersion)
+               .HasColumnName("chapter_version")
+               .HasColumnType("bigint")
+               .IsRequired();
+
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

@@ -49,6 +49,9 @@ public class Chapter : BaseEntity
         if (outline != null) Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
     }
 
+    /// <summary>Producer/Writer ghi outline chương; chuỗi rỗng = xoá.</summary>
+    public void SetOutline(string? outline) => Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
+
     public void IncrementVersion() => VersionVector++;
 
     /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → Approved), chờ Publisher.</summary>

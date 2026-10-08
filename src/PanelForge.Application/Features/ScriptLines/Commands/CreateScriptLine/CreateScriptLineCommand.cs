@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 
@@ -15,7 +16,8 @@ namespace PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 /// </summary>
 public sealed record CreateScriptLineCommand(
     Guid ChapterId, Guid SceneId, Guid UserId, string? DialogueText, string? StageDirection,
-    Guid? SpeakerCharacterId, int? LineOrder, long? ExpectedChapterVersion) : IRequest<Result<ScriptLineDto>>;
+    Guid? SpeakerCharacterId, int? LineOrder, long? ExpectedChapterVersion,
+    IReadOnlyList<Guid>? BibleEntryIds = null, Guid? ClientLineId = null) : IRequest<Result<ScriptLineDto>>;
 
 public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScriptLineCommand, Result<ScriptLineDto>>
 {
@@ -35,6 +37,28 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
         if (cmd.LineOrder is < 1)
             return Result<ScriptLineDto>.Failure("LineOrder phải từ 1 trở lên.", ResultErrorCodes.Validation);
 
+        if (cmd.ClientLineId == Guid.Empty)
+            return Result<ScriptLineDto>.Failure("clientLineId không hợp lệ.", ResultErrorCodes.Validation);
+
+        // NFR-09: gửi lại sau mất mạng → trả dòng đã tạo từ lần trước (idempotent). Vẫn kiểm quyền, nhưng KHÔNG so
+        // expectedChapterVersion vì lần gửi đầu đã làm tăng version.
+        if (cmd.ClientLineId is { } clientId
+            && await _db.ScriptLines.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(l => l.Id == clientId, ct) is { } existing)
+        {
+            var replayAuth = await ScriptLineRules.AuthorizeAsync(_db, _auth, cmd.UserId, cmd.ChapterId, null, ct);
+            if (!replayAuth.IsSuccess)
+                return Result<ScriptLineDto>.Failure(replayAuth.ErrorMessage!, replayAuth.ErrorCode);
+            if (existing.SceneId != cmd.SceneId)
+                return Result<ScriptLineDto>.Failure($"clientLineId {clientId} đã dùng cho dòng của Scene khác.", ResultErrorCodes.Conflict);
+
+            var revisionId = await _db.ContentRevisions.AsNoTracking()
+                .Where(r => r.SceneId == cmd.SceneId && r.Kind == ContentRevisionKind.Script)
+                .OrderByDescending(r => r.VersionNumber).Select(r => r.Id).FirstAsync(ct);
+            var linked = await ScriptLineRules.SetBibleLinksAsync(_db, clientId, null, ct);
+            return Result<ScriptLineDto>.Success(
+                ScriptLineDto.From(existing, replayAuth.Value.Chapter.VersionVector, revisionId, linked) with { Replayed = true });
+        }
+
         var authorized = await ScriptLineRules.AuthorizeAsync(_db, _auth, cmd.UserId, cmd.ChapterId, cmd.ExpectedChapterVersion, ct);
         if (!authorized.IsSuccess)
             return Result<ScriptLineDto>.Failure(authorized.ErrorMessage!, authorized.ErrorCode);
@@ -46,6 +70,8 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
 
         if (await ScriptLineRules.ValidateSpeakerAsync(_db, chapter.SeriesId, cmd.SpeakerCharacterId, ct) is { } speakerError)
             return Result<ScriptLineDto>.Failure(speakerError, ResultErrorCodes.Validation);
+        if (await ScriptLineRules.ValidateBibleEntriesAsync(_db, chapter.SeriesId, cmd.BibleEntryIds, ct) is { } linkError)
+            return Result<ScriptLineDto>.Failure(linkError, ResultErrorCodes.Validation);
 
         var lines = await _db.ScriptLines.Where(l => l.SceneId == cmd.SceneId).ToListAsync(ct);
         var before = ScriptLineRules.Snapshot(lines);
@@ -58,14 +84,16 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
         var line = ScriptLine.Create(cmd.SceneId, order,
             string.IsNullOrWhiteSpace(cmd.DialogueText) ? null : cmd.DialogueText,
             string.IsNullOrWhiteSpace(cmd.StageDirection) ? null : cmd.StageDirection,
-            cmd.SpeakerCharacterId);
+            cmd.SpeakerCharacterId,
+            cmd.ClientLineId);
         _db.ScriptLines.Add(line);
         lines.Add(line);
+        var bibleEntryIds = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, cmd.BibleEntryIds ?? [], ct);
 
         var revision = await ScriptLineRules.RecordRevisionAsync(
             _db, chapter, cmd.SceneId, "Thêm dòng script thủ công", before, ScriptLineRules.Snapshot(lines), ct);
 
         await _db.SaveChangesAsync(ct);
-        return Result<ScriptLineDto>.Success(ScriptLineDto.From(line, chapter.VersionVector, revision.Id));
+        return Result<ScriptLineDto>.Success(ScriptLineDto.From(line, chapter.VersionVector, revision.Id, bibleEntryIds));
     }
 }
