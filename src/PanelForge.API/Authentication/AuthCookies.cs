@@ -32,8 +32,11 @@ public static class AuthCookies
         response.Cookies.Delete(Refresh, new CookieOptions { Path = RefreshPath });
     }
 
+    // Header tuỳ chỉnh (trang khác không tự gắn được), hoặc request cùng origin – vd. Swagger UI trên chính API
+    // (Sec-Fetch-Site do trình duyệt đặt, JS không sửa được).
     public static bool HasCsrfHeader(HttpRequest request)
-        => !string.IsNullOrEmpty(request.Headers[CsrfHeader]);
+        => !string.IsNullOrEmpty(request.Headers[CsrfHeader])
+           || string.Equals(request.Headers["Sec-Fetch-Site"], "same-origin", StringComparison.OrdinalIgnoreCase);
 
     private static CookieOptions Options(HttpRequest request, string path, DateTimeOffset? expires) => new()
     {

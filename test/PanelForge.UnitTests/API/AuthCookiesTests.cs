@@ -1,4 +1,8 @@
+using MediatR;
 using Microsoft.AspNetCore.Http;
+using Moq;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Auth.Commands.Login;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Authentication;
 using PanelForge.API.Controllers;
@@ -55,6 +59,39 @@ public class AuthCookiesTests
         var headers = SetCookieHeaders(ctx);
         Assert.Contains(headers, h => h.StartsWith("pf_access=;") && h.Contains("expires=Thu, 01 Jan 1970"));
         Assert.Contains(headers, h => h.StartsWith("pf_refresh=;") && h.Contains("path=/api/auth"));
+    }
+
+    [Fact]
+    public async Task Login_Success_SetsCookies_AndBodyHasNoTokens()
+    {
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<LoginCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<AuthResponse>.Success(
+                new AuthResponse(Token: "jwt-x", ExpiresAt: DateTime.UtcNow.AddMinutes(30), RefreshToken: "rt-x")));
+        var ctx = new DefaultHttpContext();
+        var controller = new AuthController(mediator.Object) { ControllerContext = new() { HttpContext = ctx } };
+
+        var result = await controller.Login(new LoginRequest("a@b.c", "pw"), CancellationToken.None);
+
+        var body = Assert.IsType<AuthResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Null(body.Token);
+        Assert.Null(body.RefreshToken);
+        Assert.NotNull(body.ExpiresAt);
+        var headers = SetCookieHeaders(ctx);
+        Assert.Contains(headers, h => h.StartsWith("pf_access=jwt-x"));
+        Assert.Contains(headers, h => h.StartsWith("pf_refresh=rt-x"));
+    }
+
+    [Theory]
+    [InlineData("X-Requested-With", "XMLHttpRequest", true)]
+    [InlineData("Sec-Fetch-Site", "same-origin", true)]
+    [InlineData("Sec-Fetch-Site", "cross-site", false)]
+    [InlineData("Sec-Fetch-Site", "same-site", false)]
+    public void HasCsrfHeader(string header, string value, bool expected)
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers[header] = value;
+        Assert.Equal(expected, AuthCookies.HasCsrfHeader(ctx.Request));
     }
 
     [Fact]

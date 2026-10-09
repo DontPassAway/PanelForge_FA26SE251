@@ -275,11 +275,11 @@ public class AuthController : ControllerBase
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
     }
 
-    // Ghi token vào cookie HttpOnly; body vẫn trả token như cũ để FE chuyển dần (bỏ sau khi FE dùng cookie).
+    // Token chỉ nằm trong cookie HttpOnly; body không trả token/refreshToken (JS không đọc được → XSS không lấy được).
     private IActionResult AuthOk(AuthResponse response)
     {
         AuthCookies.Set(Request, Response, response);
-        return Ok(response);
+        return Ok(response with { Token = null, RefreshToken = null });
     }
 
     private IActionResult UnknownUser()
