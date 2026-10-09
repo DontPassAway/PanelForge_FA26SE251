@@ -1,3 +1,4 @@
+using PanelForge.API.Authentication;
 using System.IO;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
@@ -60,6 +61,21 @@ builder.Services.AddAuthentication(options =>
     // User bị khoá / xoá mềm mất quyền ngay, không phải đợi JWT hết hạn.
     options.Events = new JwtBearerEvents
     {
+        // Không có header Bearer → đọc JWT từ cookie HttpOnly pf_access.
+        // Chống CSRF: request đổi dữ liệu dùng cookie phải có header X-Requested-With (trang khác không tự gắn được).
+        OnMessageReceived = context =>
+        {
+            var request = context.HttpContext.Request;
+            if (string.IsNullOrEmpty(context.Token)
+                && !request.Headers.ContainsKey("Authorization")
+                && request.Cookies.TryGetValue(AuthCookies.Access, out var cookieToken)
+                && (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method)
+                    || AuthCookies.HasCsrfHeader(request)))
+            {
+                context.Token = cookieToken;
+            }
+            return Task.CompletedTask;
+        },
         OnTokenValidated = async context =>
         {
             var sub = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value

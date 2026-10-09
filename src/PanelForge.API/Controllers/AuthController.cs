@@ -2,7 +2,9 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
+using PanelForge.API.Authentication;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
@@ -57,25 +59,39 @@ public class AuthController : ControllerBase
 
         var result = await _mediator.Send(
             new LoginCommand(request.Email, request.Password, rememberDeviceToken), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+        return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [Authorize]
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout([FromBody] LogoutRequest? request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Logout(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is { } userId)
-            await _mediator.Send(new LogoutCommand(userId, request?.RefreshToken), cancellationToken);
+            await _mediator.Send(new LogoutCommand(userId, request?.RefreshToken ?? Request.Cookies[AuthCookies.Refresh]), cancellationToken);
+        AuthCookies.Clear(Response);
         return Ok(new { message = "Đăng xuất thành công." });
     }
 
-    /// <summary>Đổi refresh token lấy access JWT mới (xoay vòng refresh token).</summary>
+    /// <summary>Đổi refresh token (body, hoặc cookie HttpOnly pf_refresh) lấy access JWT mới (xoay vòng refresh token).</summary>
     [EnableRateLimiting("auth")]
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Refresh(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new RefreshTokenCommand(request.RefreshToken), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+        var refreshToken = request?.RefreshToken;
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            // Lấy từ cookie → bắt buộc header chống CSRF (trang khác không tự gắn được header tuỳ chỉnh).
+            if (!AuthCookies.HasCsrfHeader(Request))
+                return Unauthorized(new { message = "Thiếu header X-Requested-With." });
+            refreshToken = Request.Cookies[AuthCookies.Refresh];
+        }
+
+        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken ?? string.Empty), cancellationToken);
+        if (!result.IsSuccess)
+            AuthCookies.Clear(Response);
+        return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [Authorize]
@@ -133,7 +149,7 @@ public class AuthController : ControllerBase
 
         var result = await _mediator.Send(new ChangePasswordCommand(
             userId, request.CurrentPassword, request.NewPassword, request.EmailOtp, request.OtpCode,
-            request.CurrentRefreshToken),
+            request.CurrentRefreshToken ?? Request.Cookies[AuthCookies.Refresh]),
             cancellationToken);
         return result.IsSuccess
             ? Ok(new { message = "Đổi mật khẩu thành công." })
@@ -181,7 +197,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ExternalLoginCommand(request.IdToken), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+        return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [Authorize]
@@ -217,7 +233,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        return Ok(response);
+        return AuthOk(response);
     }
 
     [HttpPost("forget-device")]
@@ -257,6 +273,13 @@ public class AuthController : ControllerBase
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+    }
+
+    // Ghi token vào cookie HttpOnly; body vẫn trả token như cũ để FE chuyển dần (bỏ sau khi FE dùng cookie).
+    private IActionResult AuthOk(AuthResponse response)
+    {
+        AuthCookies.Set(Request, Response, response);
+        return Ok(response);
     }
 
     private IActionResult UnknownUser()
