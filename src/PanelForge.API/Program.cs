@@ -19,6 +19,34 @@ using PanelForge.API.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Công cụ: chép ảnh từ đĩa lên R2 rồi thoát (không khởi động web, không chạm DB) ──
+//   dotnet run -- migrate-assets-to-r2 [--dry-run] [--source <thư mục>]
+if (args.Length > 0 && args[0] == "migrate-assets-to-r2")
+{
+    var sourceIndex = Array.IndexOf(args, "--source");
+    var source = sourceIndex >= 0 && sourceIndex + 1 < args.Length
+        ? args[sourceIndex + 1]
+        : builder.Configuration["AssetStorage:RootPath"] is { Length: > 0 } configured
+            ? configured
+            : Path.Combine(AppContext.BaseDirectory, "App_Data", "assets");
+    var dryRun = args.Contains("--dry-run");
+
+    if (!Directory.Exists(source))
+    {
+        Console.Error.WriteLine($"Không thấy thư mục ảnh: {source}");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    Console.WriteLine($"Nguồn: {Path.GetFullPath(source)}{(dryRun ? "  (chạy thử, không chép)" : "")}");
+    var summary = await PanelForge.Infrastructure.Services.AssetStorageMigrator.RunAsync(
+        source, dryRun ? null : PanelForge.Infrastructure.Services.R2AssetStorage.FromConfiguration(builder.Configuration),
+        Console.Out);
+    Console.WriteLine($"Xong: {summary.Copied} {(dryRun ? "sẽ chép" : "đã chép")}, {summary.Invalid} sai hash, {summary.Failed} lỗi.");
+    Environment.ExitCode = summary.Invalid + summary.Failed == 0 ? 0 : 1;
+    return;
+}
+
 // ── Application layer (MediatR + Command/Query handlers) ─────────────────────
 builder.Services.AddApplication();
 

@@ -134,6 +134,31 @@ Nên tạo **token riêng cho server** (tên `panelforge-prod`), tách khỏi to
 
 ---
 
+## Phần 5 – Chép ảnh cũ (trên ổ đĩa) lên R2
+
+Ảnh tải lên **trước khi** bật R2 nằm ở `src/PanelForge.API/bin/Debug/net9.0/App_Data/assets` (chạy bằng F5 / `dotnet run`) – sau khi bật R2 sẽ không hiện nếu chưa chép.
+Làm sau khi đã gắn key (Phần 2). Lệnh **không** khởi động web, **không** đụng database, chạy lại nhiều lần vẫn an toàn (ảnh đã có trên R2 thì bỏ qua).
+
+Đứng ở `src/PanelForge.API`. **Tắt API đang chạy trước** (tránh khoá file build).
+
+1. Chạy thử – chỉ liệt kê và kiểm SHA-256, không chép, không cần key:
+   ```bash
+   dotnet run -- migrate-assets-to-r2 --dry-run
+   ```
+2. Chép thật:
+   ```bash
+   dotnet run -- migrate-assets-to-r2
+   ```
+3. Kết quả cuối có dạng `Xong: 5 đã chép, 0 sai hash, 0 lỗi.` Mỗi file được chép xong sẽ đọc lại từ R2 để xác nhận.
+   - `[SAI HASH]`: nội dung file không khớp tên (file hỏng) → không chép, báo Backend.
+   - `[LỖI]`: thường do key sai / mạng → sửa rồi chạy lại lệnh, các file đã chép không bị chép lại.
+
+Ảnh ở thư mục khác (vd. từng chạy bằng `-c Release`, hoặc có đặt `AssetStorage:RootPath`): thêm `--source "<đường dẫn thư mục assets>"`.
+
+Chép xong ảnh vẫn còn trên ổ đĩa (lệnh không xoá gì) – giữ lại làm bản dự phòng.
+
+---
+
 ## Tham khảo kỹ thuật (cho người đọc code)
 - Lớp: `src/PanelForge.Infrastructure/Services/R2AssetStorage.cs` (cài đặt `IAssetStorage`, dùng thư viện `AWSSDK.S3` vì R2 tương thích API S3).
 - Chọn kho lưu: `src/PanelForge.Infrastructure/DependencyInjection.cs` theo `AssetStorage:Provider` (`Local` mặc định | `R2`).
