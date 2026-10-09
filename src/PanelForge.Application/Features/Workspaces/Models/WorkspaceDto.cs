@@ -1,6 +1,6 @@
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.DTOs.Workspaces;
+namespace PanelForge.Application.Features.Workspaces.Models;
 
 public record WorkspaceDto(
     Guid Id,
@@ -13,5 +13,6 @@ public record WorkspaceDto(
     DateTime CreatedAt,
     bool IsOwner,
     WorkspaceRole? CurrentUserRole,
-    int MemberCount
+    int MemberCount,
+    int PendingTasks = 0
 );

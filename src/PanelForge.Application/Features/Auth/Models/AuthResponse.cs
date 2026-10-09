@@ -1,4 +1,4 @@
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Auth.Models;
 
 public record AuthResponse(
     string? Token = null,
@@ -7,5 +7,6 @@ public record AuthResponse(
     bool RequiresTwoFactor = false,
     string? TwoFactorEmail = null,
     string? Message = null,
-    string? RememberDeviceToken = null
+    string? RememberDeviceToken = null,
+    string? RefreshToken = null
 );

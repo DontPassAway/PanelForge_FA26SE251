@@ -16,6 +16,5 @@ public sealed record PageCreatedEvent(
     LayoutFormat LayoutFormat,
     int WidthPx,
     int HeightPx,
-    int Dpi,
-    Guid? SceneId
+    int Dpi
 ) : IDomainEvent;

@@ -28,6 +28,7 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
 
         builder.HasIndex(p => new { p.PageId, p.PanelNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự
                .HasDatabaseName("ix_panels_page_number");
 
         builder.Property(p => p.BoundingBox)
@@ -45,14 +46,16 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");
 
+        builder.Property(p => p.SceneId)
+               .HasColumnName("scene_id")
+               .HasColumnType("uuid");
+
+        builder.HasIndex(p => p.SceneId)
+               .HasDatabaseName("ix_panels_scene");
+
         builder.HasOne(p => p.CurrentStage)
                .WithMany()
                .HasForeignKey(p => p.CurrentStageId)
                .OnDelete(DeleteBehavior.SetNull);
-
-        builder.HasMany(p => p.Elements)
-               .WithOne(e => e.Panel)
-               .HasForeignKey(e => e.PanelId)
-               .OnDelete(DeleteBehavior.Cascade);
     }
 }

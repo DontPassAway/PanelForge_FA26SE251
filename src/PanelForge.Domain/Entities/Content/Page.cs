@@ -17,6 +17,15 @@ namespace PanelForge.Domain.Entities.Content;
 public sealed class Page : AggregateRoot
 {
     // ── Internal state rebuilt from events ──────────────────────────────────
+    public const string DuplicateBindingCode = "ELEMENT_DUPLICATE_BINDING";
+    public const string ElementVersionConflictCode = "ELEMENT_VERSION_CONFLICT";
+
+    /// <summary>ElementType (E-30) được phép gắn ScriptLine: balloon, caption, SFX.</summary>
+    public static readonly IReadOnlySet<string> TextElementTypes = new HashSet<string>
+    {
+        "SPEECH_BALLOON", "THOUGHT_BALLOON", "NARRATION_BOX", "SOUND_EFFECT"
+    };
+
     private readonly Dictionary<Guid, ElementState> _elements = new();
 
     /// <summary>Read-only view của tất cả Elements (kể cả đã removed).</summary>
@@ -24,7 +33,6 @@ public sealed class Page : AggregateRoot
 
     // ── Canvas metadata ─────────────────────────────────────────────────────
     public Guid ChapterId { get; private set; }
-    public Guid? SceneId { get; private set; }
     public int PageNumber { get; private set; }
     public LayoutFormat LayoutFormat { get; private set; }
     public int WidthPx { get; private set; }
@@ -34,14 +42,13 @@ public sealed class Page : AggregateRoot
 
     // ── EF Core Navigation Properties (cho relational queries) ───────────────
     public Chapter Chapter { get; private set; } = default!;
-    public Scene? Scene { get; private set; }
     public PipelineStage? CurrentStage { get; private set; }
     public ICollection<Panel> Panels { get; private set; } = [];
 
     public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
 
     // Constructor rỗng bắt buộc để Marten instantiate khi replay stream
-    private Page() { }
+    internal Page() { }
 
     // ── Factory method ──────────────────────────────────────────────────────
     public static Page CreateNew(
@@ -50,8 +57,7 @@ public sealed class Page : AggregateRoot
         LayoutFormat layoutFormat,
         int widthPx,
         int heightPx,
-        int dpi,
-        Guid? sceneId = null)
+        int dpi)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pageNumber);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(widthPx);
@@ -68,8 +74,7 @@ public sealed class Page : AggregateRoot
             LayoutFormat: layoutFormat,
             WidthPx:      widthPx,
             HeightPx:     heightPx,
-            Dpi:          dpi,
-            SceneId:      sceneId
+            Dpi:          dpi
         ));
         return page;
     }
@@ -89,18 +94,34 @@ public sealed class Page : AggregateRoot
         int zIndex,
         Guid addedByUserId,
         string? content = null,
-        string? assetId = null)
+        string? assetId = null,
+        Guid? scriptLineId = null,
+        Guid? speakerId = null,
+        string? sourceLineText = null,
+        Guid? elementId = null,
+        Guid? panelId = null,
+        double rotation = 0,
+        Guid? bibleEntryId = null)
     {
         if (string.IsNullOrWhiteSpace(elementType))
             throw new ArgumentException("ElementType không được rỗng.", nameof(elementType));
         if (width <= 0 || height <= 0)
             throw new ArgumentException("Width và Height phải > 0.");
 
+        // BR-05: mỗi ScriptLine chỉ gắn tối đa một element đang hoạt động (element đã xóa mềm nhả dòng)
+        if (scriptLineId is { } lineId
+            && _elements.Values.Any(e => !e.IsRemoved && e.ScriptLineId == lineId))
+            throw new InvalidOperationException(
+                $"{DuplicateBindingCode}: ScriptLine {lineId} đã được gắn vào một element khác trên Page {Id}.");
+
+        if (elementId is { } requested && (requested == Guid.Empty || _elements.ContainsKey(requested)))
+            throw new InvalidOperationException($"ElementId {requested} không hợp lệ hoặc đã tồn tại trên Page {Id}.");
+
         RaiseEvent(new ElementAddedEvent(
             EventId:       Guid.NewGuid(),
             OccurredAt:    DateTimeOffset.UtcNow,
             PageId:        Id,
-            ElementId:     Guid.NewGuid(),
+            ElementId:     elementId ?? Guid.NewGuid(),
             ElementType:   elementType,
             ZIndex:        zIndex,
             X:             x,
@@ -109,7 +130,14 @@ public sealed class Page : AggregateRoot
             Height:        height,
             Content:       content?.Trim(),
             AssetId:       assetId,
-            AddedByUserId: addedByUserId
+            AddedByUserId: addedByUserId,
+            ScriptLineId:  scriptLineId,
+            SpeakerId:     speakerId,
+            RenderedText:  scriptLineId is null ? null : content?.Trim(),
+            SourceLineText: sourceLineText,
+            PanelId:       panelId,
+            Rotation:      rotation == 0 ? null : rotation,
+            BibleEntryId:  bibleEntryId
         ));
     }
 
@@ -121,13 +149,17 @@ public sealed class Page : AggregateRoot
         Guid elementId,
         double newX, double newY,
         double newWidth, double newHeight,
-        Guid movedByUserId)
+        Guid movedByUserId,
+        double? newRotation = null,
+        int? newZIndex = null)
     {
         var element = GetActiveElementOrThrow(elementId);
 
         // Idempotent: không raise event nếu không có gì thay đổi
         if (element.X == newX && element.Y == newY
-            && element.Width == newWidth && element.Height == newHeight)
+            && element.Width == newWidth && element.Height == newHeight
+            && (newRotation is null || newRotation == element.Rotation)
+            && (newZIndex is null || newZIndex == element.ZIndex))
             return;
 
         RaiseEvent(new ElementMovedEvent(
@@ -141,7 +173,9 @@ public sealed class Page : AggregateRoot
             NewY:          newY,
             NewWidth:      newWidth,
             NewHeight:     newHeight,
-            MovedByUserId: movedByUserId
+            MovedByUserId: movedByUserId,
+            NewRotation:   newRotation,
+            NewZIndex:     newZIndex
         ));
     }
 
@@ -166,6 +200,69 @@ public sealed class Page : AggregateRoot
         ));
     }
 
+    /// <summary>
+    /// Sửa chữ / làm mới sau khi Writer sửa thoại / gắn lại sang ScriptLine khác (BR-05).
+    /// scriptLineId = null nghĩa là element không gắn dòng nào. Giữ unique: một dòng chỉ gắn một element đang hoạt động.
+    /// → Raises: ElementTextUpdatedEvent
+    /// </summary>
+    public void UpdateElementText(
+        Guid elementId, string? content, Guid updatedByUserId,
+        Guid? scriptLineId = null, Guid? speakerId = null, string? sourceLineText = null)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+
+        if (scriptLineId is { } lineId)
+        {
+            if (!TextElementTypes.Contains(element.ElementType))
+                throw new InvalidOperationException($"Element loại {element.ElementType} không gắn được ScriptLine.");
+            if (_elements.Values.Any(e => !e.IsRemoved && e.ElementId != elementId && e.ScriptLineId == lineId))
+                throw new InvalidOperationException(
+                    $"{DuplicateBindingCode}: ScriptLine {lineId} đã được gắn vào một element khác trên Page {Id}.");
+        }
+
+        RaiseEvent(new ElementTextUpdatedEvent(
+            EventId:              Guid.NewGuid(),
+            OccurredAt:           DateTimeOffset.UtcNow,
+            PageId:               Id,
+            ElementId:            elementId,
+            Content:              content?.Trim(),
+            ScriptLineId:         scriptLineId,
+            SpeakerId:            speakerId,
+            SourceLineText:       sourceLineText,
+            PreviousContent:      element.Content,
+            PreviousScriptLineId: element.ScriptLineId,
+            UpdatedByUserId:      updatedByUserId));
+    }
+
+    /// <summary>BR-20: xác nhận cảnh báo tràn chữ kèm lý do (bắt buộc). → Raises: ElementOverflowAcknowledgedEvent</summary>
+    public void AcknowledgeOverflow(Guid elementId, string reason, Guid userId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không phải element chữ.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Phải ghi lý do khi xác nhận cảnh báo tràn chữ.", nameof(reason));
+        if (reason.Trim().Length > 500)
+            throw new ArgumentException("Lý do tối đa 500 ký tự.", nameof(reason));
+
+        RaiseEvent(new ElementOverflowAcknowledgedEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, reason.Trim(), userId));
+    }
+
+    /// <summary>Ghi đè thứ tự đọc (≥ 1) hoặc bỏ ghi đè (null). → Raises: ElementReadingOrderSetEvent</summary>
+    public void SetReadingOrder(Guid elementId, int? readingOrder, Guid userId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không phải element chữ.");
+        if (readingOrder is < 1)
+            throw new ArgumentException("Thứ tự đọc phải ≥ 1.", nameof(readingOrder));
+        if (element.ReadingOrder == readingOrder) return;
+
+        RaiseEvent(new ElementReadingOrderSetEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, readingOrder, element.ReadingOrder, userId));
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // APPLY — Rebuild state từ events (pure, không có side effects)
     // ══════════════════════════════════════════════════════════════════════════
@@ -183,11 +280,15 @@ public sealed class Page : AggregateRoot
             case ElementAddedEvent e:      Apply(e); break;
             case ElementMovedEvent e:      Apply(e); break;
             case ElementRemovedEvent e:    Apply(e); break;
+            case ElementTextUpdatedEvent e:           Apply(e); break;
+            case ElementOverflowAcknowledgedEvent e:  Apply(e); break;
+            case ElementReadingOrderSetEvent e:       Apply(e); break;
+            case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
     }
 
-    private void Apply(PageCreatedEvent e)
+    internal void Apply(PageCreatedEvent e)
     {
         Id           = e.PageId;
         ChapterId    = e.ChapterId;
@@ -196,10 +297,9 @@ public sealed class Page : AggregateRoot
         WidthPx      = e.WidthPx;
         HeightPx     = e.HeightPx;
         Dpi          = e.Dpi;
-        SceneId      = e.SceneId;
     }
 
-    private void Apply(PageCanvasUpdatedEvent e)
+    internal void Apply(PageCanvasUpdatedEvent e)
     {
         WidthPx      = e.WidthPx;
         HeightPx     = e.HeightPx;
@@ -207,12 +307,12 @@ public sealed class Page : AggregateRoot
         LayoutFormat = e.LayoutFormat;
     }
 
-    private void Apply(PageReorderedEvent e)
+    internal void Apply(PageReorderedEvent e)
     {
         PageNumber = e.NewPageNumber;
     }
 
-    private void Apply(ElementAddedEvent e)
+    internal void Apply(ElementAddedEvent e)
     {
         _elements[e.ElementId] = new ElementState
         {
@@ -225,23 +325,88 @@ public sealed class Page : AggregateRoot
             Height      = e.Height,
             Content     = e.Content,
             AssetId     = e.AssetId,
-            IsRemoved   = false
+            ScriptLineId   = e.ScriptLineId,
+            SpeakerId      = e.SpeakerId,
+            RenderedText   = e.RenderedText,
+            SourceLineText = e.SourceLineText,
+            PanelId        = e.PanelId,
+            Rotation       = e.Rotation ?? 0,
+            BibleEntryId   = e.BibleEntryId,
+            IsRemoved   = false,
+            Version     = 1
         };
     }
 
-    private void Apply(ElementMovedEvent e)
+    internal void Apply(ElementMovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        // Đổi kích thước hộp làm xác nhận tràn chữ cũ hết hiệu lực
+        if (element.Width != e.NewWidth || element.Height != e.NewHeight) element.OverflowAckReason = null;
         element.X      = e.NewX;
         element.Y      = e.NewY;
         element.Width  = e.NewWidth;
         element.Height = e.NewHeight;
+        if (e.NewRotation is { } r) element.Rotation = r;
+        if (e.NewZIndex is { } z) element.ZIndex = z;
+        element.Version++;
     }
 
-    private void Apply(ElementRemovedEvent e)
+    internal void Apply(ElementRemovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.IsRemoved = true; // Soft Delete — record vẫn tồn tại trong stream
+        element.Version++;
+    }
+
+    internal void Apply(ElementTextUpdatedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.Content           = e.Content;
+        element.ScriptLineId      = e.ScriptLineId;
+        element.SpeakerId         = e.SpeakerId;
+        element.RenderedText      = e.ScriptLineId is null ? null : e.Content;
+        element.SourceLineText    = e.SourceLineText;
+        element.OverflowAckReason = null; // chữ đổi thì xác nhận cũ hết hiệu lực
+        element.Version++;
+    }
+
+    internal void Apply(ElementOverflowAcknowledgedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.OverflowAckReason = e.Reason;
+        element.Version++;
+    }
+
+    internal void Apply(ElementReadingOrderSetEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.ReadingOrder = e.ReadingOrder;
+        element.Version++;
+    }
+
+    internal void Apply(PageDeletedEvent e)
+    {
+        IsDeleted = true;
+        DeletedAt = e.OccurredAt.UtcDateTime;
+        DeletedBy = e.DeletedByUserId?.ToString();
+    }
+
+    // ── Delete ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Xóa mềm Page.
+    /// → Raises: PageDeletedEvent (stream được giữ lại để truy vết lịch sử)
+    /// </summary>
+    public void Delete(Guid? deletedByUserId)
+    {
+        if (IsDeleted)
+            throw new InvalidOperationException($"Page {Id} đã bị xóa.");
+
+        RaiseEvent(new PageDeletedEvent(
+            EventId:         Guid.NewGuid(),
+            OccurredAt:      DateTimeOffset.UtcNow,
+            PageId:          Id,
+            DeletedByUserId: deletedByUserId
+        ));
     }
 
     // ── Canvas settings ──────────────────────────────────────────────────────
@@ -265,8 +430,6 @@ public sealed class Page : AggregateRoot
         ));
     }
 
-    public void AssignToScene(Guid? sceneId) => SceneId = sceneId;
-
     public void Reorder(int newPageNumber)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(newPageNumber);
@@ -281,6 +444,20 @@ public sealed class Page : AggregateRoot
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// BR-11: từ chối lệnh nếu element đã bị người khác sửa kể từ lúc client tải (expectedVersion lệch).
+    /// expectedVersion = null: không kiểm (client cũ). Sửa element khác trên cùng Page không gây xung đột.
+    /// </summary>
+    public void EnsureElementVersion(Guid elementId, int? expectedVersion)
+    {
+        if (expectedVersion is not { } expected) return;
+        if (!_elements.TryGetValue(elementId, out var element)) return; // để lệnh chính báo "không tồn tại"
+        if (element.Version != expected)
+            throw new InvalidOperationException(
+                $"{ElementVersionConflictCode}: Xung đột phiên bản: element {elementId} đã được người khác sửa " +
+                $"(expected={expected}, actual={element.Version}). Vui lòng tải lại element và chọn giữ bản nào.");
+    }
+
     private ElementState GetActiveElementOrThrow(Guid elementId)
     {
         if (!_elements.TryGetValue(elementId, out var element))

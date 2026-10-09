@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Auth.Models;
 
 public record VerifyEmailRequest(
     [Required][EmailAddress(ErrorMessage = "Email không đúng định dạng.")] string Email,

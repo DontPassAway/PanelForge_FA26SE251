@@ -1,4 +1,4 @@
-﻿using PanelForge.Domain.Common;
+using PanelForge.Domain.Common;
 
 namespace PanelForge.Domain.Events;
 
@@ -17,5 +17,7 @@ public sealed record ElementMovedEvent(
     double NewY,
     double NewWidth,
     double NewHeight,
-    Guid MovedByUserId
+    Guid MovedByUserId,
+    double? NewRotation = null,  // null = giữ nguyên góc xoay (event cũ / client không gửi)
+    int? NewZIndex = null        // null = giữ nguyên thứ tự lớp
 ) : IDomainEvent;

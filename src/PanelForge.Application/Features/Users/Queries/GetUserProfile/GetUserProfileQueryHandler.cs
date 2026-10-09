@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using PanelForge.Application.DTOs.Users;
-using PanelForge.Application.Interfaces.Persistence;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Application.Features.Users.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Identity;
 
-namespace PanelForge.Application.Users.Queries.GetUserProfile;
+namespace PanelForge.Application.Features.Users.Queries.GetUserProfile;
 
 public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, UserProfileDto?>
 {

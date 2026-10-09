@@ -1,13 +1,21 @@
+using PanelForge.API.Authentication;
 using System.IO;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
+using PanelForge.Infrastructure.Persistence;
+using PanelForge.Application.Common.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Infrastructure.Persistence.Seeders;
+using PanelForge.API.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,9 +57,44 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
+
+    // User bị khoá / xoá mềm mất quyền ngay, không phải đợi JWT hết hạn.
+    options.Events = new JwtBearerEvents
+    {
+        // Không có header Bearer → đọc JWT từ cookie HttpOnly pf_access.
+        // Chống CSRF: request đổi dữ liệu dùng cookie phải có header X-Requested-With (trang khác không tự gắn được).
+        OnMessageReceived = context =>
+        {
+            var request = context.HttpContext.Request;
+            if (string.IsNullOrEmpty(context.Token)
+                && !request.Headers.ContainsKey("Authorization")
+                && request.Cookies.TryGetValue(AuthCookies.Access, out var cookieToken)
+                && (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method)
+                    || AuthCookies.HasCsrfHeader(request)))
+            {
+                context.Token = cookieToken;
+            }
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var sub = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
+                      ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var db = context.HttpContext.RequestServices.GetRequiredService<IPanelForgeDbContext>();
+            if (!Guid.TryParse(sub, out var userId)
+                || !await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, context.HttpContext.RequestAborted))
+                context.Fail("Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.");
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
+
+// ── AI Multi-Agent: đánh dấu run dở (AI service chết/restart) là Interrupted ──────────
+builder.Services.AddHostedService<AiRunSweeper>();
+
+// ── UC-14: nhắc người nhận việc sắp đến hạn / quá hạn ─────────────────────────────────
+builder.Services.AddHostedService<AssignmentReminderWorker>();
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -91,21 +134,58 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000") // URL của Frontend
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Cho phép cả React và Vite
               .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
               .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
-              .AllowCredentials();                  // Cần thiết nếu bạn dùng Cookie hoặc xác thực đặc thù
+              .AllowCredentials();                  // Cần thiết nếu dùng Cookie hoặc xác thực đặc thù
     });
 });
 
+// Chống dò mật khẩu / OTP: tối đa 10 request/phút/IP cho các endpoint auth ([EnableRateLimiting("auth")]).
+// ponytail: giới hạn theo IP, chưa theo email; khoá tài khoản sau N lần sai OTP cần thêm cột + migration.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+
 var app = builder.Build();
+
+// ── Migrate & Seed master data on startup ─────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PanelForgeDbContext>();
+    await db.Database.MigrateAsync();
+    await MasterDataSeeder.SeedAsync(db);
+
+    if (app.Environment.IsDevelopment())
+        await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
+
+    // Dữ liệu mẫu demo AI: opt-in (AiService:SeedDemoData=true), chạy lặp không tạo trùng, không sửa dữ liệu có sẵn
+    if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("AiService:SeedDemoData"))
+    {
+        var seeded = await AiDemoSeeder.SeedAsync(db);
+        app.Logger.LogInformation("AiDemoSeeder: {Result}", seeded ? "đã seed Studio Moonlight" : "bỏ qua (đã có hoặc thiếu tài khoản dev)");
+    }
+}
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
@@ -119,6 +199,7 @@ app.UseSwaggerUI(options =>
 // [THÊM MỚI] 2. Kích hoạt middleware CORS (Phải đặt TRƯỚC UseAuthentication)
 app.UseCors("AllowFrontend");
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

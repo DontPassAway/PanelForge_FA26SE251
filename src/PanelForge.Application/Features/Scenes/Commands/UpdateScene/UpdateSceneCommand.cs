@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Scenes.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Scenes.Commands.UpdateScene;
 
@@ -26,7 +26,7 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
     {
         var scene = await _dbContext.Scenes
             .Include(s => s.ScriptLines)
-            .Include(s => s.Pages)
+            .Include(s => s.Panels)
             .FirstOrDefaultAsync(s => s.Id == command.SceneId, cancellationToken);
 
         if (scene == null)
@@ -47,7 +47,7 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: scene.ScriptLines.Count,
-            PagesCount: scene.Pages.Count
+            PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count()
         ));
     }
 }

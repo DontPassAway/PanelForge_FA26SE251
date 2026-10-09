@@ -35,6 +35,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("synopsis")
                .HasColumnType("text");
 
+        builder.Property(s => s.StoryArc)
+               .HasColumnName("story_arc")
+               .HasColumnType("text");
+
         builder.Property(s => s.ReadingDirection)
                .HasColumnName("reading_direction")
                .HasColumnType("varchar(20)")
@@ -42,6 +46,22 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                    v => v.ToString(),
                    v => Enum.Parse<ReadingDirection>(v))
                .IsRequired();
+
+        builder.Property(s => s.Genre)
+               .HasColumnName("genre")
+               .HasColumnType("varchar(100)")
+               .HasDefaultValue("Action")
+               .IsRequired();
+
+        builder.Property(s => s.Format)
+               .HasColumnName("format")
+               .HasColumnType("varchar(50)")
+               .HasDefaultValue("Manga")
+               .IsRequired();
+
+        builder.Property(s => s.ReleaseScheduleJson)
+               .HasColumnName("release_schedule_json")
+               .HasColumnType("text");
 
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
@@ -66,5 +86,17 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .WithOne(p => p.Series)
                .HasForeignKey<PipelineDefinition>(p => p.SeriesId)
                .OnDelete(DeleteBehavior.SetNull);
+
+        // Task 8: Typography Presets — 1:N
+        builder.HasMany(s => s.TypographyPresets)
+               .WithOne(p => p.Series)
+               .HasForeignKey(p => p.SeriesId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        // Task 9: Consistency Rules — 1:N
+        builder.HasMany(s => s.ConsistencyRules)
+               .WithOne(r => r.Series)
+               .HasForeignKey(r => r.SeriesId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }

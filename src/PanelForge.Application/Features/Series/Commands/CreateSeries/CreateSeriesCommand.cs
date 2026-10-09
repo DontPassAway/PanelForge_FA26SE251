@@ -2,10 +2,11 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Series.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Bible;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 using PanelForge.Domain.Enums;
+using PanelForge.Domain.Entities.Content;
 
 namespace PanelForge.Application.Features.Series.Commands.CreateSeries;
 
@@ -13,11 +14,16 @@ public sealed record CreateSeriesCommand(
     Guid WorkspaceId,
     Guid UserId,
     string Title,
-    string? Synopsis,
-    ReadingDirection ReadingDirection,
-    Guid? PipelineDefinitionId
+    string Format = "WEBTOON"
 ) : IRequest<Result<SeriesDto>>;
 
+/// <summary>
+/// Lightweight CreateSeriesCommandHandler (UC-03).
+/// Accepts minimal input (Title + Format) and applies robust defaults:
+/// - Auto reading direction (VERTICAL for WEBTOON, RTL for MANGA).
+/// - Clones active PipelineTemplate or generates default 8-stage pipeline (Script -> Approved).
+/// - Initializes empty Series Bible v1.0.
+/// </summary>
 public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCommand, Result<SeriesDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
@@ -36,31 +42,97 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         if (!workspaceExists)
             return Result<SeriesDto>.Failure($"Workspace {command.WorkspaceId} không tồn tại.");
 
-        // 2. Tạo Series entity (người tạo được lưu vào CreatedBy)
+        // 2. Kiểm tra User có phải thành viên Workspace và có vai trò Producer (UC-03)
+        var member = await _dbContext.WorkspaceMembers
+            .FirstOrDefaultAsync(m => m.WorkspaceId == command.WorkspaceId && m.UserId == command.UserId, cancellationToken);
+        if (member is null)
+            return Result<SeriesDto>.Failure("Bạn không phải thành viên của Workspace này.");
+
+        if (member.Role != WorkspaceRole.Producer)
+            return Result<SeriesDto>.Failure("Chỉ người dùng có vai trò Producer mới có quyền tạo Series trong Workspace (UC-03).");
+
+        // 3. Tự động xác định Hướng đọc (ReadingDirection) dựa trên Format nếu không được chỉ định
+        var formatUpper = (command.Format ?? "WEBTOON").Trim().ToUpperInvariant();
+        var readingDir = formatUpper == "MANGA"
+            ? ReadingDirection.RightToLeft
+            : ReadingDirection.Vertical;
+
+        // 4. Tạo Series entity
         DomainSeries series;
         try
         {
             series = DomainSeries.Create(
                 workspaceId: command.WorkspaceId,
                 title: command.Title,
-                readingDirection: command.ReadingDirection,
-                synopsis: command.Synopsis
+                readingDirection: readingDir,
+                synopsis: null,
+                genre: "General",
+                format: command.Format ?? "WEBTOON",
+                releaseScheduleJson: null
             );
 
             series.CreatedBy = command.UserId.ToString();
-
-            if (command.PipelineDefinitionId.HasValue)
-            {
-                series.SetPipelineDefinition(command.PipelineDefinitionId.Value);
-            }
         }
         catch (ArgumentException ex)
         {
             return Result<SeriesDto>.Failure(ex.Message);
         }
 
-        // 3. Khởi tạo mặc định SeriesBible cho bộ truyện mới
-        var bible = SeriesBible.Create(series.Id, command.WorkspaceId, $"{series.Title} - Bible");
+        // 5. Khởi tạo PipelineDefinition (8 công đoạn sản xuất)
+        var template = await _dbContext.PipelineTemplates
+                .Include(t => t.Stages)
+                .FirstOrDefaultAsync(t => t.IsDefault && t.IsActive, cancellationToken);
+
+        var pipelineName = template != null
+            ? $"{series.Title} — {template.Name}"
+            : $"{series.Title} — 8-Stage Standard Pipeline";
+
+        var pipeline = Domain.Entities.Workflow.PipelineDefinition.Create(
+            workspaceId: command.WorkspaceId,
+            name: pipelineName,
+            description: template != null ? $"Cloned from template: {template.Code}" : "Default 8-stage production pipeline",
+            seriesId: series.Id,
+            isDefault: false
+        );
+
+        if (template != null && template.Stages.Count > 0)
+        {
+            // Clone stages từ PipelineTemplate
+            foreach (var templateStage in template.Stages.OrderBy(s => s.Order))
+            {
+                pipeline.AddStage(
+                    name: templateStage.Name,
+                    slug: templateStage.Code.ToLowerInvariant(),
+                    stageOrder: templateStage.Order,
+                    colorCode: null,
+                    allowedRole: templateStage.RequiredRole,
+                    isApprovalGate: templateStage.GateType == "Approval",
+                    isInitial: templateStage.Order == template.Stages.Min(s => s.Order),
+                    isTerminal: templateStage.Order == template.Stages.Max(s => s.Order)
+                );
+            }
+        }
+        else
+        {
+            // Fallback: Tạo 8 công đoạn chuẩn
+            pipeline.AddStage("Script", "script", 1, null, WorkspaceRole.Writer, false, isInitial: true, isTerminal: false);
+            pipeline.AddStage("Thumbnail", "thumbnail", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Pencil", "pencil", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Ink", "ink", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Color", "color", 5, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Letter", "letter", 6, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Review", "review", 7, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Approved", "approved", 8, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
+        }
+
+        // Sinh transition mặc định
+        pipeline.RebuildDefaultTransitions();
+
+        series.SetPipelineDefinition(pipeline.Id);
+        _dbContext.PipelineDefinitions.Add(pipeline);
+
+        // 6. Khởi tạo SeriesBible v1.0 cho bộ truyện
+        var bible = SeriesBible.Create(series.Id, command.WorkspaceId, $"{series.Title} - Bible", "Initialized empty Series Bible v1.0");
         series.AttachBible(bible);
 
         _dbContext.Series.Add(series);
@@ -75,6 +147,9 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             Synopsis: series.Synopsis,
             ReadingDirection: series.ReadingDirection,
             PipelineDefinitionId: series.PipelineDefinitionId,
+            Genre: series.Genre,
+            Format: series.Format,
+            ReleaseScheduleJson: series.ReleaseScheduleJson,
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,

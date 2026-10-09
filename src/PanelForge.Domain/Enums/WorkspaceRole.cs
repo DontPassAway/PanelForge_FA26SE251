@@ -4,10 +4,9 @@ public enum WorkspaceRole
 {
     Producer,
     Writer,
-    Penciler,
-    Inker,
-    Colorist,
+    Artist,
     Letterer,
     Editor,
-    Reviewer
+    /// <summary>Họp tuần 5: duyệt xuất bản và lên lịch phát hành chương đã được Producer duyệt. Lưu dạng chuỗi nên không cần migration.</summary>
+    Publisher
 }

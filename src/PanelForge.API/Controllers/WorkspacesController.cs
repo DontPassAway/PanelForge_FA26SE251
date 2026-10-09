@@ -1,9 +1,24 @@
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PanelForge.API.Common.Attributes;
-using PanelForge.Application.DTOs.Workspaces;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.Workspaces.Models;
+using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
+using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
+using PanelForge.Application.Features.Workspaces.Commands.AddMember;
+using PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
+using PanelForge.Application.Features.Workspaces.Commands.DeleteWorkspace;
+using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
+using PanelForge.Application.Features.Workspaces.Commands.ResendInvitation;
+using PanelForge.Application.Features.Workspaces.Commands.UpdateMemberRole;
+using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspace;
+using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceById;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceMembers;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -13,202 +28,224 @@ namespace PanelForge.API.Controllers;
 [Authorize]
 public class WorkspacesController : ControllerBase
 {
-    private readonly IWorkspaceService _workspaceService;
+    private readonly IMediator _mediator;
 
-    public WorkspacesController(IWorkspaceService workspaceService)
+    public WorkspacesController(IMediator mediator)
     {
-        _workspaceService = workspaceService;
-    }
-
-    private Guid GetCurrentUserId()
-    {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!Guid.TryParse(userIdStr, out var userId))
-        {
-            throw new UnauthorizedAccessException("Không xác định được danh tính người dùng.");
-        }
-        return userId;
+        _mediator = mediator;
     }
 
     [HttpPost]
     public async Task<IActionResult> CreateWorkspace([FromBody] CreateWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var result = await _workspaceService.CreateWorkspaceAsync(userId, request, cancellationToken);
-            return CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Id }, result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new CreateWorkspaceCommand(userId, request.Name, request.StorageQuotaBytes), cancellationToken);
+        return result.IsSuccess
+            ? CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Value!.Id }, result.Value)
+            : ToError(result);
     }
 
     [HttpGet]
     public async Task<IActionResult> GetMyWorkspaces(CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var workspaces = await _workspaceService.GetUserWorkspacesAsync(userId, cancellationToken);
-            return Ok(workspaces);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetMyWorkspacesQuery(userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetWorkspaceById(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var workspace = await _workspaceService.GetWorkspaceByIdAsync(userId, id, cancellationToken);
-            return Ok(workspace);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetWorkspaceByIdQuery(userId, id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpPut("{id:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> UpdateWorkspace(Guid id, [FromBody] UpdateWorkspaceRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var updated = await _workspaceService.UpdateWorkspaceAsync(userId, id, request, cancellationToken);
-            return Ok(updated);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new UpdateWorkspaceCommand(userId, id, request.Name), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteWorkspace(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            await _workspaceService.DeleteWorkspaceAsync(userId, id, cancellationToken);
-            return Ok(new { message = "Xóa Workspace thành công." });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new DeleteWorkspaceCommand(userId, id), cancellationToken);
+        return result.IsSuccess ? Ok(new { message = "Xóa Workspace thành công." }) : ToError(result);
     }
 
     [HttpGet("{id:guid}/members")]
     public async Task<IActionResult> GetMembers(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var members = await _workspaceService.GetMembersAsync(userId, id, cancellationToken);
-            return Ok(members);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetWorkspaceMembersQuery(userId, id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpPost("{id:guid}/members")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> AddMember(Guid id, [FromBody] AddWorkspaceMemberRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var actorId = GetCurrentUserId();
-            var newMember = await _workspaceService.AddMemberAsync(actorId, id, request, cancellationToken);
-            return CreatedAtAction(nameof(GetMembers), new { id }, newMember);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } actorId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new AddWorkspaceMemberCommand(actorId, id, request.Email, request.Role), cancellationToken);
+        return result.IsSuccess
+            ? CreatedAtAction(nameof(GetMembers), new { id }, result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>Gửi lại OTP kích hoạt cho thành viên được mời nhưng chưa kích hoạt tài khoản.</summary>
+    [HttpPost("{id:guid}/members/{userId:guid}/resend-invitation")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> ResendInvitation(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } actorId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new ResendWorkspaceInvitationCommand(actorId, id, userId), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
     }
 
     [HttpPut("{id:guid}/members/{userId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> UpdateMemberRole(Guid id, Guid userId, [FromBody] UpdateMemberRoleRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var actorId = GetCurrentUserId();
-            var updated = await _workspaceService.UpdateMemberRoleAsync(actorId, id, userId, request, cancellationToken);
-            return Ok(updated);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        if (GetCurrentUserId() is not { } actorId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new UpdateMemberRoleCommand(actorId, id, userId, request.NewRole), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
     }
 
     [HttpDelete("{id:guid}/members/{userId:guid}")]
     public async Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken)
     {
-        try
+        if (GetCurrentUserId() is not { } actorId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new RemoveWorkspaceMemberCommand(actorId, id, userId), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Xóa thành viên khỏi Workspace thành công." })
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/ai-config
+    /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace (UC-02).
+    /// </summary>
+    [HttpGet("{id:guid}/ai-config")]
+    [RequireWorkspaceRole]
+    public async Task<IActionResult> GetAiConfig(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(id), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/workspaces/{id}/ai-config
+    /// UC-02: Chỉ Administrator mới có quyền cấu hình AI Provider và Token Quota cho Workspace.
+    /// Endpoint này từ chối quyền thao tác của Producer/Member và yêu cầu thực hiện qua /api/admin/workspaces/{id}/ai-config.
+    /// </summary>
+    [HttpPut("{id:guid}/ai-config")]
+    public IActionResult UpdateAiConfig(Guid id)
+    {
+        return StatusCode(StatusCodes.Status403Forbidden, new
         {
-            var actorId = GetCurrentUserId();
-            await _workspaceService.RemoveMemberAsync(actorId, id, userId, cancellationToken);
-            return Ok(new { message = "Xóa thành viên khỏi Workspace thành công." });
-        }
-        catch (UnauthorizedAccessException ex)
+            message = "Theo quy định nghiệp vụ (UC-02), chỉ Administrator mới có quyền cấu hình AI Provider và hạn mức Token cho Workspace. Producer chỉ có quyền xem (Read-Only)."
+        });
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/usage
+    /// Mức dùng storage và token AI so với giới hạn của Workspace (NFR Workspace Resource Governance).
+    /// </summary>
+    [HttpGet("{id:guid}/usage")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceUsageQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/audit-logs
+    /// Tra cứu lịch sử Audit Log của Workspace (UC-15, BR-18).
+    /// </summary>
+    [HttpGet("{id:guid}/audit-logs")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> GetWorkspaceAuditLogs(
+        Guid id,
+        [FromQuery] string? action,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        // WorkspaceId luôn lấy từ route (đã qua RequireWorkspaceRole), Producer không xem được workspace khác
+        var query = new GetAuditLogsQuery(
+            WorkspaceId: id, Action: action, Page: page, PageSize: pageSize,
+            UserId: userId, EntityName: entityName, EntityId: entityId, From: from, To: to);
+        var result = await _mediator.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+    }
+
+    private IActionResult UnknownUser()
+        => Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+
+    /// <summary>
+    /// UNAUTHORIZED → 401, FORBIDDEN → 403, NOT_FOUND → <paramref name="notFoundStatus"/>, còn lại → 400.
+    /// Các endpoint thành viên trả 400 cho "không tồn tại" như hành vi trước đây.
+    /// </summary>
+    private IActionResult ToError<T>(Result<T> result, int notFoundStatus = StatusCodes.Status404NotFound)
+    {
+        var body = new { message = result.ErrorMessage };
+        return result.ErrorCode switch
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+            ResultErrorCodes.Unauthorized => Unauthorized(body),
+            ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
+            ResultErrorCodes.NotFound => StatusCode(notFoundStatus, body),
+            _ => BadRequest(body)
+        };
     }
 }

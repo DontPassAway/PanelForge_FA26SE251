@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 
@@ -48,7 +48,10 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.UpdatedAt,
                 c.CreatedBy,
                 c.Scenes.Count,
-                c.Pages.Count
+                c.Pages.Count,
+                c.Status,
+                c.PublishedAt,
+                c.Outline
             ))
             .ToListAsync(cancellationToken);
 

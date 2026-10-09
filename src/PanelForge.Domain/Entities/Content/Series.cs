@@ -1,5 +1,5 @@
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
@@ -12,11 +12,23 @@ public class Series : BaseEntity
     public Guid? PipelineDefinitionId { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Synopsis { get; private set; }
+    /// <summary>V1.2: story arc của Series (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
+    public string? StoryArc { get; private set; }
     public ReadingDirection ReadingDirection { get; private set; }
+    public string Genre { get; private set; } = "Action";
+    public string Format { get; private set; } = "Manga";
+    public string? ReleaseScheduleJson { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
     public PipelineDefinition? PipelineDefinition { get; private set; }
+
+    /// <summary>Task 8: Series-level typography presets (replaces SeriesPreset.TypographyPresetsJson).</summary>
+    public ICollection<TypographyPreset> TypographyPresets { get; private set; } = [];
+
+    /// <summary>Task 9: Series-level consistency rules (replaces SeriesPreset.ConsistencyRulesJson).</summary>
+    public ICollection<ConsistencyRule> ConsistencyRules { get; private set; } = [];
+
     public ICollection<Chapter> Chapters { get; private set; } = [];
 
     private Series() { }
@@ -25,7 +37,10 @@ public class Series : BaseEntity
         Guid workspaceId,
         string title,
         ReadingDirection readingDirection,
-        string? synopsis = null)
+        string? synopsis = null,
+        string genre = "Action",
+        string format = "Manga",
+        string? releaseScheduleJson = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
 
@@ -34,17 +49,34 @@ public class Series : BaseEntity
             WorkspaceId = workspaceId,
             Title = title.Trim(),
             Synopsis = synopsis?.Trim(),
-            ReadingDirection = readingDirection
+            ReadingDirection = readingDirection,
+            Genre = string.IsNullOrWhiteSpace(genre) ? "Action" : genre.Trim(),
+            Format = string.IsNullOrWhiteSpace(format) ? "Manga" : format.Trim(),
+            ReleaseScheduleJson = releaseScheduleJson?.Trim()
         };
     }
 
-    public void UpdateDetails(string title, string? synopsis, ReadingDirection readingDirection)
+    public void UpdateDetails(
+        string title,
+        string? synopsis,
+        ReadingDirection readingDirection,
+        string? genre = null,
+        string? format = null,
+        string? releaseScheduleJson = null,
+        string? storyArc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         Title = title.Trim();
+        if (storyArc != null) StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
         Synopsis = synopsis?.Trim();
         ReadingDirection = readingDirection;
+        if (!string.IsNullOrWhiteSpace(genre)) Genre = genre.Trim();
+        if (!string.IsNullOrWhiteSpace(format)) Format = format.Trim();
+        if (releaseScheduleJson != null) ReleaseScheduleJson = releaseScheduleJson.Trim();
     }
+
+    /// <summary>Producer/Writer ghi story arc của Series; chuỗi rỗng = xoá.</summary>
+    public void SetStoryArc(string? storyArc) => StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
 
     public void AttachBible(SeriesBible bible)
     {

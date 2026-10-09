@@ -2,9 +2,9 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using PanelForge.Application.Interfaces;
+using PanelForge.Application.Common.Interfaces.Services;
 
-namespace PanelForge.Infrastructure.Services;
+namespace PanelForge.Infrastructure.ExternalServices.Email;
 
 public class EmailService : IEmailService
 {
@@ -82,6 +82,61 @@ public class EmailService : IEmailService
             <p>Mã này có hiệu lực trong vòng 15 phút. Nếu bạn không yêu cầu điều này, xin vui lòng bỏ qua email.</p>
             <br/>
             <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+
+        return SendEmailAsync(toEmail, subject, body, cancellationToken);
+    }
+
+    public Task SendChangePasswordOtpAsync(string toEmail, string otp, string recipientName, CancellationToken cancellationToken = default)
+    {
+        var subject = "[PanelForge] Mã xác thực OTP thay đổi mật khẩu";
+        var body = $@"
+            <h3>Xin chào {recipientName},</h3>
+            <p>Chúng tôi nhận được yêu cầu thay đổi mật khẩu cho tài khoản PanelForge của bạn.</p>
+            <p>Mã OTP xác thực thay đổi mật khẩu là: <strong><span style='font-size: 24px; color: #F97316;'>{otp}</span></strong></p>
+            <p>Mã này có hiệu lực trong vòng 15 phút. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+
+        return SendEmailAsync(toEmail, subject, body, cancellationToken);
+    }
+
+    public Task SendWorkspaceInvitationAsync(
+        string toEmail,
+        string recipientName,
+        string workspaceName,
+        string role,
+        string? inviteOtp,
+        TimeSpan otpLifetime,
+        CancellationToken cancellationToken = default)
+    {
+        var safeName = WebUtility.HtmlEncode(recipientName);
+        var safeWorkspace = WebUtility.HtmlEncode(workspaceName);
+
+        string subject;
+        string body;
+        if (inviteOtp is not null)
+        {
+            subject = $"[PanelForge] Bạn được mời tham gia Studio {workspaceName}";
+            body = $@"
+            <h3>Xin chào {safeName},</h3>
+            <p>Bạn được mời tham gia Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
+            <p>Một tài khoản đã được tạo cho email này. Để kích hoạt, hãy mở trang <em>Đặt lại mật khẩu</em> và nhập mã OTP:</p>
+            <p><strong><span style='font-size: 24px; color: #007bff;'>{inviteOtp}</span></strong></p>
+            <p>Mã có hiệu lực trong {(int)otpLifetime.TotalMinutes} phút. Nếu mã hết hạn, hãy dùng chức năng <em>Quên mật khẩu</em> với email này để nhận mã mới.</p>
+            <p>Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+        }
+        else
+        {
+            subject = $"[PanelForge] Bạn đã được thêm vào Studio {workspaceName}";
+            body = $@"
+            <h3>Xin chào {safeName},</h3>
+            <p>Bạn đã được thêm vào Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
+            <p>Đăng nhập để xem Studio trong mục <em>Your Workspaces</em>.</p>
+            <br/>
+            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+        }
 
         return SendEmailAsync(toEmail, subject, body, cancellationToken);
     }

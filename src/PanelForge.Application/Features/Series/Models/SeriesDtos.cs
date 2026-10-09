@@ -9,10 +9,14 @@ public sealed record SeriesDto(
     string? Synopsis,
     ReadingDirection ReadingDirection,
     Guid? PipelineDefinitionId,
+    string Genre,
+    string Format,
+    string? ReleaseScheduleJson,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    int ChaptersCount
+    int ChaptersCount,
+    string? StoryArc = null
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -32,22 +36,28 @@ public sealed record SeriesDetailDto(
     ReadingDirection ReadingDirection,
     Guid? PipelineDefinitionId,
     Guid? BibleId,
+    string Genre,
+    string Format,
+    string? ReleaseScheduleJson,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    IReadOnlyList<SeriesChapterSummaryDto> Chapters
+    IReadOnlyList<SeriesChapterSummaryDto> Chapters,
+    string? StoryArc = null
 );
 
 public sealed record CreateSeriesRequest(
     string Title,
-    string? Synopsis,
-    ReadingDirection ReadingDirection = ReadingDirection.RightToLeft,
-    Guid? PipelineDefinitionId = null
+    string? Format = "WEBTOON"
 );
 
 public sealed record UpdateSeriesRequest(
     string Title,
     string? Synopsis,
     ReadingDirection ReadingDirection,
-    Guid? PipelineDefinitionId
+    Guid? PipelineDefinitionId,
+    string? Genre = null,
+    string? Format = null,
+    string? ReleaseScheduleJson = null,
+    string? StoryArc = null
 );

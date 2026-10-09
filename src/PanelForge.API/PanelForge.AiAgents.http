@@ -1,0 +1,99 @@
+# Demo AI Multi-Agent (Writer -> Continuity -> Storyboard -> Editor)
+# Dùng với VS Code "REST Client" hoặc Visual Studio. Chạy lần lượt từ trên xuống.
+# Cần: Backend (5044) + AI service (5055) đang chạy, DB đã seed demo (AiService__SeedDemoData=true). Xem docs/ai-multi-agent-demo.md.
+#
+# ID dưới đây là ID CỐ ĐỊNH do AiDemoSeeder tạo (Studio Moonlight / "Thành phố mưa" / Chapter 3 / Scene 1).
+# Token lấy ngay ở bước 1 từ tài khoản dev seed (DevUserSeeder, mật khẩu chung của team dev).
+
+@host = http://localhost:5044
+@series = a1000000-0000-0000-0000-000000000002
+@chapter = a1000000-0000-0000-0000-000000000003
+@scene = a1000000-0000-0000-0000-000000000004
+
+### 1. Đăng nhập Writer -> lấy JWT
+# @name login
+POST {{host}}/api/Auth/login
+Content-Type: application/json
+
+{ "email": "writer@panelforge.com", "password": "Bnt123#" }
+
+###
+@token = {{login.response.body.token}}
+
+### 2. Lấy version nguồn của Chapter (field versionVector)
+GET {{host}}/api/Chapters/{{chapter}}
+Authorization: Bearer {{token}}
+
+### 3. Xem revision script/layout đã áp dụng của Scene (rỗng ở lần đầu -> baseScriptRevisionId = null)
+GET {{host}}/api/series/{{series}}/ai/scenes/{{scene}}/revisions
+Authorization: Bearer {{token}}
+
+### 4. Chạy workflow demo -> 202 Accepted + runId (đổi chapterVersion / baseScriptRevisionId theo bước 2-3 nếu đã Accept trước đó)
+# @name run
+POST {{host}}/api/series/{{series}}/ai/workflows/demo/run
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "chapterId": "{{chapter}}",
+  "sceneId": "{{scene}}",
+  "brief": "Viết cảnh An dọn tiệm đồng hồ lúc nửa đêm thì bà Lan xuất hiện ngoài hiên.",
+  "readingDirection": "RightToLeft",
+  "chapterVersion": 0,
+  "baseScriptRevisionId": null
+}
+
+###
+@runId = {{run.response.body.runId}}
+
+### 5. Polling tiến độ: status Queued/Running -> Completed (hoặc WaitingForHuman / Failed / Interrupted); xem từng step (input/output)
+GET {{host}}/api/series/{{series}}/ai/runs/{{runId}}
+Authorization: Bearer {{token}}
+
+### 6. Danh sách đề xuất đang chờ (lấy id Script và Layout; Layout có parentSuggestionId = Script)
+GET {{host}}/api/series/{{series}}/ai/suggestions?status=Pending&runId={{runId}}
+Authorization: Bearer {{token}}
+
+### 7a. Accept script (chapterVersion = versionVector hiện tại; sai -> 409). Thay id bằng id Script ở bước 6
+@scriptSuggestionId = REPLACE_WITH_SCRIPT_SUGGESTION_ID_FROM_STEP_6
+POST {{host}}/api/series/{{series}}/ai/suggestions/{{scriptSuggestionId}}/accept
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "chapterVersion": 0, "reason": "Đúng ý" }
+
+### 7b. Accept layout SAU khi script đã Accept (versionVector lúc này tăng thêm 1 -> chapterVersion = 1)
+@layoutSuggestionId = REPLACE_WITH_LAYOUT_SUGGESTION_ID_FROM_STEP_6
+POST {{host}}/api/series/{{series}}/ai/suggestions/{{layoutSuggestionId}}/accept
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "chapterVersion": 1 }
+
+### 8. Hoặc Reject / RequestChanges (thay vì 7a/7b)
+POST {{host}}/api/series/{{series}}/ai/suggestions/{{scriptSuggestionId}}/reject
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "reason": "Không hợp giọng truyện" }
+
+###
+POST {{host}}/api/series/{{series}}/ai/suggestions/{{scriptSuggestionId}}/request-changes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "reason": "Viết lại phần mở đầu" }
+
+### 9. Kịch bản dừng ở WaitingForHuman: brief chứa [mock:stubborn] -> Writer không sửa nên còn finding chặn sau 2 lượt
+POST {{host}}/api/series/{{series}}/ai/workflows/demo/run
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "chapterId": "{{chapter}}",
+  "sceneId": "{{scene}}",
+  "brief": "Viết cảnh bà Lan nhìn An. [mock:stubborn]",
+  "readingDirection": "RightToLeft",
+  "chapterVersion": 0,
+  "baseScriptRevisionId": null
+}

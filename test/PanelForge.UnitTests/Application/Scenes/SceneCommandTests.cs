@@ -5,12 +5,12 @@ using PanelForge.Application.Features.Scenes.Commands.DeleteScene;
 using PanelForge.Application.Features.Scenes.Commands.ReorderScenes;
 using PanelForge.Application.Features.Scenes.Commands.UpdateScene;
 using PanelForge.Application.Features.Scenes.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.UnitTests.Common;
 using Xunit;
 
-namespace PanelForge.UnitTests.Application.SceneTests;
+namespace PanelForge.UnitTests.Application.Scenes;
 
 public class SceneCommandTests
 {

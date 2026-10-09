@@ -87,12 +87,18 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddRevision(
+    /// <summary>Đã có revision khoá bắt đầu đúng ở chương này: một revision mới ở cùng chương sẽ thay bản khoá tại chỗ (không cho phép).</summary>
+    public bool HasLockedRevisionStartingAt(int chapterNumber)
+        => Revisions.Any(r => r.IsLocked && r.EffectiveFromChapterNumber == chapterNumber);
+
+    public BibleEntryRevision AddRevision(
         string summary,
         string snapshotJson,
         string contentHash,
         Guid? authorId = null,
-        Guid? associatedChapterId = null)
+        Guid? associatedChapterId = null,
+        int effectiveFromChapterNumber = 1,
+        bool isInitialVersion = false)
     {
         var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
         var revision = BibleEntryRevision.Create(
@@ -102,9 +108,23 @@ public class BibleEntry : BaseEntity
             snapshotJson,
             contentHash,
             authorId,
-            associatedChapterId);
+            associatedChapterId,
+            effectiveFromChapterNumber,
+            isInitialVersion);
 
         Revisions.Add(revision);
         UpdatedAt = DateTime.UtcNow;
+        return revision;
     }
+
+    /// <summary>
+    /// Revision đang có hiệu lực ở chương mới nhất (BR-15): EffectiveFromChapterNumber lớn nhất,
+    /// cùng chương thì VersionNumber lớn nhất. Trạng thái hiện tại (Name, Description, ...) của entry
+    /// phải luôn khớp với revision này; một bản sửa hồi tố (effective từ chương cũ hơn) không được ghi đè nó.
+    /// </summary>
+    public BibleEntryRevision? GetCurrentRevision()
+        => Revisions
+            .OrderByDescending(r => r.EffectiveFromChapterNumber)
+            .ThenByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
 }

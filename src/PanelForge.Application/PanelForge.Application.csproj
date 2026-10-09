@@ -2,11 +2,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PanelForge.Domain\PanelForge.Domain.csproj" />
+    <ProjectReference Include="..\PanelForge.AI.Contracts\PanelForge.AI.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MediatR" Version="14.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PanelForge.UnitTests" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,5 +1,6 @@
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Auth;
+using PanelForge.Domain.Entities.Publishing;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -9,7 +10,13 @@ public class Chapter : BaseEntity
     public decimal ChapterNumber { get; private set; }
     public string? Title { get; private set; }
     public DateOnly? TargetReleaseDate { get; private set; }
+    /// <summary>V1.2: outline của chương (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
+    public string? Outline { get; private set; }
     public long VersionVector { get; private set; } = 0;
+
+    /// <summary>E-02: chuyển trạng thái do CF5 đảm nhiệm; mặc định InProduction.</summary>
+    public ChapterStatus Status { get; private set; } = ChapterStatus.InProduction;
+    public DateTime? PublishedAt { get; private set; }
 
     public Series Series { get; private set; } = default!;
     public ICollection<Scene> Scenes { get; private set; } = [];
@@ -35,11 +42,46 @@ public class Chapter : BaseEntity
         };
     }
 
-    public void UpdateDetails(string? title, DateOnly? targetReleaseDate)
+    public void UpdateDetails(string? title, DateOnly? targetReleaseDate, string? outline = null)
     {
         Title = title?.Trim();
         TargetReleaseDate = targetReleaseDate;
+        if (outline != null) Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
     }
 
+    /// <summary>Producer/Writer ghi outline chương; chuỗi rỗng = xoá.</summary>
+    public void SetOutline(string? outline) => Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
+
     public void IncrementVersion() => VersionVector++;
+
+    /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → Approved), chờ Publisher.</summary>
+    public void Approve()
+    {
+        RequireStatus(ChapterStatus.InProduction, "duyệt");
+        Status = ChapterStatus.Approved;
+    }
+
+    /// <summary>Mở lại để sửa (Approved → InProduction). Chương đã Published là bản cuối nên không mở lại.</summary>
+    public void Reopen()
+    {
+        RequireStatus(ChapterStatus.Approved, "mở lại");
+        Status = ChapterStatus.InProduction;
+    }
+
+    /// <summary>Publisher duyệt xuất bản (Approved → Published). <paramref name="publishAt"/> ở tương lai = lên lịch; Reader chỉ thấy từ lúc đó.</summary>
+    public void Publish(DateTime publishAt)
+    {
+        RequireStatus(ChapterStatus.Approved, "phát hành");
+        Status = ChapterStatus.Published;
+        PublishedAt = publishAt;
+    }
+
+    /// <summary>Reader chỉ thấy chương Published đã đến giờ phát hành.</summary>
+    public bool IsVisibleToReaders(DateTime utcNow) => Status == ChapterStatus.Published && PublishedAt <= utcNow;
+
+    private void RequireStatus(ChapterStatus expected, string action)
+    {
+        if (Status != expected)
+            throw new InvalidOperationException($"Chỉ {action} được chương ở trạng thái {expected}, hiện là {Status}.");
+    }
 }

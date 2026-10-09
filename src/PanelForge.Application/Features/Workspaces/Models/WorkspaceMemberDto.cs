@@ -1,6 +1,6 @@
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.DTOs.Workspaces;
+namespace PanelForge.Application.Features.Workspaces.Models;
 
 public record WorkspaceMemberDto(
     Guid UserId,
@@ -10,5 +10,7 @@ public record WorkspaceMemberDto(
     string? AvatarUrl,
     WorkspaceRole Role,
     bool IsOwner,
-    DateTime JoinedAt
+    DateTime JoinedAt,
+    bool IsEmailConfirmed = true,
+    bool? InvitationEmailSent = null
 );

@@ -1,6 +1,6 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
-namespace PanelForge.Application.DTOs.Auth;
+namespace PanelForge.Application.Features.Auth.Models;
 
 public record ChangePasswordRequest
 {
@@ -17,8 +17,21 @@ public record ChangePasswordRequest
     public string ConfirmPassword { get; init; } = default!;
 
     /// <summary>
+    /// Mã OTP 6 chữ số gửi qua email
+    /// </summary>
+    [Required(ErrorMessage = "Mã OTP gửi qua email là bắt buộc.")]
+    [RegularExpression(@"^\d{6}$", ErrorMessage = "Mã OTP email phải gồm đúng 6 chữ số.")]
+    public string EmailOtp { get; init; } = default!;
+
+    /// <summary>
     /// Mã xác thực OTP 6 số từ Google Authenticator (bắt buộc nếu tài khoản đã bật 2FA)
     /// </summary>
     [RegularExpression(@"^\d{6}$", ErrorMessage = "Mã xác thực 2FA phải gồm đúng 6 chữ số.")]
     public string? OtpCode { get; init; }
+
+    /// <summary>
+    /// Refresh token của phiên đang dùng. Nếu gửi, phiên này được giữ lại; các thiết bị khác bị đăng xuất.
+    /// Không gửi thì mọi phiên (kể cả phiên hiện tại) bị đăng xuất khi access token hết hạn.
+    /// </summary>
+    public string? CurrentRefreshToken { get; init; }
 }

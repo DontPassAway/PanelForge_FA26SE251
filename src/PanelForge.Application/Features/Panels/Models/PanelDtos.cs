@@ -10,16 +10,7 @@ public sealed record PanelDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    int ElementsCount
-);
-
-public sealed record PanelElementSummaryDto(
-    Guid Id,
-    string ElementType,
-    int ZIndex,
-    string TransformGeometry,
-    string? Content,
-    string StyleProperties
+    Guid? SceneId = null
 );
 
 public sealed record PanelDetailDto(
@@ -32,8 +23,13 @@ public sealed record PanelDetailDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    IReadOnlyList<PanelElementSummaryDto> Elements
+    Guid? SceneId = null,
+    IReadOnlyList<Guid>? ScriptLineIds = null   // dòng thoại đang neo vào panel này (V1.2)
 );
+
+public sealed record AssignPanelSceneRequest(Guid? SceneId);
+
+public sealed record AssignPanelScriptLinesRequest(IReadOnlyList<Guid> ScriptLineIds);
 
 public sealed record CreatePanelRequest(
     int? PanelNumber = null,

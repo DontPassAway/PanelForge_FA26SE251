@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Scenes.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Scenes.Queries.GetSceneById;
 
@@ -27,6 +27,13 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
         if (scene == null)
             return Result<SceneDetailDto>.Failure($"Scene {query.SceneId} không tồn tại.");
 
+        var lineIds = scene.ScriptLines.Select(l => l.Id).ToList();
+        var links = (await _dbContext.ScriptLineBibleLinks.AsNoTracking()
+                .Where(k => lineIds.Contains(k.ScriptLineId))
+                .Select(k => new { k.ScriptLineId, k.BibleEntryId })
+                .ToListAsync(cancellationToken))
+            .ToLookup(k => k.ScriptLineId, k => k.BibleEntryId);
+
         var scriptLines = scene.ScriptLines
             .OrderBy(l => l.LineOrder)
             .Select(l => new SceneScriptLineSummaryDto(
@@ -34,7 +41,9 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 l.LineOrder,
                 l.DialogueText,
                 l.StageDirection,
-                l.SpeakerCharacterId
+                l.SpeakerCharacterId,
+                l.PanelId,
+                links[l.Id].ToList()
             ))
             .ToList();
 

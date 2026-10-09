@@ -1,0 +1,60 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.TypographyPresets.Models;
+using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Content;
+
+namespace PanelForge.Application.Features.TypographyPresets.Commands.CreateTypographyPreset;
+
+public sealed record CreateTypographyPresetCommand(
+    Guid SeriesId,
+    Guid RequestingUserId,
+    string Name,
+    string FontFamily,
+    int FontSize,
+    int FontWeight = 400,
+    string FontStyle = "Normal",
+    decimal LineHeight = 1.2m,
+    decimal LetterSpacing = 0m,
+    string TextAlign = "Left",
+    string UsageType = "Custom",
+    bool IsDefault = false
+) : IRequest<Result<TypographyPresetDto>>;
+
+public sealed class CreateTypographyPresetCommandHandler
+    : IRequestHandler<CreateTypographyPresetCommand, Result<TypographyPresetDto>>
+{
+    private readonly IPanelForgeDbContext _dbContext;
+    public CreateTypographyPresetCommandHandler(IPanelForgeDbContext dbContext) => _dbContext = dbContext;
+
+    public async Task<Result<TypographyPresetDto>> Handle(
+        CreateTypographyPresetCommand cmd, CancellationToken ct)
+    {
+        // Verify Series exists & user is member of its workspace
+        var series = await _dbContext.Series
+            .FirstOrDefaultAsync(s => s.Id == cmd.SeriesId, ct);
+        if (series is null) return Result<TypographyPresetDto>.Failure("Series không tồn tại.");
+
+        var isMember = await _dbContext.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == series.WorkspaceId && m.UserId == cmd.RequestingUserId, ct);
+        if (!isMember) return Result<TypographyPresetDto>.Failure("Bạn không có quyền truy cập Series này.");
+
+        TypographyPreset preset;
+        try
+        {
+            preset = TypographyPreset.Create(
+                cmd.SeriesId, cmd.Name, cmd.FontFamily, cmd.FontSize,
+                cmd.FontWeight, cmd.FontStyle, cmd.LineHeight, cmd.LetterSpacing,
+                cmd.TextAlign, cmd.UsageType, cmd.IsDefault);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<TypographyPresetDto>.Failure(ex.Message);
+        }
+
+        _dbContext.TypographyPresets.Add(preset);
+        await _dbContext.SaveChangesAsync(ct);
+        return Result<TypographyPresetDto>.Success(preset.ToDto());
+    }
+}

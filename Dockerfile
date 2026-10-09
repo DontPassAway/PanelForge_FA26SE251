@@ -7,6 +7,7 @@ COPY ["src/PanelForge.API/PanelForge.API.csproj", "src/PanelForge.API/"]
 COPY ["src/PanelForge.Application/PanelForge.Application.csproj", "src/PanelForge.Application/"]
 COPY ["src/PanelForge.Domain/PanelForge.Domain.csproj", "src/PanelForge.Domain/"]
 COPY ["src/PanelForge.Infrastructure/PanelForge.Infrastructure.csproj", "src/PanelForge.Infrastructure/"]
+COPY ["src/PanelForge.AI.Contracts/PanelForge.AI.Contracts.csproj", "src/PanelForge.AI.Contracts/"]
 
 RUN dotnet restore "src/PanelForge.API/PanelForge.API.csproj"
 

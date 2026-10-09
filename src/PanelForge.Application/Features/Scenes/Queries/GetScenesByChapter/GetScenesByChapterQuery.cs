@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Scenes.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Scenes.Queries.GetScenesByChapter;
 
@@ -33,7 +33,7 @@ public sealed class GetScenesByChapterQueryHandler : IRequestHandler<GetScenesBy
                 s.UpdatedAt,
                 s.CreatedBy,
                 s.ScriptLines.Count,
-                s.Pages.Count
+                s.Panels.Select(p => p.PageId).Distinct().Count()  // số Page có Panel của Scene (Scene không chứa Page)
             ))
             .ToListAsync(cancellationToken);
 

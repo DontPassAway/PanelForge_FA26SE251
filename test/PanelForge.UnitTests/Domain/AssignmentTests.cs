@@ -26,7 +26,7 @@ public class AssignmentTests
             panelId,
             stageId,
             artistId,
-            WorkspaceRole.Penciler,
+            WorkspaceRole.Artist,
             "Draw dynamic splash perspective for explosion scene",
             "See Series Bible LOC-01 for district architecture",
             "[\"https://storage/ref1.png\"]",
@@ -41,7 +41,7 @@ public class AssignmentTests
         assignment.TargetEntityId.Should().Be(panelId);
         assignment.PipelineStageId.Should().Be(stageId);
         assignment.AssigneeUserId.Should().Be(artistId);
-        assignment.AssignedRole.Should().Be(WorkspaceRole.Penciler);
+        assignment.AssignedRole.Should().Be(WorkspaceRole.Artist);
         assignment.Brief.Should().Be("Draw dynamic splash perspective for explosion scene");
         assignment.ReferenceNotes.Should().Be("See Series Bible LOC-01 for district architecture");
         assignment.ReferenceAssetUrlsJson.Should().Be("[\"https://storage/ref1.png\"]");
@@ -63,7 +63,7 @@ public class AssignmentTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
-            WorkspaceRole.Inker,
+            WorkspaceRole.Artist,
             "Inking page 12");
 
         // 1. Start Work
@@ -132,17 +132,17 @@ public class AssignmentTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             initialUserId,
-            WorkspaceRole.Penciler,
+            WorkspaceRole.Artist,
             "Rough sketches");
 
         var newUserId = Guid.NewGuid();
 
         // Act
-        assignment.Reassign(newUserId, WorkspaceRole.Inker);
+        assignment.Reassign(newUserId, WorkspaceRole.Artist);
 
         // Assert
         assignment.AssigneeUserId.Should().Be(newUserId);
-        assignment.AssignedRole.Should().Be(WorkspaceRole.Inker);
+        assignment.AssignedRole.Should().Be(WorkspaceRole.Artist);
     }
 
     [Fact]

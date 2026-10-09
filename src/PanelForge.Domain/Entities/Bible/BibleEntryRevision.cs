@@ -15,10 +15,24 @@ public class BibleEntryRevision : BaseEntity
     public Guid? AuthorId { get; private set; }
     public string ContentHash { get; private set; } = default!;
     public Guid? AssociatedChapterId { get; private set; }
+    public int EffectiveFromChapterNumber { get; private set; } = 1;
+    public bool IsInitialVersion { get; private set; } = false;
+
+    /// <summary>V1.2: Producer đã duyệt và khoá revision này làm tham chiếu. Chỉ thêm metadata, nội dung (snapshot, hash) vẫn bất biến; không có thao tác mở khoá.</summary>
+    public DateTime? LockedAt { get; private set; }
+    public Guid? LockedById { get; private set; }
+    public bool IsLocked => LockedAt.HasValue;
 
     public BibleEntry BibleEntry { get; private set; } = default!;
 
     private BibleEntryRevision() { }
+
+    public void Lock(Guid userId)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
+        LockedAt = DateTime.UtcNow;
+        LockedById = userId;
+    }
 
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
@@ -27,7 +41,9 @@ public class BibleEntryRevision : BaseEntity
         string snapshotJson,
         string contentHash,
         Guid? authorId = null,
-        Guid? associatedChapterId = null)
+        Guid? associatedChapterId = null,
+        int effectiveFromChapterNumber = 1,
+        bool isInitialVersion = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
@@ -42,6 +58,8 @@ public class BibleEntryRevision : BaseEntity
             ContentHash = contentHash.Trim(),
             AuthorId = authorId,
             AssociatedChapterId = associatedChapterId,
+            EffectiveFromChapterNumber = Math.Max(1, effectiveFromChapterNumber),
+            IsInitialVersion = isInitialVersion,
             CreatedAt = DateTime.UtcNow
         };
     }

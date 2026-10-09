@@ -4,6 +4,8 @@ using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using Xunit;
 
+#pragma warning disable CS0618 // Type or member is obsolete
+
 namespace PanelForge.UnitTests.Domain;
 
 public class WorkflowStateMachineTests
@@ -74,9 +76,8 @@ public class WorkflowStateMachineTests
         var sApproved = pipeline.Stages.First(s => s.Slug == "approved");
 
         // Act & Assert
-        // Penciler/Inker/Letterer CANNOT approve submission
-        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Penciler).Should().BeFalse();
-        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Inker).Should().BeFalse();
+        // Artist/Letterer CANNOT approve submission
+        pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Artist).Should().BeFalse();
         pipeline.CanTransition(sReview.Id, sApproved.Id, WorkspaceRole.Letterer).Should().BeFalse();
     }
 
@@ -146,32 +147,5 @@ public class WorkflowStateMachineTests
         // Assert
         page.CurrentStageId.Should().Be(stageId);
         panel.CurrentStageId.Should().Be(stageId);
-    }
-
-    [Fact]
-    public void WorkflowTransitionLog_Create_ShouldStoreAuditMetadata()
-    {
-        // Arrange
-        var panelId = Guid.NewGuid();
-        var fromStageId = Guid.NewGuid();
-        var toStageId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-
-        // Act
-        var log = WorkflowTransitionLog.Create(
-            panelId,
-            WorkflowEntityType.Panel,
-            fromStageId,
-            toStageId,
-            userId,
-            "Inks approved by Lead Inker");
-
-        // Assert
-        log.EntityId.Should().Be(panelId);
-        log.EntityType.Should().Be(WorkflowEntityType.Panel);
-        log.FromStageId.Should().Be(fromStageId);
-        log.ToStageId.Should().Be(toStageId);
-        log.TriggeredByUserId.Should().Be(userId);
-        log.Comment.Should().Be("Inks approved by Lead Inker");
     }
 }

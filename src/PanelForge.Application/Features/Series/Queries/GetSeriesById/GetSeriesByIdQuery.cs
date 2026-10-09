@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Series.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Series.Queries.GetSeriesById;
 
@@ -48,10 +48,14 @@ public sealed class GetSeriesByIdQueryHandler : IRequestHandler<GetSeriesByIdQue
             ReadingDirection: series.ReadingDirection,
             PipelineDefinitionId: series.PipelineDefinitionId,
             BibleId: series.Bible?.Id,
+            Genre: series.Genre,
+            Format: series.Format,
+            ReleaseScheduleJson: series.ReleaseScheduleJson,
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,
-            Chapters: chapters
+            Chapters: chapters,
+            StoryArc: series.StoryArc
         );
 
         return Result<SeriesDetailDto>.Success(detail);

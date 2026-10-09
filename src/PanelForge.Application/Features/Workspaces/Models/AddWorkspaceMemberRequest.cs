@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using PanelForge.Domain.Enums;
 
-namespace PanelForge.Application.DTOs.Workspaces;
+namespace PanelForge.Application.Features.Workspaces.Models;
 
 public record AddWorkspaceMemberRequest
 {
@@ -10,5 +10,5 @@ public record AddWorkspaceMemberRequest
     public string Email { get; init; } = default!;
 
     [Required(ErrorMessage = "Vai trò là bắt buộc.")]
-    public WorkspaceRole Role { get; init; } = WorkspaceRole.Reviewer;
+    public WorkspaceRole Role { get; init; } = WorkspaceRole.Artist;
 }

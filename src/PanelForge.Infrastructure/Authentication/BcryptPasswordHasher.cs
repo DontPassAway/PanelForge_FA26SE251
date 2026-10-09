@@ -1,4 +1,4 @@
-using PanelForge.Application.Interfaces.Authentication;
+using PanelForge.Application.Common.Interfaces.Authentication;
 
 namespace PanelForge.Infrastructure.Authentication;
 

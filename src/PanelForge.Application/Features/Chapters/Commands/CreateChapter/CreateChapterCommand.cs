@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainChapter = PanelForge.Domain.Entities.Content.Chapter;
 
 namespace PanelForge.Application.Features.Chapters.Commands.CreateChapter;
@@ -71,7 +71,9 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             UpdatedAt: chapter.UpdatedAt,
             CreatedBy: chapter.CreatedBy,
             ScenesCount: 0,
-            PagesCount: 0
+            PagesCount: 0,
+            Status: chapter.Status,
+            PublishedAt: chapter.PublishedAt
         ));
     }
 }

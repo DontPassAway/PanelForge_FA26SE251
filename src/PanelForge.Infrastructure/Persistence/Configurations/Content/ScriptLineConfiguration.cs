@@ -29,6 +29,19 @@ internal sealed class ScriptLineConfiguration : IEntityTypeConfiguration<ScriptL
         builder.HasIndex(l => new { l.SceneId, l.LineOrder })
                .HasDatabaseName("ix_script_lines_scene_order");
 
+        builder.Property(l => l.PanelId)
+               .HasColumnName("panel_id")
+               .HasColumnType("uuid");
+
+        builder.HasIndex(l => l.PanelId)
+               .HasDatabaseName("ix_script_lines_panel");
+
+        // Panel bị xoá thì dòng thoại ở lại Scene, chỉ mất neo (ScriptLine thuộc tự sự, không thuộc bố cục)
+        builder.HasOne(l => l.Panel)
+               .WithMany(p => p.ScriptLines)
+               .HasForeignKey(l => l.PanelId)
+               .OnDelete(DeleteBehavior.SetNull);
+
         builder.Property(l => l.SpeakerCharacterId)
                .HasColumnName("speaker_character_id")
                .HasColumnType("uuid");
@@ -40,10 +53,5 @@ internal sealed class ScriptLineConfiguration : IEntityTypeConfiguration<ScriptL
         builder.Property(l => l.StageDirection)
                .HasColumnName("stage_direction")
                .HasColumnType("text");
-
-        builder.HasMany(l => l.BoundElements)
-               .WithOne(e => e.ScriptLine)
-               .HasForeignKey(e => e.ScriptLineId)
-               .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -7,11 +7,13 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="FluentAssertions" Version="8.11.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.8" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.5.3" />
@@ -22,6 +24,9 @@
     <ProjectReference Include="..\..\src\PanelForge.Application\PanelForge.Application.csproj" />
     <ProjectReference Include="..\..\src\PanelForge.Domain\PanelForge.Domain.csproj" />
     <ProjectReference Include="..\..\src\PanelForge.Infrastructure\PanelForge.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\PanelForge.API\PanelForge.API.csproj" />
+    <ProjectReference Include="..\..\src\PanelForge.AI\PanelForge.AI.csproj" />
+    <ProjectReference Include="..\..\src\PanelForge.AI.Contracts\PanelForge.AI.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

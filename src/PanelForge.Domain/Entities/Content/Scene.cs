@@ -11,7 +11,8 @@ public class Scene : BaseEntity
 
     public Chapter Chapter { get; private set; } = default!;
     public ICollection<ScriptLine> ScriptLines { get; private set; } = [];
-    public ICollection<Page> Pages { get; private set; } = [];
+    /// <summary>Scene không còn chứa Page (V1.2): chỉ Panel mang SceneId.</summary>
+    public ICollection<Panel> Panels { get; private set; } = [];
 
     private Scene() { }
 

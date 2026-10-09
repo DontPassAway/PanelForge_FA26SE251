@@ -2,10 +2,10 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PanelForge.Application.DTOs.Users;
-using PanelForge.Application.Users.Commands.SoftDeleteUser;
-using PanelForge.Application.Users.Commands.UpdateUserProfile;
-using PanelForge.Application.Users.Queries.GetUserProfile;
+using PanelForge.Application.Features.Users.Models;
+using PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
+using PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
+using PanelForge.Application.Features.Users.Queries.GetUserProfile;
 
 namespace PanelForge.API.Controllers;
 

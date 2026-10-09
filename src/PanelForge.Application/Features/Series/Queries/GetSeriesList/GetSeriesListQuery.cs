@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Series.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Series.Queries.GetSeriesList;
 
@@ -43,10 +43,14 @@ public sealed class GetSeriesListQueryHandler : IRequestHandler<GetSeriesListQue
                 s.Synopsis,
                 s.ReadingDirection,
                 s.PipelineDefinitionId,
+                s.Genre,
+                s.Format,
+                s.ReleaseScheduleJson,
                 s.CreatedAt,
                 s.UpdatedAt,
                 s.CreatedBy,
-                s.Chapters.Count
+                s.Chapters.Count,
+                s.StoryArc
             ))
             .ToListAsync(cancellationToken);
 

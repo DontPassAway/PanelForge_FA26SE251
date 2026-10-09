@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Series.Models;
-using PanelForge.Application.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Series.Commands.UpdateSeries;
@@ -13,7 +13,11 @@ public sealed record UpdateSeriesCommand(
     string Title,
     string? Synopsis,
     ReadingDirection ReadingDirection,
-    Guid? PipelineDefinitionId
+    Guid? PipelineDefinitionId,
+    string? Genre = null,
+    string? Format = null,
+    string? ReleaseScheduleJson = null,
+    string? StoryArc = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCommand, Result<SeriesDto>>
@@ -36,7 +40,15 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
 
         try
         {
-            series.UpdateDetails(command.Title, command.Synopsis, command.ReadingDirection);
+            series.UpdateDetails(
+                command.Title,
+                command.Synopsis,
+                command.ReadingDirection,
+                command.Genre,
+                command.Format,
+                command.ReleaseScheduleJson,
+                command.StoryArc
+            );
             series.SetPipelineDefinition(command.PipelineDefinitionId);
             series.UpdatedBy = command.UserId.ToString();
         }
@@ -54,10 +66,14 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             Synopsis: series.Synopsis,
             ReadingDirection: series.ReadingDirection,
             PipelineDefinitionId: series.PipelineDefinitionId,
+            Genre: series.Genre,
+            Format: series.Format,
+            ReleaseScheduleJson: series.ReleaseScheduleJson,
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,
-            ChaptersCount: series.Chapters.Count
+            ChaptersCount: series.Chapters.Count,
+            StoryArc: series.StoryArc
         ));
     }
 }

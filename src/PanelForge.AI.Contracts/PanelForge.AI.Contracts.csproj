@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Hợp đồng HTTP + payload dùng chung giữa PanelForge.API (Application) và PanelForge.AI.
+       Không phụ thuộc gì (kể cả Domain) để hai service không tham chiếu lẫn nhau. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

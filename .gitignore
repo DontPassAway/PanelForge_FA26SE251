@@ -431,4 +431,15 @@ FodyWeavers.xsd
 # Ignore ASP.NET Core environment specific settings
 appsettings.json
 appsettings.*.json
+!appsettings.Example.json
+!appsettings.Development.Example.json
 **/firebase-key.json
+
+# File artwork do người dùng tải lên (AssetStorage:RootPath, mặc định App_Data/assets cạnh ứng dụng): không commit
+App_Data/
+
+# Claude Code personal settings (agent config in .claude/ is shared)
+.claude/settings.local.json
+
+# Bản clone upstream (agent-skills, ponytail) chỉ để cập nhật skill thủ công; skill đã copy sẵn trong .claude/skills
+agent-tools/

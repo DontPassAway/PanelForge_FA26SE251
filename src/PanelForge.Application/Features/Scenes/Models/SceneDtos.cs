@@ -18,7 +18,9 @@ public sealed record SceneScriptLineSummaryDto(
     int LineOrder,
     string? DialogueText,
     string? StageDirection,
-    Guid? SpeakerCharacterId
+    Guid? SpeakerCharacterId,
+    Guid? PanelId = null,  // V1.2: Panel mà dòng được neo vào (null = chưa gán)
+    IReadOnlyList<Guid>? BibleEntryIds = null  // UC-06: mục Series Bible dòng nhắc tới (ngoài speaker)
 );
 
 public sealed record SceneDetailDto(
