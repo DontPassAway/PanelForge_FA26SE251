@@ -90,7 +90,11 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
 
         // ── Artwork assets: lưu file cục bộ + link tải ngắn hạn ký bằng Data Protection (BR-04, BR-13, BR-16) ──
-        services.AddSingleton<IAssetStorage, LocalAssetStorage>();
+        // AssetStorage:Provider = "Local" (mặc định, đĩa cục bộ) | "R2" (Cloudflare R2)
+        if (string.Equals(configuration["AssetStorage:Provider"], "R2", StringComparison.OrdinalIgnoreCase))
+            services.AddSingleton<IAssetStorage>(_ => R2AssetStorage.FromConfiguration(configuration));
+        else
+            services.AddSingleton<IAssetStorage, LocalAssetStorage>();
         services.AddSingleton<IAssetLinkSigner, DataProtectionAssetLinkSigner>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
