@@ -7,6 +7,7 @@ using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Domain.Entities.Assets;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Assets.Commands.UploadArtwork;
@@ -115,7 +116,8 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 
             asset = Asset.Create(workspaceId, hash, cmd.Content.Length, contentType);
             // Lưu file trước khi ghi DB: nếu Save lỗi chỉ để lại file mồ côi theo hash, vô hại và dùng lại được
-            await _storage.SaveAsync(asset.StorageKey, cmd.Content, ct);
+            var info = await DescribeAsync(workspace.Name, chapter, cmd, contentType, layerType, ct);
+            await _storage.SaveAsync(asset.StorageKey, cmd.Content, info, ct);
             _db.Assets.Add(asset);
         }
 
@@ -134,5 +136,36 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         await _db.SaveChangesAsync(ct);
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
+    }
+
+    /// <summary>
+    /// Nhãn dễ đọc gắn lên file trên kho (vd. Custom Metadata ở R2) để người xem bucket biết ảnh thuộc Studio/Series/trang nào.
+    /// Chỉ ghi lúc lưu lần đầu – file trùng nội dung dùng lại ở chỗ khác vẫn giữ nhãn lần đầu; DB mới là nguồn sự thật.
+    /// </summary>
+    private async Task<AssetObjectInfo> DescribeAsync(
+        string workspaceName, Chapter chapter, UploadArtworkCommand cmd, string contentType, string? layerType, CancellationToken ct)
+    {
+        var seriesTitle = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.Title).FirstOrDefaultAsync(ct);
+        var pageNumber = await _db.Pages.AsNoTracking().Where(p => p.Id == cmd.PageId).Select(p => p.PageNumber).FirstOrDefaultAsync(ct);
+        int? panelNumber = cmd.PanelId is { } panelId
+            ? await _db.Panels.AsNoTracking().Where(p => p.Id == panelId).Select(p => (int?)p.PanelNumber).FirstOrDefaultAsync(ct)
+            : null;
+        var stageName = await _db.PipelineStages.AsNoTracking().Where(s => s.Id == cmd.StageId).Select(s => s.Name).FirstOrDefaultAsync(ct);
+        var uploader = await _db.Users.AsNoTracking().Where(u => u.Id == cmd.UserId).Select(u => u.Email).FirstOrDefaultAsync(ct);
+
+        var metadata = new Dictionary<string, string>
+        {
+            ["workspace"] = workspaceName,
+            ["series"] = seriesTitle ?? "",
+            ["chapter"] = $"{chapter.ChapterNumber:0.##}{(string.IsNullOrWhiteSpace(chapter.Title) ? "" : " - " + chapter.Title)}",
+            ["page"] = pageNumber.ToString(),
+            ["panel"] = panelNumber?.ToString() ?? "ca trang",
+            ["stage"] = stageName ?? "",
+            ["layer"] = layerType ?? "",
+            ["file-name"] = AssetRules.SanitizeFileName(cmd.FileName) ?? "",
+            ["uploaded-by"] = uploader ?? "",
+            ["uploaded-at"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        };
+        return new AssetObjectInfo(contentType, metadata);
     }
 }

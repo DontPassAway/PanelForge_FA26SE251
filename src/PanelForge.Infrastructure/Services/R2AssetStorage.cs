@@ -49,19 +49,45 @@ public sealed class R2AssetStorage : IAssetStorage
         return new R2AssetStorage(client, Required("Bucket"));
     }
 
-    public async Task SaveAsync(string key, byte[] content, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(string key, byte[] content, AssetObjectInfo? info, CancellationToken cancellationToken = default)
     {
         if (await ExistsAsync(key, cancellationToken)) return; // nội dung gắn theo hash nên đã có thì không tải lại
 
         using var body = new MemoryStream(content, writable: false);
-        await _s3.PutObjectAsync(new PutObjectRequest
+        var request = new PutObjectRequest
         {
             BucketName = _bucket,
             Key = key,
             InputStream = body,
             AutoCloseStream = false,
             DisablePayloadSigning = true // R2 không hỗ trợ streaming SigV4
-        }, cancellationToken);
+        };
+        if (info is not null)
+        {
+            request.ContentType = info.ContentType;
+            // Hiện ở Cloudflare → object → Custom Metadata (x-amz-meta-*)
+            foreach (var (name, value) in info.Metadata)
+                if (!string.IsNullOrWhiteSpace(value))
+                    request.Metadata[name] = ToHeaderValue(value);
+        }
+        await _s3.PutObjectAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Header S3 chỉ nhận ASCII: bỏ dấu tiếng Việt (đ→d), ký tự lạ thành '?', cắt 256 ký tự.
+    /// Chỉ để người xem đọc, nên mất dấu chấp nhận được (tên thật vẫn ở DB).
+    /// </summary>
+    public static string ToHeaderValue(string value)
+    {
+        var folded = value.Replace('đ', 'd').Replace('Đ', 'D').Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(folded.Length);
+        foreach (var c in folded)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark) continue;
+            sb.Append(c is >= ' ' and <= '~' ? c : '?');
+        }
+        var result = sb.ToString().Trim();
+        return result.Length > 256 ? result[..256] : result;
     }
 
     public async Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default)
