@@ -36,8 +36,10 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
         {
             // Lấy revision có EffectiveFromChapterNumber <= ChapterNumber của request (BR-15)
             // Lấy revision có EffectiveFromChapterNumber lớn nhất, và VersionNumber lớn nhất
+            // Nếu là Character thì BẮT BUỘC revision phải được khoá (CanonLocked)
             var effectiveRev = entry.Revisions
                 .Where(r => r.EffectiveFromChapterNumber <= request.ChapterNumber)
+                .Where(r => entry.Category != PanelForge.Domain.Enums.BibleEntryCategory.Character || r.IsLocked)
                 .OrderByDescending(r => r.EffectiveFromChapterNumber)
                 .ThenByDescending(r => r.VersionNumber)
                 .FirstOrDefault();
