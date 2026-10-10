@@ -24,7 +24,7 @@ public sealed class AssetInfrastructureTests : IDisposable
     {
         var storage = Storage();
 
-        await storage.SaveAsync("ws/ab/abcdef", [1, 2, 3, 4], CancellationToken.None);
+        await storage.SaveAsync("ws/ab/abcdef", [1, 2, 3, 4], info: null, CancellationToken.None);
 
         await using var stream = await storage.OpenReadAsync("ws/ab/abcdef", CancellationToken.None);
         stream.Should().NotBeNull();
@@ -37,9 +37,9 @@ public sealed class AssetInfrastructureTests : IDisposable
     public async Task Storage_SavingSameKeyTwice_KeepsFirstContent_AndLeavesNoTempFiles()
     {
         var storage = Storage();
-        await storage.SaveAsync("ws/ab/key", [1], CancellationToken.None);
+        await storage.SaveAsync("ws/ab/key", [1], info: null, CancellationToken.None);
 
-        await storage.SaveAsync("ws/ab/key", [9, 9], CancellationToken.None);
+        await storage.SaveAsync("ws/ab/key", [9, 9], info: null, CancellationToken.None);
 
         (await File.ReadAllBytesAsync(Path.Combine(_root, "ws", "ab", "key"))).Should().Equal(1);
         Directory.GetFiles(_root, "*.tmp", SearchOption.AllDirectories).Should().BeEmpty();
@@ -59,7 +59,7 @@ public sealed class AssetInfrastructureTests : IDisposable
     {
         var storage = Storage();
 
-        await FluentActions.Awaiting(() => storage.SaveAsync(key, [1], CancellationToken.None))
+        await FluentActions.Awaiting(() => storage.SaveAsync(key, [1], info: null, CancellationToken.None))
             .Should().ThrowAsync<InvalidOperationException>();
         await FluentActions.Awaiting(() => storage.OpenReadAsync(key, CancellationToken.None))
             .Should().ThrowAsync<InvalidOperationException>();

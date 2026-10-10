@@ -67,6 +67,7 @@ public class ArtworkUploadTests
             Db.Setup(d => d.Assets).Returns(DbSetMockHelper.CreateDbSetMock(Assets));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(References));
             Db.Setup(d => d.AssetAccessLogs).Returns(DbSetMockHelper.CreateDbSetMock(AccessLogs));
+            Db.Setup(d => d.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.User>()));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -109,8 +110,28 @@ public class ArtworkUploadTests
         f.Assets.Should().ContainSingle();
         f.References.Should().ContainSingle().Which.UploadedByUserId.Should().Be(f.ArtistId);
         f.Workspace.UsedStorageBytes.Should().Be(png.Length);
-        f.Storage.Verify(s => s.SaveAsync(f.Assets[0].StorageKey, png, It.IsAny<CancellationToken>()), Times.Once);
+        f.Storage.Verify(s => s.SaveAsync(f.Assets[0].StorageKey, png, It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Once);
         f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Upload_NewFile_PassesReadableLabelsToStorage()
+    {
+        var f = new Fixture(quota: 1000);
+        AssetObjectInfo? info = null;
+        f.Storage.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, byte[], AssetObjectInfo?, CancellationToken>((_, _, i, _) => info = i)
+            .Returns(Task.CompletedTask);
+
+        await f.Upload(Png(), layerType: "ARTWORK_LAYER", fileName: "v3Ch1_Trang1.png");
+
+        info.Should().NotBeNull();
+        info!.ContentType.Should().Be("image/png");
+        info.Metadata.Should().Contain(new Dictionary<string, string>
+        {
+            ["workspace"] = "Studio", ["series"] = "Series", ["chapter"] = "1", ["page"] = "1",
+            ["panel"] = "ca trang", ["stage"] = "Pencil", ["layer"] = "ARTWORK_LAYER", ["file-name"] = "v3Ch1_Trang1.png"
+        });
     }
 
     [Fact]
@@ -136,7 +157,7 @@ public class ArtworkUploadTests
         f.Assets.Should().BeEmpty();
         f.References.Should().BeEmpty();
         f.Workspace.UsedStorageBytes.Should().Be(0);
-        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
+        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -214,7 +235,7 @@ public class ArtworkUploadTests
         f.Assets.Should().ContainSingle();
         f.References.Should().HaveCount(2);
         f.Workspace.UsedStorageBytes.Should().Be(png.Length); // không tính lại
-        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
+        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -244,7 +265,7 @@ public class ArtworkUploadTests
         f.Workspace.UsedStorageBytes.Should().Be(0);
         f.Assets.Should().BeEmpty();
         f.References.Should().BeEmpty();
-        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
+        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Never);
         f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 

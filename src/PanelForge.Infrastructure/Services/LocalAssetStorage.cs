@@ -19,7 +19,8 @@ public sealed class LocalAssetStorage : IAssetStorage
             : configured);
     }
 
-    public async Task SaveAsync(string key, byte[] content, CancellationToken cancellationToken = default)
+    // Đĩa cục bộ không có chỗ lưu metadata → bỏ qua info
+    public async Task SaveAsync(string key, byte[] content, AssetObjectInfo? info, CancellationToken cancellationToken = default)
     {
         var path = Resolve(key);
         if (File.Exists(path)) return; // nội dung gắn theo hash nên đã có thì không ghi lại
