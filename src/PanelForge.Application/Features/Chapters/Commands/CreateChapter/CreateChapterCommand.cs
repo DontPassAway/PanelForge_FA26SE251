@@ -12,7 +12,8 @@ public sealed record CreateChapterCommand(
     Guid UserId,
     decimal ChapterNumber,
     string? Title = null,
-    DateOnly? TargetReleaseDate = null
+    DateOnly? TargetReleaseDate = null,
+    string? Outline = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterCommand, Result<ChapterDto>>
@@ -50,6 +51,10 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
                 title: command.Title,
                 targetReleaseDate: command.TargetReleaseDate
             );
+            if (!string.IsNullOrWhiteSpace(command.Outline))
+            {
+                chapter.SetOutline(command.Outline);
+            }
             chapter.CreatedBy = command.UserId.ToString();
         }
         catch (ArgumentOutOfRangeException ex)
@@ -73,7 +78,8 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             ScenesCount: 0,
             PagesCount: 0,
             Status: chapter.Status,
-            PublishedAt: chapter.PublishedAt
+            PublishedAt: chapter.PublishedAt,
+            Outline: chapter.Outline
         ));
     }
 }

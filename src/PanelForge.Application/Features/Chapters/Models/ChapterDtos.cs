@@ -55,7 +55,8 @@ public sealed record ChapterDetailDto(
 public sealed record CreateChapterRequest(
     decimal ChapterNumber,
     string? Title = null,
-    DateOnly? TargetReleaseDate = null
+    DateOnly? TargetReleaseDate = null,
+    string? Outline = null
 );
 
 public sealed record UpdateChapterRequest(

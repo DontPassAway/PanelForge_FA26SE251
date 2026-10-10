@@ -58,7 +58,8 @@ public sealed class ChaptersController : ControllerBase
             UserId: GetCurrentUserId(),
             ChapterNumber: body.ChapterNumber,
             Title: body.Title,
-            TargetReleaseDate: body.TargetReleaseDate
+            TargetReleaseDate: body.TargetReleaseDate,
+            Outline: body.Outline
         );
 
         var result = await _mediator.Send(command, cancellationToken);
