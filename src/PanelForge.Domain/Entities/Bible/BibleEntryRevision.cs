@@ -34,6 +34,13 @@ public class BibleEntryRevision : BaseEntity
         LockedById = userId;
     }
 
+    public void Unlock()
+    {
+        if (!IsLocked) throw new InvalidOperationException("Revision chưa được khoá.");
+        LockedAt = null;
+        LockedById = null;
+    }
+
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
         int versionNumber,
