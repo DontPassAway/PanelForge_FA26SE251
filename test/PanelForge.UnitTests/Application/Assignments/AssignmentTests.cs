@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignment;
+using PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 using PanelForge.Application.Features.Assignments.Commands.OpenAssignmentReview;
 using PanelForge.Application.Features.Assignments.Commands.RequestAssignmentChanges;
 using PanelForge.Application.Features.Assignments.Commands.StartAssignment;
@@ -884,5 +885,62 @@ public partial class AssignmentTests
 
         row.Invoking(r => r.Submit(Guid.NewGuid())).Should().Throw<InvalidOperationException>();
         row.Invoking(r => r.Resume()).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_SuccessfullyDeletes_AndClearsDependencies()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed(dependsOn: a.Id);
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        f.Assignments.Should().NotContain(a);
+        b.DependsOnAssignmentId.Should().BeNull();
+        f.Notifications.Should().Contain(n => n.Type == NotificationType.AssignmentUnassigned && n.UserId == a.AssigneeUserId);
+        f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfNotFound()
+    {
+        var f = new Fixture();
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, Guid.NewGuid(), f.ProducerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfChapterLocked()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        f.LockChapter();
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfApproved()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        a.MarkApproved();
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("Approved");
     }
 }

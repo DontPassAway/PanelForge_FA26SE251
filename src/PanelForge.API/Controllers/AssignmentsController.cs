@@ -6,6 +6,7 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignment;
+using PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 using PanelForge.Application.Features.Assignments.Commands.OpenAssignmentReview;
 using PanelForge.Application.Features.Assignments.Commands.RejectChangeRequest;
 using PanelForge.Application.Features.Assignments.Commands.ReopenChangeRequest;
@@ -75,6 +76,16 @@ public sealed class AssignmentsController : ControllerBase
             chapterId, assignmentId, GetCurrentUserId(), body.Brief, body.ReferenceNotes, body.DueDate,
             body.Priority, body.AssigneeUserId, body.DependsOnAssignmentId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>DELETE /api/chapters/{chapterId}/assignments/{assignmentId} — Producer xoá mềm hoặc huỷ Assignment (UC-05).</summary>
+    [HttpDelete("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Delete(Guid chapterId, Guid assignmentId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new DeleteAssignmentCommand(chapterId, assignmentId, GetCurrentUserId()), ct);
+        return result.IsSuccess ? NoContent() : Error(result);
     }
 
     /// <summary>POST .../assignments/{assignmentId}/start — chỉ người được giao.</summary>
