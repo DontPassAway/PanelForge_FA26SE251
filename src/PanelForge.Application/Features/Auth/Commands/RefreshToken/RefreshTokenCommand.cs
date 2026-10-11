@@ -13,7 +13,10 @@ namespace PanelForge.Application.Features.Auth.Commands.RefreshToken;
 /// POST /api/auth/refresh — đổi refresh token lấy access JWT mới. Xoay vòng: token cũ bị thu hồi, phát token mới.
 /// Token đã thu hồi mà bị dùng lại (nghi bị đánh cắp) → thu hồi toàn bộ phiên của user.
 /// </summary>
-public sealed record RefreshTokenCommand(string RefreshToken) : IRequest<Result<AuthResponse>>;
+public sealed record RefreshTokenCommand(
+    string RefreshToken,
+    string? IpAddress = null,
+    string? UserAgent = null) : IRequest<Result<AuthResponse>>;
 
 public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, Result<AuthResponse>>
 {
@@ -59,9 +62,20 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         stored.Revoke();
         var newToken = AuthSecrets.NewRefreshToken();
+        var ip = command.IpAddress ?? stored.IpAddress;
+        var ua = command.UserAgent ?? stored.UserAgent;
+        var deviceName = stored.DeviceName ?? DeviceDetector.DetectDevice(ua);
+
         _dbContext.RefreshTokens.Add(Domain.Entities.Identity.RefreshToken.Create(
-            stored.UserId, AuthSecrets.HashToken(newToken), policy.ExpiryFor(stored.SessionStartedAt, now),
-            stored.SessionId, stored.SessionStartedAt));
+            stored.UserId,
+            AuthSecrets.HashToken(newToken),
+            policy.ExpiryFor(stored.SessionStartedAt, now),
+            stored.SessionId,
+            stored.SessionStartedAt,
+            deviceName,
+            ip,
+            ua,
+            now));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(AuthResponseFactory.Build(

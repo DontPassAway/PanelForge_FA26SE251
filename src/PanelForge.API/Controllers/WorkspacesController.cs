@@ -19,6 +19,8 @@ using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceById;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceMembers;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceActiveSessions;
+using PanelForge.Application.Features.Workspaces.Commands.RevokeWorkspaceSession;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -193,6 +195,36 @@ public class WorkspacesController : ControllerBase
     {
         var result = await _mediator.Send(new GetWorkspaceUsageQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/sessions
+    /// Danh sách thiết bị và phiên làm việc đồng thời của các thành viên Studio (UC-15, NFR Resource Governance).
+    /// </summary>
+    [HttpGet("{id:guid}/sessions")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> GetActiveSessions(Guid id, CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        Guid.TryParse(userIdStr, out var currentUserId);
+
+        var result = await _mediator.Send(new GetWorkspaceActiveSessionsQuery(id, currentUserId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// DELETE /api/workspaces/{id}/sessions/{sessionId}
+    /// Producer thu hồi phiên làm việc bất thường của thành viên trong Studio.
+    /// </summary>
+    [HttpDelete("{id:guid}/sessions/{sessionId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    public async Task<IActionResult> RevokeSession(Guid id, Guid sessionId, CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        Guid.TryParse(userIdStr, out var currentUserId);
+
+        var result = await _mediator.Send(new RevokeWorkspaceSessionCommand(id, sessionId, currentUserId), cancellationToken);
+        return result.IsSuccess ? Ok(new { message = "Thu hồi phiên làm việc thành công." }) : ToError(result);
     }
 
     /// <summary>

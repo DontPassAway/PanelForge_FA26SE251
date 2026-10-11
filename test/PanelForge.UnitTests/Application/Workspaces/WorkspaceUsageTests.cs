@@ -21,6 +21,8 @@ public class WorkspaceUsageTests
             workspace is null ? new List<StudioWorkspace>() : new List<StudioWorkspace> { workspace }));
         db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(
             ai is null ? new List<WorkspaceAiConfig>() : new List<WorkspaceAiConfig> { ai }));
+        db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.RefreshToken>()));
         return new GetWorkspaceUsageQueryHandler(db.Object);
     }
 
@@ -39,6 +41,39 @@ public class WorkspaceUsageTests
         result.Value!.Storage.Should().Be(new UsageMeterDto(250, 1000, false, 25.0));
         result.Value.AiTokens.Should().Be(new UsageMeterDto(500, 2000, false, 25.0));
         result.Value.AiEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Usage_ReportsActiveSessionsAndMemberCountAgainstSessionPolicy()
+    {
+        var id = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Studio", Guid.NewGuid(), 1000);
+        workspace.SetSessionPolicy(lifetimeMinutes: 60, idleTimeoutMinutes: 30, maxConcurrentSessions: 3);
+        typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, id);
+
+        var memberId = Guid.NewGuid();
+        var member = WorkspaceMember.Create(id, memberId, PanelForge.Domain.Enums.WorkspaceRole.Writer);
+
+        var token1 = PanelForge.Domain.Entities.Identity.RefreshToken.Create(
+            memberId, "hash-1", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), deviceName: "Chrome (Windows)");
+        var token2 = PanelForge.Domain.Entities.Identity.RefreshToken.Create(
+            memberId, "hash-2", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), deviceName: "Safari (iOS)");
+
+        var db = new Mock<IPanelForgeDbContext>();
+        db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceAiConfig>()));
+        db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member }));
+        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.RefreshToken> { token1, token2 }));
+
+        var handler = new GetWorkspaceUsageQueryHandler(db.Object);
+        var result = await handler.Handle(new GetWorkspaceUsageQuery(id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.ActiveSessions.Should().NotBeNull();
+        result.Value.ActiveSessions!.Used.Should().Be(2);
+        result.Value.ActiveSessions.Quota.Should().Be(3);
+        result.Value.ActiveMemberCount.Should().Be(1);
+        result.Value.MaxConcurrentSessionsPerUser.Should().Be(3);
     }
 
     [Fact]

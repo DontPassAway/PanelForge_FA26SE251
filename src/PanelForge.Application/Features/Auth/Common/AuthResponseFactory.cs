@@ -27,12 +27,22 @@ internal static class AuthResponseFactory
         User user,
         IJwtTokenGenerator jwtTokenGenerator,
         string message,
-        string? rememberDeviceToken = null)
+        string? rememberDeviceToken = null,
+        string? deviceName = null,
+        string? ipAddress = null,
+        string? userAgent = null)
     {
         var refreshToken = AuthSecrets.NewRefreshToken();
         var now = DateTime.UtcNow;
         var policy = await SessionPolicy.ForUserAsync(dbContext, user.Id, cancellationToken);
-        var session = RefreshToken.Create(user.Id, AuthSecrets.HashToken(refreshToken), policy.ExpiryFor(now, now));
+        var session = RefreshToken.Create(
+            user.Id,
+            AuthSecrets.HashToken(refreshToken),
+            policy.ExpiryFor(now, now),
+            deviceName: deviceName,
+            ipAddress: ipAddress,
+            userAgent: userAgent,
+            lastActiveAt: now);
         await policy.EnforceMaxSessionsAsync(dbContext, user.Id, session.SessionId, now, cancellationToken);
         dbContext.RefreshTokens.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);

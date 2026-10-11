@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using PanelForge.API.Authentication;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Auth.Common;
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
 using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
@@ -57,8 +58,12 @@ public class AuthController : ControllerBase
             ?? Request.Headers[RememberDeviceHeader].FirstOrDefault()
             ?? request.RememberDeviceToken;
 
+        var userAgent = Request.Headers.UserAgent.ToString();
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var deviceName = DeviceDetector.DetectDevice(userAgent);
+
         var result = await _mediator.Send(
-            new LoginCommand(request.Email, request.Password, rememberDeviceToken), cancellationToken);
+            new LoginCommand(request.Email, request.Password, rememberDeviceToken, deviceName, ipAddress, userAgent), cancellationToken);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
@@ -88,7 +93,10 @@ public class AuthController : ControllerBase
             refreshToken = Request.Cookies[AuthCookies.Refresh];
         }
 
-        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken ?? string.Empty), cancellationToken);
+        var userAgent = Request.Headers.UserAgent.ToString();
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken ?? string.Empty, ipAddress, userAgent), cancellationToken);
         if (!result.IsSuccess)
             AuthCookies.Clear(Response);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);

@@ -17,22 +17,40 @@ public class RefreshToken : BaseEntity
     public Guid SessionId { get; private set; }
     public DateTime SessionStartedAt { get; private set; }
 
+    public string? DeviceName { get; private set; }
+    public string? IpAddress { get; private set; }
+    public string? UserAgent { get; private set; }
+    public DateTime LastActiveAt { get; private set; }
+
     public User User { get; private set; } = default!;
 
     private RefreshToken() { }
 
     /// <param name="sessionId">Null = phiên mới. Khi xoay vòng truyền SessionId và SessionStartedAt của token cũ.</param>
     public static RefreshToken Create(
-        Guid userId, string tokenHash, DateTime expiresAt, Guid? sessionId = null, DateTime? sessionStartedAt = null)
+        Guid userId,
+        string tokenHash,
+        DateTime expiresAt,
+        Guid? sessionId = null,
+        DateTime? sessionStartedAt = null,
+        string? deviceName = null,
+        string? ipAddress = null,
+        string? userAgent = null,
+        DateTime? lastActiveAt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
+        var now = DateTime.UtcNow;
         return new RefreshToken
         {
             UserId = userId,
             TokenHash = tokenHash,
             ExpiresAt = expiresAt,
             SessionId = sessionId ?? Guid.NewGuid(),
-            SessionStartedAt = sessionStartedAt ?? DateTime.UtcNow
+            SessionStartedAt = sessionStartedAt ?? now,
+            DeviceName = deviceName?.Trim(),
+            IpAddress = ipAddress?.Trim(),
+            UserAgent = userAgent?.Trim(),
+            LastActiveAt = lastActiveAt ?? now
         };
     }
 
