@@ -41,12 +41,14 @@ public sealed class StartAssignmentCommandHandler : IRequestHandler<StartAssignm
         if (!notified)
             return Fail("Người nhận chưa được thông báo về việc này nên việc chưa có hiệu lực (BR-14).", ResultErrorCodes.Conflict);
 
-        if (assignment.DependsOnAssignmentId is { } depId)
+        var depIds = assignment.GetDependsOnAssignmentIds();
+        if (depIds.Count > 0)
         {
-            var depStatus = await _db.Assignments.AsNoTracking()
-                .Where(a => a.Id == depId).Select(a => (AssignmentStatus?)a.Status).FirstOrDefaultAsync(ct);
-            if (depStatus != AssignmentStatus.Approved)
-                return Fail("Việc phụ thuộc chưa được duyệt, chưa thể bắt đầu.", ResultErrorCodes.Conflict);
+            var unapprovedCount = await _db.Assignments.AsNoTracking()
+                .Where(a => depIds.Contains(a.Id) && a.Status != AssignmentStatus.Approved)
+                .CountAsync(ct);
+            if (unapprovedCount > 0)
+                return Fail($"Có {unapprovedCount} công việc phụ thuộc chưa được duyệt (Approved), chưa thể bắt đầu.", ResultErrorCodes.Conflict);
         }
 
         var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == assignment.PipelineStageId, ct);

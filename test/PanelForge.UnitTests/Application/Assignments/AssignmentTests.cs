@@ -943,4 +943,75 @@ public partial class AssignmentTests
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         result.ErrorMessage.Should().Contain("Approved");
     }
+
+    [Fact]
+    public async Task Update_MultipleDependencies_DAGCycle_IsRejected()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+
+        // c phụ thuộc đồng thời vào a và b
+        var updateCHandler = new UpdateAssignmentCommandHandler(f.Db.Object);
+        var resC = await updateCHandler.Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, c.Id, f.ProducerId, c.Brief, null, null, c.Priority, c.AssigneeUserId, null, [a.Id, b.Id]), CancellationToken.None);
+        resC.IsSuccess.Should().BeTrue();
+        c.GetDependsOnAssignmentIds().Should().Contain([a.Id, b.Id]);
+
+        // Thử tạo chu trình: cho a phụ thuộc vào c (a -> c -> [a, b])
+        var updateAHandler = new UpdateAssignmentCommandHandler(f.Db.Object);
+        var resA = await updateAHandler.Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, a.Id, f.ProducerId, a.Brief, null, null, a.Priority, a.AssigneeUserId, null, [c.Id]), CancellationToken.None);
+
+        resA.IsSuccess.Should().BeFalse();
+        resA.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        resA.ErrorMessage.Should().Contain("chu trình");
+    }
+
+    [Fact]
+    public async Task Start_MultipleDependencies_RequiresAllToBeApproved()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+        c.SetDependencies([a.Id, b.Id]);
+
+        // Thử start c khi cả a và b chưa Approved
+        var startHandler = new StartAssignmentCommandHandler(f.Db.Object);
+        var res1 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res1.IsSuccess.Should().BeFalse();
+        res1.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        res1.ErrorMessage.Should().Contain("chưa được duyệt");
+
+        // Duyệt a, nhưng b vẫn chưa duyệt -> vẫn bị chặn
+        a.MarkApproved();
+        var res2 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res2.IsSuccess.Should().BeFalse();
+        res2.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        // Duyệt nốt b -> giờ c bắt đầu thành công
+        b.MarkApproved();
+        var res3 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res3.IsSuccess.Should().BeTrue();
+        c.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_ReleasesFromMultipleDependencies()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+        c.SetDependencies([a.Id, b.Id]);
+
+        var deleteHandler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var delRes = await deleteHandler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+        delRes.IsSuccess.Should().BeTrue();
+
+        // c chỉ còn phụ thuộc vào b
+        c.GetDependsOnAssignmentIds().Should().Equal([b.Id]);
+    }
 }

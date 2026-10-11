@@ -18,7 +18,8 @@ public sealed record UpdateAssignmentCommand(
     DateTime? DueDate,
     AssignmentPriority Priority,
     Guid AssigneeUserId,
-    Guid? DependsOnAssignmentId
+    Guid? DependsOnAssignmentId,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null
 ) : IRequest<Result<AssignmentDto>>;
 
 public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssignmentCommand, Result<AssignmentDto>>
@@ -51,8 +52,9 @@ public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssig
         if (!EditableStatuses.Contains(assignment.Status))
             return Fail($"Không thể sửa Assignment đang ở trạng thái {assignment.Status}.", ResultErrorCodes.Conflict);
 
-        if (await AssignmentRules.ValidateDependencyAsync(
-                _db, cmd.ChapterId, assignment.Id, cmd.DependsOnAssignmentId, ct) is { } depError)
+        var depIds = cmd.DependsOnAssignmentIds ?? (cmd.DependsOnAssignmentId.HasValue ? [cmd.DependsOnAssignmentId.Value] : null);
+        if (await AssignmentRules.ValidateDependenciesAsync(
+                _db, cmd.ChapterId, assignment.Id, depIds, ct) is { } depError)
             return Fail(depError);
 
         var previousAssignee = assignment.AssigneeUserId;
@@ -61,7 +63,7 @@ public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssig
                           || assignment.ReferenceNotes != cmd.ReferenceNotes?.Trim()
                           || assignment.DueDate != cmd.DueDate
                           || assignment.Priority != cmd.Priority
-                          || assignment.DependsOnAssignmentId != cmd.DependsOnAssignmentId;
+                          || !assignment.GetDependsOnAssignmentIds().SequenceEqual(depIds ?? []);
 
         if (reassigned)
         {
@@ -76,7 +78,7 @@ public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssig
         }
 
         assignment.UpdateBriefAndDeadline(cmd.Brief, cmd.ReferenceNotes, null, cmd.DueDate, cmd.Priority);
-        assignment.SetDependency(cmd.DependsOnAssignmentId);
+        assignment.SetDependencies(depIds);
         assignment.UpdatedBy = cmd.UserId.ToString();
 
         // BR-14 / UC-14: báo người nhận mới (và người cũ) khi giao lại; báo người đang giữ khi nội dung đổi

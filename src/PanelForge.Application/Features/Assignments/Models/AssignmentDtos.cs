@@ -22,13 +22,14 @@ public sealed record AssignmentDto(
     DateTime? CompletedAt,
     string? LastFeedbackComment,
     DateTime CreatedAt,
-    DateTime? UpdatedAt)
+    DateTime? UpdatedAt,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null)
 {
     public static AssignmentDto From(Assignment a) => new(
         a.Id, a.SeriesId, a.ChapterId, a.EntityType, a.TargetEntityId, a.PipelineStageId,
         a.AssigneeUserId, a.AssignedRole, a.Brief, a.ReferenceNotes, a.DueDate, a.Priority,
         a.Status, a.DependsOnAssignmentId, a.StartedAt, a.CompletedAt, a.LastFeedbackComment,
-        a.CreatedAt, a.UpdatedAt);
+        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds());
 }
 
 /// <summary>TargetEntityId bỏ trống khi EntityType = Chapter (mặc định là chính Chapter trên route).</summary>
@@ -41,7 +42,8 @@ public sealed record CreateAssignmentRequest(
     string? ReferenceNotes = null,
     DateTime? DueDate = null,
     AssignmentPriority Priority = AssignmentPriority.Medium,
-    Guid? DependsOnAssignmentId = null);
+    Guid? DependsOnAssignmentId = null,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
 
 /// <summary>Một yêu cầu sửa cụ thể. RegionJson tuỳ chọn: <c>{ "x", "y", "w", "h" }</c> chuẩn hóa 0–1.</summary>
 /// <summary>AssetReferenceId: phiên bản artwork (của Chapter) mà RegionJson khoanh trên đó; PanelId: Panel của vùng (thuộc Chapter). Đều tuỳ chọn.</summary>
@@ -117,4 +119,5 @@ public sealed record UpdateAssignmentRequest(
     DateTime? DueDate,
     AssignmentPriority Priority,
     Guid AssigneeUserId,
-    Guid? DependsOnAssignmentId);
+    Guid? DependsOnAssignmentId,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null);

@@ -47,7 +47,7 @@ public sealed class AssignmentsController : ControllerBase
         var result = await _mediator.Send(new CreateAssignmentCommand(
             chapterId, GetCurrentUserId(), body.EntityType, body.TargetEntityId, body.PipelineStageId,
             body.AssigneeUserId, body.Brief, body.ReferenceNotes, body.DueDate, body.Priority,
-            body.DependsOnAssignmentId), ct);
+            body.DependsOnAssignmentId, body.DependsOnAssignmentIds), ct);
 
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value)
@@ -74,7 +74,7 @@ public sealed class AssignmentsController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateAssignmentCommand(
             chapterId, assignmentId, GetCurrentUserId(), body.Brief, body.ReferenceNotes, body.DueDate,
-            body.Priority, body.AssigneeUserId, body.DependsOnAssignmentId), ct);
+            body.Priority, body.AssigneeUserId, body.DependsOnAssignmentId, body.DependsOnAssignmentIds), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

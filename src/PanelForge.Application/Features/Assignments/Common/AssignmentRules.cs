@@ -48,30 +48,63 @@ internal static class AssignmentRules
     }
 
     /// <summary>
-    /// Dependency phải cùng Chapter và không tạo chu trình. <paramref name="selfId"/> null khi đang tạo mới
-    /// (việc mới chưa có ai phụ thuộc nên không thể thành chu trình).
-    /// Trả về thông báo lỗi, hoặc null nếu hợp lệ.
+    /// Kiểm tra đồ thị phụ thuộc đa nhiệm (DAG): mọi dependency phải thuộc cùng Chapter và không tạo chu trình (Cycle).
     /// </summary>
-    public static async Task<string?> ValidateDependencyAsync(
-        IPanelForgeDbContext db, Guid chapterId, Guid? selfId, Guid? dependsOnId, CancellationToken ct)
+    public static async Task<string?> ValidateDependenciesAsync(
+        IPanelForgeDbContext db, Guid chapterId, Guid? selfId, IEnumerable<Guid>? dependsOnIds, CancellationToken ct)
     {
-        if (dependsOnId is null) return null;
+        var depList = dependsOnIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
 
-        var edges = (await db.Assignments.AsNoTracking()
-                .Where(a => a.ChapterId == chapterId)
-                .Select(a => new { a.Id, a.DependsOnAssignmentId })
-                .ToListAsync(ct))
-            .ToDictionary(a => a.Id, a => a.DependsOnAssignmentId);
+        if (depList.Count == 0) return null;
 
-        if (!edges.ContainsKey(dependsOnId.Value))
-            return "Assignment phụ thuộc không tồn tại trong Chapter này.";
+        if (selfId.HasValue && depList.Contains(selfId.Value))
+            return "Assignment không thể phụ thuộc vào chính nó.";
 
-        var seen = new HashSet<Guid>();
-        for (Guid? cur = dependsOnId; cur is { } id && seen.Add(id); cur = edges.GetValueOrDefault(id))
+        var assignmentsInChapter = await db.Assignments.AsNoTracking()
+            .Where(a => a.ChapterId == chapterId)
+            .ToListAsync(ct);
+
+        var existingMap = assignmentsInChapter.ToDictionary(a => a.Id, a => a.GetDependsOnAssignmentIds());
+
+        foreach (var depId in depList)
         {
-            if (id == selfId) return "Dependency tạo chu trình.";
+            if (!existingMap.ContainsKey(depId))
+                return "Assignment phụ thuộc không tồn tại trong Chapter này.";
+        }
+
+        if (selfId.HasValue)
+        {
+            var queue = new Queue<Guid>(depList);
+            var visited = new HashSet<Guid>(depList);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                if (current == selfId.Value)
+                    return "Dependency tạo chu trình trong đồ thị công việc.";
+
+                if (existingMap.TryGetValue(current, out var nextDeps))
+                {
+                    foreach (var next in nextDeps)
+                    {
+                        if (next == selfId.Value)
+                            return "Dependency tạo chu trình trong đồ thị công việc.";
+
+                        if (visited.Add(next))
+                            queue.Enqueue(next);
+                    }
+                }
+            }
         }
 
         return null;
     }
+
+    /// <summary>Backward compatibility cho dependency đơn.</summary>
+    public static Task<string?> ValidateDependencyAsync(
+        IPanelForgeDbContext db, Guid chapterId, Guid? selfId, Guid? dependsOnId, CancellationToken ct) =>
+        ValidateDependenciesAsync(db, chapterId, selfId, dependsOnId.HasValue ? [dependsOnId.Value] : null, ct);
 }

@@ -21,7 +21,8 @@ public sealed record CreateAssignmentCommand(
     string? ReferenceNotes,
     DateTime? DueDate,
     AssignmentPriority Priority,
-    Guid? DependsOnAssignmentId
+    Guid? DependsOnAssignmentId,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null
 ) : IRequest<Result<AssignmentDto>>;
 
 public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssignmentCommand, Result<AssignmentDto>>
@@ -63,7 +64,8 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, cmd.AssigneeUserId, stage, ct);
         if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode);
 
-        if (await AssignmentRules.ValidateDependencyAsync(_db, chapter.Id, null, cmd.DependsOnAssignmentId, ct) is { } depError)
+        var depIds = cmd.DependsOnAssignmentIds ?? (cmd.DependsOnAssignmentId.HasValue ? [cmd.DependsOnAssignmentId.Value] : null);
+        if (await AssignmentRules.ValidateDependenciesAsync(_db, chapter.Id, null, depIds, ct) is { } depError)
             return Fail(depError);
 
         var duplicate = await _db.Assignments.AnyAsync(a =>
@@ -76,7 +78,8 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
             chapter.SeriesId, chapter.Id, cmd.EntityType, target.Value, stage.Id,
             cmd.AssigneeUserId, role.Value, cmd.Brief,
             referenceNotes: cmd.ReferenceNotes, dueDate: cmd.DueDate, priority: cmd.Priority,
-            dependsOnAssignmentId: cmd.DependsOnAssignmentId);
+            dependsOnAssignmentId: cmd.DependsOnAssignmentId,
+            dependsOnAssignmentIds: depIds);
         assignment.CreatedBy = cmd.UserId.ToString();
 
         _db.Assignments.Add(assignment);

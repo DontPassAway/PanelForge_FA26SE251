@@ -41,14 +41,19 @@ public sealed class DeleteAssignmentCommandHandler : IRequestHandler<DeleteAssig
         if (assignment.Status == AssignmentStatus.Approved)
             return Fail("Không thể xoá Assignment đã được phê duyệt hoàn thành (Approved).", ResultErrorCodes.Conflict);
 
-        // Giải phóng các Assignment khác trong cùng Chapter đang phụ thuộc vào Assignment này
-        var dependentAssignments = await _db.Assignments
-            .Where(a => a.ChapterId == cmd.ChapterId && a.DependsOnAssignmentId == assignment.Id)
+        // Giải phóng các Assignment khác trong cùng Chapter đang phụ thuộc vào Assignment này (DAG)
+        var allChapterAssignments = await _db.Assignments
+            .Where(a => a.ChapterId == cmd.ChapterId && a.Id != assignment.Id)
             .ToListAsync(ct);
 
-        foreach (var dep in dependentAssignments)
+        foreach (var other in allChapterAssignments)
         {
-            dep.SetDependency(null);
+            var otherDeps = other.GetDependsOnAssignmentIds();
+            if (otherDeps.Contains(assignment.Id))
+            {
+                var remaining = otherDeps.Where(id => id != assignment.Id).ToList();
+                other.SetDependencies(remaining);
+            }
         }
 
         // Gửi thông báo cho người đang nhận việc nếu có người nhận và người nhận khác người thực hiện xoá

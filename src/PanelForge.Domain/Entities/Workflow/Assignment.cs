@@ -30,6 +30,9 @@ public class Assignment : BaseEntity
     /// <summary>CF2: việc phải được Approved trước khi việc này bắt đầu (cùng Chapter, tối đa một; không được tạo chu trình).</summary>
     public Guid? DependsOnAssignmentId { get; private set; }
 
+    /// <summary>Đồ thị phụ thuộc đa nhiệm (DAG): danh sách các công việc tiền đề phải được Approved trước khi việc này bắt đầu.</summary>
+    public string DependsOnAssignmentIdsJson { get; private set; } = "[]";
+
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
     public string? LastFeedbackComment { get; private set; }
@@ -54,9 +57,20 @@ public class Assignment : BaseEntity
         string? referenceAssetUrlsJson = null,
         DateTime? dueDate = null,
         AssignmentPriority priority = AssignmentPriority.Medium,
-        Guid? dependsOnAssignmentId = null)
+        Guid? dependsOnAssignmentId = null,
+        IEnumerable<Guid>? dependsOnAssignmentIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(brief);
+
+        var depList = dependsOnAssignmentIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
+
+        if (dependsOnAssignmentId.HasValue && !depList.Contains(dependsOnAssignmentId.Value))
+        {
+            depList.Insert(0, dependsOnAssignmentId.Value);
+        }
 
         return new Assignment
         {
@@ -72,7 +86,8 @@ public class Assignment : BaseEntity
             ReferenceAssetUrlsJson = string.IsNullOrWhiteSpace(referenceAssetUrlsJson) ? "[]" : referenceAssetUrlsJson.Trim(),
             DueDate = dueDate,
             Priority = priority,
-            DependsOnAssignmentId = dependsOnAssignmentId,
+            DependsOnAssignmentId = depList.Count > 0 ? depList[0] : null,
+            DependsOnAssignmentIdsJson = depList.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(depList) : "[]",
             Status = AssignmentStatus.Assigned,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -146,14 +161,48 @@ public class Assignment : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Đặt hoặc bỏ dependency. Việc kiểm tra chu trình do handler làm (cần dữ liệu của cả Chapter).</summary>
+    /// <summary>Lấy danh sách toàn bộ ID của các công việc tiền đề phụ thuộc (DAG).</summary>
+    public IReadOnlyList<Guid> GetDependsOnAssignmentIds()
+    {
+        var ids = new List<Guid>();
+        if (!string.IsNullOrWhiteSpace(DependsOnAssignmentIdsJson) && DependsOnAssignmentIdsJson != "[]")
+        {
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(DependsOnAssignmentIdsJson);
+                if (parsed != null) ids.AddRange(parsed.Where(i => i != Guid.Empty));
+            }
+            catch { }
+        }
+
+        if (DependsOnAssignmentId.HasValue && !ids.Contains(DependsOnAssignmentId.Value))
+        {
+            ids.Insert(0, DependsOnAssignmentId.Value);
+        }
+
+        return ids.Distinct().ToList();
+    }
+
+    /// <summary>Cập nhật đồ thị phụ thuộc đa nhiệm (DAG). Gán lại cả DependsOnAssignmentId đại diện.</summary>
+    public void SetDependencies(IEnumerable<Guid>? dependsOnAssignmentIds)
+    {
+        var list = dependsOnAssignmentIds?
+            .Where(id => id != Guid.Empty && id != Id)
+            .Distinct()
+            .ToList() ?? [];
+
+        DependsOnAssignmentIdsJson = list.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(list) : "[]";
+        DependsOnAssignmentId = list.Count > 0 ? list[0] : null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Đặt hoặc bỏ dependency đơn. Tự động đồng bộ vào danh sách đa nhiệm.</summary>
     public void SetDependency(Guid? dependsOnAssignmentId)
     {
         if (dependsOnAssignmentId == Id)
             throw new InvalidOperationException("Assignment không thể phụ thuộc vào chính nó.");
 
-        DependsOnAssignmentId = dependsOnAssignmentId;
-        UpdatedAt = DateTime.UtcNow;
+        SetDependencies(dependsOnAssignmentId.HasValue ? [dependsOnAssignmentId.Value] : null);
     }
 
     /// <summary>

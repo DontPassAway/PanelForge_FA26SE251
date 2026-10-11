@@ -117,6 +117,12 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasForeignKey(a => a.DependsOnAssignmentId)
                .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Property(a => a.DependsOnAssignmentIdsJson)
+               .HasColumnName("depends_on_assignment_ids_json")
+               .HasColumnType("text")
+               .HasDefaultValue("[]")
+               .IsRequired();
+
         builder.Property(a => a.StartedAt)
                .HasColumnName("started_at")
                .HasColumnType("timestamptz");
