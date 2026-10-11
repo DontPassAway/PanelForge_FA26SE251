@@ -109,9 +109,10 @@ builder.Services.AddAuthentication(options =>
             var sub = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
                       ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var db = context.HttpContext.RequestServices.GetRequiredService<IPanelForgeDbContext>();
+            Guid? sessionId = Guid.TryParse(context.Principal?.FindFirst("session_id")?.Value, out var sid) ? sid : null;
             if (!Guid.TryParse(sub, out var userId)
-                || !await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, context.HttpContext.RequestAborted))
-                context.Fail("Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.");
+                || !await AccessTokenGuard.IsValidAsync(db, userId, sessionId, DateTime.UtcNow, context.HttpContext.RequestAborted))
+                context.Fail("Tài khoản không tồn tại, đã bị vô hiệu hóa hoặc phiên đăng nhập đã kết thúc.");
         }
     };
 });

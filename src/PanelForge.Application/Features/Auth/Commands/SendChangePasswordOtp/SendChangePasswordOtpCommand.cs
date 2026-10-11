@@ -29,7 +29,7 @@ public sealed class SendChangePasswordOtpCommandHandler : IRequestHandler<SendCh
                 "Người dùng không tồn tại hoặc đã bị vô hiệu hóa.", ResultErrorCodes.Unauthorized);
 
         var otp = AuthSecrets.NewEmailOtp();
-        user.SetPasswordResetToken(otp, DateTime.UtcNow.Add(AuthSecrets.OtpLifetime));
+        user.SetPasswordResetToken(AuthSecrets.ChangePasswordOtp(otp), DateTime.UtcNow.Add(AuthSecrets.OtpLifetime));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _emailService.SendChangePasswordOtpAsync(user.Email, otp, user.FullName, cancellationToken);

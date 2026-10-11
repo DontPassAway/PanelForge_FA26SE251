@@ -35,7 +35,7 @@ public class SessionPolicyTests
         _db.Users.Add(_user);
         _db.SaveChanges();
         _hasher.Setup(h => h.VerifyPassword("Password123!", "hash")).Returns(true);
-        _jwt.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+        _jwt.Setup(j => j.GenerateToken(It.IsAny<User>(), It.IsAny<Guid>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
     }
 
     private StudioWorkspace JoinWorkspace(int? lifetime = null, int? idle = null, int? maxSessions = null)

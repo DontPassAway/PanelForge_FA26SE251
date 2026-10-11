@@ -102,6 +102,8 @@ public class ImageQuotaTests
             var db = new Mock<IPanelForgeDbContext>();
             db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
             db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(configs));
+            db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+            db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.RefreshToken>()));
             return new GetWorkspaceUsageQueryHandler(db.Object);
         }
 

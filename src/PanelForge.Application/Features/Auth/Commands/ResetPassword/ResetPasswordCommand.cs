@@ -41,6 +41,13 @@ public sealed class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordC
         user.ResetPassword(_passwordHasher.HashPassword(command.NewPassword));
         await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken);
 
+        // Mật khẩu bị đặt lại (có thể vì nghi lộ) → thiết bị tin cậy không còn được bỏ qua 2FA.
+        var trustedDevices = await _dbContext.UserRememberedDevices
+            .Where(d => d.UserId == user.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var device in trustedDevices)
+            _dbContext.UserRememberedDevices.Remove(device);
+
         // OTP được gửi tới hộp thư nên đặt lại thành công đã chứng minh quyền sở hữu email.
         // Cần thiết cho tài khoản tạo từ lời mời Workspace.
         if (!user.IsEmailConfirmed)

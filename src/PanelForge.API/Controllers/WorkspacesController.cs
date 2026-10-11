@@ -205,10 +205,9 @@ public class WorkspacesController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     public async Task<IActionResult> GetActiveSessions(Guid id, CancellationToken cancellationToken)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        Guid.TryParse(userIdStr, out var currentUserId);
+        Guid? currentSessionId = Guid.TryParse(User.FindFirstValue("session_id"), out var sid) ? sid : null;
 
-        var result = await _mediator.Send(new GetWorkspaceActiveSessionsQuery(id, currentUserId), cancellationToken);
+        var result = await _mediator.Send(new GetWorkspaceActiveSessionsQuery(id, currentSessionId), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

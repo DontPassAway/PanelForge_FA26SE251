@@ -9,6 +9,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Auth.Common;
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
+using PanelForge.Application.Features.Auth.Commands.DisableTwoFactor;
 using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
 using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
 using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
@@ -187,8 +188,10 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new VerifyEmailCommand(request.Email, request.Token), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+        var result = await _mediator.Send(
+            new VerifyEmailCommand(request.Email, request.Token, ClientIp(), ClientUserAgent()), cancellationToken);
+        // Xác thực email thành công = đăng nhập luôn: token đi qua cookie như /login, không nằm trong body.
+        return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [EnableRateLimiting("auth")]
@@ -204,7 +207,8 @@ public class AuthController : ControllerBase
     [HttpPost("external-login")]
     public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ExternalLoginCommand(request.IdToken), cancellationToken);
+        var result = await _mediator.Send(
+            new ExternalLoginCommand(request.IdToken, ClientIp(), ClientUserAgent()), cancellationToken);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
@@ -219,15 +223,38 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("disable-2fa")]
+    public async Task<IActionResult> DisableTwoFactor([FromBody] DisableTwoFactorRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new DisableTwoFactorCommand(userId, request.Code, request.CurrentPassword), cancellationToken);
+        if (!result.IsSuccess)
+            return ToError(result);
+
+        Response.Cookies.Delete(RememberDeviceCookie);
+        return Ok(new { message = "Đã tắt bảo mật 2FA cho tài khoản của bạn." });
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("verify-2fa")]
     public async Task<IActionResult> VerifyTwoFactor([FromBody] VerifyTwoFactorRequest request, CancellationToken cancellationToken)
     {
+        // Có cookie thử thách (đã qua bước mật khẩu) → hoàn tất đăng nhập; không có → chỉ xác nhận bật 2FA cho user đang đăng nhập.
+        var challengeEmail = TwoFactorChallengeCookie.Read(HttpContext);
         var result = await _mediator.Send(new VerifyTwoFactorCommand(
-            GetCurrentUserId(), request.Code, request.Email, request.RememberDevice, request.DeviceName),
+            GetCurrentUserId(), request.Code, request.Email, request.RememberDevice, request.DeviceName,
+            ClientIp(), ClientUserAgent(), challengeEmail),
             cancellationToken);
         if (!result.IsSuccess)
             return ToError(result);
+
+        if (challengeEmail is not null)
+            TwoFactorChallengeCookie.Clear(HttpContext);
 
         var response = result.Value!;
         if (!string.IsNullOrEmpty(response.RememberDeviceToken))
@@ -286,9 +313,16 @@ public class AuthController : ControllerBase
     // Token chỉ nằm trong cookie HttpOnly; body không trả token/refreshToken (JS không đọc được → XSS không lấy được).
     private IActionResult AuthOk(AuthResponse response)
     {
+        if (response.RequiresTwoFactor && !string.IsNullOrEmpty(response.TwoFactorEmail))
+            TwoFactorChallengeCookie.Set(HttpContext, response.TwoFactorEmail);
+
         AuthCookies.Set(Request, Response, response);
         return Ok(response with { Token = null, RefreshToken = null });
     }
+
+    private string? ClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    private string ClientUserAgent() => Request.Headers.UserAgent.ToString();
 
     private IActionResult UnknownUser()
         => Unauthorized(new { message = "Không xác định được danh tính người dùng." });

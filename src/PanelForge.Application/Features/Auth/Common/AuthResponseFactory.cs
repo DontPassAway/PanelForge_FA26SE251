@@ -47,14 +47,14 @@ internal static class AuthResponseFactory
         dbContext.RefreshTokens.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken);
+        return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken, session.SessionId);
     }
 
     /// <summary>Dựng AuthResponse từ refresh token đã được lưu sẵn (dùng khi xoay vòng token).</summary>
     public static AuthResponse Build(
-        User user, IJwtTokenGenerator jwtTokenGenerator, string message, string? rememberDeviceToken, string refreshToken)
+        User user, IJwtTokenGenerator jwtTokenGenerator, string message, string? rememberDeviceToken, string refreshToken, Guid sessionId)
     {
-        var (token, expiresAt) = jwtTokenGenerator.GenerateToken(user);
+        var (token, expiresAt) = jwtTokenGenerator.GenerateToken(user, sessionId);
         return new AuthResponse(
             Token: token,
             ExpiresAt: expiresAt,

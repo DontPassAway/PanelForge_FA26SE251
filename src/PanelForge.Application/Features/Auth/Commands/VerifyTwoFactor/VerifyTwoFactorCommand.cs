@@ -20,7 +20,10 @@ public sealed record VerifyTwoFactorCommand(
     string Code,
     string? Email,
     bool RememberDevice,
-    string? DeviceName) : IRequest<Result<AuthResponse>>;
+    string? DeviceName,
+    string? IpAddress = null,
+    string? UserAgent = null,
+    string? ChallengeEmail = null) : IRequest<Result<AuthResponse>>;
 
 public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFactorCommand, Result<AuthResponse>>
 {
@@ -39,9 +42,15 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
     }
 
     public Task<Result<AuthResponse>> Handle(VerifyTwoFactorCommand command, CancellationToken cancellationToken)
-        => command.CurrentUserId.HasValue
+    {
+        // Thử thách đăng nhập đang mở (đã qua bước mật khẩu) được ưu tiên, kể cả khi trình duyệt còn cookie của phiên khác.
+        if (!string.IsNullOrWhiteSpace(command.ChallengeEmail))
+            return CompleteLoginChallengeAsync(command, cancellationToken);
+
+        return command.CurrentUserId.HasValue
             ? ConfirmSetupAsync(command.CurrentUserId.Value, command.Code, cancellationToken)
-            : CompleteLoginChallengeAsync(command, cancellationToken);
+            : Task.FromResult(Unauthorized("Phiên xác thực 2FA đã hết hạn hoặc chưa qua bước đăng nhập. Vui lòng đăng nhập lại."));
+    }
 
     private async Task<Result<AuthResponse>> ConfirmSetupAsync(Guid userId, string code, CancellationToken cancellationToken)
     {
@@ -65,10 +74,11 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
     private async Task<Result<AuthResponse>> CompleteLoginChallengeAsync(
         VerifyTwoFactorCommand command, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(command.Email))
-            return Result<AuthResponse>.Failure("Email là bắt buộc khi xác thực 2FA đăng nhập.");
+        // Email lấy từ thử thách do server cấp ở bước mật khẩu; email trong body (nếu có) phải trùng.
+        var email = AuthSecrets.NormalizeEmail(command.ChallengeEmail!);
+        if (!string.IsNullOrWhiteSpace(command.Email) && AuthSecrets.NormalizeEmail(command.Email) != email)
+            return Unauthorized("Thông tin tài khoản hoặc cấu hình 2FA không hợp lệ.");
 
-        var email = AuthSecrets.NormalizeEmail(command.Email);
         var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
         if (user is null || !user.IsActive || !user.TwoFactorEnabled || string.IsNullOrEmpty(user.TwoFactorSecret))
@@ -94,7 +104,8 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
             : "Xác thực 2FA và đăng nhập thành công.";
 
         return Result<AuthResponse>.Success(
-            await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, message, rememberToken));
+            await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, message, rememberToken,
+                deviceName: DeviceDetector.DetectDevice(command.UserAgent), ipAddress: command.IpAddress, userAgent: command.UserAgent));
     }
 
     private static Result<AuthResponse> Unauthorized(string message)

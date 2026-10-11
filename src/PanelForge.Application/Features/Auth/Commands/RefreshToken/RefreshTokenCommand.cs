@@ -79,7 +79,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(AuthResponseFactory.Build(
-            stored.User, _jwtTokenGenerator, "Làm mới phiên đăng nhập thành công.", null, newToken));
+            stored.User, _jwtTokenGenerator, "Làm mới phiên đăng nhập thành công.", null, newToken, stored.SessionId));
     }
 
     private static Result<AuthResponse> Unauthorized() => Result<AuthResponse>.Failure(Invalid, ResultErrorCodes.Unauthorized);

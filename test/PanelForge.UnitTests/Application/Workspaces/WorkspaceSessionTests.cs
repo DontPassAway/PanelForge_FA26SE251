@@ -40,6 +40,10 @@ public class WorkspaceSessionTests
             memberId, "hash-1", DateTime.UtcNow.AddHours(2), session1Id,
             deviceName: "Chrome (Windows)", ipAddress: "192.168.1.10", userAgent: "Mozilla/5.0");
 
+        // Phiên thứ hai của cùng thành viên: không được tính là phiên hiện tại.
+        var otherSessionToken = RefreshToken.Create(
+            memberId, "hash-4", DateTime.UtcNow.AddHours(2), Guid.NewGuid());
+
         var revokedToken = RefreshToken.Create(
             memberId, "hash-2", DateTime.UtcNow.AddHours(2), Guid.NewGuid());
         revokedToken.Revoke();
@@ -50,19 +54,19 @@ public class WorkspaceSessionTests
         var db = new Mock<IPanelForgeDbContext>();
         db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member }));
-        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<RefreshToken> { activeToken, revokedToken, nonMemberToken }));
+        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<RefreshToken> { activeToken, otherSessionToken, revokedToken, nonMemberToken }));
 
         var handler = new GetWorkspaceActiveSessionsQueryHandler(db.Object);
-        var result = await handler.Handle(new GetWorkspaceActiveSessionsQuery(workspaceId, memberId), CancellationToken.None);
+        var result = await handler.Handle(new GetWorkspaceActiveSessionsQuery(workspaceId, session1Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Should().HaveCount(1);
-        result.Value![0].SessionId.Should().Be(session1Id);
-        result.Value[0].FullName.Should().Be("Artist Name");
-        result.Value[0].Email.Should().Be("artist@example.com");
-        result.Value[0].DeviceName.Should().Be("Chrome (Windows)");
-        result.Value[0].IpAddress.Should().Be("192.168.1.10");
-        result.Value[0].IsCurrentSession.Should().BeTrue();
+        result.Value!.Should().HaveCount(2);
+        var current = result.Value!.Single(s => s.IsCurrentSession);
+        current.SessionId.Should().Be(session1Id);
+        current.FullName.Should().Be("Artist Name");
+        current.Email.Should().Be("artist@example.com");
+        current.DeviceName.Should().Be("Chrome (Windows)");
+        current.IpAddress.Should().Be("192.168.1.10");
     }
 
     [Fact]

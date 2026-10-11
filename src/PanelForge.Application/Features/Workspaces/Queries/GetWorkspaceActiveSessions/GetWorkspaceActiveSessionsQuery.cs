@@ -18,7 +18,8 @@ public sealed record WorkspaceSessionDto(
     DateTime LastActiveAt,
     bool IsCurrentSession);
 
-public sealed record GetWorkspaceActiveSessionsQuery(Guid WorkspaceId, Guid? CurrentUserId = null)
+/// <param name="CurrentSessionId">Phiên của chính request này (claim <c>session_id</c> trong JWT); null nếu token không mang claim.</param>
+public sealed record GetWorkspaceActiveSessionsQuery(Guid WorkspaceId, Guid? CurrentSessionId = null)
     : IRequest<Result<IReadOnlyList<WorkspaceSessionDto>>>;
 
 public sealed class GetWorkspaceActiveSessionsQueryHandler
@@ -69,7 +70,7 @@ public sealed class GetWorkspaceActiveSessionsQueryHandler
                     UserAgent: latestToken.UserAgent,
                     SessionStartedAt: latestToken.SessionStartedAt,
                     LastActiveAt: latestToken.LastActiveAt,
-                    IsCurrentSession: q.CurrentUserId.HasValue && latestToken.UserId == q.CurrentUserId.Value
+                    IsCurrentSession: g.Key == q.CurrentSessionId
                 );
             })
             .OrderByDescending(s => s.LastActiveAt)

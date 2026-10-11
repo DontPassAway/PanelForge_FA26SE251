@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Auth.Commands.Login;
+using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Authentication;
 using PanelForge.API.Controllers;
@@ -80,6 +81,29 @@ public class AuthCookiesTests
         var headers = SetCookieHeaders(ctx);
         Assert.Contains(headers, h => h.StartsWith("pf_access=jwt-x"));
         Assert.Contains(headers, h => h.StartsWith("pf_refresh=rt-x"));
+    }
+
+    [Fact]
+    public async Task VerifyEmail_Success_SignsInLikeLogin_CookiesSet_AndBodyHasNoTokens()
+    {
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<VerifyEmailCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<AuthResponse>.Success(
+                new AuthResponse(Token: "jwt-x", ExpiresAt: DateTime.UtcNow.AddMinutes(30), RefreshToken: "rt-x")));
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers.UserAgent = "Mozilla/5.0 (Windows NT 10.0) Chrome/129.0";
+        var controller = new AuthController(mediator.Object) { ControllerContext = new() { HttpContext = ctx } };
+
+        var result = await controller.VerifyEmail(new VerifyEmailRequest("a@b.c", "123456"), CancellationToken.None);
+
+        var body = Assert.IsType<AuthResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Null(body.Token);
+        Assert.Null(body.RefreshToken);
+        var headers = SetCookieHeaders(ctx);
+        Assert.Contains(headers, h => h.StartsWith("pf_access=jwt-x"));
+        Assert.Contains(headers, h => h.StartsWith("pf_refresh=rt-x"));
+        mediator.Verify(m => m.Send(
+            It.Is<VerifyEmailCommand>(c => c.UserAgent!.Contains("Chrome")), It.IsAny<CancellationToken>()));
     }
 
     [Theory]
