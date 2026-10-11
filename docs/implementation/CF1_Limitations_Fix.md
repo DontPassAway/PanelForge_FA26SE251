@@ -2,9 +2,9 @@
 
 - **Nhánh:** `test-feature-cf1-limitations` (tách từ `test-feature` @ `f46c02d`)
 - **Ngày:** 11/10/2026
-- **Người thực hiện:** Phạm Thành Danh (với Claude Code)
+- **Người thực hiện:** Phạm Thành Danh
 - **Nguồn yêu cầu:** mục "Core Flow 1 – Thiết lập Studio & Series Bible" trong danh sách hạn chế của `TONG_KET_DU_AN_PANELFORGE.md`
-- **FE đi kèm:** repo `panelforge-fe`, nhánh local `fix/cf1-limitations` (tách từ `tam` @ `118f350`). FE **bắt buộc** đi cùng vì endpoint `/unlock` đã bị bỏ.
+- **FE đi kèm:** repo `panelforge-fe`, nhánh `tam-cf1-limitations` (tách từ `tam` @ `4e1bc2d`). FE **bắt buộc** merge cùng lúc vì endpoint `/unlock` đã bị bỏ.
 
 ## 1. Tổng quan
 
@@ -14,7 +14,7 @@
 | 2 | Không có mở khoá Character Sheet | Bỏ `/unlock` (trái V1.2), thay bằng **thay thế bản khoá** (`/supersede`) | `45da281` |
 | 3 | AI/checker chưa chặn nhân vật chưa khoá | AI chỉ dùng bản khoá; checker cảnh báo `CHARACTER_NOT_LOCKED`; UI hiện lại nhân vật chưa khoá | `45da281` |
 | 4 | Idle timeout chỉ kiểm khi refresh (trễ tới 30') | Kiểm ở **mỗi request** theo hoạt động thật; sửa bug đăng xuất người đang làm việc | `5d6ab48` |
-| 5 | Producer chưa giám sát được phiên đồng thời | BE đã có từ `f35c7dd`; sửa cách đếm (bỏ phiên quá idle); FE thêm thẻ phiên | `5d6ab48` |
+| 5 | Producer chưa giám sát được phiên đồng thời | BE đã có từ `f35c7dd`, FE đã có từ `47e3290` (Minh, nhánh `tam`); nhánh này sửa cách đếm (bỏ phiên quá idle) | `5d6ab48` |
 | 6 | Quota sinh ảnh luôn 0 | **Chưa sửa**: chưa có pipeline sinh ảnh. FE ghi chú "Chưa áp dụng" | — |
 
 Không có migration mới. Không đổi schema.
@@ -66,7 +66,7 @@ Không có migration mới. Không đổi schema.
 
 `POST .../unlock` giờ trả 404/405.
 
-**FE** (`87f57d7`): nút "Mở Khoá Character Sheet" đổi thành "Thay thế bản khoá". Nút mở lại form tạo phiên bản ở chế độ thay thế:
+**FE** (`24b708f`): nút "Mở Khoá Character Sheet" đổi thành "Thay thế bản khoá". Nút mở lại form tạo phiên bản ở chế độ thay thế:
 - Chương hiệu lực bị khoá theo bản cũ.
 - Nội dung điền sẵn từ snapshot của bản khoá.
 - Lý do bắt buộc.
@@ -119,10 +119,7 @@ Không có migration mới. Không đổi schema.
   - Usage có `activeSessions`, `activeMemberCount`.
 - **Sửa:** `GetWorkspaceUsage` và `GetWorkspaceActiveSessions` bỏ các phiên đã quá idle timeout của Workspace. Trước đây chúng chỉ loại token đã thu hồi hoặc hết hạn, nên đếm dư cả phiên bỏ quên nhiều ngày.
   - *Shortcut:* lọc theo policy của chính Workspace đó. User có policy chặt hơn ở Workspace khác có thể bị đếm dư cho tới request kế tiếp của họ.
-- **FE** (`d58d1fd`, `fefedfc`): thẻ "Phiên Đăng Nhập Đồng Thời" trên trang Producer workspace.
-  - Hiện số phiên trên giới hạn và số thành viên đang đăng nhập.
-  - Có danh sách thiết bị; phiên hiện tại mang nhãn "Phiên này" và không có nút thu hồi.
-  - Nút "Thu hồi" có xác nhận; sau khi thu hồi thì tải lại usage.
+- **FE:** Minh đã làm ở `47e3290` trên `tam`: đồng hồ số thiết bị, modal danh sách có tìm kiếm, thu hồi phiên, tải lại usage sau khi thu hồi. Nhánh FE này **không** thêm giao diện phiên riêng, để tránh trùng.
 - **Lưu ý nghiệp vụ:** phiên thuộc về user, không theo Workspace. Producer studio A thu hồi phiên thì user bị đăng xuất khỏi thiết bị đó ở mọi studio.
 
 ### 2.6. Quota sinh ảnh (mục 6) — chưa sửa
@@ -134,7 +131,7 @@ Không có migration mới. Không đổi schema.
 3. Gọi provider sinh ảnh.
 4. Gọi `RecordImages(n)`, chỉ khi sinh ảnh thành công.
 
-Gợi ý: thêm `ImageCount` vào `AiUsageEntry` để `AiUsageService.RecordAsync` ghi cả token lẫn ảnh. Tạm thời FE hiện dòng "Chưa áp dụng" dưới đồng hồ quota ảnh.
+Gợi ý: thêm `ImageCount` vào `AiUsageEntry` để `AiUsageService.RecordAsync` ghi cả token lẫn ảnh. Tạm thời FE (`ae8d32f`) hiện dòng "Chưa áp dụng" dưới đồng hồ quota ảnh.
 
 ## 3. Business rule liên quan
 
@@ -180,12 +177,16 @@ Chạy trên DB riêng `panelforge_cf1_test`, có seed demo AI, bằng các tài
   - Danh sách phiên bỏ phiên idle.
   - Thu hồi phiên Writer; Writer bị 401 ngay.
 
-### 4.3. Giao diện (Chrome, FE nhánh `fix/cf1-limitations`)
+### 4.3. Giao diện (Chrome)
 
-- **Thẻ phiên:**
-  - Số phiên và số thành viên hiện đúng; nhãn "Phiên này" hiện đúng.
-  - Thu hồi một phiên thì danh sách và con số cập nhật.
-  - "Hoạt động lúc" tăng theo request thật.
+Được test trên bản FE trước khi rebase lên `tam` @ `4e1bc2d`. Phần Series Bible giữ nguyên code khi rebase.
+
+- **Thẻ phiên:** đây là bản thẻ phiên riêng trước đây, nay đã bỏ để dùng bản của Minh. Test cho thấy BE trả đúng:
+  - Số phiên đúng.
+  - Thu hồi một phiên thì phiên đó mất ngay.
+  - `lastActiveAt` tăng theo request thật.
+
+  **Chưa test giao diện của bản `47e3290`** với BE của nhánh này.
 - **Series Bible:**
   - Nhân vật chưa khoá (Nam) vẫn hiện.
   - "Thay thế bản khoá" Bà Lan: form điền sẵn và khoá chương; lưu thành công.
@@ -195,9 +196,10 @@ Chạy trên DB riêng `panelforge_cf1_test`, có seed demo AI, bằng các tài
 
 ### 4.4. FE
 
-- Typecheck sạch. Lint sạch trên các file đã sửa. 18 lỗi prettier của `ProducerWorkspaceView.tsx` đã có sẵn từ `origin/tam`.
-- Vitest: 397 pass. 4 test fail đều đã fail sẵn trên `origin/tam` gốc: `axiosClient.test.ts` ×3, `App.test.tsx` ×1.
-- Sau bản sửa cuối (`fefedfc`), chỉ chạy lại 4 test của `WorkspaceSessionsCard` (4/4) và typecheck.
+Kết quả trên nhánh `tam-cf1-limitations` (2 commit trên `tam` @ `4e1bc2d`):
+- Typecheck sạch.
+- Lint sạch trên cả 4 file đã sửa.
+- Vitest **397/397 pass** (48 file), gồm 2 test mới cho `supersedeRevision`.
 
 ## 5. Vấn đề phát hiện ngoài phạm vi (chưa sửa ở nhánh này)
 
@@ -206,13 +208,13 @@ Chạy trên DB riêng `panelforge_cf1_test`, có seed demo AI, bằng các tài
    - EF 9 ném lỗi `PendingModelChangesWarning` ở `MigrateAsync`.
    - Unit test (InMemory) không bắt được.
    - Nhánh này kế thừa lỗi đó. Phần test runtime ở mục 4.2 được chạy trên `f46c02d~1` cộng 3 commit của nhánh này. Cần tạo lại migration bằng `dotnet ef migrations add` trước khi merge.
-2. **4 test FE fail sẵn trên `tam`** (auth/axios và chuyển Workspace).
-3. **FE lưu chữ giữ chỗ làm phụ đề:** `mapEntryToBibleEntity` gán phụ đề mặc định "Canon Spec Entity". Khi tạo hoặc thay thế phiên bản cho mục không có phụ đề, chữ này bị lưu vào DB. Lỗi có sẵn, không do nhánh này gây ra.
+2. **FE lưu chữ giữ chỗ làm phụ đề:** `mapEntryToBibleEntity` gán phụ đề mặc định "Canon Spec Entity". Khi tạo hoặc thay thế phiên bản cho mục không có phụ đề, chữ này bị lưu vào DB. Lỗi có sẵn, không do nhánh này gây ra.
 
 ## 6. Việc cần làm khi merge
 
 - [ ] Sửa migration của `f46c02d` (mục 5.1).
-- [ ] Merge FE `fix/cf1-limitations` cùng lúc. FE cũ gọi `/unlock` sẽ lỗi 404.
+- [ ] Merge FE `tam-cf1-limitations` cùng lúc. FE cũ gọi `/unlock` sẽ lỗi 404.
 - [ ] Thống nhất với Minh (tác giả `87f05a3`, `6590a7e`) về việc bỏ unlock và chuyển canon lock sang AI.
 - [ ] Với DB dev có sẵn: Producer khoá lại các character sheet cần cho AI.
+- [ ] Test giao diện giám sát phiên của Minh (`47e3290`) với BE nhánh này: số thiết bị phải bỏ phiên đã quá idle.
 - [ ] Cập nhật bảng hạn chế trong `TONG_KET_DU_AN_PANELFORGE.md`.
