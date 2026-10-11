@@ -9,7 +9,8 @@ namespace PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 
 /// <summary>
 /// V1.2: Producer duyệt và khoá một revision của character sheet (mục Nhân vật) làm tham chiếu.
-/// Không có thao tác mở khoá: muốn thay thì thêm revision mới có hiệu lực từ chương khác (AddBibleEntryRevision).
+/// Không có thao tác mở khoá: muốn thay thì thêm revision mới có hiệu lực từ chương khác, hoặc Producer thay thế
+/// tại chương đó kèm lý do (AddBibleEntryRevision với SupersedesRevisionId).
 /// Quyền Producer do [RequireWorkspaceRole] kiểm tra theo seriesId trên route.
 /// </summary>
 public sealed record LockBibleEntryRevisionCommand(

@@ -31,7 +31,7 @@ public class ConsistencyCheckTests
             Scene = Scene.Create(Chapter.Id, 1);
             var bible = SeriesBible.Create(seriesId, Guid.NewGuid(), "Bible");
             Mira = bible.AddEntry(BibleEntryCategory.Character, "MIRA", "Mira", "Nhân vật chính");
-            Mira.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+            Mira.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, isInitialVersion: true).Lock(UserId);
             Lighthouse = bible.AddEntry(BibleEntryCategory.Location, "LIGHTHOUSE", "Hải đăng", "Bối cảnh");
             FutureVillain = bible.AddEntry(BibleEntryCategory.Character, "VILLAIN", "Kẻ phản diện", "Xuất hiện từ chương 3");
             FutureVillain.AddRevision("v1", "{}", "h2", effectiveFromChapterNumber: 3, isInitialVersion: true);
@@ -71,6 +71,26 @@ public class ConsistencyCheckTests
         result.Value.NewCount.Should().Be(3);
         result.Value.BlockingOpenCount.Should().Be(2);
         result.Value.Findings.Should().OnlyContain(x => x.Status == ConsistencyFindingStatus.Open && x.Evidence != null);
+    }
+
+    [Fact]
+    public async Task Check_CharacterWithoutLockedSheet_IsOneNonBlockingWarningPerChapter()
+    {
+        var f = new Fixture();
+        var draft = f.Db.SeriesBibles.Local.Single().AddEntry(BibleEntryCategory.Character, "NAM", "Nam", "Bạn của Mira");
+        draft.AddRevision("v1", "{}", "h3", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        f.Db.BibleEntries.Add(draft);
+        await f.Db.SaveChangesAsync();
+        f.Line(1, "Chào Mira!", draft.Id);
+        f.Line(2, "Đi đâu đấy?", draft.Id);
+
+        var result = await f.Run();
+
+        var finding = result.Value!.Findings.Should().ContainSingle().Which;
+        finding.RuleCode.Should().Be(ConsistencyChecker.CharacterNotLocked);
+        finding.Severity.Should().Be(ConsistencyFindingSeverity.Warning);
+        finding.BibleEntryId.Should().Be(draft.Id);
+        result.Value.BlockingOpenCount.Should().Be(0, "chưa khoá không chặn duyệt chương");
     }
 
     [Fact]

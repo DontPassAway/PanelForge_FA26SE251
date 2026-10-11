@@ -165,7 +165,7 @@ public sealed class BibleController : ControllerBase
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/lock
     /// Producer duyệt và khoá một revision của character sheet làm tham chiếu (V1.2). Không mở khoá được:
-    /// muốn thay thì thêm revision mới có hiệu lực từ chương khác.
+    /// muốn thay thì thêm revision mới có hiệu lực từ chương khác, hoặc thay thế tại chương đó qua /supersede.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/lock")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
@@ -195,22 +195,39 @@ public sealed class BibleController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/unlock
-    /// Mở khoá một revision của character sheet.
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/supersede
+    /// Producer thay thế một bản character sheet đã khoá (V1.2): tạo revision mới cùng chương, khoá luôn, ghi lý do.
+    /// Bản cũ giữ nguyên trong lịch sử, không mở khoá (BR-01).
     /// </summary>
-    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/unlock")]
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/supersede")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> UnlockBibleEntryRevision(
+    public async Task<IActionResult> SupersedeBibleEntryRevision(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid entryId,
         [FromRoute] Guid revisionId,
+        [FromBody] SupersedeBibleEntryRevisionRequest body,
         CancellationToken cancellationToken)
     {
-        var command = new Application.Features.Bible.Commands.UnlockBibleEntryRevision.UnlockBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId());
+        var command = new AddBibleEntryRevisionCommand(
+            SeriesId: seriesId,
+            BibleEntryId: entryId,
+            UserId: GetCurrentUserId(),
+            Summary: body.Reason,
+            Name: body.Name,
+            Description: body.Description,
+            Subtitle: body.Subtitle,
+            DetailsJson: body.DetailsJson,
+            ReferenceImageUrl: body.ReferenceImageUrl,
+            Priority: body.Priority,
+            StrictCheck: body.StrictCheck,
+            ExpectedVersionNumber: body.ExpectedVersionNumber,
+            SupersedesRevisionId: revisionId,
+            SupersedeReason: body.Reason
+        );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {

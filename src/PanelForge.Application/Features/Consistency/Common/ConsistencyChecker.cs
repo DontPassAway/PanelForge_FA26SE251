@@ -11,7 +11,9 @@ public sealed record CheckLine(
     Guid? SpeakerId, IReadOnlyList<Guid> LinkedEntryIds);
 
 /// <param name="FirstEffectiveChapter">Chương nhỏ nhất mà mục có revision hiệu lực (BR-15); null = chưa có revision.</param>
-public sealed record CheckEntry(Guid Id, string Name, BibleEntryCategory Category, bool IsActive, int? FirstEffectiveChapter);
+/// <param name="FirstLockedChapter">Chương nhỏ nhất mà mục có revision đã khoá (V1.2 character sheet); null = chưa khoá bản nào.</param>
+public sealed record CheckEntry(
+    Guid Id, string Name, BibleEntryCategory Category, bool IsActive, int? FirstEffectiveChapter, int? FirstLockedChapter = null);
 
 public sealed record CheckRule(Guid Id, string Name, string RuleType, string? Pattern, string Severity, string ConfigurationJson);
 
@@ -35,6 +37,7 @@ public static class ConsistencyChecker
     public const string SpeakerNotCharacter = "SPEAKER_NOT_CHARACTER";
     public const string EntryInactive = "ENTRY_INACTIVE";
     public const string EntryNotYetEffective = "ENTRY_NOT_YET_EFFECTIVE";
+    public const string CharacterNotLocked = "CHARACTER_NOT_LOCKED";
     public const string RulePattern = "RULE_PATTERN";
     public const string DialogueTooLong = "DIALOGUE_TOO_LONG";
 
@@ -45,6 +48,7 @@ public static class ConsistencyChecker
         IReadOnlyList<CheckRule> rules)
     {
         var found = new List<DetectedFinding>();
+        var notLockedReported = new HashSet<Guid>();
         foreach (var line in lines.OrderBy(l => l.SceneNumber).ThenBy(l => l.LineOrder))
         {
             var where = $"Cảnh {line.SceneNumber}, dòng {line.LineOrder}";
@@ -77,6 +81,12 @@ public static class ConsistencyChecker
                     found.Add(new(EntryNotYetEffective, ConsistencyFindingSeverity.Blocking,
                         $"{where}: \"{entry.Name}\" chỉ có hiệu lực từ chương {first}, chưa xuất hiện ở chương {chapterNumber}.",
                         text, line.SceneId, line.Id, entryId, null));
+                // Nhân vật đã có hiệu lực nhưng chưa có bản khoá: AI không dùng làm tham chiếu. Báo một lần mỗi nhân vật/chương.
+                if (entry.Category == BibleEntryCategory.Character && entry.FirstEffectiveChapter <= chapterNumber
+                    && !(entry.FirstLockedChapter <= chapterNumber) && notLockedReported.Add(entryId))
+                    found.Add(new(CharacterNotLocked, ConsistencyFindingSeverity.Warning,
+                        $"\"{entry.Name}\" chưa có character sheet được Producer khoá ở chương {chapterNumber}: AI sẽ không dùng nhân vật này làm tham chiếu.",
+                        entry.Name, null, null, entryId, null));
             }
 
             foreach (var rule in rules)

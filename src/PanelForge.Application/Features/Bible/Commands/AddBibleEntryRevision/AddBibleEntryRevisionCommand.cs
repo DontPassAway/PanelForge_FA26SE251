@@ -25,7 +25,11 @@ public sealed record AddBibleEntryRevisionCommand(
     bool StrictCheck = true,
     int EffectiveFromChapterNumber = 1,
     // UC-04 luồng phụ: version mà người dùng đã mở để sửa. Nếu khác version mới nhất → xung đột (409).
-    int? ExpectedVersionNumber = null
+    int? ExpectedVersionNumber = null,
+    // V1.2: Producer thay thế một bản đã khoá (route .../supersede, chỉ Producer). Bản mới cùng chương, được khoá luôn;
+    // bản cũ giữ nguyên (không mở khoá, không sửa tại chỗ). Lý do bắt buộc, ghi vào Summary.
+    Guid? SupersedesRevisionId = null,
+    string? SupersedeReason = null
 ) : IRequest<Result<BibleEntryRevisionDto>>;
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
@@ -73,13 +77,31 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         }
 
         var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
+        var summary = command.Summary;
 
-        // V1.2: bản đã khoá chỉ được thay bằng bản mới có hiệu lực từ chương khác, không được ghi đè tại chỗ.
-        if (entry.HasLockedRevisionStartingAt(effectiveFrom))
+        if (command.SupersedesRevisionId is { } supersededId)
+        {
+            var superseded = entry.Revisions.FirstOrDefault(r => r.Id == supersededId);
+            if (superseded is null)
+                return Result<BibleEntryRevisionDto>.Failure(
+                    $"Revision {supersededId} của mục Bible {entry.Id} không tồn tại.", ResultErrorCodes.NotFound);
+            if (!superseded.IsLocked)
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Revision này chưa được khoá, hãy thêm phiên bản mới theo cách thông thường.", ResultErrorCodes.Conflict);
+            var reason = command.SupersedeReason?.Trim();
+            if (string.IsNullOrEmpty(reason) || reason.Length > MaxSupersedeReasonLength)
+                return Result<BibleEntryRevisionDto>.Failure(
+                    $"Phải nhập lý do thay thế bản đã khoá (tối đa {MaxSupersedeReasonLength} ký tự).", ResultErrorCodes.Validation);
+
+            effectiveFrom = superseded.EffectiveFromChapterNumber;
+            summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
+        }
+        // V1.2: bản đã khoá không bị ghi đè tại chỗ: thêm bản ở chương khác, hoặc Producer thay thế có lý do (ở trên).
+        else if (entry.HasLockedRevisionStartingAt(effectiveFrom))
         {
             return Result<BibleEntryRevisionDto>.Failure(
                 $"Chương {effectiveFrom} đã có phiên bản được khoá cho mục này, không thể thay tại chỗ. " +
-                "Hãy chọn chương bắt đầu có hiệu lực khác cho phiên bản mới.",
+                "Hãy chọn chương bắt đầu có hiệu lực khác, hoặc nhờ Producer thay thế bản đã khoá (kèm lý do).",
                 ResultErrorCodes.Conflict);
         }
 
@@ -102,7 +124,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
 
         var revision = entry.AddRevision(
-            summary: command.Summary,
+            summary: summary,
             snapshotJson: snapshotJson,
             contentHash: contentHash,
             authorId: command.UserId,
@@ -110,6 +132,8 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: false
         );
+        // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
+        if (command.SupersedesRevisionId is not null) revision.Lock(command.UserId);
 
         // Chỉ cập nhật current state khi revision mới là bản có hiệu lực ở chương mới nhất.
         // Bản sửa hồi tố (effective từ chương cũ hơn) chỉ được lưu thành version, current state giữ nguyên.
@@ -151,9 +175,15 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             AssociatedChapterId: revision.AssociatedChapterId,
             EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
             IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt
+            CreatedAt: revision.CreatedAt,
+            IsLocked: revision.IsLocked,
+            LockedAt: revision.LockedAt,
+            LockedById: revision.LockedById
         ));
     }
+
+    // Summary là varchar(500): chừa chỗ cho tiền tố "Thay thế bản khoá vN: "
+    private const int MaxSupersedeReasonLength = 400;
 
     private static bool IsVersionUniqueViolation(DbUpdateException ex)
         => ex.InnerException?.Message.Contains("ix_bible_entry_revisions_bible_entry_id_version", StringComparison.OrdinalIgnoreCase) == true;

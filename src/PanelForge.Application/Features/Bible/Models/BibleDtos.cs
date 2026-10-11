@@ -73,3 +73,16 @@ public sealed record AddBibleEntryRevisionRequest(
     // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
     int? ExpectedVersionNumber = null
 );
+
+/// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do; chương hiệu lực lấy theo bản bị thay.</summary>
+public sealed record SupersedeBibleEntryRevisionRequest(
+    string Reason,
+    string Name,
+    string Description,
+    string? Subtitle = null,
+    string? DetailsJson = null,
+    string? ReferenceImageUrl = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true,
+    int? ExpectedVersionNumber = null
+);

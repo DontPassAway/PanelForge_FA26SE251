@@ -51,7 +51,8 @@ public sealed class RunConsistencyCheckCommandHandler
             .Select(b => b.Id).ToListAsync(ct);
         var entries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
             .Select(e => new CheckEntry(e.Id, e.Name, e.Category, e.IsActive,
-                e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min()))
+                e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min(),
+                e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min()))
             .ToDictionaryAsync(e => e.Id, ct);
 
         var rules = await _db.ConsistencyRules.AsNoTracking().Where(r => r.SeriesId == chapter.SeriesId && r.IsEnabled)
