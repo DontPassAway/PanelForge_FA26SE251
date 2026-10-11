@@ -32,9 +32,11 @@ public sealed class GetWorkspaceActiveSessionsQueryHandler
     public async Task<Result<IReadOnlyList<WorkspaceSessionDto>>> Handle(
         GetWorkspaceActiveSessionsQuery q, CancellationToken ct)
     {
-        var workspaceExists = await _db.StudioWorkspaces.AsNoTracking()
-            .AnyAsync(w => w.Id == q.WorkspaceId, ct);
-        if (!workspaceExists)
+        var workspace = await _db.StudioWorkspaces.AsNoTracking()
+            .Where(w => w.Id == q.WorkspaceId)
+            .Select(w => new { w.SessionIdleTimeoutMinutes })
+            .FirstOrDefaultAsync(ct);
+        if (workspace is null)
             return Result<IReadOnlyList<WorkspaceSessionDto>>.Failure("Workspace không tồn tại.", ResultErrorCodes.NotFound);
 
         var members = await _db.WorkspaceMembers.AsNoTracking()
@@ -46,8 +48,11 @@ public sealed class GetWorkspaceActiveSessionsQueryHandler
         var memberUserIds = members.Select(m => m.UserId).ToList();
 
         var now = DateTime.UtcNow;
+        // Phiên đã quá idle timeout không còn dùng được (AccessTokenGuard từ chối) nên không liệt kê; cùng giới hạn với GetWorkspaceUsage.
+        DateTime? idleCutoff = workspace.SessionIdleTimeoutMinutes is { } idle ? now.AddMinutes(-idle) : null;
         var activeTokens = await _db.RefreshTokens.AsNoTracking()
-            .Where(t => memberUserIds.Contains(t.UserId) && t.RevokedAt == null && t.ExpiresAt > now)
+            .Where(t => memberUserIds.Contains(t.UserId) && t.RevokedAt == null && t.ExpiresAt > now
+                        && (idleCutoff == null || t.LastActiveAt > idleCutoff))
             .OrderByDescending(t => t.LastActiveAt)
             .ToListAsync(ct);
 

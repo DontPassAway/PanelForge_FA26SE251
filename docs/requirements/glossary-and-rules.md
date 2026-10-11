@@ -51,7 +51,7 @@
 | **External Reviewer** | Người xem thử qua link; nhà xuất bản (publisher) là một External Reviewer | Xem chương đã khóa và phản hồi ở cấp chương, trang hoặc panel, gắn đúng phiên bản đang xem; không có tài khoản, không có quyền sản xuất |
 | **Public Reader** | Độc giả công khai (tài khoản Reader trên app) | Đọc chương đã phát hành. **Tính năng thêm ngoài phạm vi đăng ký V1.2**, không thuộc nghiệm thu (xem BR-24) |
 | **CanCreateStudio** | Quyền do Admin cấp cho một User | Cho phép User tạo Studio; người tạo tự thành Producer |
-| **Session policy** | Luật phiên đăng nhập của Workspace do Admin đặt: thời gian sống, idle timeout, số phiên đồng thời | Được kiểm khi đăng nhập hoặc làm mới token; user thuộc nhiều Workspace chịu giá trị chặt nhất |
+| **Session policy** | Luật phiên đăng nhập của Workspace do Admin đặt: thời gian sống, idle timeout, số phiên đồng thời | Được kiểm khi đăng nhập hoặc làm mới token; idle timeout còn được kiểm ở mỗi request (đo từ lần hoạt động cuối của phiên, sai số ≤ 30 giây); user thuộc nhiều Workspace chịu giá trị chặt nhất |
 | **RBAC / ABAC** | Phân quyền theo role / theo thuộc tính (assignment, trạng thái tài nguyên) | Kiểm quyền chi tiết ở server |
 
 ## 1.3 Sản xuất và quy trình

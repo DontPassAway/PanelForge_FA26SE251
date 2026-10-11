@@ -93,7 +93,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
             if (entry.State is EntityState.Detached or EntityState.Unchanged)
                 continue;
 
-            if (entry.Entity is not (AuditLog or AiUsageRecord))
+            if (entry.Entity is not (AuditLog or AiUsageRecord) && !IsSessionHeartbeat(entry))
             {
                 var action = entry.State switch
                 {
@@ -166,6 +166,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
 
         return await base.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>Phiên chỉ cập nhật LastActiveAt (mỗi request, xem AccessTokenGuard) là nhịp hoạt động, không phải thao tác nghiệp vụ: không ghi audit.</summary>
+    private static bool IsSessionHeartbeat(EntityEntry entry)
+        => entry is { Entity: RefreshToken, State: EntityState.Modified }
+           && entry.Properties.Where(p => p.IsModified).All(p => p.Metadata.Name == nameof(RefreshToken.LastActiveAt));
 
     /// <summary>WorkspaceId của bản ghi audit: cột WorkspaceId, chính Workspace, hoặc suy ra qua SeriesId.</summary>
     private static Guid? ResolveWorkspaceId(EntityEntry entry, IReadOnlyDictionary<Guid, Guid> workspaceBySeries)

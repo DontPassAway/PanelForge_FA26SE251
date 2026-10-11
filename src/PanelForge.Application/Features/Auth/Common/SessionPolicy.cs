@@ -6,9 +6,9 @@ namespace PanelForge.Application.Features.Auth.Common;
 /// <summary>
 /// Session policy hiệu lực của một user (V1.2): Administrator đặt theo Workspace, user thuộc nhiều Workspace chịu giá trị CHẶT NHẤT
 /// (nhỏ nhất) trong các Workspace đó. Không thuộc Workspace nào (kể cả Admin) = không bị giới hạn thêm ngoài hạn refresh token mặc định.
-/// Idle timeout chỉ kiểm tra khi làm mới token nên độ chính xác bằng hạn access token (JWT).
+/// Idle timeout đo từ <c>RefreshToken.LastActiveAt</c>, được kiểm và cập nhật ở mỗi request (API AccessTokenGuard) và khi làm mới token.
 /// </summary>
-internal sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, int? MaxSessions)
+public sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, int? MaxSessions)
 {
     public static async Task<SessionPolicy> ForUserAsync(IPanelForgeDbContext db, Guid userId, CancellationToken ct)
     {
@@ -40,9 +40,9 @@ internal sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, 
     public bool IsSessionExpired(DateTime sessionStartedAt, DateTime now)
         => Lifetime.HasValue && now >= sessionStartedAt.Add(Lifetime.Value);
 
-    /// <param name="lastIssuedAt">Lúc phát token hiện tại = lần làm mới gần nhất của phiên.</param>
-    public bool IsIdle(DateTime lastIssuedAt, DateTime now)
-        => IdleTimeout.HasValue && now - lastIssuedAt > IdleTimeout.Value;
+    /// <param name="lastActiveAt">Lần cuối phiên có request (<c>RefreshToken.LastActiveAt</c>).</param>
+    public bool IsIdle(DateTime lastActiveAt, DateTime now)
+        => IdleTimeout.HasValue && now - lastActiveAt > IdleTimeout.Value;
 
     /// <summary>
     /// Phiên mới sắp được thêm: nếu vượt số phiên đồng thời thì thu hồi các phiên CŨ NHẤT cho vừa giới hạn.
@@ -57,7 +57,7 @@ internal sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, 
             .ToListAsync(ct);
 
         var sessions = tokens
-            .Where(t => !IsSessionExpired(t.SessionStartedAt, now) && !IsIdle(t.CreatedAt, now))
+            .Where(t => !IsSessionExpired(t.SessionStartedAt, now) && !IsIdle(t.LastActiveAt, now))
             .GroupBy(t => t.SessionId)
             .OrderBy(g => g.Min(t => t.SessionStartedAt))
             .ToList();
