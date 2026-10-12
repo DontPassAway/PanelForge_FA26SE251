@@ -28,5 +28,9 @@ public enum NotificationType
     /// <summary>Gửi người nhận khi việc chưa xong và hạn còn trong khoảng nhắc (mặc định 24 giờ). BR-14, UC-14.</summary>
     AssignmentDueSoon = 12,
     /// <summary>Gửi người nhận một lần khi việc chưa xong đã quá hạn.</summary>
-    AssignmentOverdue = 13
+    AssignmentOverdue = 13,
+    /// <summary>Gửi người chịu trách nhiệm khi yêu cầu sửa chưa xong và hạn còn trong khoảng nhắc. UC-14, CF3.</summary>
+    ChangeRequestDueSoon = 14,
+    /// <summary>Gửi người chịu trách nhiệm một lần khi yêu cầu sửa chưa xong đã quá hạn. UC-14, CF3.</summary>
+    ChangeRequestOverdue = 15
 }

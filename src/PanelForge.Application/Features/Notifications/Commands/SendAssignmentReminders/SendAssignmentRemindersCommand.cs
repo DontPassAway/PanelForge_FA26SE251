@@ -48,6 +48,24 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
             created++;
         }
 
+        // ChangeRequest: nhắc người chịu trách nhiệm khi yêu cầu sửa sắp đến hạn hoặc đã quá hạn (UC-14, CF3)
+        var crCandidates = await _db.ChangeRequests.AsNoTracking()
+            .Where(cr => cr.DueDate != null && cr.DueDate <= upper && cr.DueDate >= lower && cr.Status == ChangeRequestStatus.Open &&
+                         _db.Chapters.Any(c => c.Id == cr.ChapterId && c.Status == ChapterStatus.InProduction))
+            .ToListAsync(ct);
+
+        foreach (var cr in crCandidates)
+        {
+            var note = cr.DueDate < now ? AssignmentNotifications.ChangeRequestOverdue(cr) : AssignmentNotifications.ChangeRequestDueSoon(cr);
+
+            var alreadySent = await _db.Notifications.AnyAsync(n =>
+                n.AssignmentId == cr.AssignmentId && n.UserId == cr.ResponsibleUserId && n.Type == note.Type && n.Message == note.Message, ct);
+            if (alreadySent) continue;
+
+            _db.Notifications.Add(note);
+            created++;
+        }
+
         // ponytail: hai instance Backend chạy cùng lúc có thể gửi trùng một lần ở cùng chu kỳ; chấp nhận được, cần thì thêm cột reminded_at + unique index
         if (created > 0) await _db.SaveChangesAsync(ct);
         return created;
