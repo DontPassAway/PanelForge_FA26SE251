@@ -20,6 +20,7 @@ using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissio
 using PanelForge.Application.Features.Assignments.Queries.GetChangeRequestsByChapter;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentsByChapter;
+using PanelForge.Application.Features.Assignments.Queries.GetMyWorkspaceAssignments;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
 using PanelForge.Application.Features.Progress.Queries.GetStageProgressByChapter;
 using PanelForge.Domain.Enums;
@@ -62,6 +63,18 @@ public sealed class AssignmentsController : ControllerBase
         Guid chapterId, [FromQuery] Guid? assigneeUserId, [FromQuery] AssignmentStatus? status, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAssignmentsByChapterQuery(chapterId, assigneeUserId, status), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/workspaces/{workspaceId}/my-assignments — danh sách việc cá nhân toàn bộ Studio (Cross-Chapter Worklist).</summary>
+    [HttpGet("api/workspaces/{workspaceId:guid}/my-assignments")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<WorkspaceAssignmentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyWorkspaceAssignments(
+        Guid workspaceId, [FromQuery] AssignmentStatus? status, [FromQuery] Guid? seriesId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetMyWorkspaceAssignmentsQuery(
+            workspaceId, GetCurrentUserId(), status, seriesId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

@@ -32,6 +32,35 @@ public sealed record AssignmentDto(
         a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds());
 }
 
+/// <summary>DTO dành cho màn hình làm việc cá nhân xuyên suốt toàn bộ Studio (Cross-Chapter Worklist).</summary>
+public sealed record WorkspaceAssignmentDto(
+    Guid Id,
+    Guid SeriesId,
+    string SeriesTitle,
+    Guid ChapterId,
+    decimal ChapterNumber,
+    string? ChapterTitle,
+    Guid PipelineStageId,
+    string StageName,
+    int StageOrder,
+    string? StageColorCode,
+    WorkflowEntityType EntityType,
+    Guid TargetEntityId,
+    Guid AssigneeUserId,
+    WorkspaceRole AssignedRole,
+    string Brief,
+    string? ReferenceNotes,
+    DateTime? DueDate,
+    AssignmentPriority Priority,
+    AssignmentStatus Status,
+    Guid? DependsOnAssignmentId,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    string? LastFeedbackComment,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
+
 /// <summary>TargetEntityId bỏ trống khi EntityType = Chapter (mặc định là chính Chapter trên route).</summary>
 public sealed record CreateAssignmentRequest(
     WorkflowEntityType EntityType,
