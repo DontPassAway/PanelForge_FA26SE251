@@ -68,6 +68,9 @@ internal static class StageProgressRules
         {
             if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
 
+            if (panels.Any(p => p.ReadingOrder <= 0))
+                return "Các panel cần có thứ tự đọc (reading order) hợp lệ trước khi nộp.";
+
             // CF2 mục "Điều kiện nộp": artwork đã tải lên. Sau khi bị trả về, phải có bản MỚI hơn lần từ chối (BR-01).
             var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
             var rejectedAt = await db.Submissions.AsNoTracking()

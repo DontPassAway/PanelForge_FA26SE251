@@ -482,6 +482,22 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task Submit_ArtistPageWithInvalidReadingOrder_IsConflict()
+    {
+        var f = new Fixture();
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        var p = f.AddPanel(f.Page, 1);
+        typeof(Panel).GetProperty(nameof(Panel.ReadingOrder))!.SetValue(p, 0);
+        await Start(f, a, f.ArtistId);
+
+        var result = await Submit(f, a);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("thứ tự đọc");
+        a.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
     public async Task Submit_WriterChapterNeedsScriptLines()
     {
         var f = new Fixture();
