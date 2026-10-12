@@ -20,6 +20,7 @@ public class WorkspaceSessionTests
     {
         var workspaceId = Guid.NewGuid();
         var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid(), 1000);
+        workspace.SetSessionPolicy(null, idleTimeoutMinutes: 30, null);
         typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, workspaceId);
 
         var memberId = Guid.NewGuid();
@@ -48,13 +49,18 @@ public class WorkspaceSessionTests
             memberId, "hash-2", DateTime.UtcNow.AddHours(2), Guid.NewGuid());
         revokedToken.Revoke();
 
+        // Phiên bỏ quên quá idle timeout 30': không còn dùng được nên không liệt kê.
+        var idleToken = RefreshToken.Create(
+            memberId, "hash-5", DateTime.UtcNow.AddHours(2), Guid.NewGuid(), lastActiveAt: DateTime.UtcNow.AddMinutes(-31));
+
         var nonMemberToken = RefreshToken.Create(
             nonMemberId, "hash-3", DateTime.UtcNow.AddHours(2), Guid.NewGuid());
 
         var db = new Mock<IPanelForgeDbContext>();
         db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member }));
-        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<RefreshToken> { activeToken, otherSessionToken, revokedToken, nonMemberToken }));
+        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<RefreshToken> { activeToken, otherSessionToken, revokedToken, idleToken, nonMemberToken }));
 
         var handler = new GetWorkspaceActiveSessionsQueryHandler(db.Object);
         var result = await handler.Handle(new GetWorkspaceActiveSessionsQuery(workspaceId, session1Id), CancellationToken.None);

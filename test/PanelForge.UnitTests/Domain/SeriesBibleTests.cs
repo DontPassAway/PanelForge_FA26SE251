@@ -156,4 +156,22 @@ public class SeriesBibleTests
         entry.Priority.Should().Be(BiblePriority.StrictCheck);
         entry.StrictCheck.Should().BeTrue();
     }
+
+    [Fact]
+    public void EffectiveRevisionAt_CanonOnly_UsesLatestLockedCharacterSheet_ButNotForOtherCategories()
+    {
+        var hero = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Desc");
+        var v1 = hero.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        hero.AddRevision("v2 nháp", "{}", "h2", effectiveFromChapterNumber: 3);
+        var shop = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Location, "SHOP", "Tiệm", "Desc");
+        shop.AddRevision("v1", "{}", "h3", effectiveFromChapterNumber: 1, isInitialVersion: true);
+
+        hero.EffectiveRevisionAt(5, canonOnly: true).Should().BeNull("chưa khoá bản nào");
+        v1.Lock(Guid.NewGuid());
+
+        hero.EffectiveRevisionAt(5)!.VersionNumber.Should().Be(2, "màn hình vẫn thấy bản nháp mới nhất");
+        hero.EffectiveRevisionAt(5, canonOnly: true)!.VersionNumber.Should().Be(1, "AI chỉ dùng bản đã khoá");
+        hero.EffectiveRevisionAt(0).Should().BeNull();
+        shop.EffectiveRevisionAt(1, canonOnly: true).Should().NotBeNull("chỉ Nhân vật mới cần khoá");
+    }
 }

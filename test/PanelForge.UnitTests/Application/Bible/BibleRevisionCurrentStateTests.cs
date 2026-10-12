@@ -88,9 +88,7 @@ public class BibleRevisionCurrentStateTests
     {
         await AddRevision("Hero ch10", 10);
         await AddRevision("Hero ch2 (corrected)", 2);
-        // Canon lock: character sheet chỉ có hiệu lực ở at-chapter khi revision đã khoá.
-        foreach (var revision in _entry.Revisions) revision.Lock(Guid.NewGuid());
-
+        // Màn hình Bible theo chương hiện cả bản chưa khoá (chỉ AI mới giới hạn ở bản khoá)
         var queryHandler = new GetBibleEntriesAtChapterQueryHandler(_dbContextMock.Object);
 
         var atChapter1 = await queryHandler.Handle(new GetBibleEntriesAtChapterQuery(_seriesId, 1), CancellationToken.None);
@@ -100,6 +98,7 @@ public class BibleRevisionCurrentStateTests
         atChapter1.Value!.Single().Name.Should().Be("Hero ch1");
         atChapter5.Value!.Single().Name.Should().Be("Hero ch2 (corrected)");
         atChapter12.Value!.Single().Name.Should().Be("Hero ch10");
+        atChapter12.Value!.Single().EffectiveRevision!.IsLocked.Should().BeFalse();
     }
 
     [Fact]

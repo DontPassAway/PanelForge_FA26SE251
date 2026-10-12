@@ -53,6 +53,26 @@ public class ChapterCommandTests
         result.Value.Title.Should().Be("Chapter 1: The Beginning");
     }
 
+    [Theory]
+    [InlineData("  An tìm thấy chìa khoá bạc.  ", "An tìm thấy chìa khoá bạc.")]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public async Task CreateChapter_WithOutline_SavesItTrimmed_BlankMeansNone(string? outline, string? expected)
+    {
+        var seriesId = Guid.NewGuid();
+        var series = Series.Create(Guid.NewGuid(), "Manga", ReadingDirection.RightToLeft);
+        typeof(Series).GetProperty("Id")!.SetValue(series, seriesId);
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var result = await new CreateChapterCommandHandler(_dbContextMock.Object).Handle(
+            new CreateChapterCommand(seriesId, Guid.NewGuid(), 1, Outline: outline), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Value!.Outline.Should().Be(expected);
+    }
+
     [Fact]
     public async Task CreateChapter_WhenNumberDuplicate_ShouldReturnFailure()
     {

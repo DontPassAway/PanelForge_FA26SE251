@@ -118,6 +118,18 @@ public class BibleEntry : BaseEntity
     }
 
     /// <summary>
+    /// Revision có hiệu lực tại một chương (BR-15): EffectiveFromChapterNumber ≤ chương, lớn nhất rồi đến VersionNumber lớn nhất.
+    /// <paramref name="canonOnly"/>: với Nhân vật chỉ tính revision đã được Producer khoá (V1.2, nguồn chuẩn cho AI).
+    /// </summary>
+    public BibleEntryRevision? EffectiveRevisionAt(int chapterNumber, bool canonOnly = false)
+        => Revisions
+            .Where(r => r.EffectiveFromChapterNumber <= chapterNumber)
+            .Where(r => !canonOnly || Category != BibleEntryCategory.Character || r.IsLocked)
+            .OrderByDescending(r => r.EffectiveFromChapterNumber)
+            .ThenByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
+    /// <summary>
     /// Revision đang có hiệu lực ở chương mới nhất (BR-15): EffectiveFromChapterNumber lớn nhất,
     /// cùng chương thì VersionNumber lớn nhất. Trạng thái hiện tại (Name, Description, ...) của entry
     /// phải luôn khớp với revision này; một bản sửa hồi tố (effective từ chương cũ hơn) không được ghi đè nó.

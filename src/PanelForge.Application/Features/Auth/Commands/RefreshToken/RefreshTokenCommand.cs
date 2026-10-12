@@ -57,7 +57,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         // coi là "token đã thu hồi bị lộ" và kéo theo thu hồi các phiên khác của user.
         var now = DateTime.UtcNow;
         var policy = await SessionPolicy.ForUserAsync(_dbContext, stored.UserId, cancellationToken);
-        if (policy.IsSessionExpired(stored.SessionStartedAt, now) || policy.IsIdle(stored.CreatedAt, now))
+        if (policy.IsSessionExpired(stored.SessionStartedAt, now) || policy.IsIdle(stored.LastActiveAt, now))
             return Unauthorized();
 
         stored.Revoke();

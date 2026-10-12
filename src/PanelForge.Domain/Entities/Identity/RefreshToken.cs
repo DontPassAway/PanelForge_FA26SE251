@@ -58,4 +58,10 @@ public class RefreshToken : BaseEntity
     public bool IsRevoked => RevokedAt.HasValue;
 
     public void Revoke() => RevokedAt ??= DateTime.UtcNow;
+
+    /// <summary>Ghi nhận phiên vừa có request (đo idle timeout theo hoạt động thật, không theo lần làm mới token).</summary>
+    public void MarkActive(DateTime now)
+    {
+        if (now > LastActiveAt) LastActiveAt = now;
+    }
 }

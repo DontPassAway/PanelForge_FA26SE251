@@ -14,7 +14,7 @@ internal static class AiSnapshotBuilder
 
     /// <summary>
     /// Chụp context của run. Mọi loại workflow (trừ Producer): Bible hiệu lực tại Chapter (BR-15: revision có EffectiveFromChapterNumber ≤ chương
-    /// hiện tại, lớn nhất rồi đến VersionNumber lớn nhất) + revision IDs + script nền của Scene. Thêm theo loại: layout đã Accept (Editor/Artist/Letterer),
+    /// hiện tại, lớn nhất rồi đến VersionNumber lớn nhất; Nhân vật chỉ lấy bản đã khoá) + revision IDs + script nền của Scene. Thêm theo loại: layout đã Accept (Editor/Artist/Letterer),
     /// panel + style rules (Artist), thoại + panel + bubble + giới hạn chữ ước lượng (Letterer), snapshot tiến độ do code tính (Producer).
     /// Trả null nếu Series chưa có Bible mà workflow cần Bible.
     /// </summary>
@@ -71,11 +71,8 @@ internal static class AiSnapshotBuilder
         var entries = new List<BibleEntryContext>();
         foreach (var entry in bible.Entries.Where(e => e.IsActive).OrderBy(e => e.Category).ThenBy(e => e.Code))
         {
-            var rev = entry.Revisions
-                .Where(r => r.EffectiveFromChapterNumber <= chapterInt)
-                .OrderByDescending(r => r.EffectiveFromChapterNumber)
-                .ThenByDescending(r => r.VersionNumber)
-                .FirstOrDefault();
+            // V1.2: AI chỉ dựa trên character sheet đã được Producer khoá; nhân vật chưa khoá bị bỏ khỏi context.
+            var rev = entry.EffectiveRevisionAt(chapterInt, canonOnly: true);
             if (rev is null) continue;
 
             var (name, description) = (entry.Name, entry.Description);

@@ -34,15 +34,8 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
 
         foreach (var entry in bible.Entries.Where(e => e.IsActive).OrderBy(e => e.Category).ThenBy(e => e.Name))
         {
-            // Lấy revision có EffectiveFromChapterNumber <= ChapterNumber của request (BR-15)
-            // Lấy revision có EffectiveFromChapterNumber lớn nhất, và VersionNumber lớn nhất
-            // Nếu là Character thì BẮT BUỘC revision phải được khoá (CanonLocked)
-            var effectiveRev = entry.Revisions
-                .Where(r => r.EffectiveFromChapterNumber <= request.ChapterNumber)
-                .Where(r => entry.Category != PanelForge.Domain.Enums.BibleEntryCategory.Character || r.IsLocked)
-                .OrderByDescending(r => r.EffectiveFromChapterNumber)
-                .ThenByDescending(r => r.VersionNumber)
-                .FirstOrDefault();
+            // BR-15. Màn hình hiện cả nhân vật chưa khoá (DTO có IsLocked); chỉ AI mới bị giới hạn ở bản khoá (AiSnapshotBuilder).
+            var effectiveRev = entry.EffectiveRevisionAt(request.ChapterNumber);
 
             // Nếu mục này chỉ xuất hiện từ chương sau (EffectiveFrom > ChapterNumber) và không có revision nào trước đó thì bỏ qua tại chapter này
             if (effectiveRev == null)

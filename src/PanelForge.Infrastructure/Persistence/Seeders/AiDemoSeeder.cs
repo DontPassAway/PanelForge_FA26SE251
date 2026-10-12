@@ -94,7 +94,9 @@ public static class AiDemoSeeder
         var entry = bible.AddEntry(category, code, name, description);
         var snapshot = JsonSerializer.Serialize(new { Name = name, Description = description });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
-        entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, effectiveFromChapterNumber: 1, isInitialVersion: true);
+        var revision = entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, effectiveFromChapterNumber: 1, isInitialVersion: true);
+        // AI chỉ dùng character sheet đã khoá (V1.2): khoá sẵn để demo có nhân vật trong context
+        if (category == BibleEntryCategory.Character) revision.Lock(ProducerUser);
     }
 
     private static void SetId(BaseEntity entity, Guid id) =>

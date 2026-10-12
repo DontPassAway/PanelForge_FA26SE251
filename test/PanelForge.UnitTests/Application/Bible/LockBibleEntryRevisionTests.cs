@@ -122,4 +122,51 @@ public class LockBibleEntryRevisionTests
         _heroV1.SnapshotJson.Should().Be("{}");
         _hero.Revisions.Should().HaveCount(2);
     }
+
+    private Task<Result<PanelForge.Application.Features.Bible.Models.BibleEntryRevisionDto>> Supersede(
+        BibleEntryRevision revision, string? reason) =>
+        new AddBibleEntryRevisionCommandHandler(_db.Object).Handle(
+            new AddBibleEntryRevisionCommand(_seriesId, _hero.Id, _producerId, reason ?? "", "Hero", "Anh hùng (sửa canon)",
+                SupersedesRevisionId: revision.Id, SupersedeReason: reason), CancellationToken.None);
+
+    [Fact]
+    public async Task Supersede_LockedRevision_AddsNewLockedCanonAtTheSameChapter_AndKeepsTheOldOneIntact()
+    {
+        await Lock(_hero, _heroV1);
+        var oldLockedAt = _heroV1.LockedAt;
+
+        var result = await Supersede(_heroV1, "Sai màu tóc trong bản khoá");
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Value!.VersionNumber.Should().Be(2);
+        result.Value.EffectiveFromChapterNumber.Should().Be(1);
+        result.Value.IsLocked.Should().BeTrue();
+        result.Value.LockedById.Should().Be(_producerId);
+        result.Value.Summary.Should().Contain("v1").And.Contain("Sai màu tóc trong bản khoá");
+        _heroV1.LockedAt.Should().Be(oldLockedAt, "bản khoá cũ không bị mở khoá");
+        _heroV1.SnapshotJson.Should().Be("{}");
+        _hero.EffectiveRevisionAt(1, canonOnly: true)!.VersionNumber.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Supersede_WithoutReason_IsRejected_AndNotSaved()
+    {
+        await Lock(_hero, _heroV1);
+        _db.Invocations.Clear();
+
+        var result = await Supersede(_heroV1, "  ");
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        _hero.Revisions.Should().HaveCount(1);
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Supersede_UnlockedRevision_ReturnsConflict()
+    {
+        var result = await Supersede(_heroV1, "Không cần thay");
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _hero.Revisions.Should().HaveCount(1);
+    }
 }

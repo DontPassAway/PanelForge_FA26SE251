@@ -35,7 +35,7 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
     {
         var workspace = await _db.StudioWorkspaces.AsNoTracking()
             .Where(w => w.Id == q.WorkspaceId)
-            .Select(w => new { w.StorageQuotaBytes, w.UsedStorageBytes, w.MaxConcurrentSessions })
+            .Select(w => new { w.StorageQuotaBytes, w.UsedStorageBytes, w.MaxConcurrentSessions, w.SessionIdleTimeoutMinutes })
             .FirstOrDefaultAsync(ct);
         if (workspace is null)
             return Result<WorkspaceUsageDto>.Failure("Workspace không tồn tại.", ResultErrorCodes.NotFound);
@@ -51,8 +51,12 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
             .ToListAsync(ct);
 
         var now = DateTime.UtcNow;
+        // shortcut: lọc idle theo policy của Workspace này; user có policy chặt hơn ở Workspace khác có thể bị đếm dư
+        // tới khi request kế tiếp của họ bị từ chối. Đổi sang SessionPolicy.ForUserAsync từng user nếu cần chính xác tuyệt đối.
+        DateTime? idleCutoff = workspace.SessionIdleTimeoutMinutes is { } idle ? now.AddMinutes(-idle) : null;
         var activeTokens = await _db.RefreshTokens.AsNoTracking()
-            .Where(t => memberUserIds.Contains(t.UserId) && t.RevokedAt == null && t.ExpiresAt > now)
+            .Where(t => memberUserIds.Contains(t.UserId) && t.RevokedAt == null && t.ExpiresAt > now
+                        && (idleCutoff == null || t.LastActiveAt > idleCutoff))
             .Select(t => new { t.UserId, t.SessionId })
             .ToListAsync(ct);
 

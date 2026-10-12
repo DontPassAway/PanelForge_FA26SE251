@@ -58,12 +58,16 @@ public class WorkspaceUsageTests
             memberId, "hash-1", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), deviceName: "Chrome (Windows)");
         var token2 = PanelForge.Domain.Entities.Identity.RefreshToken.Create(
             memberId, "hash-2", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), deviceName: "Safari (iOS)");
+        // Phiên bỏ quên quá idle 30': refresh token chưa hết hạn nhưng không còn dùng được → không tính
+        var idleToken = PanelForge.Domain.Entities.Identity.RefreshToken.Create(
+            memberId, "hash-3", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), lastActiveAt: DateTime.UtcNow.AddMinutes(-45));
 
         var db = new Mock<IPanelForgeDbContext>();
         db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceAiConfig>()));
         db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember> { member }));
-        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.RefreshToken> { token1, token2 }));
+        db.Setup(d => d.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<PanelForge.Domain.Entities.Identity.RefreshToken> { token1, token2, idleToken }));
 
         var handler = new GetWorkspaceUsageQueryHandler(db.Object);
         var result = await handler.Handle(new GetWorkspaceUsageQuery(id), CancellationToken.None);
