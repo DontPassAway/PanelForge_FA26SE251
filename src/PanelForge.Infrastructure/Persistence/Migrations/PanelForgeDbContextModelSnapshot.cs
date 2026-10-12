@@ -2173,15 +2173,31 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("DeviceName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("device_name");
+
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("expires_at");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("ip_address");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<DateTime>("LastActiveAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_active_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamptz")
@@ -2195,27 +2211,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("session_started_at");
 
-                    b.Property<string>("DeviceName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("device_name");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("ip_address");
-
-                    b.Property<string>("UserAgent")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("user_agent");
-
-                    b.Property<DateTime>("LastActiveAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("last_active_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasColumnType("varchar(64)")
@@ -2228,6 +2223,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -3001,6 +3001,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DependsOnAssignmentId")
                         .HasColumnType("uuid")
                         .HasColumnName("depends_on_assignment_id");
+
+                    b.Property<string>("DependsOnAssignmentIdsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("depends_on_assignment_ids_json");
 
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamptz")
