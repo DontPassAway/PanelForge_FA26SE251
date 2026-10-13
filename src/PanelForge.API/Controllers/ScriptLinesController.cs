@@ -6,6 +6,7 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
+using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Enums;
@@ -59,6 +60,18 @@ public sealed class ScriptLinesController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteScriptLineCommand(chapterId, lineId, GetCurrentUserId(), expectedChapterVersion), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>PUT /api/chapters/{chapterId}/scenes/{sceneId}/script-lines/reorder — đổi thứ tự các dòng trong Scene (DnD).</summary>
+    [HttpPut("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-lines/reorder")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reorder(
+        Guid chapterId, Guid sceneId, [FromBody] ReorderScriptLinesRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ReorderScriptLinesCommand(
+            chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion), ct);
+        return result.IsSuccess ? Ok(new { message = "Cập nhật thứ tự dòng kịch bản thành công." }) : Error(result);
     }
 
     private IActionResult Error<T>(Result<T> result) => result.ErrorCode switch

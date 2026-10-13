@@ -131,4 +131,46 @@ public class AssignmentReminderTests
 
         (await RunAsync()).Should().Be(0);
     }
+
+    [Fact]
+    public async Task ChangeRequest_DueWithinLead_NotifiesResponsibleUserOnce()
+    {
+        var cr = ChangeRequest.Create(Guid.NewGuid(), _chapter.Id, null, _artist, Guid.NewGuid(),
+            "Vẽ lại mắt nhân vật", dueDate: Now.AddHours(5));
+        _db.ChangeRequests.Add(cr);
+        await _db.SaveChangesAsync();
+
+        (await RunAsync()).Should().Be(1);
+        (await RunAsync()).Should().Be(0, "đã nhắc cho hạn yêu cầu sửa này rồi");
+
+        _db.Notifications.Should().ContainSingle(n =>
+            n.UserId == _artist && n.AssignmentId == cr.AssignmentId && n.Type == NotificationType.ChangeRequestDueSoon && n.ChapterId == _chapter.Id);
+    }
+
+    [Fact]
+    public async Task ChangeRequest_Overdue_NotifiesResponsibleUserOnce()
+    {
+        var cr = ChangeRequest.Create(Guid.NewGuid(), _chapter.Id, null, _artist, Guid.NewGuid(),
+            "Chỉnh sửa bubble thoại trang 3", dueDate: Now.AddHours(-4));
+        _db.ChangeRequests.Add(cr);
+        await _db.SaveChangesAsync();
+
+        (await RunAsync()).Should().Be(1);
+        (await RunAsync()).Should().Be(0);
+
+        _db.Notifications.Should().ContainSingle(n =>
+            n.UserId == _artist && n.AssignmentId == cr.AssignmentId && n.Type == NotificationType.ChangeRequestOverdue && n.ChapterId == _chapter.Id);
+    }
+
+    [Fact]
+    public async Task ChangeRequest_ResolvedOrVerified_IsNotReminded()
+    {
+        var cr = ChangeRequest.Create(Guid.NewGuid(), _chapter.Id, null, _artist, Guid.NewGuid(),
+            "Sửa màu nền", dueDate: Now.AddHours(-2));
+        cr.Resolve("Đã đổi sang màu xanh");
+        _db.ChangeRequests.Add(cr);
+        await _db.SaveChangesAsync();
+
+        (await RunAsync()).Should().Be(0);
+    }
 }

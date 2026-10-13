@@ -15,7 +15,8 @@ public sealed record StageBreakdownDto(
 public sealed record ChapterProgressDto(
     Guid ChapterId, decimal ChapterNumber, string? Title, ChapterStatus Status, DateOnly? TargetReleaseDate,
     int PageCount, int PanelCount, double PercentComplete, IReadOnlyList<StageBreakdownDto> Stages,
-    IReadOnlyDictionary<string, int> AssignmentsByStatus, int OverdueAssignments);
+    IReadOnlyDictionary<string, int> AssignmentsByStatus, int OverdueAssignments,
+    int OverdueChangeRequests = 0);
 
 public sealed record WorkloadDto(
     Guid UserId, string FullName, WorkspaceRole Role, int Open, int Overdue, int WaitingReview, int Done);
@@ -23,12 +24,17 @@ public sealed record WorkloadDto(
 public sealed record OverdueAssignmentDto(
     Guid AssignmentId, Guid ChapterId, Guid AssigneeUserId, string AssigneeName, AssignmentStatus Status, DateTime DueDate, string Brief);
 
+public sealed record OverdueChangeRequestDto(
+    Guid ChangeRequestId, Guid AssignmentId, Guid ChapterId, Guid ResponsibleUserId, string ResponsibleUserName,
+    ChangeRequestStatus Status, DateTime DueDate, string Description);
+
 /// <param name="Remaining">Số việc chưa Approved vào cuối ngày <paramref name="Date"/> (UTC).</param>
 public sealed record BurndownPointDto(DateOnly Date, int Remaining);
 
 public sealed record SeriesProgressDto(
     Guid SeriesId, DateTime GeneratedAt, IReadOnlyList<ChapterProgressDto> Chapters, IReadOnlyList<WorkloadDto> Workload,
-    IReadOnlyList<OverdueAssignmentDto> Overdue, IReadOnlyList<BurndownPointDto> Burndown);
+    IReadOnlyList<OverdueAssignmentDto> Overdue, IReadOnlyList<BurndownPointDto> Burndown,
+    IReadOnlyList<OverdueChangeRequestDto>? OverdueChangeRequests = null);
 
 /// <summary>
 /// UC-16: tổng hợp tiến độ của Series cho Producer: theo stage và Panel, khối lượng việc từng người, việc quá hạn, burndown.
@@ -70,11 +76,15 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var panelIds = panels.Select(p => p.Id).ToList();
         var progress = await _db.StageProgresses.AsNoTracking().Where(s => panelIds.Contains(s.PanelId)).ToListAsync(ct);
         var assignments = await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct);
+        var changeRequests = await _db.ChangeRequests.AsNoTracking()
+            .Where(cr => chapterIds.Contains(cr.ChapterId))
+            .ToListAsync(ct);
 
         var pageChapter = pages.ToDictionary(p => p.Id, p => p.ChapterId);
         var panelChapter = panels.ToDictionary(p => p.Id, p => pageChapter[p.PageId]);
 
         bool IsOverdue(Assignment a) => a.DueDate is { } due && due < now && a.Status != AssignmentStatus.Approved;
+        bool IsCrOverdue(ChangeRequest cr) => cr.DueDate is { } due && due < now && cr.Status == ChangeRequestStatus.Open;
 
         var chapterDtos = chapters.Select(c =>
         {
@@ -93,15 +103,19 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
                 : rows.Count(r => r.PipelineStageId == finalStageId && r.Status == StageProgressStatus.Approved);
             var percent = chapterPanels.Count == 0 ? 0 : Math.Round(100.0 * finalApproved / chapterPanels.Count, 1);
             var mine = assignments.Where(a => a.ChapterId == c.Id).ToList();
+            var chapterCrs = changeRequests.Where(cr => cr.ChapterId == c.Id).ToList();
 
             return new ChapterProgressDto(
                 c.Id, c.ChapterNumber, c.Title, c.Status, c.TargetReleaseDate,
                 pages.Count(p => p.ChapterId == c.Id), chapterPanels.Count, percent, breakdown,
                 mine.GroupBy(a => a.Status.ToString()).ToDictionary(g => g.Key, g => g.Count()),
-                mine.Count(IsOverdue));
+                mine.Count(IsOverdue),
+                chapterCrs.Count(IsCrOverdue));
         }).ToList();
 
-        var assigneeIds = assignments.Select(a => a.AssigneeUserId).Distinct().ToList();
+        var assigneeIds = assignments.Select(a => a.AssigneeUserId)
+            .Concat(changeRequests.Select(cr => cr.ResponsibleUserId))
+            .Distinct().ToList();
         var names = await _db.Users.AsNoTracking().Where(u => assigneeIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
@@ -116,6 +130,11 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var overdue = assignments.Where(IsOverdue).OrderBy(a => a.DueDate)
             .Select(a => new OverdueAssignmentDto(a.Id, a.ChapterId, a.AssigneeUserId,
                 names.GetValueOrDefault(a.AssigneeUserId, "?"), a.Status, a.DueDate!.Value, a.Brief)).ToList();
+
+        var overdueCrs = changeRequests.Where(IsCrOverdue).OrderBy(cr => cr.DueDate)
+            .Select(cr => new OverdueChangeRequestDto(
+                cr.Id, cr.AssignmentId, cr.ChapterId, cr.ResponsibleUserId,
+                names.GetValueOrDefault(cr.ResponsibleUserId, "?"), cr.Status, cr.DueDate!.Value, cr.Description)).ToList();
 
         // Burndown theo số việc: còn lại(ngày) = đã tạo đến ngày đó - đã Approved đến ngày đó (ngày UTC, tối đa 90 ngày gần nhất)
         var burndown = new List<BurndownPointDto>();
@@ -132,6 +151,6 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
             }
         }
 
-        return Result<SeriesProgressDto>.Success(new SeriesProgressDto(q.SeriesId, now, chapterDtos, workload, overdue, burndown));
+        return Result<SeriesProgressDto>.Success(new SeriesProgressDto(q.SeriesId, now, chapterDtos, workload, overdue, burndown, overdueCrs));
     }
 }

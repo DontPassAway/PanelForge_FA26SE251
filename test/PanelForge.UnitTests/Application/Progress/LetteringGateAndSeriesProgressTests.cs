@@ -144,4 +144,28 @@ public class LetteringGateAndSeriesProgressTests
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(PanelForge.Application.Common.ResultErrorCodes.NotFound);
     }
+
+    [Fact]
+    public async Task SeriesProgress_IncludesOverdueChangeRequests()
+    {
+        var artist = User.Create("chloe2@test.com", "Chloe Two", SystemRole.User);
+        _db.Users.Add(artist);
+        var asg = Assignment.Create(_series.Id, _chapter.Id, WorkflowEntityType.Page, _page.Id, Guid.NewGuid(), artist.Id, WorkspaceRole.Artist, "Vẽ");
+        var overdueCr = ChangeRequest.Create(asg.Id, _chapter.Id, null, artist.Id, Guid.NewGuid(), "Sửa màu mắt", dueDate: DateTime.UtcNow.AddDays(-1));
+        var futureCr = ChangeRequest.Create(asg.Id, _chapter.Id, null, artist.Id, Guid.NewGuid(), "Sửa tóc", dueDate: DateTime.UtcNow.AddDays(2));
+        _db.Assignments.Add(asg);
+        _db.ChangeRequests.AddRange(overdueCr, futureCr);
+        await _db.SaveChangesAsync();
+
+        var result = await new GetSeriesProgressQueryHandler(_db).Handle(new GetSeriesProgressQuery(_series.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.OverdueChangeRequests.Should().NotBeNull();
+        result.Value.OverdueChangeRequests!.Should().ContainSingle(cr =>
+            cr.ChangeRequestId == overdueCr.Id &&
+            cr.ResponsibleUserId == artist.Id &&
+            cr.ResponsibleUserName == "Chloe Two" &&
+            cr.Description == "Sửa màu mắt");
+        result.Value.Chapters.Single(c => c.ChapterId == _chapter.Id).OverdueChangeRequests.Should().Be(1);
+    }
 }

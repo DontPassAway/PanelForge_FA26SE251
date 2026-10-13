@@ -5,6 +5,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
+using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -260,5 +261,28 @@ public class ManualScriptLineTests
 
         r.ErrorCode.Should().Be(ResultErrorCodes.Validation);
         _db.ScriptLines.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReorderScriptLines_SuccessfullyUpdatesOrderAndRecordsRevision()
+    {
+        var line1 = ScriptLine.Create(_scene.Id, 1, "Thoại 1", null);
+        var line2 = ScriptLine.Create(_scene.Id, 2, "Thoại 2", null);
+        _db.ScriptLines.AddRange(line1, line2);
+        await _db.SaveChangesAsync();
+
+        var handler = new ReorderScriptLinesCommandHandler(_db, _auth.Object);
+        var items = new List<ReorderScriptLineItem>
+        {
+            new(line1.Id, 2),
+            new(line2.Id, 1)
+        };
+
+        var result = await handler.Handle(
+            new ReorderScriptLinesCommand(_chapter.Id, _scene.Id, _writer, items), default);
+
+        result.IsSuccess.Should().BeTrue();
+        line1.LineOrder.Should().Be(2);
+        line2.LineOrder.Should().Be(1);
     }
 }
