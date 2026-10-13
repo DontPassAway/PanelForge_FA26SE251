@@ -9,7 +9,8 @@ namespace PanelForge.Application.Features.Consistency.Common;
 public sealed record CheckLine(
     Guid Id, Guid SceneId, int SceneNumber, int LineOrder, string? Dialogue, string? StageDirection,
     Guid? SpeakerId, IReadOnlyList<Guid> LinkedEntryIds,
-    Guid? PanelId = null, int? PanelReadingOrder = null, int? PageNumber = null);
+    Guid? PanelId = null, int? PanelReadingOrder = null, int? PageNumber = null,
+    NarrationMode NarrationMode = NarrationMode.Present);
 
 public sealed record CheckKnownBy(string? Character, Guid? CharacterId, int FromChapter);
 
@@ -191,12 +192,20 @@ public static class ConsistencyChecker
                 else
                 {
                     // CHARACTER_AFTER_DEATH: nhân vật đã chết từ chương X vẫn xuất hiện hay nói
-                    if (speaker.DiesAtChapter is { } diesAt && chapterNumber > diesAt
-                        && !(speaker.RevivesAtChapter is { } revives && chapterNumber >= revives))
+                    // Ngoại lệ có chủ ý (Flashback / Dream / Imagination): không phạt vì là hồi tưởng quá khứ hoặc giấc mơ
+                    if (line.NarrationMode is not (NarrationMode.Flashback or NarrationMode.Dream or NarrationMode.Imagination))
                     {
-                        found.Add(new(CharacterAfterDeath, ConsistencyFindingSeverity.Blocking,
-                            $"{where}: nhân vật \"{speaker.Name}\" đã chết từ chương {diesAt}, không thể xuất hiện hay nói ở chương {chapterNumber}.",
-                            text, line.SceneId, line.Id, speakerId, null));
+                        if (speaker.DiesAtChapter is { } diesAt && chapterNumber > diesAt
+                            && !(speaker.RevivesAtChapter is { } revives && chapterNumber >= revives))
+                        {
+                            var sev = line.NarrationMode == NarrationMode.UnreliableNarrator
+                                ? ConsistencyFindingSeverity.Warning
+                                : ConsistencyFindingSeverity.Blocking;
+
+                            found.Add(new(CharacterAfterDeath, sev,
+                                $"{where}: nhân vật \"{speaker.Name}\" đã chết từ chương {diesAt}, không thể xuất hiện hay nói ở chương {chapterNumber}.",
+                                text, line.SceneId, line.Id, speakerId, null));
+                        }
                     }
                 }
             }
@@ -227,42 +236,59 @@ public static class ConsistencyChecker
                 if (!entries.TryGetValue(entryId, out var entry)) continue;
 
                 // PROP_NOT_BEFORE: Đạo cụ/sự kiện không được xuất hiện trước chương X
-                if (entry.AvailableFromChapter is { } notBefore && chapterNumber < notBefore)
+                // Ngoại lệ có chủ ý (Dream / Imagination): giấc mơ không làm đạo cụ thực sự xuất hiện trong mạch truyện
+                if (line.NarrationMode is not (NarrationMode.Dream or NarrationMode.Imagination))
                 {
-                    found.Add(new(PropNotBefore, ConsistencyFindingSeverity.Blocking,
-                        $"{where}: đạo cụ/sự kiện \"{entry.Name}\" không được xuất hiện trước chương {notBefore} (chương hiện tại: {chapterNumber}).",
-                        text, line.SceneId, line.Id, entryId, null));
+                    if (entry.AvailableFromChapter is { } notBefore && chapterNumber < notBefore)
+                    {
+                        var sev = line.NarrationMode == NarrationMode.UnreliableNarrator
+                            ? ConsistencyFindingSeverity.Warning
+                            : ConsistencyFindingSeverity.Blocking;
+
+                        found.Add(new(PropNotBefore, sev,
+                            $"{where}: đạo cụ/sự kiện \"{entry.Name}\" không được xuất hiện trước chương {notBefore} (chương hiện tại: {chapterNumber}).",
+                            text, line.SceneId, line.Id, entryId, null));
+                    }
                 }
 
                 // KNOWLEDGE_BEFORE_REVEAL: Nhân vật nhắc điều chưa được biết
-                if (line.SpeakerId is { } spkId && entries.TryGetValue(spkId, out var speaker))
+                // Ngoại lệ có chủ ý (Dream / Imagination / Lie / Rumor):
+                // Giấc mơ không làm nhân vật biết thật; Lời nói dối hoặc tin đồn là tuyên bố của nhân vật, không phải sự thật thế giới
+                if (line.NarrationMode is not (NarrationMode.Dream or NarrationMode.Imagination or NarrationMode.Lie or NarrationMode.Rumor))
                 {
-                    if (entry.KnownBy is { Count: > 0 } knownList)
+                    if (line.SpeakerId is { } spkId && entries.TryGetValue(spkId, out var speaker))
                     {
-                        var ruleForSpeaker = knownList.FirstOrDefault(k =>
-                            (k.CharacterId.HasValue && k.CharacterId == speaker.Id) ||
-                            (!string.IsNullOrWhiteSpace(k.Character) &&
-                             (string.Equals(k.Character, speaker.Name, StringComparison.OrdinalIgnoreCase) ||
-                              (!string.IsNullOrWhiteSpace(speaker.Code) && string.Equals(k.Character, speaker.Code, StringComparison.OrdinalIgnoreCase)))));
+                        var sev = line.NarrationMode == NarrationMode.UnreliableNarrator
+                            ? ConsistencyFindingSeverity.Warning
+                            : ConsistencyFindingSeverity.Blocking;
 
-                        if (ruleForSpeaker is null)
+                        if (entry.KnownBy is { Count: > 0 } knownList)
                         {
-                            found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
-                                $"{where}: nhân vật \"{speaker.Name}\" chưa từng được biết về \"{entry.Name}\" theo Series Bible.",
+                            var ruleForSpeaker = knownList.FirstOrDefault(k =>
+                                (k.CharacterId.HasValue && k.CharacterId == speaker.Id) ||
+                                (!string.IsNullOrWhiteSpace(k.Character) &&
+                                 (string.Equals(k.Character, speaker.Name, StringComparison.OrdinalIgnoreCase) ||
+                                  (!string.IsNullOrWhiteSpace(speaker.Code) && string.Equals(k.Character, speaker.Code, StringComparison.OrdinalIgnoreCase)))));
+
+                            if (ruleForSpeaker is null)
+                            {
+                                found.Add(new(KnowledgeBeforeReveal, sev,
+                                    $"{where}: nhân vật \"{speaker.Name}\" chưa từng được biết về \"{entry.Name}\" theo Series Bible.",
+                                    text, line.SceneId, line.Id, entryId, null));
+                            }
+                            else if (chapterNumber < ruleForSpeaker.FromChapter)
+                            {
+                                found.Add(new(KnowledgeBeforeReveal, sev,
+                                    $"{where}: nhân vật \"{speaker.Name}\" chỉ được biết về \"{entry.Name}\" từ chương {ruleForSpeaker.FromChapter}, chưa biết ở chương {chapterNumber}.",
+                                    text, line.SceneId, line.Id, entryId, null));
+                            }
+                        }
+                        else if (entry.RevealedFromChapter is { } revFrom && chapterNumber < revFrom)
+                        {
+                            found.Add(new(KnowledgeBeforeReveal, sev,
+                                $"{where}: nhân vật \"{speaker.Name}\" nhắc tới \"{entry.Name}\" trước khi được tiết lộ (từ chương {revFrom}).",
                                 text, line.SceneId, line.Id, entryId, null));
                         }
-                        else if (chapterNumber < ruleForSpeaker.FromChapter)
-                        {
-                            found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
-                                $"{where}: nhân vật \"{speaker.Name}\" chỉ được biết về \"{entry.Name}\" từ chương {ruleForSpeaker.FromChapter}, chưa biết ở chương {chapterNumber}.",
-                                text, line.SceneId, line.Id, entryId, null));
-                        }
-                    }
-                    else if (entry.RevealedFromChapter is { } revFrom && chapterNumber < revFrom)
-                    {
-                        found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
-                            $"{where}: nhân vật \"{speaker.Name}\" nhắc tới \"{entry.Name}\" trước khi được tiết lộ (từ chương {revFrom}).",
-                            text, line.SceneId, line.Id, entryId, null));
                     }
                 }
             }

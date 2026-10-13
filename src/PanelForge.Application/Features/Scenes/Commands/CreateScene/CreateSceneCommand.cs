@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Enums;
 using DomainScene = PanelForge.Domain.Entities.Content.Scene;
 
 namespace PanelForge.Application.Features.Scenes.Commands.CreateScene;
@@ -12,7 +13,8 @@ public sealed record CreateSceneCommand(
     Guid UserId,
     int? SceneNumber = null,
     string? Heading = null,
-    string? Summary = null
+    string? Summary = null,
+    NarrationMode? DefaultNarrationMode = null
 ) : IRequest<Result<SceneDto>>;
 
 public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneCommand, Result<SceneDto>>
@@ -61,7 +63,8 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
                 chapterId: command.ChapterId,
                 sceneNumber: sceneNumber,
                 heading: command.Heading,
-                summary: command.Summary
+                summary: command.Summary,
+                defaultNarrationMode: command.DefaultNarrationMode ?? NarrationMode.Present
             );
             scene.CreatedBy = command.UserId.ToString();
         }
@@ -83,7 +86,8 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: 0,
-            PagesCount: 0
+            PagesCount: 0,
+            DefaultNarrationMode: scene.DefaultNarrationMode
         ));
     }
 }

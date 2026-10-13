@@ -36,7 +36,7 @@ public sealed class RunConsistencyCheckCommandHandler
         var sceneNumber = scenes.ToDictionary(s => s.Id, s => s.SceneNumber);
 
         var rawLines = await _db.ScriptLines.AsNoTracking().Where(l => sceneIds.Contains(l.SceneId))
-            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.PanelId })
+            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.PanelId, l.NarrationMode })
             .ToListAsync(ct);
         var lineIds = rawLines.Select(l => l.Id).ToList();
         var links = (await _db.ScriptLineBibleLinks.AsNoTracking().Where(k => lineIds.Contains(k.ScriptLineId))
@@ -59,7 +59,7 @@ public sealed class RunConsistencyCheckCommandHandler
             }
             return new CheckLine(
                 l.Id, l.SceneId, sceneNumber[l.SceneId], l.LineOrder, l.DialogueText, l.StageDirection,
-                l.SpeakerCharacterId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber);
+                l.SpeakerCharacterId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
         }).ToList();
 
         var bibleIds = await _db.SeriesBibles.AsNoTracking().Where(b => b.SeriesId == chapter.SeriesId)

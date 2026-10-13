@@ -10,7 +10,8 @@ public sealed record UpdateSceneCommand(
     Guid SceneId,
     Guid UserId,
     string? Heading,
-    string? Summary
+    string? Summary,
+    PanelForge.Domain.Enums.NarrationMode? DefaultNarrationMode = null
 ) : IRequest<Result<SceneDto>>;
 
 public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneCommand, Result<SceneDto>>
@@ -32,7 +33,7 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
         if (scene == null)
             return Result<SceneDto>.Failure($"Scene {command.SceneId} không tồn tại.");
 
-        scene.UpdateContent(command.Heading, command.Summary);
+        scene.UpdateContent(command.Heading, command.Summary, command.DefaultNarrationMode);
         scene.UpdatedBy = command.UserId.ToString();
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -47,7 +48,8 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: scene.ScriptLines.Count,
-            PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count()
+            PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count(),
+            DefaultNarrationMode: scene.DefaultNarrationMode
         ));
     }
 }

@@ -302,4 +302,110 @@ public class ConsistencyCheckTests
         findings.Should().Contain(x => x.RuleCode == ConsistencyChecker.PropNotBefore);
         findings.Should().Contain(x => x.RuleCode == ConsistencyChecker.ReadingOrderWrong);
     }
+
+    [Fact]
+    public void ConsistencyChecker_Flashback_SuppressesCharacterAfterDeath()
+    {
+        var speakerId = Guid.NewGuid();
+        var entries = new Dictionary<Guid, CheckEntry>
+        {
+            [speakerId] = new(speakerId, "Arthur", BibleEntryCategory.Character, true, 1, diesAtChapter: 2)
+        };
+
+        var lines = new List<CheckLine>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), 1, 1, "Remembering old times", null, speakerId, [],
+                NarrationMode: NarrationMode.Flashback)
+        };
+
+        var findings = ConsistencyChecker.Check(3, lines, entries, []);
+
+        findings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.CharacterAfterDeath);
+    }
+
+    [Fact]
+    public void ConsistencyChecker_DreamAndImagination_SuppressDeathPropAndKnowledgeRules()
+    {
+        var speakerId = Guid.NewGuid();
+        var propId = Guid.NewGuid();
+        var secretId = Guid.NewGuid();
+
+        var entries = new Dictionary<Guid, CheckEntry>
+        {
+            [speakerId] = new(speakerId, "Arthur", BibleEntryCategory.Character, true, 1, diesAtChapter: 2),
+            [propId] = new(propId, "Holy Grail", BibleEntryCategory.Prop, true, 1, availableFromChapter: 5),
+            [secretId] = new(secretId, "Dark Secret", BibleEntryCategory.PlotFact, true, 1, availableFromChapter: 10)
+        };
+
+        var dreamLines = new List<CheckLine>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), 1, 1, "In my dream...", null, speakerId, [propId, secretId],
+                NarrationMode: NarrationMode.Dream)
+        };
+
+        var dreamFindings = ConsistencyChecker.Check(3, dreamLines, entries, []);
+        dreamFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.CharacterAfterDeath);
+        dreamFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.PropNotBefore);
+        dreamFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.KnowledgeBeforeReveal);
+
+        var imagineLines = new List<CheckLine>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), 1, 1, "What if...", null, speakerId, [propId, secretId],
+                NarrationMode: NarrationMode.Imagination)
+        };
+
+        var imagineFindings = ConsistencyChecker.Check(3, imagineLines, entries, []);
+        imagineFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.CharacterAfterDeath);
+        imagineFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.PropNotBefore);
+        imagineFindings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.KnowledgeBeforeReveal);
+    }
+
+    [Fact]
+    public void ConsistencyChecker_LieAndRumor_SuppressKnowledgeBeforeRevealOnly()
+    {
+        var speakerId = Guid.NewGuid();
+        var secretId = Guid.NewGuid();
+
+        var entries = new Dictionary<Guid, CheckEntry>
+        {
+            [speakerId] = new(speakerId, "Arthur", BibleEntryCategory.Character, true, 1, diesAtChapter: 2),
+            [secretId] = new(secretId, "Secret Identity", BibleEntryCategory.PlotFact, true, 1, availableFromChapter: 8)
+        };
+
+        var lieLines = new List<CheckLine>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), 1, 1, "I'm lying about the secret", null, speakerId, [secretId],
+                NarrationMode: NarrationMode.Lie)
+        };
+
+        var findings = ConsistencyChecker.Check(3, lieLines, entries, []);
+
+        // Lie suppresses KNOWLEDGE_BEFORE_REVEAL
+        findings.Should().NotContain(x => x.RuleCode == ConsistencyChecker.KnowledgeBeforeReveal);
+        // But CHARACTER_AFTER_DEATH is NOT suppressed for Lie
+        findings.Should().Contain(x => x.RuleCode == ConsistencyChecker.CharacterAfterDeath);
+    }
+
+    [Fact]
+    public void ConsistencyChecker_UnreliableNarrator_DowngradesToWarning()
+    {
+        var speakerId = Guid.NewGuid();
+        var entries = new Dictionary<Guid, CheckEntry>
+        {
+            [speakerId] = new(speakerId, "Arthur", BibleEntryCategory.Character, true, 1, diesAtChapter: 2)
+        };
+
+        var lines = new List<CheckLine>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), 1, 1, "Or did he?", null, speakerId, [],
+                NarrationMode: NarrationMode.UnreliableNarrator)
+        };
+
+        var findings = ConsistencyChecker.Check(3, lines, entries, []);
+
+        var deathFinding = findings.FirstOrDefault(x => x.RuleCode == ConsistencyChecker.CharacterAfterDeath);
+        deathFinding.Should().NotBeNull();
+        deathFinding!.Severity.Should().Be(ConsistencyFindingSeverity.Warning);
+    }
 }
+

@@ -43,7 +43,8 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 l.StageDirection,
                 l.SpeakerCharacterId,
                 l.PanelId,
-                links[l.Id].ToList()
+                links[l.Id].ToList(),
+                l.NarrationMode
             ))
             .ToList();
 
@@ -56,7 +57,8 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
             CreatedAt: scene.CreatedAt,
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
-            ScriptLines: scriptLines
+            ScriptLines: scriptLines,
+            DefaultNarrationMode: scene.DefaultNarrationMode
         );
 
         return Result<SceneDetailDto>.Success(detail);

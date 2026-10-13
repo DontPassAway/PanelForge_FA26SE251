@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -8,6 +9,7 @@ public class Scene : BaseEntity
     public int SceneNumber { get; private set; }
     public string? Heading { get; private set; }
     public string? Summary { get; private set; }
+    public NarrationMode DefaultNarrationMode { get; private set; } = NarrationMode.Present;
 
     public Chapter Chapter { get; private set; } = default!;
     public ICollection<ScriptLine> ScriptLines { get; private set; } = [];
@@ -16,7 +18,9 @@ public class Scene : BaseEntity
 
     private Scene() { }
 
-    public static Scene Create(Guid chapterId, int sceneNumber, string? heading = null, string? summary = null)
+    public static Scene Create(
+        Guid chapterId, int sceneNumber, string? heading = null, string? summary = null,
+        NarrationMode defaultNarrationMode = NarrationMode.Present)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sceneNumber);
 
@@ -25,14 +29,19 @@ public class Scene : BaseEntity
             ChapterId = chapterId,
             SceneNumber = sceneNumber,
             Heading = heading?.Trim(),
-            Summary = summary?.Trim()
+            Summary = summary?.Trim(),
+            DefaultNarrationMode = defaultNarrationMode
         };
     }
 
-    public void UpdateContent(string? heading, string? summary)
+    public void UpdateContent(string? heading, string? summary, NarrationMode? defaultNarrationMode = null)
     {
         Heading = heading?.Trim();
         Summary = summary?.Trim();
+        if (defaultNarrationMode.HasValue)
+        {
+            DefaultNarrationMode = defaultNarrationMode.Value;
+        }
     }
 
     public void Reorder(int newSceneNumber)
