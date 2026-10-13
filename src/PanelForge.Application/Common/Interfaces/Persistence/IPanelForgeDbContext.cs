@@ -51,6 +51,7 @@ public interface IPanelForgeDbContext
     DbSet<ChangeRequest> ChangeRequests { get; }
     DbSet<ConsistencyFinding> ConsistencyFindings { get; }
     DbSet<PanelForge.Domain.Entities.Preview.PreviewLink> PreviewLinks { get; }
+    DbSet<ExportJob> ExportJobs { get; }
     DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs { get; }
     DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback { get; }
     DbSet<Asset> Assets { get; }

@@ -2882,6 +2882,128 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("preview_link_access_logs", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExportJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<long>("ChapterVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chapter_version");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<int>("DownloadCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("download_count");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<Guid>("ExportPresetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("export_preset_id");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("format");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastDownloadedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_downloaded_at");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<string>("ResultContentType")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("result_content_type");
+
+                    b.Property<string>("ResultFileName")
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("result_file_name");
+
+                    b.Property<string>("ResultSha256")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("result_sha256");
+
+                    b.Property<long?>("ResultSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("result_size_bytes");
+
+                    b.Property<string>("ResultStorageKey")
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("result_storage_key");
+
+                    b.PrimitiveCollection<List<Guid>>("SnapshotArtworkIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("snapshot_artwork_ids");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .HasDatabaseName("ix_export_jobs_chapter_id");
+
+                    b.HasIndex("ExportPresetId");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_export_jobs_status_created_at");
+
+                    b.ToTable("export_jobs", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExternalPreviewLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4299,6 +4421,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PreviewLinkId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExportJob", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.MasterData.ExportPreset", null)
+                        .WithMany()
+                        .HasForeignKey("ExportPresetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Publishing.ExternalPreviewLink", b =>

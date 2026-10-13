@@ -125,6 +125,9 @@ builder.Services.AddHostedService<AiRunSweeper>();
 // ── UC-14: nhắc người nhận việc sắp đến hạn / quá hạn ─────────────────────────────────
 builder.Services.AddHostedService<AssignmentReminderWorker>();
 
+// ── UC-12 / UC-14: chạy bản xuất chương (CBZ, PDF, ảnh trang, webtoon) ────────────────
+builder.Services.AddHostedService<ExportWorker>();
+
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
