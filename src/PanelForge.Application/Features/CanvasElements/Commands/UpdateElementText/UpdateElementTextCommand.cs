@@ -1,5 +1,6 @@
 using MediatR;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.CanvasElements.Common;
 
@@ -33,6 +34,8 @@ public sealed class UpdateElementTextCommandHandler
 
         var page = await _pages.GetAsync(cmd.PageId, ct);
         if (page is null) return Fail($"Page {cmd.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, ct) is { } readOnly)
+            return Result<UpdateElementTextResponse>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
         if (!page.Elements.TryGetValue(cmd.ElementId, out var element) || element.IsRemoved)
             return Fail($"Element {cmd.ElementId} không tồn tại trên Page {cmd.PageId}.");
         try { page.EnsureElementVersion(cmd.ElementId, cmd.ExpectedElementVersion); }

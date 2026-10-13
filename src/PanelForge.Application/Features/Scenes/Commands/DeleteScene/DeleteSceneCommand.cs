@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Scenes.Commands.DeleteScene;
@@ -23,6 +24,8 @@ public sealed class DeleteSceneCommandHandler : IRequestHandler<DeleteSceneComma
 
         if (scene == null)
             return Result<bool>.Failure($"Scene {command.SceneId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         scene.DeletedBy = command.UserId.ToString();
 

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -31,6 +32,8 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
 
         if (scene == null)
             return Result<SceneDto>.Failure($"Scene {command.SceneId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
+            return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         scene.UpdateContent(command.Heading, command.Summary);
         scene.UpdatedBy = command.UserId.ToString();

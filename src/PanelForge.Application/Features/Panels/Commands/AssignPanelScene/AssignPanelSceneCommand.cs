@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Panels.Models;
 
@@ -20,6 +21,8 @@ public sealed class AssignPanelSceneCommandHandler : IRequestHandler<AssignPanel
         var panel = await _db.Panels.Include(p => p.Page).FirstOrDefaultAsync(p => p.Id == command.PanelId, ct);
         if (panel is null)
             return Result<PanelDto>.Failure($"Panel {command.PanelId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, panel.Page.ChapterId, ct) is { } readOnly)
+            return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         if (command.SceneId is { } sceneId)
         {

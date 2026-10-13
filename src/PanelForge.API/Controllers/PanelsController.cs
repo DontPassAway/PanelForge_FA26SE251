@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Panels.Commands.AssignPanelScene;
@@ -58,7 +59,7 @@ public sealed class PanelsController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return CreatedAtAction(nameof(GetPanelById), new { panelId = result.Value!.Id }, result.Value);
@@ -128,7 +129,7 @@ public sealed class PanelsController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return Ok(result.Value);
@@ -150,7 +151,7 @@ public sealed class PanelsController : ControllerBase
         if (!result.IsSuccess)
             return result.ErrorMessage?.Contains("không tồn tại") == true
                 ? NotFound(new { error = result.ErrorMessage })
-                : BadRequest(new { error = result.ErrorMessage });
+                : this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
 
         return Ok(result.Value);
     }
@@ -171,7 +172,7 @@ public sealed class PanelsController : ControllerBase
         if (!result.IsSuccess)
             return result.ErrorMessage?.Contains("không tồn tại") == true
                 ? NotFound(new { error = result.ErrorMessage })
-                : BadRequest(new { error = result.ErrorMessage });
+                : this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
 
         return Ok(result.Value);
     }
@@ -192,7 +193,7 @@ public sealed class PanelsController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return NotFound(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
 
         return Ok(new { message = $"Panel {panelId} đã được xóa thành công." });
     }

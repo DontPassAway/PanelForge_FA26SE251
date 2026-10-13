@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
+using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Commands.AcknowledgeOverflow;
 using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 using PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
@@ -106,7 +107,7 @@ public sealed class ElementsController : ControllerBase
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess) return Failure(result.ErrorMessage);
+        if (!result.IsSuccess) return Failure(result.ErrorMessage, result.ErrorCode);
 
         // 202 Accepted — Event đã được append thành công
         return Accepted(result.Value);
@@ -130,7 +131,7 @@ public sealed class ElementsController : ControllerBase
         var result = await _mediator.Send(
             new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId(), request.ExpectedElementVersion),
             cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── POST — Xác nhận cảnh báo tràn chữ kèm lý do (BR-20) ─────────────────
@@ -146,7 +147,7 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new AcknowledgeOverflowCommand(pageId, elementId, request.Reason, GetCurrentUserId()), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ." }) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ." }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── PUT — Ghi đè thứ tự đọc (Letterer) ───────────────────────────────────
@@ -163,7 +164,7 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId(), request.ExpectedElementVersion), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── PUT — Di chuyển / Resize Element (Update → ElementMovedEvent APPEND) ─
@@ -209,7 +210,7 @@ public sealed class ElementsController : ControllerBase
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess) return Failure(result.ErrorMessage);
+        if (!result.IsSuccess) return Failure(result.ErrorMessage, result.ErrorCode);
 
         return Accepted(new { message = "Element đã được di chuyển thành công." });
     }
@@ -251,7 +252,7 @@ public sealed class ElementsController : ControllerBase
         if (!result.IsSuccess)
             return result.ErrorMessage!.Contains("đã bị xóa") && !result.ErrorMessage.Contains("Xung đột")
                 ? NotFound(new { message = result.ErrorMessage })
-                : Failure(result.ErrorMessage);
+                : Failure(result.ErrorMessage, result.ErrorCode);
 
         return Accepted(new
         {
@@ -262,9 +263,11 @@ public sealed class ElementsController : ControllerBase
     }
 
     // ── Helper ─────────────────────────────────────────────────────────────
-    private IActionResult Failure(string? message)
+    private IActionResult Failure(string? message, string? code)
     {
         message ??= "Yêu cầu không hợp lệ.";
+        if (code == ResultErrorCodes.ChapterReadOnly) // BR-12, không có field conflict nên FE không mở hộp thoại tải lại
+            return Conflict(new { message, code });
         if (message.Contains(Page.DuplicateBindingCode))
             return Conflict(new { message, code = Page.DuplicateBindingCode });
         if (message.Contains(Page.ElementVersionConflictCode))

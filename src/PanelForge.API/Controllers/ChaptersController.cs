@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
@@ -68,7 +69,7 @@ public sealed class ChaptersController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return CreatedAtAction(nameof(GetChapterById), new { chapterId = result.Value!.Id }, result.Value);
@@ -142,7 +143,7 @@ public sealed class ChaptersController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return Ok(result.Value);
@@ -164,7 +165,7 @@ public sealed class ChaptersController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return NotFound(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
 
         return Ok(new { message = $"Chương {chapterId} đã được xóa thành công." });
     }

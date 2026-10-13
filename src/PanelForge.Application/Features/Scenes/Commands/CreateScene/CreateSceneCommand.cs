@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainScene = PanelForge.Domain.Entities.Content.Scene;
@@ -32,6 +33,8 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
 
         if (!chapterExists)
             return Result<SceneDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 2. Tính số scene tự động nếu không truyền vào
         int sceneNumber;

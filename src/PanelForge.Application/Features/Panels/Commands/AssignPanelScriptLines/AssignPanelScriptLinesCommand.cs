@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Panels.Commands.AssignPanelScriptLines;
@@ -25,6 +26,8 @@ public sealed class AssignPanelScriptLinesCommandHandler
         var panel = await _db.Panels.Include(p => p.Page).FirstOrDefaultAsync(p => p.Id == command.PanelId, ct);
         if (panel is null)
             return Result<IReadOnlyList<Guid>>.Failure($"Panel {command.PanelId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, panel.Page.ChapterId, ct) is { } readOnly)
+            return Result<IReadOnlyList<Guid>>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         var wanted = command.ScriptLineIds.Distinct().ToList();
         var lines = await _db.ScriptLines

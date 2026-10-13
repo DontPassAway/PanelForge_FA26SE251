@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Scenes.Commands.CreateScene;
@@ -59,7 +60,7 @@ public sealed class ScenesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return CreatedAtAction(nameof(GetSceneById), new { sceneId = result.Value!.Id }, result.Value);
@@ -129,7 +130,7 @@ public sealed class ScenesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return Ok(result.Value);
@@ -152,7 +153,7 @@ public sealed class ScenesController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
 
         return Ok(new { message = "Cập nhật thứ tự phân cảnh thành công." });
     }
@@ -173,7 +174,7 @@ public sealed class ScenesController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return NotFound(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
 
         return Ok(new { message = $"Phân cảnh {sceneId} đã được xóa thành công." });
     }

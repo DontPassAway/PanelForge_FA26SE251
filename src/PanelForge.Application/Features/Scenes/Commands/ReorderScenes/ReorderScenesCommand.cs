@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -29,6 +30,8 @@ public sealed class ReorderScenesCommandHandler : IRequestHandler<ReorderScenesC
 
         if (scenes.Count == 0)
             return Result<bool>.Failure($"Không tìm thấy Scene nào trong Chapter {command.ChapterId}.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         var sceneMap = scenes.ToDictionary(s => s.Id);
         foreach (var item in command.Scenes)
