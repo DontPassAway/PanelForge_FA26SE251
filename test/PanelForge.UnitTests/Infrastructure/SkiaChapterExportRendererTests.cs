@@ -62,6 +62,10 @@ public class SkiaChapterExportRendererTests
         var text = Encoding.Latin1.GetString(file.Content);
         text.Should().StartWith("%PDF");
         Regex.Matches(text, @"/Type\s*/Page\b").Count.Should().Be(2);
+        // Ảnh giữ nguyên độ phân giải, nén không mất dữ liệu (không JPEG); trang 30px ở 300dpi = 7.2pt
+        Regex.IsMatch(text, @"/Subtype\s*/Image\s*/Width 30\s*/Height 45").Should().BeTrue();
+        text.Should().NotContain("/DCTDecode");
+        Regex.IsMatch(text, @"/MediaBox\s*\[0 0 7\.[12]\d* 10\.[78]\d*\]").Should().BeTrue();
     }
 
     [Fact]

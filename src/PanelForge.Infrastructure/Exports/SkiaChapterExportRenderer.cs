@@ -79,7 +79,8 @@ public sealed class SkiaChapterExportRenderer : IChapterExportRenderer
         {
             Title = m.ChapterTitle is { Length: > 0 } t ? $"{m.SeriesTitle} - {m.ChapterNumber}: {t}" : $"{m.SeriesTitle} - {m.ChapterNumber}",
             Creator = "PanelForge",
-            RasterDpi = dpi
+            RasterDpi = dpi,
+            EncodingQuality = 101 // > 100 = nén không mất dữ liệu; JPEG làm nhoè nét vẽ trắng đen
         };
         using (var document = SKDocument.CreatePdf(buffer, metadata))
         {
