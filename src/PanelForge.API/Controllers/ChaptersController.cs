@@ -18,6 +18,7 @@ using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
 using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
+using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -249,6 +250,26 @@ public sealed class ChaptersController : ControllerBase
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(
             new TriageConsistencyFindingCommand(chapterId, findingId, GetCurrentUserId(), body.Decision, body.Note), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/visual-consistency-report — Báo cáo nhất quán hình ảnh cho Editor (CF3, V1.2).
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/visual-consistency-report")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor, WorkspaceRole.Writer, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(VisualConsistencyReportDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetVisualConsistencyReport(
+        [FromRoute] Guid chapterId, [FromQuery] decimal? threshold, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetVisualConsistencyReportQuery(chapterId, threshold), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/visual-consistency-check — Chạy kiểm tra nhất quán hình ảnh so với Character Sheet khóa.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/visual-consistency-check")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(VisualConsistencyReportDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RunVisualConsistencyCheck(
+        [FromRoute] Guid chapterId, [FromBody] RunVisualConsistencyCheckRequest? body, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RunVisualConsistencyCheckCommand(chapterId, GetCurrentUserId(), body?.Threshold), cancellationToken));
 
     private IActionResult ToActionResult<T>(Result<T> result) => result.IsSuccess ? Ok(result.Value) : result.ErrorCode switch
     {
