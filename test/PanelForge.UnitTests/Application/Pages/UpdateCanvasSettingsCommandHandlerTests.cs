@@ -20,6 +20,7 @@ public class UpdateCanvasSettingsCommandHandlerTests
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
         _handler = new UpdateCanvasSettingsCommandHandler(_pageRepositoryMock.Object, _dbContextMock.Object, new PassThroughUnitOfWork());
     }
 

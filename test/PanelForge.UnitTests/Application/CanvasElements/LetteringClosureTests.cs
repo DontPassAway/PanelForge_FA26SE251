@@ -130,7 +130,7 @@ public class LetteringClosureTests
 
         (await AnalyzeAsync()).Warnings.Should().Contain(w => w.Code == LetteringWarningRules.ReadingOrderMismatch);
 
-        var set = new SetReadingOrderCommandHandler(_repo.Object);
+        var set = new SetReadingOrderCommandHandler(_repo.Object, InMemoryDb.Create());
         (await set.Handle(new SetReadingOrderCommand(_page.Id, first, 1, _user), default)).IsSuccess.Should().BeTrue();
         (await set.Handle(new SetReadingOrderCommand(_page.Id, second, 2, _user), default)).IsSuccess.Should().BeTrue();
 

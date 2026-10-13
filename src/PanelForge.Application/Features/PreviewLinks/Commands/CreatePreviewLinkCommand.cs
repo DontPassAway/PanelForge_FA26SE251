@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.PreviewLinks.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Domain.Entities.Preview;
@@ -42,16 +43,7 @@ public sealed class CreatePreviewLinkCommandHandler : IRequestHandler<CreatePrev
             .Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
 
         // Snapshot: mỗi trang lấy bản cả trang ở stage cuối cùng có artwork, phiên bản mới nhất
-        var refs = await (
-            from r in _db.AssetReferences.AsNoTracking()
-            where r.ChapterId == chapter.Id && r.PanelId == null
-            join s in _db.PipelineStages.AsNoTracking() on r.PipelineStageId equals s.Id
-            select new { r.Id, r.PageId, s.StageOrder, r.VersionNumber }).ToListAsync(ct);
-        var livePages = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
-        var snapshot = refs.Where(r => livePages.Contains(r.PageId))
-            .GroupBy(r => r.PageId)
-            .Select(g => g.OrderByDescending(r => r.StageOrder).ThenByDescending(r => r.VersionNumber).First().Id)
-            .ToList();
+        var snapshot = (await FinalArtwork.SelectAsync(_db, chapter.Id, ct)).Select(a => a.AssetReferenceId).ToList();
         if (snapshot.Count == 0)
             return Fail("Chương chưa có artwork nào để xem thử.", ResultErrorCodes.Conflict);
 

@@ -1,6 +1,7 @@
 using MediatR;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
@@ -9,10 +10,12 @@ public sealed class MoveElementCommandHandler
     : IRequestHandler<MoveElementCommand, Result<bool>>
 {
     private readonly IPageRepository _pageRepository;
+    private readonly IPanelForgeDbContext _db;
 
-    public MoveElementCommandHandler(IPageRepository pageRepository)
+    public MoveElementCommandHandler(IPageRepository pageRepository, IPanelForgeDbContext db)
     {
         _pageRepository = pageRepository;
+        _db = db;
     }
 
     public async Task<Result<bool>> Handle(
@@ -23,6 +26,8 @@ public sealed class MoveElementCommandHandler
         var page = await _pageRepository.GetAsync(command.PageId, cancellationToken);
         if (page is null)
             return Result<bool>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 2. Optimistic Concurrency (BR-11): theo element nếu client gửi, nếu không thì theo cả Page (client cũ)
         if (command.ExpectedElementVersion is null)

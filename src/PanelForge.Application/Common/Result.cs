@@ -23,6 +23,8 @@ public static class ResultErrorCodes
 {
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
+    /// <summary>BR-12: chương Approved/Published, nội dung chỉ đọc → HTTP 409. Mã riêng để FE không nhầm với xung đột phiên bản.</summary>
+    public const string ChapterReadOnly = "CHAPTER_READ_ONLY";
     /// <summary>Sai thông tin đăng nhập / OTP / token → HTTP 401.</summary>
     public const string Unauthorized = "UNAUTHORIZED";
     /// <summary>Đã xác thực nhưng không đủ quyền → HTTP 403.</summary>

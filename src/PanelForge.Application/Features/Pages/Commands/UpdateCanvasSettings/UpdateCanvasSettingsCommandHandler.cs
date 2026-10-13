@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
@@ -38,6 +39,8 @@ public sealed class UpdateCanvasSettingsCommandHandler
         var page = await _pageRepository.GetAsync(command.PageId, cancellationToken);
         if (page is null)
             return Result<bool>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, page.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         if (!Enum.TryParse<LayoutFormat>(command.LayoutFormat, ignoreCase: true, out var layoutFormat))
         {

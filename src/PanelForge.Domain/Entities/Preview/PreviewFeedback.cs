@@ -23,6 +23,8 @@ public class PreviewFeedback : BaseEntity
     public string? TriageNote { get; private set; }
     public Guid? TriagedByUserId { get; private set; }
     public DateTime? TriagedAt { get; private set; }
+    /// <summary>CF5 bước 7 / CF3: yêu cầu sửa sinh từ phản hồi "cần sửa"; null = chưa chuyển.</summary>
+    public Guid? ChangeRequestId { get; private set; }
 
     private PreviewFeedback() { }
 
@@ -56,10 +58,25 @@ public class PreviewFeedback : BaseEntity
         if (decision == PreviewFeedbackStatus.NeedsChange && string.IsNullOrWhiteSpace(note))
             throw new ArgumentException("Cần sửa bắt buộc ghi chú (sẽ dùng làm lý do mở lại chương).", nameof(note));
 
+        if (ChangeRequestId.HasValue)
+            throw new InvalidOperationException("Phản hồi đã thành yêu cầu sửa, không phân loại lại được.");
+
         Status = decision;
         TriageNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         TriagedByUserId = byUserId;
         TriagedAt = DateTime.UtcNow;
         UpdatedAt = TriagedAt;
+    }
+
+    /// <summary>Gắn yêu cầu sửa sinh từ phản hồi. Chỉ phản hồi NeedsChange, và mỗi phản hồi một lần.</summary>
+    public void LinkChangeRequest(Guid changeRequestId)
+    {
+        if (Status != PreviewFeedbackStatus.NeedsChange)
+            throw new InvalidOperationException("Chỉ phản hồi đã phân loại \"cần sửa\" mới chuyển thành yêu cầu sửa.");
+        if (ChangeRequestId.HasValue)
+            throw new InvalidOperationException("Phản hồi này đã được chuyển thành yêu cầu sửa.");
+
+        ChangeRequestId = changeRequestId;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

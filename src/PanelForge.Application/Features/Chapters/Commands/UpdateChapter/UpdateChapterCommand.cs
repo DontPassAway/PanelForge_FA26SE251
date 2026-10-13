@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -33,6 +34,8 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
 
         if (chapter == null)
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
+            return Result<ChapterDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();

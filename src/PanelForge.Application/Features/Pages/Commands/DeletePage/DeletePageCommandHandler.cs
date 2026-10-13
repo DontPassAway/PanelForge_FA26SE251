@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -47,6 +48,8 @@ public sealed class DeletePageCommandHandler
 
         if (efPage is null && streamPage is null)
             return Result<bool>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, efPage?.ChapterId ?? streamPage!.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 1. Event Store: đánh dấu Page đã xóa trong stream
         if (streamPage is not null)

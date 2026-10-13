@@ -73,6 +73,7 @@ internal sealed class PreviewFeedbackConfiguration : IEntityTypeConfiguration<Pr
         builder.Property(f => f.TriageNote).HasColumnName("triage_note").HasColumnType("text");
         builder.Property(f => f.TriagedByUserId).HasColumnName("triaged_by_user_id").HasColumnType("uuid");
         builder.Property(f => f.TriagedAt).HasColumnName("triaged_at").HasColumnType("timestamptz");
+        builder.Property(f => f.ChangeRequestId).HasColumnName("change_request_id").HasColumnType("uuid");
         builder.Property(f => f.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(f => f.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
         builder.HasOne<PreviewLink>().WithMany().HasForeignKey(f => f.PreviewLinkId).OnDelete(DeleteBehavior.Cascade);

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -42,6 +43,8 @@ public sealed class ReorderPageCommandHandler : IRequestHandler<ReorderPageComma
         var page = await _pageRepository.GetAsync(command.PageId, cancellationToken);
         if (page == null)
             return Result<PageDto>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, page.ChapterId, cancellationToken) is { } readOnly)
+            return Result<PageDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 2. Reorder domain command
         try

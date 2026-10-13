@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+﻿using PanelForge.UnitTests.Common;
+using FluentAssertions;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using Moq;
 using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
@@ -17,7 +18,7 @@ public class MoveElementCommandHandlerTests
     public MoveElementCommandHandlerTests()
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new MoveElementCommandHandler(_pageRepositoryMock.Object);
+        _handler = new MoveElementCommandHandler(_pageRepositoryMock.Object, InMemoryDb.Create());
     }
 
     [Fact]

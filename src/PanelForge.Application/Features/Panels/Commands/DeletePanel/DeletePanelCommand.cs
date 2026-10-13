@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Panels.Commands.DeletePanel;
@@ -23,6 +24,8 @@ public sealed class DeletePanelCommandHandler : IRequestHandler<DeletePanelComma
 
         if (panel == null)
             return Result<bool>.Failure($"Panel {command.PanelId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         panel.DeletedBy = command.UserId.ToString();
 

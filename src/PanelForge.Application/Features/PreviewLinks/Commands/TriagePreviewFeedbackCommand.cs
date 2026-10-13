@@ -10,6 +10,7 @@ namespace PanelForge.Application.Features.PreviewLinks.Commands;
 /// <summary>
 /// UC-24: Producer/Editor phân loại phản hồi: Noted (ghi chú cho bản sau) hoặc NeedsChange (cần sửa, note bắt buộc).
 /// NeedsChange không tự mở lại chương: Producer mở lại bằng API reopen (lý do có thể lấy từ note); khi mở lại, mọi link bị thu hồi.
+/// Sau đó chuyển phản hồi thành yêu cầu sửa bằng <see cref="CreateChangeRequestFromFeedbackCommand"/>.
 /// </summary>
 public sealed record TriagePreviewFeedbackCommand(
     Guid ChapterId, Guid FeedbackId, Guid UserId, PreviewFeedbackStatus Decision, string? Note)
@@ -28,6 +29,7 @@ public sealed class TriagePreviewFeedbackCommandHandler : IRequestHandler<Triage
 
         try { feedback.Triage(cmd.Decision, cmd.Note, cmd.UserId); }
         catch (ArgumentException ex) { return Result<PreviewFeedbackDto>.Failure(ex.Message, ResultErrorCodes.Validation); }
+        catch (InvalidOperationException ex) { return Result<PreviewFeedbackDto>.Failure(ex.Message, ResultErrorCodes.Conflict); }
 
         feedback.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
