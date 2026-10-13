@@ -8,12 +8,127 @@ namespace PanelForge.Application.Features.Consistency.Common;
 
 public sealed record CheckLine(
     Guid Id, Guid SceneId, int SceneNumber, int LineOrder, string? Dialogue, string? StageDirection,
-    Guid? SpeakerId, IReadOnlyList<Guid> LinkedEntryIds);
+    Guid? SpeakerId, IReadOnlyList<Guid> LinkedEntryIds,
+    Guid? PanelId = null, int? PanelReadingOrder = null, int? PageNumber = null);
+
+public sealed record CheckKnownBy(string? Character, Guid? CharacterId, int FromChapter);
 
 /// <param name="FirstEffectiveChapter">Chương nhỏ nhất mà mục có revision hiệu lực (BR-15); null = chưa có revision.</param>
 /// <param name="FirstLockedChapter">Chương nhỏ nhất mà mục có revision đã khoá (V1.2 character sheet); null = chưa khoá bản nào.</param>
-public sealed record CheckEntry(
-    Guid Id, string Name, BibleEntryCategory Category, bool IsActive, int? FirstEffectiveChapter, int? FirstLockedChapter = null);
+public sealed record CheckEntry
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; }
+    public BibleEntryCategory Category { get; init; }
+    public bool IsActive { get; init; }
+    public int? FirstEffectiveChapter { get; init; }
+    public int? FirstLockedChapter { get; init; }
+    public string? DetailsJson { get; init; }
+    public int? DiesAtChapter { get; init; }
+    public int? RevivesAtChapter { get; init; }
+    public int? AvailableFromChapter { get; init; }
+    public IReadOnlyList<CheckKnownBy>? KnownBy { get; init; }
+    public string? Code { get; init; }
+    public int? RevealedFromChapter { get; init; }
+
+    public CheckEntry(
+        Guid id, string name, BibleEntryCategory category, bool isActive,
+        int? firstEffectiveChapter, int? firstLockedChapter = null,
+        string? detailsJson = null, int? diesAtChapter = null, int? revivesAtChapter = null,
+        int? availableFromChapter = null, IReadOnlyList<CheckKnownBy>? knownBy = null,
+        string? code = null, int? revealedFromChapter = null)
+    {
+        Id = id;
+        Name = name;
+        Category = category;
+        IsActive = isActive;
+        FirstEffectiveChapter = firstEffectiveChapter;
+        FirstLockedChapter = firstLockedChapter;
+        DetailsJson = detailsJson;
+        Code = code;
+
+        int? parsedDies = diesAtChapter;
+        int? parsedRevives = revivesAtChapter;
+        int? parsedAvailable = availableFromChapter;
+        int? parsedRevealed = revealedFromChapter;
+        List<CheckKnownBy>? parsedKnownBy = knownBy != null ? new List<CheckKnownBy>(knownBy) : null;
+
+        if (!string.IsNullOrWhiteSpace(detailsJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(detailsJson);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (parsedDies == null)
+                    {
+                        if (TryGetInt(root, "diesAtChapter", out var d) ||
+                            TryGetInt(root, "deathChapter", out d) ||
+                            TryGetInt(root, "diesAt", out d))
+                            parsedDies = d;
+                    }
+                    if (parsedRevives == null)
+                    {
+                        if (TryGetInt(root, "revivesAtChapter", out var r) ||
+                            TryGetInt(root, "revivalChapter", out r) ||
+                            TryGetInt(root, "revivesAt", out r))
+                            parsedRevives = r;
+                    }
+                    if (parsedAvailable == null)
+                    {
+                        if (TryGetInt(root, "availableFromChapter", out var a) ||
+                            TryGetInt(root, "notBeforeChapter", out a) ||
+                            TryGetInt(root, "availableFrom", out a))
+                            parsedAvailable = a;
+                    }
+                    if (parsedRevealed == null)
+                    {
+                        if (TryGetInt(root, "revealedToReaderFromChapter", out var rev) ||
+                            TryGetInt(root, "revealedFromChapter", out rev) ||
+                            TryGetInt(root, "knownFromChapter", out rev))
+                            parsedRevealed = rev;
+                    }
+                    if (parsedKnownBy == null && (root.TryGetProperty("knownBy", out var kb) || root.TryGetProperty("KnownBy", out kb)) && kb.ValueKind == JsonValueKind.Array)
+                    {
+                        parsedKnownBy = new List<CheckKnownBy>();
+                        foreach (var item in kb.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Object)
+                            {
+                                string? charName = null;
+                                Guid? charId = null;
+                                int fromCh = 1;
+                                if (item.TryGetProperty("character", out var c) || item.TryGetProperty("Character", out c))
+                                    charName = c.GetString();
+                                if ((item.TryGetProperty("characterId", out var ci) || item.TryGetProperty("CharacterId", out ci)) && ci.TryGetGuid(out var g))
+                                    charId = g;
+                                if (TryGetInt(item, "fromChapter", out var fc) || TryGetInt(item, "FromChapter", out fc))
+                                    fromCh = fc;
+                                parsedKnownBy.Add(new CheckKnownBy(charName, charId, fromCh));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (JsonException) { }
+        }
+
+        DiesAtChapter = parsedDies;
+        RevivesAtChapter = parsedRevives;
+        AvailableFromChapter = parsedAvailable;
+        RevealedFromChapter = parsedRevealed;
+        KnownBy = parsedKnownBy;
+    }
+
+    private static bool TryGetInt(JsonElement el, string propName, out int value)
+    {
+        value = 0;
+        return (el.TryGetProperty(propName, out var p) ||
+                (propName.Length > 0 && el.TryGetProperty(char.ToUpperInvariant(propName[0]) + propName[1..], out p)))
+               && p.TryGetInt32(out value);
+    }
+}
 
 public sealed record CheckRule(Guid Id, string Name, string RuleType, string? Pattern, string Severity, string ConfigurationJson);
 
@@ -40,6 +155,10 @@ public static class ConsistencyChecker
     public const string CharacterNotLocked = "CHARACTER_NOT_LOCKED";
     public const string RulePattern = "RULE_PATTERN";
     public const string DialogueTooLong = "DIALOGUE_TOO_LONG";
+    public const string CharacterAfterDeath = "CHARACTER_AFTER_DEATH";
+    public const string PropNotBefore = "PROP_NOT_BEFORE";
+    public const string KnowledgeBeforeReveal = "KNOWLEDGE_BEFORE_REVEAL";
+    public const string ReadingOrderWrong = "READING_ORDER_WRONG";
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
 
@@ -49,6 +168,8 @@ public static class ConsistencyChecker
     {
         var found = new List<DetectedFinding>();
         var notLockedReported = new HashSet<Guid>();
+        CheckLine? prevPanelLine = null;
+
         foreach (var line in lines.OrderBy(l => l.SceneNumber).ThenBy(l => l.LineOrder))
         {
             var where = $"Cảnh {line.SceneNumber}, dòng {line.LineOrder}";
@@ -67,6 +188,17 @@ public static class ConsistencyChecker
                     found.Add(new(SpeakerNotCharacter, ConsistencyFindingSeverity.Blocking,
                         $"{where}: \"{speaker.Name}\" là {speaker.Category}, không phải nhân vật nên không thể nói.",
                         text, line.SceneId, line.Id, speakerId, null));
+                else
+                {
+                    // CHARACTER_AFTER_DEATH: nhân vật đã chết từ chương X vẫn xuất hiện hay nói
+                    if (speaker.DiesAtChapter is { } diesAt && chapterNumber > diesAt
+                        && !(speaker.RevivesAtChapter is { } revives && chapterNumber >= revives))
+                    {
+                        found.Add(new(CharacterAfterDeath, ConsistencyFindingSeverity.Blocking,
+                            $"{where}: nhân vật \"{speaker.Name}\" đã chết từ chương {diesAt}, không thể xuất hiện hay nói ở chương {chapterNumber}.",
+                            text, line.SceneId, line.Id, speakerId, null));
+                    }
+                }
             }
 
             // Mục Bible được dòng nhắc tới (người nói + liên kết): phải còn dùng và đã có hiệu lực ở chương này
@@ -89,17 +221,86 @@ public static class ConsistencyChecker
                         entry.Name, null, null, entryId, null));
             }
 
+            // PROP_NOT_BEFORE & KNOWLEDGE_BEFORE_REVEAL trên các liên kết kịch bản (LinkedEntryIds)
+            foreach (var entryId in line.LinkedEntryIds.Distinct())
+            {
+                if (!entries.TryGetValue(entryId, out var entry)) continue;
+
+                // PROP_NOT_BEFORE: Đạo cụ/sự kiện không được xuất hiện trước chương X
+                if (entry.AvailableFromChapter is { } notBefore && chapterNumber < notBefore)
+                {
+                    found.Add(new(PropNotBefore, ConsistencyFindingSeverity.Blocking,
+                        $"{where}: đạo cụ/sự kiện \"{entry.Name}\" không được xuất hiện trước chương {notBefore} (chương hiện tại: {chapterNumber}).",
+                        text, line.SceneId, line.Id, entryId, null));
+                }
+
+                // KNOWLEDGE_BEFORE_REVEAL: Nhân vật nhắc điều chưa được biết
+                if (line.SpeakerId is { } spkId && entries.TryGetValue(spkId, out var speaker))
+                {
+                    if (entry.KnownBy is { Count: > 0 } knownList)
+                    {
+                        var ruleForSpeaker = knownList.FirstOrDefault(k =>
+                            (k.CharacterId.HasValue && k.CharacterId == speaker.Id) ||
+                            (!string.IsNullOrWhiteSpace(k.Character) &&
+                             (string.Equals(k.Character, speaker.Name, StringComparison.OrdinalIgnoreCase) ||
+                              (!string.IsNullOrWhiteSpace(speaker.Code) && string.Equals(k.Character, speaker.Code, StringComparison.OrdinalIgnoreCase)))));
+
+                        if (ruleForSpeaker is null)
+                        {
+                            found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
+                                $"{where}: nhân vật \"{speaker.Name}\" chưa từng được biết về \"{entry.Name}\" theo Series Bible.",
+                                text, line.SceneId, line.Id, entryId, null));
+                        }
+                        else if (chapterNumber < ruleForSpeaker.FromChapter)
+                        {
+                            found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
+                                $"{where}: nhân vật \"{speaker.Name}\" chỉ được biết về \"{entry.Name}\" từ chương {ruleForSpeaker.FromChapter}, chưa biết ở chương {chapterNumber}.",
+                                text, line.SceneId, line.Id, entryId, null));
+                        }
+                    }
+                    else if (entry.RevealedFromChapter is { } revFrom && chapterNumber < revFrom)
+                    {
+                        found.Add(new(KnowledgeBeforeReveal, ConsistencyFindingSeverity.Blocking,
+                            $"{where}: nhân vật \"{speaker.Name}\" nhắc tới \"{entry.Name}\" trước khi được tiết lộ (từ chương {revFrom}).",
+                            text, line.SceneId, line.Id, entryId, null));
+                    }
+                }
+            }
+
+            // READING_ORDER_WRONG: kiểm tra thứ tự panel gắn với dòng thoại so với thứ tự kịch bản
+            if (line.PanelId.HasValue && (line.PanelReadingOrder.HasValue || line.PageNumber.HasValue))
+            {
+                if (prevPanelLine is not null && prevPanelLine.PanelId != line.PanelId)
+                {
+                    var prevPage = prevPanelLine.PageNumber ?? 1;
+                    var currPage = line.PageNumber ?? 1;
+                    var prevOrder = prevPanelLine.PanelReadingOrder ?? 0;
+                    var currOrder = line.PanelReadingOrder ?? 0;
+
+                    if (currPage < prevPage || (currPage == prevPage && currOrder < prevOrder))
+                    {
+                        found.Add(new(ReadingOrderWrong, ConsistencyFindingSeverity.Warning,
+                            $"{where}: thứ tự đọc của panel (Trang {currPage}, thứ tự {currOrder}) đứng trước panel của dòng kịch bản trước (Trang {prevPage}, thứ tự {prevOrder}).",
+                            text, line.SceneId, line.Id, null, null));
+                    }
+                }
+                prevPanelLine = line;
+            }
+
             foreach (var rule in rules)
-                if (CheckRuleOnLine(rule, line, where, text) is { } hit) found.Add(hit);
+                if (CheckRuleOnLine(rule, line, where, text, entries, chapterNumber) is { } hit) found.Add(hit);
         }
         return found;
     }
 
     /// <summary>
     /// Luật Producer cấu hình: có <c>Pattern</c> (regex, không phân biệt hoa thường) = chữ bị cấm, khớp trong thoại hoặc
-    /// chỉ dẫn là vi phạm; RuleType <c>DialogueOverflow</c> với ConfigurationJson <c>{"maxChars": N}</c> = thoại dài quá N ký tự.
+    /// chỉ dẫn là vi phạm; RuleType <c>DialogueOverflow</c> với ConfigurationJson <c>{"maxChars": N}</c> = thoại dài quá N ký tự;
+    /// hoặc các luật có cấu trúc CHARACTER_AFTER_DEATH, PROP_NOT_BEFORE, KNOWLEDGE_BEFORE_REVEAL, READING_ORDER_WRONG.
     /// </summary>
-    private static DetectedFinding? CheckRuleOnLine(CheckRule rule, CheckLine line, string where, string text)
+    private static DetectedFinding? CheckRuleOnLine(
+        CheckRule rule, CheckLine line, string where, string text,
+        IReadOnlyDictionary<Guid, CheckEntry>? entries = null, decimal chapterNumber = 1)
     {
         var severity = rule.Severity.Trim().ToLowerInvariant() switch
         {
@@ -131,6 +332,75 @@ public static class ConsistencyChecker
                 $"{where}: thoại dài {line.Dialogue!.Length} ký tự, vượt {max} của luật \"{rule.Name}\".",
                 text, line.SceneId, line.Id, null, rule.Id);
 
+        if (string.Equals(rule.RuleType, CharacterAfterDeath, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rule.RuleType, "CharacterDeath", StringComparison.OrdinalIgnoreCase))
+        {
+            if (ParseDeathRule(rule.ConfigurationJson) is { } death
+                && line.SpeakerId == death.CharacterId
+                && chapterNumber > death.DiesAtChapter
+                && (death.RevivesAtChapter == null || chapterNumber < death.RevivesAtChapter))
+            {
+                var name = entries != null && line.SpeakerId.HasValue && entries.TryGetValue(line.SpeakerId.Value, out var ce)
+                    ? ce.Name : "Nhân vật";
+                return new(CharacterAfterDeath, severity,
+                    $"{where}: vi phạm luật \"{rule.Name}\" - \"{name}\" đã chết từ chương {death.DiesAtChapter}.",
+                    text, line.SceneId, line.Id, line.SpeakerId, rule.Id);
+            }
+        }
+
+        if (string.Equals(rule.RuleType, PropNotBefore, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rule.RuleType, "PropAvailability", StringComparison.OrdinalIgnoreCase))
+        {
+            if (ParsePropRule(rule.ConfigurationJson) is { } prop
+                && line.LinkedEntryIds.Contains(prop.EntryId)
+                && chapterNumber < prop.NotBeforeChapter)
+            {
+                var name = entries != null && entries.TryGetValue(prop.EntryId, out var ce) ? ce.Name : "Đạo cụ";
+                return new(PropNotBefore, severity,
+                    $"{where}: vi phạm luật \"{rule.Name}\" - \"{name}\" không được xuất hiện trước chương {prop.NotBeforeChapter}.",
+                    text, line.SceneId, line.Id, prop.EntryId, rule.Id);
+            }
+        }
+
+        return null;
+    }
+
+    private static (Guid CharacterId, int DiesAtChapter, int? RevivesAtChapter)? ParseDeathRule(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && (root.TryGetProperty("characterId", out var c) || root.TryGetProperty("CharacterId", out c))
+                && c.TryGetGuid(out var charId)
+                && (root.TryGetProperty("diesAtChapter", out var d) || root.TryGetProperty("deathChapter", out d))
+                && d.TryGetInt32(out var diesAt))
+            {
+                int? revives = (root.TryGetProperty("revivesAtChapter", out var r) || root.TryGetProperty("revivalChapter", out r)) && r.TryGetInt32(out var rv) ? rv : null;
+                return (charId, diesAt, revives);
+            }
+        }
+        catch (JsonException) { }
+        return null;
+    }
+
+    private static (Guid EntryId, int NotBeforeChapter)? ParsePropRule(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && (root.TryGetProperty("entryId", out var e) || root.TryGetProperty("EntryId", out e))
+                && e.TryGetGuid(out var entryId)
+                && (root.TryGetProperty("notBeforeChapter", out var nb) || root.TryGetProperty("availableFromChapter", out nb))
+                && nb.TryGetInt32(out var ch))
+            {
+                return (entryId, ch);
+            }
+        }
+        catch (JsonException) { }
         return null;
     }
 
