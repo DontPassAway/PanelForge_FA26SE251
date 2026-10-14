@@ -12,7 +12,6 @@ using PanelForge.Application.Features.Scenes.Commands.UpdateScene;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Features.Scenes.Queries.GetSceneById;
 using PanelForge.Application.Features.Scenes.Queries.GetScenesByChapter;
-using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 

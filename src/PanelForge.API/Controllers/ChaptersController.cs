@@ -21,7 +21,6 @@ using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Domain.Enums;
-using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 

@@ -14,7 +14,6 @@ using PanelForge.Application.Features.Panels.Queries.GetPanelById;
 using PanelForge.Application.Features.Panels.Queries.GetPanelsByPage;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Consistency.Models;
-using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
