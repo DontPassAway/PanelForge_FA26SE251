@@ -39,6 +39,14 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
                .HasColumnName("summary")
                .HasColumnType("text");
 
+        builder.Property(s => s.DefaultNarrationMode)
+               .HasColumnName("default_narration_mode")
+               .HasColumnType("varchar(30)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<PanelForge.Domain.Enums.NarrationMode>(v))
+               .HasDefaultValue(PanelForge.Domain.Enums.NarrationMode.Present);
+
         builder.HasMany(s => s.ScriptLines)
                .WithOne(l => l.Scene)
                .HasForeignKey(l => l.SceneId)

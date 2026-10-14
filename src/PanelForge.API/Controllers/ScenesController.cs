@@ -50,7 +50,8 @@ public sealed class ScenesController : ControllerBase
             UserId: GetCurrentUserId(),
             SceneNumber: body.SceneNumber,
             Heading: body.Heading,
-            Summary: body.Summary
+            Summary: body.Summary,
+            DefaultNarrationMode: body.DefaultNarrationMode
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -120,7 +121,8 @@ public sealed class ScenesController : ControllerBase
             SceneId: sceneId,
             UserId: GetCurrentUserId(),
             Heading: body.Heading,
-            Summary: body.Summary
+            Summary: body.Summary,
+            DefaultNarrationMode: body.DefaultNarrationMode
         );
 
         var result = await _mediator.Send(command, cancellationToken);

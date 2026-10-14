@@ -5,6 +5,7 @@ using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
@@ -148,7 +149,7 @@ public class LetteringGateAndSeriesProgressTests
     [Fact]
     public async Task SeriesProgress_IncludesOverdueChangeRequests()
     {
-        var artist = User.Create("chloe2@test.com", "Chloe Two", SystemRole.User);
+        var artist = User.Create("chloe2@test.com", "Chloe Two", role: SystemRole.User);
         _db.Users.Add(artist);
         var asg = Assignment.Create(_series.Id, _chapter.Id, WorkflowEntityType.Page, _page.Id, Guid.NewGuid(), artist.Id, WorkspaceRole.Artist, "Vẽ");
         var overdueCr = ChangeRequest.Create(asg.Id, _chapter.Id, null, artist.Id, Guid.NewGuid(), "Sửa màu mắt", dueDate: DateTime.UtcNow.AddDays(-1));

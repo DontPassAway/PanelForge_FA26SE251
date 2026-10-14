@@ -36,24 +36,51 @@ public sealed class RunConsistencyCheckCommandHandler
         var sceneNumber = scenes.ToDictionary(s => s.Id, s => s.SceneNumber);
 
         var rawLines = await _db.ScriptLines.AsNoTracking().Where(l => sceneIds.Contains(l.SceneId))
-            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId })
+            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.PanelId, l.NarrationMode })
             .ToListAsync(ct);
         var lineIds = rawLines.Select(l => l.Id).ToList();
         var links = (await _db.ScriptLineBibleLinks.AsNoTracking().Where(k => lineIds.Contains(k.ScriptLineId))
                 .Select(k => new { k.ScriptLineId, k.BibleEntryId }).ToListAsync(ct))
             .ToLookup(k => k.ScriptLineId, k => k.BibleEntryId);
 
-        var lines = rawLines.Select(l => new CheckLine(
-            l.Id, l.SceneId, sceneNumber[l.SceneId], l.LineOrder, l.DialogueText, l.StageDirection,
-            l.SpeakerCharacterId, links[l.Id].ToList())).ToList();
+        var panelIds = rawLines.Where(l => l.PanelId.HasValue).Select(l => l.PanelId!.Value).Distinct().ToList();
+        var panels = await _db.Panels.AsNoTracking().Where(p => panelIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.ReadingOrder, PageNumber = p.Page.PageNumber })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var lines = rawLines.Select(l =>
+        {
+            int? readingOrder = null;
+            int? pageNumber = null;
+            if (l.PanelId.HasValue && panels.TryGetValue(l.PanelId.Value, out var p))
+            {
+                readingOrder = p.ReadingOrder;
+                pageNumber = p.PageNumber;
+            }
+            return new CheckLine(
+                l.Id, l.SceneId, sceneNumber[l.SceneId], l.LineOrder, l.DialogueText, l.StageDirection,
+                l.SpeakerCharacterId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
+        }).ToList();
 
         var bibleIds = await _db.SeriesBibles.AsNoTracking().Where(b => b.SeriesId == chapter.SeriesId)
             .Select(b => b.Id).ToListAsync(ct);
-        var entries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
-            .Select(e => new CheckEntry(e.Id, e.Name, e.Category, e.IsActive,
-                e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min(),
-                e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min()))
-            .ToDictionaryAsync(e => e.Id, ct);
+        var rawEntries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
+            .Select(e => new
+            {
+                e.Id,
+                e.Name,
+                e.Category,
+                e.IsActive,
+                e.DetailsJson,
+                e.Code,
+                FirstEffective = e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min(),
+                FirstLocked = e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min()
+            })
+            .ToListAsync(ct);
+
+        var entries = rawEntries.ToDictionary(e => e.Id, e => new CheckEntry(
+            e.Id, e.Name, e.Category, e.IsActive, e.FirstEffective, e.FirstLocked,
+            detailsJson: e.DetailsJson, code: e.Code));
 
         var rules = await _db.ConsistencyRules.AsNoTracking().Where(r => r.SeriesId == chapter.SeriesId && r.IsEnabled)
             .Select(r => new CheckRule(r.Id, r.Name, r.RuleType, r.Pattern, r.Severity, r.ConfigurationJson))

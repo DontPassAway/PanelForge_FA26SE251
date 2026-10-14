@@ -53,5 +53,13 @@ internal sealed class ScriptLineConfiguration : IEntityTypeConfiguration<ScriptL
         builder.Property(l => l.StageDirection)
                .HasColumnName("stage_direction")
                .HasColumnType("text");
+
+        builder.Property(l => l.NarrationMode)
+               .HasColumnName("narration_mode")
+               .HasColumnType("varchar(30)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<PanelForge.Domain.Enums.NarrationMode>(v))
+               .HasDefaultValue(PanelForge.Domain.Enums.NarrationMode.Present);
     }
 }

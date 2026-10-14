@@ -17,6 +17,7 @@ public static class LetteringWarningRules
 {
     public const string TextOverflow = "TEXT_OVERFLOW";
     public const string ReadingOrderMismatch = "READING_ORDER_MISMATCH";
+    public const string ReadingOrderWrong = "READING_ORDER_WRONG";
     public const string OverlapsKeyRegion = "OVERLAPS_KEY_ARTWORK_REGION";
     public const string KeyRegionType = "KEY_ARTWORK_REGION";
 

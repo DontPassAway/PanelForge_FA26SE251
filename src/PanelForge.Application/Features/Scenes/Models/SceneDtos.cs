@@ -1,3 +1,5 @@
+using PanelForge.Domain.Enums;
+
 namespace PanelForge.Application.Features.Scenes.Models;
 
 public sealed record SceneDto(
@@ -10,7 +12,8 @@ public sealed record SceneDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     int ScriptLinesCount,
-    int PagesCount
+    int PagesCount,
+    NarrationMode DefaultNarrationMode = NarrationMode.Present
 );
 
 public sealed record SceneScriptLineSummaryDto(
@@ -20,7 +23,8 @@ public sealed record SceneScriptLineSummaryDto(
     string? StageDirection,
     Guid? SpeakerCharacterId,
     Guid? PanelId = null,  // V1.2: Panel mà dòng được neo vào (null = chưa gán)
-    IReadOnlyList<Guid>? BibleEntryIds = null  // UC-06: mục Series Bible dòng nhắc tới (ngoài speaker)
+    IReadOnlyList<Guid>? BibleEntryIds = null,  // UC-06: mục Series Bible dòng nhắc tới (ngoài speaker)
+    NarrationMode NarrationMode = NarrationMode.Present
 );
 
 public sealed record SceneDetailDto(
@@ -32,18 +36,21 @@ public sealed record SceneDetailDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    IReadOnlyList<SceneScriptLineSummaryDto> ScriptLines
+    IReadOnlyList<SceneScriptLineSummaryDto> ScriptLines,
+    NarrationMode DefaultNarrationMode = NarrationMode.Present
 );
 
 public sealed record CreateSceneRequest(
     int? SceneNumber = null,
     string? Heading = null,
-    string? Summary = null
+    string? Summary = null,
+    NarrationMode? DefaultNarrationMode = null
 );
 
 public sealed record UpdateSceneRequest(
     string? Heading,
-    string? Summary
+    string? Summary,
+    NarrationMode? DefaultNarrationMode = null
 );
 
 public sealed record ReorderSceneItem(

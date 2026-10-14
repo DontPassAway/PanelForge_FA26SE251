@@ -17,7 +17,8 @@ namespace PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 public sealed record CreateScriptLineCommand(
     Guid ChapterId, Guid SceneId, Guid UserId, string? DialogueText, string? StageDirection,
     Guid? SpeakerCharacterId, int? LineOrder, long? ExpectedChapterVersion,
-    IReadOnlyList<Guid>? BibleEntryIds = null, Guid? ClientLineId = null) : IRequest<Result<ScriptLineDto>>;
+    IReadOnlyList<Guid>? BibleEntryIds = null, Guid? ClientLineId = null,
+    NarrationMode? NarrationMode = null) : IRequest<Result<ScriptLineDto>>;
 
 public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScriptLineCommand, Result<ScriptLineDto>>
 {
@@ -65,7 +66,8 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
         var chapter = authorized.Value.Chapter;
 
         // Chặn IDOR: Scene phải thuộc Chapter trên route
-        if (!await _db.Scenes.AsNoTracking().AnyAsync(s => s.Id == cmd.SceneId && s.ChapterId == chapter.Id, ct))
+        var scene = await _db.Scenes.AsNoTracking().FirstOrDefaultAsync(s => s.Id == cmd.SceneId && s.ChapterId == chapter.Id, ct);
+        if (scene is null)
             return Result<ScriptLineDto>.Failure($"Scene {cmd.SceneId} không tồn tại trong Chapter này.", ResultErrorCodes.NotFound);
 
         if (await ScriptLineRules.ValidateSpeakerAsync(_db, chapter.SeriesId, cmd.SpeakerCharacterId, ct) is { } speakerError)
@@ -81,11 +83,13 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
         var order = Math.Min(cmd.LineOrder ?? end, end);
         foreach (var l in lines.Where(l => l.LineOrder >= order)) l.Reorder(l.LineOrder + 1);
 
+        var mode = cmd.NarrationMode ?? scene.DefaultNarrationMode;
         var line = ScriptLine.Create(cmd.SceneId, order,
             string.IsNullOrWhiteSpace(cmd.DialogueText) ? null : cmd.DialogueText,
             string.IsNullOrWhiteSpace(cmd.StageDirection) ? null : cmd.StageDirection,
             cmd.SpeakerCharacterId,
-            cmd.ClientLineId);
+            cmd.ClientLineId,
+            mode);
         _db.ScriptLines.Add(line);
         lines.Add(line);
         var bibleEntryIds = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, cmd.BibleEntryIds ?? [], ct);

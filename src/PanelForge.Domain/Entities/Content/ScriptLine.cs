@@ -1,5 +1,6 @@
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -10,6 +11,7 @@ public class ScriptLine : BaseEntity
     public Guid? SpeakerCharacterId { get; private set; }
     public string? DialogueText { get; private set; }
     public string? StageDirection { get; private set; }
+    public NarrationMode NarrationMode { get; private set; } = NarrationMode.Present;
 
     /// <summary>Panel mà dòng được neo vào sau breakdown (tối đa một). Phân trang lại chỉ đổi giá trị này, dòng giữ nguyên.</summary>
     public Guid? PanelId { get; private set; }
@@ -26,7 +28,8 @@ public class ScriptLine : BaseEntity
         string? dialogueText = null,
         string? stageDirection = null,
         Guid? speakerCharacterId = null,
-        Guid? id = null)
+        Guid? id = null,
+        NarrationMode narrationMode = NarrationMode.Present)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lineOrder);
 
@@ -41,16 +44,22 @@ public class ScriptLine : BaseEntity
             LineOrder = lineOrder,
             DialogueText = dialogueText?.Trim(),
             StageDirection = stageDirection?.Trim(),
-            SpeakerCharacterId = speakerCharacterId
+            SpeakerCharacterId = speakerCharacterId,
+            NarrationMode = narrationMode
         };
     }
 
-    public void UpdateContent(string? dialogueText, string? stageDirection, Guid? speakerCharacterId)
+    public void UpdateContent(
+        string? dialogueText, string? stageDirection, Guid? speakerCharacterId,
+        NarrationMode narrationMode = NarrationMode.Present)
     {
         DialogueText = dialogueText?.Trim();
         StageDirection = stageDirection?.Trim();
         SpeakerCharacterId = speakerCharacterId;
+        NarrationMode = narrationMode;
     }
+
+    public void UpdateNarrationMode(NarrationMode narrationMode) => NarrationMode = narrationMode;
 
     public void AssignToPanel(Guid? panelId) => PanelId = panelId;
 
