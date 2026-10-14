@@ -28,7 +28,10 @@ public sealed record VisualDeviationDto(
     Guid? TriagedByUserId,
     string? TriagedByUserName,
     DateTime? TriagedAt,
-    DateTime DetectedAt
+    DateTime DetectedAt,
+    IReadOnlyList<ImageConsistencyDeviationDto>? DetailedDeviations = null,
+    string? SummaryReason = null,
+    string? RevisionRef = null
 );
 
 /// <summary>
