@@ -42,9 +42,9 @@ public sealed class GetVisualConsistencyReportQueryHandler
 
         var threshold = query.Threshold ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
 
-        // Lấy các finding hình ảnh đã lưu
+        // Lấy các finding hình ảnh đã lưu (VISUAL_CHARACTER_DEVIATION hoặc IMAGE_INCONSISTENCY)
         var findings = await _db.ConsistencyFindings.AsNoTracking()
-            .Where(f => f.ChapterId == chapter.Id && f.RuleCode == ConsistencyChecker.VisualCharacterDeviation)
+            .Where(f => f.ChapterId == chapter.Id && (f.RuleCode == ConsistencyChecker.VisualCharacterDeviation || f.RuleCode == ConsistencyChecker.ImageInconsistency))
             .ToListAsync(ct);
 
         // Nếu chưa từng chạy kiểm tra, tự động khởi tạo lần đầu
@@ -74,6 +74,9 @@ public sealed class GetVisualConsistencyReportQueryHandler
             Guid? assetId = null;
             string? artUrl = null;
             decimal simScore = 0.68m;
+            var detailedDevs = new List<ImageConsistencyDeviationDto>();
+            string? summaryReason = null;
+            string? revisionRef = null;
 
             if (!string.IsNullOrWhiteSpace(f.Evidence))
             {
@@ -92,6 +95,18 @@ public sealed class GetVisualConsistencyReportQueryHandler
                     if (root.TryGetProperty("assetReferenceId", out var aid) && aid.TryGetGuid(out var parsedAid)) assetId = parsedAid;
                     if (root.TryGetProperty("artworkUrl", out var aurl)) artUrl = aurl.GetString();
                     if (root.TryGetProperty("similarityScore", out var sscore) && sscore.TryGetDecimal(out var parsedScore)) simScore = parsedScore;
+                    if (root.TryGetProperty("summaryReason", out var sreason)) summaryReason = sreason.GetString();
+                    if (root.TryGetProperty("revisionRef", out var rref)) revisionRef = rref.GetString();
+                    if (root.TryGetProperty("deviations", out var devArr) && devArr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in devArr.EnumerateArray())
+                        {
+                            var aspect = item.TryGetProperty("aspect", out var asp) ? asp.GetString() ?? "general" : "general";
+                            var desc = item.TryGetProperty("description", out var ds) ? ds.GetString() ?? "" : "";
+                            var hint = item.TryGetProperty("regionHint", out var rh) ? rh.GetString() : null;
+                            detailedDevs.Add(new ImageConsistencyDeviationDto(aspect, desc, hint));
+                        }
+                    }
                 }
                 catch
                 {
@@ -128,7 +143,10 @@ public sealed class GetVisualConsistencyReportQueryHandler
                 TriagedByUserId: f.TriagedByUserId,
                 TriagedByUserName: triagedByName,
                 TriagedAt: f.TriagedAt,
-                DetectedAt: f.LastDetectedAt
+                DetectedAt: f.LastDetectedAt,
+                DetailedDeviations: detailedDevs.Count > 0 ? detailedDevs : null,
+                SummaryReason: summaryReason,
+                RevisionRef: revisionRef
             ));
         }
 

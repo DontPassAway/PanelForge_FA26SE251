@@ -38,6 +38,7 @@ public static class DependencyInjection
                 npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName);
             });
 
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 #if DEBUG
             options.EnableSensitiveDataLogging()
                    .EnableDetailedErrors();
@@ -102,6 +103,7 @@ public static class DependencyInjection
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
         services.AddScoped<IAiUsageService, AiUsageService>();
+        services.AddHttpClient<IImageConsistencyService, ImageConsistencyService>();
 
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();

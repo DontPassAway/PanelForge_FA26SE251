@@ -11,6 +11,8 @@ using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
 using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Features.Panels.Queries.GetPanelById;
 using PanelForge.Application.Features.Panels.Queries.GetPanelsByPage;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Consistency.Models;
 
 namespace PanelForge.API.Controllers;
 
@@ -195,5 +197,37 @@ public sealed class PanelsController : ControllerBase
             return NotFound(new { error = result.ErrorMessage });
 
         return Ok(new { message = $"Panel {panelId} đã được xóa thành công." });
+    }
+
+    /// <summary>
+    /// POST /api/panels/{panelId}/check-image-consistency
+    /// Chạy kiểm tra nhất quán hình ảnh AI (Bước A5) giữa Artwork của Panel và Character Sheet đã khóa.
+    /// </summary>
+    [HttpPost("api/panels/{panelId:guid}/check-image-consistency")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ImageConsistencyResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CheckImageConsistency(
+        [FromRoute] Guid panelId,
+        [FromQuery] string? revisionRef,
+        [FromQuery] decimal? threshold,
+        [FromServices] IImageConsistencyService imageConsistencyService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await imageConsistencyService.CheckPanelConsistencyAsync(
+                panelId, revisionRef, threshold, cancellationToken);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }

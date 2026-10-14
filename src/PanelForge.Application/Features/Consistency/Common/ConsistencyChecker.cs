@@ -161,6 +161,7 @@ public static class ConsistencyChecker
     public const string KnowledgeBeforeReveal = "KNOWLEDGE_BEFORE_REVEAL";
     public const string ReadingOrderWrong = "READING_ORDER_WRONG";
     public const string VisualCharacterDeviation = "VISUAL_CHARACTER_DEVIATION";
+    public const string ImageInconsistency = "IMAGE_INCONSISTENCY";
     public const decimal DefaultVisualSimilarityThreshold = 0.75m;
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);

@@ -11,12 +11,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "depends_on_assignment_ids_json",
-                table: "assignments",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
+            migrationBuilder.Sql("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS depends_on_assignment_ids_json text NOT NULL DEFAULT '[]';");
 
             // Tự động đồng bộ các bản ghi cũ có depends_on_assignment_id sang JSON array
             migrationBuilder.Sql(@"
