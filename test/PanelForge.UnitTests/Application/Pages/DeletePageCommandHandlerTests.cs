@@ -21,6 +21,7 @@ public class DeletePageCommandHandlerTests
     public DeletePageCommandHandlerTests()
     {
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
         _handler = new DeletePageCommandHandler(
             _dbContextMock.Object, _pageRepositoryMock.Object, _unitOfWork, _currentUserMock.Object);
     }

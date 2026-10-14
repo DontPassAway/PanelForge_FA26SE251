@@ -19,6 +19,7 @@ public class SceneCommandTests
     public SceneCommandTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
     }
 
     [Fact]

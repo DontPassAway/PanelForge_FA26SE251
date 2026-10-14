@@ -47,6 +47,9 @@ public class StageProgress : BaseEntity
     /// <summary>InReview → ChangesRequested (comment bắt buộc do handler kiểm tra).</summary>
     public void RequestChanges() => Move(StageProgressStatus.InReview, StageProgressStatus.ChangesRequested);
 
+    /// <summary>CF5 bước 7: chương mở lại, phản hồi xem thử thành yêu cầu sửa → stage đã duyệt phải làm lại (Approved → ChangesRequested).</summary>
+    public void ReopenForRework() => Move(StageProgressStatus.Approved, StageProgressStatus.ChangesRequested);
+
     private void Move(StageProgressStatus from, StageProgressStatus to)
     {
         if (Status != from)

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -29,6 +30,8 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
 
         if (panel == null)
             return Result<PanelDto>.Failure($"Panel {command.PanelId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
+            return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         try
         {

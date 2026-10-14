@@ -66,6 +66,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ChangeRequest> ChangeRequests => Set<ChangeRequest>();
     public DbSet<ConsistencyFinding> ConsistencyFindings => Set<ConsistencyFinding>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewLink> PreviewLinks => Set<PanelForge.Domain.Entities.Preview.PreviewLink>();
+    public DbSet<ExportJob> ExportJobs => Set<ExportJob>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs => Set<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback => Set<PanelForge.Domain.Entities.Preview.PreviewFeedback>();
     public DbSet<Asset> Assets => Set<Asset>();

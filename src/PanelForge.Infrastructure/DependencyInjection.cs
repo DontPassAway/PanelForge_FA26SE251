@@ -97,6 +97,9 @@ public static class DependencyInjection
             services.AddSingleton<IAssetStorage, LocalAssetStorage>();
         services.AddSingleton<IAssetLinkSigner, DataProtectionAssetLinkSigner>();
 
+        // ── UC-12: dựng file xuất chương (SkiaSharp) ──
+        services.AddSingleton<IChapterExportRenderer, PanelForge.Infrastructure.Exports.SkiaChapterExportRenderer>();
+
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
         services.AddDataProtection();
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();

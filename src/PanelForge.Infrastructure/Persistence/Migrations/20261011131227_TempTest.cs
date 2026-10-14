@@ -8,22 +8,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
     public partial class TempTest : Migration
     {
         /// <inheritdoc />
+        // Trùng cột với AddMultipleAssignmentDependencies; idempotent để DB nào đã chạy một trong hai vẫn migrate được
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "depends_on_assignment_ids_json",
-                table: "assignments",
-                type: "text",
-                nullable: false,
-                defaultValue: "[]");
+            migrationBuilder.Sql(
+                "ALTER TABLE assignments ADD COLUMN IF NOT EXISTS depends_on_assignment_ids_json text NOT NULL DEFAULT '[]';");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "depends_on_assignment_ids_json",
-                table: "assignments");
+            migrationBuilder.Sql("ALTER TABLE assignments DROP COLUMN IF EXISTS depends_on_assignment_ids_json;");
         }
     }
 }

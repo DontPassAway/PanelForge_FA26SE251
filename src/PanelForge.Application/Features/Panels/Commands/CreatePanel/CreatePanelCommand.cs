@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainPanel = PanelForge.Domain.Entities.Content.Panel;
@@ -32,6 +33,8 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
 
         if (!pageExists)
             return Result<PanelDto>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, command.PageId, cancellationToken) is { } readOnly)
+            return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 2. Tính số Panel và ReadingOrder tự động nếu chưa truyền vào
         int panelNumber;

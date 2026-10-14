@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -42,6 +43,8 @@ public sealed class CreatePageCommandHandler
 
         if (!chapterExists)
             return Result<PageDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<PageDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // 2. Tính số trang tự động nếu không truyền vào
         int pageNumber;
