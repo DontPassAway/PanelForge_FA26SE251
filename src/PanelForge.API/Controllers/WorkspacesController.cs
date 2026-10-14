@@ -22,6 +22,9 @@ using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceActiveSessions;
 using PanelForge.Application.Features.Workspaces.Commands.RevokeWorkspaceSession;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
+using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.Audit.Models;
 
 namespace PanelForge.API.Controllers;
 
@@ -38,6 +41,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(WorkspaceDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateWorkspace([FromBody] CreateWorkspaceRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -51,6 +55,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<WorkspaceDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyWorkspaces(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -61,6 +66,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(WorkspaceDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspaceById(Guid id, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -72,6 +78,7 @@ public class WorkspacesController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(WorkspaceDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateWorkspace(Guid id, [FromBody] UpdateWorkspaceRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -82,6 +89,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteWorkspace(Guid id, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -92,6 +100,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpGet("{id:guid}/members")]
+    [ProducesResponseType(typeof(IReadOnlyList<WorkspaceMemberDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMembers(Guid id, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -103,6 +112,7 @@ public class WorkspacesController : ControllerBase
 
     [HttpPost("{id:guid}/members")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(WorkspaceMemberDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> AddMember(Guid id, [FromBody] AddWorkspaceMemberRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } actorId)
@@ -119,6 +129,7 @@ public class WorkspacesController : ControllerBase
     [HttpPost("{id:guid}/members/{userId:guid}/resend-invitation")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(typeof(WorkspaceMemberDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendInvitation(Guid id, Guid userId, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } actorId)
@@ -132,6 +143,7 @@ public class WorkspacesController : ControllerBase
 
     [HttpPut("{id:guid}/members/{userId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(WorkspaceMemberDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateMemberRole(Guid id, Guid userId, [FromBody] UpdateMemberRoleRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } actorId)
@@ -145,6 +157,7 @@ public class WorkspacesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}/members/{userId:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> RemoveMember(Guid id, Guid userId, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } actorId)
@@ -162,6 +175,7 @@ public class WorkspacesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/ai-config")]
     [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAiConfig(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(id), cancellationToken);
@@ -191,6 +205,7 @@ public class WorkspacesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/usage")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(WorkspaceUsageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceUsageQuery(id), cancellationToken);
@@ -203,6 +218,7 @@ public class WorkspacesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/sessions")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<WorkspaceSessionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetActiveSessions(Guid id, CancellationToken cancellationToken)
     {
         Guid? currentSessionId = Guid.TryParse(User.FindFirstValue("session_id"), out var sid) ? sid : null;
@@ -217,6 +233,7 @@ public class WorkspacesController : ControllerBase
     /// </summary>
     [HttpDelete("{id:guid}/sessions/{sessionId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> RevokeSession(Guid id, Guid sessionId, CancellationToken cancellationToken)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
@@ -232,6 +249,7 @@ public class WorkspacesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/audit-logs")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AuditLogsPagedResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspaceAuditLogs(
         Guid id,
         [FromQuery] string? action,

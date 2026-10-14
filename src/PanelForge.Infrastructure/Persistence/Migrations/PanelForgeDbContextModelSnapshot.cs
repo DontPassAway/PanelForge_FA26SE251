@@ -3808,6 +3808,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("PanelLayoutJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("panel_layout_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("varchar(30)")

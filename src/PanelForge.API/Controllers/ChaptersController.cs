@@ -21,6 +21,7 @@ using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -156,7 +157,7 @@ public sealed class ChaptersController : ControllerBase
     /// </summary>
     [HttpDelete("api/chapters/{chapterId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteChapter(
         [FromRoute] Guid chapterId,

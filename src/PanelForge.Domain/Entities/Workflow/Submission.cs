@@ -21,6 +21,12 @@ public class Submission : BaseEntity
     public List<Guid> ArtworkReferenceIds { get; private set; } = [];
     /// <summary>Chapter.VersionVector lúc nộp (revision của script).</summary>
     public long ChapterVersion { get; private set; }
+    /// <summary>
+    /// Bố cục Panel của các trang việc bao phủ tại lúc nộp (mảng JSON: id, pageId, panelNumber, readingOrder, boundingBox).
+    /// Lịch sử lần nộp phải dựng lại được dù sau đó Panel bị xoá hay đổi toạ độ (BR-01). "[]" với việc không có Panel
+    /// và với các lần nộp có trước khi thêm cột này.
+    /// </summary>
+    public string PanelLayoutJson { get; private set; } = "[]";
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -30,7 +36,7 @@ public class Submission : BaseEntity
 
     public static Submission Create(
         Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
-        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0)
+        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
 
@@ -42,6 +48,7 @@ public class Submission : BaseEntity
             AttemptNumber = attemptNumber,
             ArtworkReferenceIds = artworkReferenceIds?.Distinct().ToList() ?? [],
             ChapterVersion = chapterVersion,
+            PanelLayoutJson = string.IsNullOrWhiteSpace(panelLayoutJson) ? "[]" : panelLayoutJson,
             Status = SubmissionStatus.Pending,
             SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow

@@ -115,7 +115,7 @@ public sealed class PreviewLinksController : ControllerBase
     /// <summary>GET /api/preview/images?token= — ảnh trang (token ảnh ngắn hạn lấy từ ImageUrl của /open).</summary>
     [HttpGet("api/preview/images")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> Image([FromQuery] string? token, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetPreviewImageQuery(token, Ip), ct);

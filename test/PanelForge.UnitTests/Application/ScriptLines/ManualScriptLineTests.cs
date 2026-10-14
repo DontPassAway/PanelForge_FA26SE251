@@ -5,8 +5,12 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
+using PanelForge.AI.Contracts;
 using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
+using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptRevision;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
+using PanelForge.Application.Features.ScriptLines.Models;
+using PanelForge.Application.Features.ScriptLines.Queries.GetScriptRevision;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
@@ -284,5 +288,119 @@ public class ManualScriptLineTests
         result.IsSuccess.Should().BeTrue();
         line1.LineOrder.Should().Be(2);
         line2.LineOrder.Should().Be(1);
+    }
+
+    // ── UC-13 / BR-08: khôi phục phiên bản script ─────────────────────────────
+
+    private Task<Result<RestoreScriptRevisionResult>> Restore(Guid revisionId, long? expected = null, Guid? sceneId = null) =>
+        new RestoreScriptRevisionCommandHandler(_db, _auth.Object).Handle(
+            new RestoreScriptRevisionCommand(_chapter.Id, sceneId ?? _scene.Id, revisionId, _writer, expected), default);
+
+    private Task EditLine(Guid lineId, string dialogue) =>
+        new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+            new UpdateScriptLineCommand(_chapter.Id, lineId, _writer, dialogue, null, null, null), default);
+
+    private List<ContentRevision> ScriptRevisions() => _db.ContentRevisions
+        .Where(r => r.SceneId == _scene.Id && r.Kind == ContentRevisionKind.Script).OrderBy(r => r.VersionNumber).ToList();
+
+    [Fact]
+    public async Task Restore_AddsNewHeadRevisionWithOldContent_AndKeepsEveryOlderRevision()
+    {
+        var a = await Create("A"); var b = await Create("B");   // v1, v2
+        await EditLine(a.Value!.Id, "A sửa");                    // v3
+        await new DeleteScriptLineCommandHandler(_db, _auth.Object).Handle(
+            new DeleteScriptLineCommand(_chapter.Id, b.Value!.Id, _writer, null), default); // v4
+        var payloadsBefore = ScriptRevisions().Select(r => r.PayloadJson).ToList();
+
+        var r = await Restore(ScriptRevisions()[1].Id);
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        (r.Value!.VersionNumber, r.Value.RestoredFromVersionNumber, r.Value.ChapterVersion).Should().Be((5, 2, 5L));
+        var lines = _db.ScriptLines.Where(l => l.SceneId == _scene.Id).OrderBy(l => l.LineOrder).ToList();
+        lines.Select(l => l.DialogueText).Should().Equal("A", "B");
+        lines.Select(l => l.Id).Should().Equal([a.Value.Id, b.Value.Id], "dòng đã xoá được bật lại đúng Id cũ");
+
+        var history = ScriptRevisions();
+        history.Should().HaveCount(5, "khôi phục thêm bản mới ở đầu lịch sử, không xoá bản nào (BR-08)");
+        history.Take(4).Select(x => x.PayloadJson).Should().Equal(payloadsBefore);
+        history[4].ContentHash.Should().Be(history[1].ContentHash);
+        history[4].PreviousRevisionId.Should().Be(history[3].Id);
+        history[4].MappingJson.Should().Contain(history[1].Id.ToString());
+    }
+
+    [Fact]
+    public async Task Restore_CurrentRevision_IsRejected_AndChangesNothing()
+    {
+        var a = await Create("A");
+        await EditLine(a.Value!.Id, "A sửa");
+
+        var r = await Restore(ScriptRevisions().Last().Id);
+
+        r.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        ScriptRevisions().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Restore_WithStaleVersion_OrAfterChapterApproved_Conflicts()
+    {
+        var a = await Create("A");
+        await EditLine(a.Value!.Id, "A sửa");
+        var first = ScriptRevisions()[0].Id;
+
+        (await Restore(first, expected: 0)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        _chapter.Approve();
+        await _db.SaveChangesAsync();
+        (await Restore(first)).ErrorCode.Should().Be(ResultErrorCodes.Conflict, "chương đã duyệt phải mở lại trước (BR-12)");
+
+        _db.ScriptLines.Single().DialogueText.Should().Be("A sửa");
+    }
+
+    [Fact]
+    public async Task Restore_RevisionOfAnotherScene_IsNotFound()
+    {
+        var a = await Create("A");
+        await EditLine(a.Value!.Id, "A sửa");
+        var otherScene = Scene.Create(_chapter.Id, 2);
+        _db.Scenes.Add(otherScene);
+        await _db.SaveChangesAsync();
+
+        (await Restore(ScriptRevisions()[0].Id, sceneId: otherScene.Id)).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task Restore_ReadsRevisionWrittenByAiSuggestion()
+    {
+        // Revision từ đề xuất AI lưu payload dạng object { lines: [...] }, khác dạng mảng của sửa tay
+        var line = ScriptLine.Create(_scene.Id, 1, "Thoại AI");
+        _db.ScriptLines.Add(line);
+        var payload = AiJson.Serialize(new ScriptDraft(1, Guid.NewGuid(), _scene.Id, 0,
+            [new ScriptDraftLine(line.Id, 1, null, "Thoại AI", null)], [], null));
+        _db.ContentRevisions.Add(ContentRevision.Create(
+            _chapter.Id, _scene.Id, ContentRevisionKind.Script, 1, "Script từ đề xuất AI", payload, "hash", null, Guid.NewGuid()));
+        await _db.SaveChangesAsync();
+        await EditLine(line.Id, "Sửa tay");
+
+        var r = await Restore(ScriptRevisions()[0].Id);
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        _db.ScriptLines.Single().DialogueText.Should().Be("Thoại AI");
+    }
+
+    [Fact]
+    public async Task GetScriptRevision_ReturnsLinesOfThatVersion_AndFlagsCurrent()
+    {
+        var a = await Create("A");
+        await EditLine(a.Value!.Id, "A sửa");
+        var history = ScriptRevisions();
+        var handler = new GetScriptRevisionQueryHandler(_db);
+
+        var old = await handler.Handle(new GetScriptRevisionQuery(_chapter.Id, _scene.Id, history[0].Id), default);
+        var current = await handler.Handle(new GetScriptRevisionQuery(_chapter.Id, _scene.Id, history[1].Id), default);
+        var wrongChapter = await handler.Handle(new GetScriptRevisionQuery(Guid.NewGuid(), _scene.Id, history[0].Id), default);
+
+        old.Value!.Lines.Select(l => l.DialogueText).Should().Equal("A");
+        (old.Value.IsCurrent, current.Value!.IsCurrent).Should().Be((false, true));
+        wrongChapter.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 }

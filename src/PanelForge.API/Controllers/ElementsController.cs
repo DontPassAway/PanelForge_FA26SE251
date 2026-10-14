@@ -13,6 +13,7 @@ using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
 using PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
 using PanelForge.Domain.Entities.Content;
 using System.Security.Claims;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -139,7 +140,7 @@ public sealed class ElementsController : ControllerBase
     /// <summary>POST /api/pages/{pageId}/elements/{elementId}/overflow-ack — Body: { "reason": "..." } (bắt buộc, ≤ 500 ký tự)</summary>
     [HttpPost("{elementId:guid}/overflow-ack")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AcknowledgeOverflow(
@@ -155,7 +156,7 @@ public sealed class ElementsController : ControllerBase
     /// <summary>PUT /api/pages/{pageId}/elements/{elementId}/reading-order — Body: { "readingOrder": 3 } hoặc null để bỏ ghi đè</summary>
     [HttpPut("{elementId:guid}/reading-order")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -184,7 +185,7 @@ public sealed class ElementsController : ControllerBase
     /// </summary>
     [HttpPut("{elementId:guid}/position")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]

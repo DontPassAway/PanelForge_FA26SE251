@@ -6,6 +6,7 @@ using PanelForge.Application.Features.Users.Models;
 using PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
 using PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
 using PanelForge.Application.Features.Users.Queries.GetUserProfile;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -44,6 +45,7 @@ public class UsersController : ControllerBase
     /// Lấy thông tin hồ sơ của chính người dùng đang đăng nhập
     /// </summary>
     [HttpGet("me")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
     {
         var userIdStr = GetCallerUserIdStr();
@@ -65,6 +67,7 @@ public class UsersController : ControllerBase
     /// Lấy chi tiết người dùng theo PostgreSQL Id
     /// </summary>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileQuery(Id: id);
@@ -82,6 +85,7 @@ public class UsersController : ControllerBase
     /// Lấy chi tiết người dùng theo Firebase Uid
     /// </summary>
     [HttpGet("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetByFirebaseUid(string firebaseUid, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileQuery(FirebaseUid: firebaseUid);
@@ -99,6 +103,7 @@ public class UsersController : ControllerBase
     /// Cập nhật Username và Avatar theo PostgreSQL Id (xác thực quyền sở hữu qua token)
     /// </summary>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProfile(Guid id, [FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         try
@@ -136,6 +141,7 @@ public class UsersController : ControllerBase
     /// Cập nhật Username và Avatar theo Firebase Uid (xác thực quyền sở hữu qua token)
     /// </summary>
     [HttpPut("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProfileByFirebaseUid(string firebaseUid, [FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         try
@@ -173,6 +179,7 @@ public class UsersController : ControllerBase
     /// Vô hiệu hóa (Soft Delete) người dùng theo PostgreSQL Id
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SoftDelete(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -207,6 +214,7 @@ public class UsersController : ControllerBase
     /// Vô hiệu hóa (Soft Delete) người dùng theo Firebase Uid
     /// </summary>
     [HttpDelete("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SoftDeleteByFirebaseUid(string firebaseUid, CancellationToken cancellationToken)
     {
         try

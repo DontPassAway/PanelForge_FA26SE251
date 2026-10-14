@@ -87,7 +87,13 @@ public class DemoWorkflowTests
         steps[5].InputJson.Should().Contain("checklist");
 
         // Provenance: prompt version/ref, parameters; Mock không khai token
-        all.Should().OnlyContain(s => s.PromptVersion != "" && s.PromptRef.Contains("#sha256:") && s.ParametersJson.Contains("temperature"));
+        all.Should().OnlyContain(s => s.PromptVersion != "" && s.PromptRef.Contains("#sha256:"));
+        steps.Should().OnlyContain(s => s.ParametersJson.Contains("temperature"));
+        // Tiết kiệm quota: Supervisor chỉ gọi model ở nhánh rẽ thật (sửa tiếp hay dừng); các quyết định một-lựa-chọn do code lập
+        var supervisorSteps = all.Where(s => s.Agent == AiAgentType.Supervisor).ToList();
+        supervisorSteps.Select(s => s.ParametersJson.Contains("temperature")).Should().Equal(false, false, true, false, false, false, false);
+        supervisorSteps.Where(s => !s.ParametersJson.Contains("temperature"))
+            .Should().OnlyContain(s => s.ParametersJson.Contains("single-allowed-action"));
         all.Should().OnlyContain(s => s.PromptTokens == null && s.CompletionTokens == null && s.Provider == "Mock");
         all.Where(s => s.Agent == AiAgentType.Supervisor).Should().OnlyContain(s => s.PromptVersion == "supervisor@2");
         h.Usage.Verify(u => u.RecordAsync(It.IsAny<PanelForge.Application.Common.Interfaces.Services.AiUsageEntry>(), default), Times.Never);
@@ -119,8 +125,10 @@ public class DemoWorkflowTests
         var revisionWriter = chat.UserMessages.Single(m => m.Contains("[[agent:writer]]") && m.Contains("[[round:1]]"));
         revisionWriter.Should().Contain("Chỉ đạo của Supervisor");
         revisionWriter.Should().Contain("Bỏ chi tiết mâu thuẫn với Bible");
+        // Lượt đầu chỉ có một bước hợp lệ → code quyết định, không gọi model nên không có chỉ đạo
         var firstWriter = chat.UserMessages.First(m => m.Contains("[[agent:writer]]"));
-        firstWriter.Should().Contain("Bám sát Series Bible");
+        firstWriter.Should().NotContain("Chỉ đạo của Supervisor");
+        chat.UserMessages.Count(m => m.Contains("[[agent:supervisor]]")).Should().Be(1);
     }
 
     [Fact]
@@ -183,7 +191,7 @@ public class DemoWorkflowTests
         var h = await AiHarness.CreateAsync();
         var runId = await h.StartRunAsync();
         var mock = new MockChatClient();
-        // Supervisor luôn đòi nhảy thẳng sang Editor ngay từ đầu (ngoài danh sách cho phép)
+        // Ở nhánh rẽ thật (sau finding chặn: Writer | StopForHuman) Supervisor đòi nhảy thẳng sang Editor (ngoài danh sách cho phép)
         var chat = new ScriptedChatClient((_, msg) => msg.Contains("[[agent:supervisor]]")
             ? "{\"action\":\"Editor\",\"reason\":\"viết review luôn\",\"instruction\":null}"
             : Ask(mock, msg));
@@ -191,8 +199,7 @@ public class DemoWorkflowTests
         await h.ExecuteWorkflowAsync(runId, chat);
 
         var all = await h.StepsAsync(runId);
-        var first = all[0];
-        first.Agent.Should().Be(AiAgentType.Supervisor);
+        var first = all.Where(s => s.Agent == AiAgentType.Supervisor).ElementAt(2);
         first.RepairAttempts.Should().Be(1, "cho một lần sửa output rồi mới ghi đè");
         var decision = AiJson.Deserialize<SupervisorDecision>(first.OutputJson!)!;
         decision.GuardrailOverridden.Should().BeTrue();

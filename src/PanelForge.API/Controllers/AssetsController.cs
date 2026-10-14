@@ -81,7 +81,7 @@ public sealed class AssetsController : ControllerBase
     /// </summary>
     [HttpGet("api/assets/download")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> Download([FromQuery] string? token, CancellationToken ct)
     {
         var result = await _mediator.Send(

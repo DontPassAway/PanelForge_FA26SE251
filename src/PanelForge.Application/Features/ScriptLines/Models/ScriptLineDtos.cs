@@ -37,3 +37,18 @@ public sealed record UpdateScriptLineRequest(
     NarrationMode? NarrationMode = null);
 
 public sealed record DeleteScriptLineResult(long ChapterVersion, Guid RevisionId);
+
+public sealed record ScriptRevisionLineDto(
+    Guid LineId, int LineOrder, Guid? SpeakerCharacterId, string? DialogueText, string? StageDirection);
+
+/// <param name="IsCurrent">true = đây là revision Script mới nhất của Scene (không khôi phục được vì đã là bản hiện tại).</param>
+/// <param name="SourceSuggestionId">Đề xuất AI sinh ra revision này; null = sửa tay, baseline hoặc khôi phục.</param>
+public sealed record ScriptRevisionDetailDto(
+    Guid Id, Guid SceneId, int VersionNumber, string Summary, Guid? PreviousRevisionId, Guid? SourceSuggestionId,
+    bool IsCurrent, DateTime CreatedAt, string? CreatedBy, IReadOnlyList<ScriptRevisionLineDto> Lines);
+
+public sealed record RestoreScriptRevisionRequest(long? ExpectedChapterVersion);
+
+/// <param name="RevisionId">Revision MỚI ở đầu lịch sử, mang nội dung của bản được khôi phục (BR-08).</param>
+public sealed record RestoreScriptRevisionResult(
+    long ChapterVersion, Guid RevisionId, int VersionNumber, Guid RestoredFromRevisionId, int RestoredFromVersionNumber);

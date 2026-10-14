@@ -21,6 +21,7 @@ using PanelForge.Application.Features.TypographyPresets.Commands.DeleteTypograph
 using PanelForge.Application.Features.TypographyPresets.Models;
 using PanelForge.Application.Features.TypographyPresets.Queries.GetTypographyPresets;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -166,7 +167,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSeries(
         [FromRoute] Guid seriesId,
@@ -265,6 +266,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/presets/{presetId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteTypographyPreset(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid presetId,
@@ -353,6 +355,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteConsistencyRule(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid ruleId,

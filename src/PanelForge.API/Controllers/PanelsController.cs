@@ -14,6 +14,7 @@ using PanelForge.Application.Features.Panels.Queries.GetPanelById;
 using PanelForge.Application.Features.Panels.Queries.GetPanelsByPage;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Consistency.Models;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -185,7 +186,7 @@ public sealed class PanelsController : ControllerBase
     /// </summary>
     [HttpDelete("api/panels/{panelId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePanel(
         [FromRoute] Guid panelId,
@@ -194,6 +195,7 @@ public sealed class PanelsController : ControllerBase
         var command = new DeletePanelCommand(panelId, GetCurrentUserId());
         var result = await _mediator.Send(command, cancellationToken);
 
+        // 409: panel còn việc đang giao
         if (!result.IsSuccess)
             return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
 

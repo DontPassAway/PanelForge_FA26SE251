@@ -72,10 +72,16 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
             _db.Notifications.Add(AssignmentNotifications.Submitted(assignment, reviewerId));
 
         // Gắn lần nộp với đúng bản được nộp (CF3: mọi phê duyệt gắn với một revision cụ thể)
+        // Chụp cả bố cục Panel của các trang đó: lịch sử lần nộp phải xem lại được dù sau này Panel bị xoá / đổi toạ độ (BR-01)
+        var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
+        var pagePanels = pageIds.Count == 0
+            ? []
+            : await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
         var artworkIds = await ChangeRequestRules.LatestArtworkIdsAsync(
-            _db, assignment.PipelineStageId, panels.Select(p => p.PageId), ct);
+            _db, assignment.PipelineStageId, pageIds, pagePanels.Select(p => p.Id), ct);
         await ChangeRequestRules.RecordSubmissionAsync(
-            _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector);
+            _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector,
+            SubmissionPanelDto.Serialize(pagePanels));
 
         assignment.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
