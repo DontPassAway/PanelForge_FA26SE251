@@ -6,7 +6,7 @@ using PanelForge.Application.Features.Assets.Common;
 namespace PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
 
 /// <summary>
-/// FR-Producer-02: Producer tải ảnh reference sheet lên kho. URL trả về được gửi vào <c>ReferenceImageUrl</c>
+/// FR-Producer-02, hướng B: Producer, Writer hoặc Artist tải ảnh reference sheet lên kho (ảnh chỉ thành canon khi Producer khoá revision chứa nó). URL trả về được gửi vào <c>ReferenceImageUrl</c>
 /// khi tạo mục hoặc thêm revision, nên ảnh gắn theo từng version (BR-01, BR-15). Khoá theo SHA-256 nội dung:
 /// cùng ảnh thì cùng URL, file đã lưu không bao giờ bị ghi đè.
 /// </summary>

@@ -1004,6 +1004,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("effective_from_chapter_number");
 
+                    b.Property<int?>("EffectiveToChapterNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("effective_to_chapter_number");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -1026,6 +1030,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("snapshot_json");
+
+                    b.Property<string>("StageName")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("stage_name");
 
                     b.Property<string>("Summary")
                         .IsRequired()
@@ -3541,6 +3549,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
 
                     b.Property<bool>("IsInitial")
                         .ValueGeneratedOnAdd()

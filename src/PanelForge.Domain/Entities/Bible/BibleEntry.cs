@@ -98,7 +98,9 @@ public class BibleEntry : BaseEntity
         Guid? authorId = null,
         Guid? associatedChapterId = null,
         int effectiveFromChapterNumber = 1,
-        bool isInitialVersion = false)
+        bool isInitialVersion = false,
+        string? stageName = null,
+        int? effectiveToChapterNumber = null)
     {
         var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
         var revision = BibleEntryRevision.Create(
@@ -110,7 +112,9 @@ public class BibleEntry : BaseEntity
             authorId,
             associatedChapterId,
             effectiveFromChapterNumber,
-            isInitialVersion);
+            isInitialVersion,
+            stageName,
+            effectiveToChapterNumber);
 
         Revisions.Add(revision);
         UpdatedAt = DateTime.UtcNow;
@@ -118,12 +122,14 @@ public class BibleEntry : BaseEntity
     }
 
     /// <summary>
-    /// Revision có hiệu lực tại một chương (BR-15): EffectiveFromChapterNumber ≤ chương, lớn nhất rồi đến VersionNumber lớn nhất.
+    /// Revision có hiệu lực tại một chương (BR-15): phạm vi [from, to] chứa chương (to null = tới hết truyện);
+    /// nhiều bản cùng phủ thì lấy from lớn nhất (giai đoạn mới hơn) rồi đến VersionNumber lớn nhất (bản sửa mới hơn).
+    /// Hết phạm vi mọi bản (vd. nhân vật đã rời truyện) → null.
     /// <paramref name="canonOnly"/>: với Nhân vật chỉ tính revision đã được Producer khoá (V1.2, nguồn chuẩn cho AI).
     /// </summary>
     public BibleEntryRevision? EffectiveRevisionAt(int chapterNumber, bool canonOnly = false)
         => Revisions
-            .Where(r => r.EffectiveFromChapterNumber <= chapterNumber)
+            .Where(r => r.CoversChapter(chapterNumber))
             .Where(r => !canonOnly || Category != BibleEntryCategory.Character || r.IsLocked)
             .OrderByDescending(r => r.EffectiveFromChapterNumber)
             .ThenByDescending(r => r.VersionNumber)

@@ -77,6 +77,8 @@ public sealed class LockBibleEntryRevisionCommandHandler
             CreatedAt: revision.CreatedAt,
             IsLocked: revision.IsLocked,
             LockedAt: revision.LockedAt,
-            LockedById: revision.LockedById));
+            LockedById: revision.LockedById,
+            StageName: revision.StageName,
+            EffectiveToChapterNumber: revision.EffectiveToChapterNumber));
     }
 }

@@ -84,7 +84,7 @@ public sealed class BibleController : ControllerBase
     /// Thêm mục mới vào Series Bible (Tự động khởi tạo Version 1 - BR-18, CF1 Step 8).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)] // UC-04, FR-Producer-02: chỉ Producer duy trì Bible
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // Hướng B: Writer/Artist tạo bản nháp, chỉ Producer khoá thành canon
     [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -105,7 +105,9 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.ReferenceImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber
+            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -125,7 +127,7 @@ public sealed class BibleController : ControllerBase
     /// Tạo phiên bản sửa đổi mới cho BibleEntry có hiệu lực từ một Chapter (Append-only BR-01, BR-15).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)] // UC-04, FR-Producer-02
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // bản nháp (chưa khoá)
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -149,6 +151,8 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ExpectedVersionNumber: body.ExpectedVersionNumber
         );
 
@@ -230,7 +234,9 @@ public sealed class BibleController : ControllerBase
             StrictCheck: body.StrictCheck,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
             SupersedesRevisionId: revisionId,
-            SupersedeReason: body.Reason
+            SupersedeReason: body.Reason,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber
         );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -251,7 +257,7 @@ public sealed class BibleController : ControllerBase
     /// Trả về <c>url</c> để gửi vào <c>referenceImageUrl</c> khi tạo mục hoặc thêm revision.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/assets")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]

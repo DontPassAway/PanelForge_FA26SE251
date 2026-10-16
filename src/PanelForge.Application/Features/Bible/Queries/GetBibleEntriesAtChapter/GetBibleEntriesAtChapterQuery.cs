@@ -83,7 +83,9 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 CreatedAt: effectiveRev.CreatedAt,
                 IsLocked: effectiveRev.IsLocked,
                 LockedAt: effectiveRev.LockedAt,
-                LockedById: effectiveRev.LockedById
+                LockedById: effectiveRev.LockedById,
+            StageName: effectiveRev.StageName,
+            EffectiveToChapterNumber: effectiveRev.EffectiveToChapterNumber
             );
 
             results.Add(new BibleEntryDto(
