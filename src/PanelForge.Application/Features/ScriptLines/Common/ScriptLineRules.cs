@@ -114,6 +114,12 @@ internal static class ScriptLineRules
         var latest = await db.ContentRevisions.Where(r => r.SceneId == sceneId && r.Kind == ContentRevisionKind.Script)
             .OrderByDescending(r => r.VersionNumber).FirstOrDefaultAsync(ct);
 
+        var payload = AiJson.Serialize(after);
+        var hash = AiContentValidator.Sha256(payload);
+        // Lưu lại mà nội dung dòng không đổi (vd. chỉ đổi Bible link / chế độ lời dẫn, hoặc blur không sửa gì):
+        // không sinh version trùng, không tăng VersionVector. Revision mới nhất vẫn là bản đúng.
+        if (latest is not null && latest.ContentHash == hash) return latest;
+
         var previousId = latest?.Id;
         var next = (latest?.VersionNumber ?? 0) + 1;
         if (latest is null && before.Count > 0)
@@ -124,11 +130,11 @@ internal static class ScriptLineRules
             db.ContentRevisions.Add(baseline);
             previousId = baseline.Id;
             next = 2;
+            if (baseline.ContentHash == hash) return baseline;
         }
 
-        var payload = AiJson.Serialize(after);
         var revision = ContentRevision.Create(chapter.Id, sceneId, ContentRevisionKind.Script, next, summary,
-            payload, AiContentValidator.Sha256(payload), previousId, null, mappingJson);
+            payload, hash, previousId, null, mappingJson);
         db.ContentRevisions.Add(revision);
         chapter.IncrementVersion();
         return revision;

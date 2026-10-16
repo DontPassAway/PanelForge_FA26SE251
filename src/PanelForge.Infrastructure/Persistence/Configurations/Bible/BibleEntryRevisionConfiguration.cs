@@ -64,6 +64,14 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
         builder.HasIndex(r => r.EffectiveFromChapterNumber)
                .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
 
+        builder.Property(r => r.EffectiveToChapterNumber)
+               .HasColumnName("effective_to_chapter_number")
+               .HasColumnType("integer");
+
+        builder.Property(r => r.StageName)
+               .HasColumnName("stage_name")
+               .HasColumnType("varchar(100)");
+
         builder.Property(r => r.IsInitialVersion)
                .HasColumnName("is_initial_version")
                .HasColumnType("boolean")

@@ -7,6 +7,9 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
+using PanelForge.Application.Features.Bible.Queries.GetBibleReferenceImage;
+using PanelForge.Application.Features.Bible.Queries.GetPanelBible;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
@@ -64,9 +67,10 @@ public sealed class BibleController : ControllerBase
     public async Task<IActionResult> GetBibleEntriesAtChapter(
         [FromRoute] Guid seriesId,
         [FromRoute] int chapterNumber,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool canonOnly = false)
     {
-        var query = new GetBibleEntriesAtChapterQuery(seriesId, chapterNumber);
+        var query = new GetBibleEntriesAtChapterQuery(seriesId, chapterNumber, canonOnly);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
@@ -80,7 +84,7 @@ public sealed class BibleController : ControllerBase
     /// Thêm mục mới vào Series Bible (Tự động khởi tạo Version 1 - BR-18, CF1 Step 8).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // Hướng B: Writer/Artist tạo bản nháp, chỉ Producer khoá thành canon
     [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -101,7 +105,9 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.ReferenceImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber
+            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -121,7 +127,7 @@ public sealed class BibleController : ControllerBase
     /// Tạo phiên bản sửa đổi mới cho BibleEntry có hiệu lực từ một Chapter (Append-only BR-01, BR-15).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // bản nháp (chưa khoá)
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -145,6 +151,8 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ExpectedVersionNumber: body.ExpectedVersionNumber
         );
 
@@ -226,7 +234,9 @@ public sealed class BibleController : ControllerBase
             StrictCheck: body.StrictCheck,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
             SupersedesRevisionId: revisionId,
-            SupersedeReason: body.Reason
+            SupersedeReason: body.Reason,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber
         );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -238,6 +248,70 @@ public sealed class BibleController : ControllerBase
                 _ => BadRequest(new { error = result.ErrorMessage })
             };
         }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Producer tải ảnh reference sheet (PNG/JPEG/WebP, ≤ 10 MB).
+    /// Trả về <c>url</c> để gửi vào <c>referenceImageUrl</c> khi tạo mục hoặc thêm revision.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/assets")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(BibleReferenceImageDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UploadReferenceImage(
+        [FromRoute] Guid seriesId, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+
+        var result = await _mediator.Send(new UploadBibleReferenceImageCommand(seriesId, buffer.ToArray()), cancellationToken);
+        return result.IsSuccess
+            ? Created(result.Value!.Url, result.Value)
+            : BadRequest(new { error = result.ErrorMessage });
+    }
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/bible/assets/{sha256} — ảnh reference sheet, mọi thành viên Workspace (FR-Artist-04).
+    /// Cần Bearer: FE tải bằng fetch rồi hiển thị qua blob URL.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/bible/assets/{sha256}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetReferenceImage(
+        [FromRoute] Guid seriesId, [FromRoute] string sha256, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetBibleReferenceImageQuery(seriesId, sha256), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        // Nội dung gắn theo hash nên không đổi; vẫn là tài sản nội bộ nên chỉ cache ở trình duyệt
+        Response.Headers.CacheControl = "private, max-age=86400, immutable";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    /// <summary>
+    /// GET /api/panels/{panelId}/bible — mục Bible của các nhân vật nói trong Panel, bản canon đã khoá
+    /// có hiệu lực ở chương của Panel (UC-07 bước 1, BR-15). Dùng cho drawer tham chiếu trong task của Artist.
+    /// </summary>
+    [HttpGet("api/panels/{panelId:guid}/bible")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<BibleEntryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPanelBible([FromRoute] Guid panelId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPanelBibleQuery(panelId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
 
         return Ok(result.Value);
     }

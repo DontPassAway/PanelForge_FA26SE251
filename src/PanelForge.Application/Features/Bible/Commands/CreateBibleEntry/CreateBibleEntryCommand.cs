@@ -23,7 +23,9 @@ public sealed record CreateBibleEntryCommand(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1
+    int EffectiveFromChapterNumber = 1,
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null
 ) : IRequest<Result<BibleEntryDto>>;
 
 public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBibleEntryCommand, Result<BibleEntryDto>>
@@ -75,6 +77,9 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
         }
 
         var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
+        if (command.EffectiveToChapterNumber < effectiveFrom)
+            return Result<BibleEntryDto>.Failure(
+                $"Chương kết thúc hiệu lực phải ≥ chương bắt đầu ({effectiveFrom}).", ResultErrorCodes.Validation);
 
         // Tự động sinh snapshot & revision v1 ban đầu (BR-18, CF1 Step 8)
         var snapshotObj = new
@@ -88,7 +93,9 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             entry.ReferenceImageUrl,
             entry.Priority,
             entry.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom
+            EffectiveFromChapterNumber = effectiveFrom,
+            StageName = command.StageName?.Trim(),
+            command.EffectiveToChapterNumber
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
@@ -100,7 +107,9 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             authorId: command.UserId,
             associatedChapterId: null,
             effectiveFromChapterNumber: effectiveFrom,
-            isInitialVersion: true
+            isInitialVersion: true,
+            stageName: command.StageName,
+            effectiveToChapterNumber: command.EffectiveToChapterNumber
         );
 
         _dbContext.BibleEntries.Add(entry);
@@ -119,7 +128,9 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             AssociatedChapterId: revision.AssociatedChapterId,
             EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
             IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt
+            CreatedAt: revision.CreatedAt,
+            StageName: revision.StageName,
+            EffectiveToChapterNumber: revision.EffectiveToChapterNumber
         );
 
         return Result<BibleEntryDto>.Success(new BibleEntryDto(

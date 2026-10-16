@@ -29,7 +29,9 @@ public sealed record AddBibleEntryRevisionCommand(
     // V1.2: Producer thay thế một bản đã khoá (route .../supersede, chỉ Producer). Bản mới cùng chương, được khoá luôn;
     // bản cũ giữ nguyên (không mở khoá, không sửa tại chỗ). Lý do bắt buộc, ghi vào Summary.
     Guid? SupersedesRevisionId = null,
-    string? SupersedeReason = null
+    string? SupersedeReason = null,
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null
 ) : IRequest<Result<BibleEntryRevisionDto>>;
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
@@ -77,6 +79,8 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         }
 
         var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
+        var effectiveTo = command.EffectiveToChapterNumber;
+        var stageName = command.StageName;
         var summary = command.Summary;
 
         if (command.SupersedesRevisionId is { } supersededId)
@@ -94,6 +98,9 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                     $"Phải nhập lý do thay thế bản đã khoá (tối đa {MaxSupersedeReasonLength} ký tự).", ResultErrorCodes.Validation);
 
             effectiveFrom = superseded.EffectiveFromChapterNumber;
+            // Bản thay thế giữ đúng giai đoạn của bản bị thay, trừ khi Producer chỉnh lại
+            effectiveTo ??= superseded.EffectiveToChapterNumber;
+            stageName ??= superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
         }
         // V1.2: bản đã khoá không bị ghi đè tại chỗ: thêm bản ở chương khác, hoặc Producer thay thế có lý do (ở trên).
@@ -104,6 +111,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 "Hãy chọn chương bắt đầu có hiệu lực khác, hoặc nhờ Producer thay thế bản đã khoá (kèm lý do).",
                 ResultErrorCodes.Conflict);
         }
+
+        if (effectiveTo < effectiveFrom)
+            return Result<BibleEntryRevisionDto>.Failure(
+                $"Chương kết thúc hiệu lực phải ≥ chương bắt đầu ({effectiveFrom}).", ResultErrorCodes.Validation);
 
         // Snapshot lấy từ nội dung của CHÍNH revision này, không lấy từ current state của entry,
         // vì bản sửa hồi tố không được thay đổi current state (Append-only BR-01, BR-15).
@@ -118,7 +129,9 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             ReferenceImageUrl = command.ReferenceImageUrl?.Trim(),
             command.Priority,
             command.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom
+            EffectiveFromChapterNumber = effectiveFrom,
+            StageName = stageName?.Trim(),
+            EffectiveToChapterNumber = effectiveTo
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
@@ -130,7 +143,9 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             authorId: command.UserId,
             associatedChapterId: null,
             effectiveFromChapterNumber: effectiveFrom,
-            isInitialVersion: false
+            isInitialVersion: false,
+            stageName: stageName,
+            effectiveToChapterNumber: effectiveTo
         );
         // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
         if (command.SupersedesRevisionId is not null) revision.Lock(command.UserId);
@@ -178,7 +193,9 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             CreatedAt: revision.CreatedAt,
             IsLocked: revision.IsLocked,
             LockedAt: revision.LockedAt,
-            LockedById: revision.LockedById
+            LockedById: revision.LockedById,
+            StageName: revision.StageName,
+            EffectiveToChapterNumber: revision.EffectiveToChapterNumber
         ));
     }
 

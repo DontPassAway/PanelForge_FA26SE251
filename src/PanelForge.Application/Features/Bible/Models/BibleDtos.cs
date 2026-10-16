@@ -16,7 +16,10 @@ public sealed record BibleEntryRevisionDto(
     DateTime CreatedAt,
     bool IsLocked = false,
     DateTime? LockedAt = null,
-    Guid? LockedById = null
+    Guid? LockedById = null,
+    // Giai đoạn và phạm vi hiệu lực [from, to] (to null = tới hết truyện)
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null
 );
 
 public sealed record BibleEntryDto(
@@ -57,7 +60,9 @@ public sealed record CreateBibleEntryRequest(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1
+    int EffectiveFromChapterNumber = 1,
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null
 );
 
 public sealed record AddBibleEntryRevisionRequest(
@@ -70,6 +75,8 @@ public sealed record AddBibleEntryRevisionRequest(
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
     int EffectiveFromChapterNumber = 1,
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null,
     // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
     int? ExpectedVersionNumber = null
 );
@@ -84,5 +91,8 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int? ExpectedVersionNumber = null
+    int? ExpectedVersionNumber = null,
+    // null = giữ giai đoạn và chương kết thúc của bản bị thay
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null
 );

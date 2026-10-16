@@ -75,6 +75,8 @@ Mỗi lần sửa một mục là tạo thêm **một phiên bản mới**; phi�
 | Mã băm (`ContentHash`) | Dùng để kiểm tra toàn vẹn |
 | Tác giả (`AuthorId`) | Ai tạo phiên bản này |
 | **Có hiệu lực từ chương** (`EffectiveFromChapterNumber`) | Phiên bản này bắt đầu đúng từ chương nào |
+| **Hết hiệu lực ở chương** (`EffectiveToChapterNumber`) | Chương cuối còn hiệu lực (gồm cả chương đó); trống = tới hết truyện |
+| **Tên giai đoạn** (`StageName`) | Tên do người dùng đặt, vd. "Lúc nhỏ", "Trưởng thành". Không phải số phiên bản |
 | Chương liên quan (`AssociatedChapterId`) | Chương gắn với thay đổi, nếu có |
 | Phiên bản đầu tiên? (`IsInitialVersion`) | Đánh dấu bản khởi tạo |
 
@@ -97,6 +99,19 @@ Mục PlotFact "Chiếc chìa khóa bạc":
 - Khi kiểm tra **Chương 6**, hệ thống dùng v2. Cùng cảnh đó **hợp lệ**.
 
 Nhờ vậy, khi một sự thật thay đổi hợp lệ ở chương sau, hệ thống **không báo lỗi giả** cho các chương trước, và trạng thái cũ vẫn luôn dựng lại được.
+
+### Giai đoạn của nhân vật (vd. Goku lúc nhỏ và trưởng thành)
+
+Không đặt tên kiểu "Goku V1 / V1.x / V2", vì dễ hiểu nhầm thành số lần chỉnh sửa. Giữ **một mục** `CHR-GOKU`, mỗi giai đoạn là một bản ghi có **tên** và **phạm vi chương**:
+
+| Giai đoạn | Hiệu lực từ | Hết hiệu lực ở |
+|---|---|---|
+| Lúc nhỏ | Chương 1 | Chương 19 |
+| Trưởng thành | Chương 20 | (trống = tới hết truyện) |
+
+Quy tắc chọn bản ở Chương N: lấy bản có phạm vi chứa N; nếu nhiều bản cùng chứa thì lấy bản bắt đầu muộn nhất (giai đoạn mới hơn), rồi tới bản sửa mới nhất. Nếu không bản nào chứa N (vd. nhân vật rời truyện sau chương 50), mục đó không xuất hiện ở chương N. Sửa chi tiết trong cùng giai đoạn (thêm mặt nghiêng, chỉnh màu áo) là một bản mới **cùng tên giai đoạn và cùng phạm vi**; nếu bản cũ đã khoá thì Producer dùng "Thay thế bản khoá", bản thay thế giữ nguyên giai đoạn và phạm vi.
+
+Hạn chế hiện tại: cảnh hồi tưởng (Chương 25 có Goku lúc nhỏ) chưa chọn được giai đoạn riêng cho từng Panel.
 
 ### Sửa Bible khi phát hiện sai
 
@@ -122,9 +137,9 @@ Nếu Producer nhận ra Bible ghi sai từ đầu, không sửa đè v1. Cô t�
 
 | Role | Quyền với Bible |
 |---|---|
-| **Producer** | Tạo mục, cập nhật nhân vật/địa điểm/đạo cụ/thuật ngữ/quy tắc phong cách, ghi plot fact, tạo phiên bản sửa đổi |
-| **Writer** | Đề xuất bổ sung hoặc sửa; liên kết script với mục Bible |
-| **Artist** | Xem: model sheet, bảng màu, đạo cụ. Dùng làm tham chiếu khi vẽ |
+| **Producer** | Tạo và sửa mục; **duyệt và khoá** bản nháp thành canon; thay thế bản đã khoá (kèm lý do) |
+| **Writer** | Tạo mục và bản nháp (mô tả, tính cách, vai trò, giai đoạn); liên kết script với mục Bible |
+| **Artist** | Thêm bản nháp có ảnh reference sheet cho mục do Writer tạo; xem bản canon khi vẽ |
 | **Letterer** | Xem: thuật ngữ, cách xưng hô |
 | **Editor** | Góp ý; chạy kiểm tra nhất quán và xử lý các phát hiện |
 | **Admin** | Không có quyền nội dung trong Workspace |
