@@ -169,6 +169,21 @@ public class ManualScriptLineTests
     }
 
     [Fact]
+    public async Task Update_WithUnchangedContent_CreatesNoNewRevision_AndKeepsChapterVersion()
+    {
+        var created = await Create("Giữ nguyên");
+        var revisionsBefore = _db.ContentRevisions.Count();
+
+        var same = await new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+            new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Giữ nguyên", null, null, created.Value.ChapterVersion), default);
+
+        same.IsSuccess.Should().BeTrue();
+        same.Value!.ChapterVersion.Should().Be(created.Value.ChapterVersion);
+        same.Value.RevisionId.Should().Be(created.Value.RevisionId);
+        _db.ContentRevisions.Count().Should().Be(revisionsBefore);
+    }
+
+    [Fact]
     public async Task Update_LineOfAnotherChapter_IsNotFound()
     {
         var created = await Create("A");
