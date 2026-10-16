@@ -60,7 +60,7 @@ public class SeriesPipelineController : ControllerBase
         CancellationToken cancellationToken)
         => ToActionResult(await _mediator.Send(new UpdatePipelineStageCommand(
             seriesId, stageId, body.Name, body.ColorCode, body.AllowedRole,
-            body.IsApprovalGate, body.EstimatedDurationDays), cancellationToken));
+            body.IsApprovalGate, body.EstimatedDurationDays, body.IsEnabled), cancellationToken));
 
     /// <summary>PUT /api/series/{seriesId}/pipeline/stages/order — sắp xếp lại toàn bộ stage.</summary>
     [HttpPut("api/series/{seriesId:guid}/pipeline/stages/order")]

@@ -17,6 +17,7 @@ public class PipelineStage : BaseEntity
     public bool IsApprovalGate { get; private set; }
     public bool IsInitial { get; private set; }
     public bool IsTerminal { get; private set; }
+    public bool IsEnabled { get; private set; } = true;
     public int? EstimatedDurationDays { get; private set; }
 
     public PipelineDefinition PipelineDefinition { get; private set; } = default!;
@@ -72,6 +73,19 @@ public class PipelineStage : BaseEntity
         AllowedRole = allowedRole;
         IsApprovalGate = isApprovalGate;
         EstimatedDurationDays = estimatedDurationDays;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Producer tắt stage không dùng cho Series (vd. Color với truyện trắng đen, phiếu V1.2: Color là phạm vi mở rộng)
+    /// thay vì xoá, vì stage đã có dữ liệu thì không xoá được. BR-19 bỏ qua stage tắt khi tìm stage trước.
+    /// </summary>
+    public void SetEnabled(bool isEnabled)
+    {
+        if (IsEnabled == isEnabled) return;
+        if (!isEnabled && (IsInitial || IsTerminal))
+            throw new InvalidOperationException("Không thể tắt stage đầu hoặc stage cuối của pipeline.");
+        IsEnabled = isEnabled;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -15,7 +15,8 @@ public sealed record UpdatePipelineStageCommand(
     string? ColorCode,
     WorkspaceRole? AllowedRole,
     bool IsApprovalGate,
-    int? EstimatedDurationDays
+    int? EstimatedDurationDays,
+    bool? IsEnabled = null
 ) : IRequest<Result<SeriesPipelineDto>>;
 
 public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePipelineStageCommand, Result<SeriesPipelineDto>>
@@ -38,8 +39,9 @@ public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePi
         try
         {
             stage.UpdateDetails(cmd.Name, cmd.ColorCode, cmd.AllowedRole, cmd.IsApprovalGate, cmd.EstimatedDurationDays);
+            if (cmd.IsEnabled is { } enabled) stage.SetEnabled(enabled);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return Result<SeriesPipelineDto>.Failure(ex.Message);
         }

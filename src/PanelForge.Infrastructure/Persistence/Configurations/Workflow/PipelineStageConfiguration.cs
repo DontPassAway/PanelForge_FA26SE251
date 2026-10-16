@@ -48,6 +48,11 @@ internal sealed class PipelineStageConfiguration : IEntityTypeConfiguration<Pipe
         builder.HasIndex(s => new { s.PipelineDefinitionId, s.StageOrder })
                .HasDatabaseName("ix_pipeline_stages_definition_stage_order");
 
+        builder.Property(s => s.IsEnabled)
+               .HasColumnName("is_enabled")
+               .HasColumnType("boolean")
+               .IsRequired();
+
         builder.Property(s => s.ColorCode)
                .HasColumnName("color_code")
                .HasColumnType("varchar(20)");

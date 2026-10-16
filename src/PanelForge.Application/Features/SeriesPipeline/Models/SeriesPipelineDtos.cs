@@ -21,7 +21,8 @@ public sealed record PipelineStageDto(
     bool IsApprovalGate,
     bool IsInitial,
     bool IsTerminal,
-    int? EstimatedDurationDays);
+    int? EstimatedDurationDays,
+    bool IsEnabled = true);
 
 public sealed record StageTransitionDto(
     Guid Id,
@@ -50,7 +51,9 @@ public sealed record UpdatePipelineStageRequest(
     string? ColorCode = null,
     WorkspaceRole? AllowedRole = null,
     bool IsApprovalGate = false,
-    int? EstimatedDurationDays = null);
+    int? EstimatedDurationDays = null,
+    // null = giữ nguyên; false = tắt stage (vd. Color cho truyện trắng đen)
+    bool? IsEnabled = null);
 
 /// <param name="StageIds">Toàn bộ stage id của pipeline theo thứ tự mới.</param>
 public sealed record ReorderPipelineStagesRequest(IReadOnlyList<Guid> StageIds);
@@ -69,7 +72,7 @@ internal static class SeriesPipelineMappings
             Stages: pipeline.GetOrderedStages()
                 .Select(s => new PipelineStageDto(
                     s.Id, s.Name, s.Slug, s.StageOrder, s.ColorCode, s.AllowedRole,
-                    s.IsApprovalGate, s.IsInitial, s.IsTerminal, s.EstimatedDurationDays))
+                    s.IsApprovalGate, s.IsInitial, s.IsTerminal, s.EstimatedDurationDays, s.IsEnabled))
                 .ToList(),
             Transitions: pipeline.Transitions
                 .OrderBy(t => order.GetValueOrDefault(t.FromStageId))

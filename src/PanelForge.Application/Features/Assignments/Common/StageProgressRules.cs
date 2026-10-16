@@ -29,10 +29,14 @@ internal static class StageProgressRules
     public static async Task<string?> PriorStageBlockReasonAsync(
         IPanelForgeDbContext db, Assignment a, PipelineStage stage, IReadOnlyList<Panel> panels, CancellationToken ct)
     {
+        if (!stage.IsEnabled) return $"Stage '{stage.Name}' đã được Producer tắt cho Series này.";
         if (stage.IsInitial || panels.Count == 0) return null;
 
-        var prior = await db.PipelineStages.AsNoTracking().FirstOrDefaultAsync(
-            s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder == stage.StageOrder - 1, ct);
+        // Stage trước = stage ĐANG BẬT gần nhất phía trước (vd. truyện trắng đen tắt Color: Letter chờ Ink)
+        var prior = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
+            .OrderByDescending(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
         if (prior is null) return null;
 
         var chapterLevelApproved = await db.Assignments.AnyAsync(x =>

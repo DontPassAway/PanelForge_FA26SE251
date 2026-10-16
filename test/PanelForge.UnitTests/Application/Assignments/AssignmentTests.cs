@@ -559,6 +559,58 @@ public partial class AssignmentTests
         result.IsSuccess.Should().BeTrue();
     }
 
+    /// <summary>Truyện trắng đen: Producer tắt Color thì Letter chỉ chờ stage đang bật ngay trước (Pencil ở fixture này).</summary>
+    private static (PipelineStage Color, PipelineStage Letter) WithDisabledColorBeforeLetter(Fixture f)
+    {
+        var color = PipelineStage.Create(f.InkStage.PipelineDefinitionId, "Color", "color", 2, allowedRole: WorkspaceRole.Artist);
+        color.SetEnabled(false);
+        var letter = PipelineStage.Create(f.InkStage.PipelineDefinitionId, "Letter", "letter", 3, allowedRole: WorkspaceRole.Artist);
+        f.Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { f.ArtistStage, color, letter }));
+        return (color, letter);
+    }
+
+    [Fact]
+    public async Task Start_AfterDisabledStage_WaitsOnlyForNearestEnabledPriorStage()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var (_, letterStage) = WithDisabledColorBeforeLetter(f);
+        var pencil = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, pencil, f.ArtistId);
+        await Submit(f, pencil);
+        var letter = f.SeedFor(WorkflowEntityType.Page, f.Page.Id, letterStage);
+
+        var blocked = await Start(f, letter, f.ArtistId);
+        blocked.ErrorMessage.Should().Contain("Pencil"); // không phải "Color"
+
+        Fixture.Approve(f.Progress.Single(r => r.PanelId == panel.Id));
+        (await Start(f, letter, f.ArtistId)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Start_OnDisabledStage_IsConflict()
+    {
+        var f = new Fixture();
+        f.AddPanel(f.Page, 1);
+        var (colorStage, _) = WithDisabledColorBeforeLetter(f);
+        var color = f.SeedFor(WorkflowEntityType.Page, f.Page.Id, colorStage);
+
+        var result = await Start(f, color, f.ArtistId);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        color.Status.Should().Be(AssignmentStatus.Assigned);
+    }
+
+    [Fact]
+    public void SetEnabled_InitialStage_CannotBeDisabled()
+    {
+        var f = new Fixture();
+
+        var act = () => f.ArtistStage.SetEnabled(false);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
     // ── Thông báo (BR-14, UC-14) ──
 
     [Fact]
