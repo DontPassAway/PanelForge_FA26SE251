@@ -1,3 +1,5 @@
+using System.Text.Json;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
@@ -107,11 +109,31 @@ public sealed record SubmissionDto(
     DateTime? DecidedAt,
     string? DecisionComment,
     IReadOnlyList<Guid>? ArtworkReferenceIds = null,  // phiên bản artwork (AssetReference.id) của lần nộp này
-    long ChapterVersion = 0)                          // version chương lúc nộp (revision script)
+    long ChapterVersion = 0,                          // version chương lúc nộp (revision script)
+    IReadOnlyList<SubmissionPanelDto>? PanelLayout = null) // bố cục Panel lúc nộp; rỗng = không có (lần nộp cũ / việc không có Panel)
 {
     public static SubmissionDto From(Submission s) => new(
         s.Id, s.AssignmentId, s.ChapterId, s.SubmittedByUserId, s.AttemptNumber, s.Status, s.SubmittedAt,
-        s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.ArtworkReferenceIds, s.ChapterVersion);
+        s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.ArtworkReferenceIds, s.ChapterVersion,
+        SubmissionPanelDto.Parse(s.PanelLayoutJson));
+}
+
+/// <summary>Một Panel trong bố cục chụp lúc nộp. Cùng tên field với <c>PanelDto</c> để FE ghép trang bằng một kiểu dữ liệu.</summary>
+public sealed record SubmissionPanelDto(Guid Id, Guid PageId, int PanelNumber, int ReadingOrder, string BoundingBox)
+{
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    public static string Serialize(IEnumerable<Panel> panels) => JsonSerializer.Serialize(
+        panels.OrderBy(p => p.PageId).ThenBy(p => p.PanelNumber)
+            .Select(p => new SubmissionPanelDto(p.Id, p.PageId, p.PanelNumber, p.ReadingOrder, p.BoundingBox)), JsonOpts);
+
+    /// <summary>JSON hỏng hoặc rỗng → danh sách rỗng (FE quay về bố cục hiện tại), không làm hỏng cả lịch sử nộp.</summary>
+    public static IReadOnlyList<SubmissionPanelDto> Parse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonSerializer.Deserialize<List<SubmissionPanelDto>>(json, JsonOpts) ?? []; }
+        catch (JsonException) { return []; }
+    }
 }
 
 public sealed record ChangeRequestDto(

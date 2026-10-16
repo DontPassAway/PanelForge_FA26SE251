@@ -78,6 +78,13 @@ internal sealed class SubmissionConfiguration : IEntityTypeConfiguration<Submiss
                .HasColumnType("bigint")
                .IsRequired();
 
+        // Bố cục Panel lúc nộp; lần nộp cũ (trước khi có cột) nhận "[]"
+        builder.Property(s => s.PanelLayoutJson)
+               .HasColumnName("panel_layout_json")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
+               .IsRequired();
+
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

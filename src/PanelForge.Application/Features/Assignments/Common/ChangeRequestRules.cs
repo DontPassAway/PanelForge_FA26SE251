@@ -37,27 +37,30 @@ internal static class ChangeRequestRules
     /// <summary>Ghi lần nộp mới (cùng lần Save với việc nộp); bản còn Pending trước đó thành Superseded.</summary>
     public static async Task RecordSubmissionAsync(
         IPanelForgeDbContext db, Guid assignmentId, Guid chapterId, Guid submittedByUserId, CancellationToken ct,
-        IReadOnlyList<Guid>? artworkReferenceIds = null, long chapterVersion = 0)
+        IReadOnlyList<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null)
     {
         var previous = await db.Submissions.Where(s => s.AssignmentId == assignmentId).ToListAsync(ct);
         foreach (var pending in previous.Where(s => s.Status == SubmissionStatus.Pending)) pending.Supersede();
 
         db.Submissions.Add(Submission.Create(
-            assignmentId, chapterId, submittedByUserId, previous.Count + 1, artworkReferenceIds, chapterVersion));
+            assignmentId, chapterId, submittedByUserId, previous.Count + 1, artworkReferenceIds, chapterVersion, panelLayoutJson));
     }
 
     /// <summary>
     /// Bản artwork đang nộp: phiên bản mới nhất của từng (Page, Panel) thuộc các trang việc bao phủ, ở stage của việc
-    /// (ảnh cả trang có PanelId null). Việc cấp Chapter / không có artwork → rỗng.
+    /// (ảnh cả trang có PanelId null). Ảnh của Panel không còn trong <paramref name="alivePanelIds"/> (đã bị xoá) bị bỏ,
+    /// vì nó không còn thuộc bố cục được nộp. Việc cấp Chapter / không có artwork → rỗng.
     /// </summary>
     public static async Task<List<Guid>> LatestArtworkIdsAsync(
-        IPanelForgeDbContext db, Guid stageId, IEnumerable<Guid> pageIds, CancellationToken ct)
+        IPanelForgeDbContext db, Guid stageId, IEnumerable<Guid> pageIds, IEnumerable<Guid> alivePanelIds, CancellationToken ct)
     {
         var pages = pageIds.Distinct().ToList();
         if (pages.Count == 0) return [];
-        var refs = await db.AssetReferences.AsNoTracking()
+        var alive = alivePanelIds.ToHashSet();
+        var refs = (await db.AssetReferences.AsNoTracking()
             .Where(r => r.PipelineStageId == stageId && pages.Contains(r.PageId))
-            .Select(r => new { r.Id, r.PageId, r.PanelId, r.VersionNumber }).ToListAsync(ct);
+            .Select(r => new { r.Id, r.PageId, r.PanelId, r.VersionNumber }).ToListAsync(ct))
+            .Where(r => r.PanelId is null || alive.Contains(r.PanelId.Value));
         return refs.GroupBy(r => (r.PageId, r.PanelId))
             .Select(g => g.OrderByDescending(r => r.VersionNumber).First().Id).ToList();
     }

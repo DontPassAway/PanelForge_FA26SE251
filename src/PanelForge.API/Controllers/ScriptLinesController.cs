@@ -7,9 +7,12 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
+using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptRevision;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Models;
+using PanelForge.Application.Features.ScriptLines.Queries.GetScriptRevision;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -65,13 +68,38 @@ public sealed class ScriptLinesController : ControllerBase
     /// <summary>PUT /api/chapters/{chapterId}/scenes/{sceneId}/script-lines/reorder — đổi thứ tự các dòng trong Scene (DnD).</summary>
     [HttpPut("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-lines/reorder")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reorder(
         Guid chapterId, Guid sceneId, [FromBody] ReorderScriptLinesRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new ReorderScriptLinesCommand(
             chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion), ct);
         return result.IsSuccess ? Ok(new { message = "Cập nhật thứ tự dòng kịch bản thành công." }) : Error(result);
+    }
+
+    /// <summary>GET /api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId} — các dòng của một revision script (UC-18).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-revisions/{revisionId:guid}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ScriptRevisionDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRevision(Guid chapterId, Guid sceneId, Guid revisionId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetScriptRevisionQuery(chapterId, sceneId, revisionId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId}/restore — khôi phục script của Scene về
+    /// revision cũ (UC-13). Tạo revision mới ở đầu lịch sử, không xoá bản nào (BR-08).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-revisions/{revisionId:guid}/restore")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(RestoreScriptRevisionResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RestoreRevision(
+        Guid chapterId, Guid sceneId, Guid revisionId, [FromBody] RestoreScriptRevisionRequest? body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RestoreScriptRevisionCommand(
+            chapterId, sceneId, revisionId, GetCurrentUserId(), body?.ExpectedChapterVersion), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     private IActionResult Error<T>(Result<T> result) => result.ErrorCode switch

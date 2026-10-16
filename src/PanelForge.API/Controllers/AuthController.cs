@@ -24,6 +24,7 @@ using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
 using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -43,6 +44,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -53,6 +55,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
@@ -70,6 +73,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("logout")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request, CancellationToken cancellationToken)
     {
@@ -82,6 +86,7 @@ public class AuthController : ControllerBase
     /// <summary>Đổi refresh token (body, hoặc cookie HttpOnly pf_refresh) lấy access JWT mới (xoay vòng refresh token).</summary>
     [EnableRateLimiting("auth")]
     [HttpPost("refresh")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Refresh(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
@@ -137,6 +142,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("send-change-password-otp")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SendChangePasswordOtp(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -151,6 +157,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [EnableRateLimiting("auth")]
     [HttpPost("change-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -167,6 +174,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         await _mediator.Send(new ForgotPasswordCommand(request.Email), cancellationToken);
@@ -175,6 +183,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -186,6 +195,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("verify-email")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -196,6 +206,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("resend-verification")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ResendVerificationEmailCommand(request.Email), cancellationToken);
@@ -205,6 +216,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("external-login")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -214,6 +226,7 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("enable-2fa")]
+    [ProducesResponseType(typeof(EnableTwoFactorResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> EnableTwoFactor(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -226,6 +239,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [EnableRateLimiting("auth")]
     [HttpPost("disable-2fa")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DisableTwoFactor([FromBody] DisableTwoFactorRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -242,6 +256,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("verify-2fa")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyTwoFactor([FromBody] VerifyTwoFactorRequest request, CancellationToken cancellationToken)
     {
         // Có cookie thử thách (đã qua bước mật khẩu) → hoàn tất đăng nhập; không có → chỉ xác nhận bật 2FA cho user đang đăng nhập.
@@ -272,6 +287,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forget-device")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgetDevice(CancellationToken cancellationToken)
     {
         var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
@@ -292,6 +308,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [Authorize]
     [HttpGet("me/landing-context")]
+    [ProducesResponseType(typeof(LandingContextDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLandingContext(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)

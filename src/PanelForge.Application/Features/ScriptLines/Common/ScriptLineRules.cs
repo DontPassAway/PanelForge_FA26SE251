@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common;
@@ -107,7 +108,8 @@ internal static class ScriptLineRules
     /// </summary>
     public static async Task<ContentRevision> RecordRevisionAsync(
         IPanelForgeDbContext db, Chapter chapter, Guid sceneId, string summary,
-        IReadOnlyList<BaselineScriptLine> before, IReadOnlyList<BaselineScriptLine> after, CancellationToken ct)
+        IReadOnlyList<BaselineScriptLine> before, IReadOnlyList<BaselineScriptLine> after, CancellationToken ct,
+        string? mappingJson = null)
     {
         var latest = await db.ContentRevisions.Where(r => r.SceneId == sceneId && r.Kind == ContentRevisionKind.Script)
             .OrderByDescending(r => r.VersionNumber).FirstOrDefaultAsync(ct);
@@ -126,9 +128,29 @@ internal static class ScriptLineRules
 
         var payload = AiJson.Serialize(after);
         var revision = ContentRevision.Create(chapter.Id, sceneId, ContentRevisionKind.Script, next, summary,
-            payload, AiContentValidator.Sha256(payload), previousId, null);
+            payload, AiContentValidator.Sha256(payload), previousId, null, mappingJson);
         db.ContentRevisions.Add(revision);
         chapter.IncrementVersion();
         return revision;
+    }
+
+    /// <summary>
+    /// Đọc các dòng của một revision Script. Payload có hai dạng: mảng dòng (sửa tay, baseline) hoặc object có <c>lines</c>
+    /// (đề xuất AI). Trả null khi payload không đọc được.
+    /// </summary>
+    public static IReadOnlyList<BaselineScriptLine>? ParseRevisionLines(string payloadJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("lines", out var lines)) root = lines;
+            if (root.ValueKind != JsonValueKind.Array) return null;
+            return root.Deserialize<List<BaselineScriptLine>>(AiJson.Options)?.OrderBy(l => l.Order).ToList();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

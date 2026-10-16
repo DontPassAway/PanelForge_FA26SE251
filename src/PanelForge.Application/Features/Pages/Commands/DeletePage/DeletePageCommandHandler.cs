@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.Pages.Commands.DeletePage;
 
@@ -50,6 +51,13 @@ public sealed class DeletePageCommandHandler
             return Result<bool>.Failure($"Page {command.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, efPage?.ChapterId ?? streamPage!.ChapterId, cancellationToken) is { } readOnly)
             return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+
+        // Còn việc đang giao cho Page hoặc Panel của nó thì không xoá: tránh Assignment mồ côi
+        var targetIds = await _dbContext.Panels.AsNoTracking()
+            .Where(p => p.PageId == command.PageId).Select(p => p.Id).ToListAsync(cancellationToken);
+        targetIds.Add(command.PageId);
+        if (await AssignmentRules.DeleteBlockedReasonAsync(_dbContext, "trang", targetIds, cancellationToken) is { } blocked)
+            return Result<bool>.Failure(blocked, ResultErrorCodes.Conflict);
 
         // 1. Event Store: đánh dấu Page đã xóa trong stream
         if (streamPage is not null)

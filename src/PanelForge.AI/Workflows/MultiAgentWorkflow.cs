@@ -93,6 +93,12 @@ public sealed class MultiAgentWorkflow
                 dCall = SupervisorAgent.MissingContext(ctx, allowed);
                 dInput = AiJson.Serialize(new { round, allowedActions = allowed, history, missingContext = true });
             }
+            else if (allowed.Count == 1)
+            {
+                // Chỉ một bước hợp lệ: không có gì để chọn → code quyết định, tiết kiệm một lần gọi model (quota)
+                dCall = SupervisorAgent.SingleChoice(ctx, allowed, round, blocking);
+                dInput = AiJson.Serialize(new { round, blockingFindings = blocking, allowedActions = allowed, history });
+            }
             else
             {
                 (dCall, dInput) = await supervisor.DecideAsync(ctx, history, allowed, round, blocking, ct);

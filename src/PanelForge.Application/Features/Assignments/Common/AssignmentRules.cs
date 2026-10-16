@@ -16,6 +16,23 @@ internal static class AssignmentRules
             ? null
             : $"Chapter đang ở trạng thái {chapter.Status}, không thể thay đổi việc.";
 
+    /// <summary>
+    /// Không xoá Page/Panel khi còn Assignment trỏ tới nó: đích của việc phải tồn tại, nếu không danh sách việc và tiến độ
+    /// sẽ hỏi dữ liệu của một trang đã mất. Trả lý do chặn, hoặc null nếu xoá được.
+    /// </summary>
+    public static async Task<string?> DeleteBlockedReasonAsync(
+        IPanelForgeDbContext db, string what, IReadOnlyCollection<Guid> targetIds, CancellationToken ct)
+    {
+        var statuses = await db.Assignments.AsNoTracking()
+            .Where(a => a.EntityType != WorkflowEntityType.Chapter && targetIds.Contains(a.TargetEntityId))
+            .Select(a => a.Status).ToListAsync(ct);
+        if (statuses.Count == 0) return null;
+
+        return statuses.Any(s => s == AssignmentStatus.Approved)
+            ? $"Không thể xoá {what}: đang có {statuses.Count} việc được giao, trong đó có việc đã được duyệt (Approved) nên không huỷ được."
+            : $"Không thể xoá {what}: đang có {statuses.Count} việc được giao. Producer cần huỷ các việc này trước.";
+    }
+
     /// <summary>Người nhận thông báo "đã nộp": Editor của Workspace; nếu chưa có Editor thì Producer. Loại trừ người nộp.</summary>
     public static async Task<List<Guid>> ReviewerUserIdsAsync(
         IPanelForgeDbContext db, Guid workspaceId, Guid excludeUserId, CancellationToken ct)

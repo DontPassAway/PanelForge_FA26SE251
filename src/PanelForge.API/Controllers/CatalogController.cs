@@ -55,7 +55,7 @@ public class CatalogController : ControllerBase
 
     /// <summary>GET /api/catalog/chapters/{chapterId}/pages/{pageId}/image — ảnh trang (artwork ở stage cuối, bản mới nhất).</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPageImage([FromRoute] Guid chapterId, [FromRoute] Guid pageId, CancellationToken cancellationToken)
     {

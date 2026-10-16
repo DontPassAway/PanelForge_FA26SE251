@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Moq;
+using PanelForge.Application.Common;
 using PanelForge.Application.Features.Pages.Commands.DeletePage;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
@@ -22,6 +24,8 @@ public class DeletePageCommandHandlerTests
     {
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
+        _dbContextMock.Setup(db => db.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
+        _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
         _handler = new DeletePageCommandHandler(
             _dbContextMock.Object, _pageRepositoryMock.Object, _unitOfWork, _currentUserMock.Object);
     }
@@ -48,6 +52,34 @@ public class DeletePageCommandHandlerTests
         _unitOfWork.ExecutionCount.Should().Be(1);
         _pageRepositoryMock.Verify(r => r.SaveAsync(streamPage, It.IsAny<CancellationToken>()), Times.Once);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false)] // việc giao cho chính Page
+    [InlineData(true)]  // việc giao cho một Panel của Page
+    public async Task Handle_WhenPageOrItsPanelHasAssignment_ShouldConflictAndDeleteNothing(bool assignedToPanel)
+    {
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
+        page.ClearUncommittedEvents();
+        var panel = Panel.Create(page.Id, 1, 1, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}");
+        var efPages = new List<Page> { page };
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(efPages));
+        _dbContextMock.Setup(db => db.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel> { panel }));
+        _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>
+        {
+            Assignment.Create(Guid.NewGuid(), page.ChapterId,
+                assignedToPanel ? WorkflowEntityType.Panel : WorkflowEntityType.Page, assignedToPanel ? panel.Id : page.Id,
+                Guid.NewGuid(), Guid.NewGuid(), WorkspaceRole.Artist, "Vẽ thumbnail")
+        }));
+        _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        var result = await _handler.Handle(new DeletePageCommand(page.Id), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        page.IsDeleted.Should().BeFalse();
+        efPages.Should().ContainSingle();
+        _pageRepositoryMock.Verify(r => r.SaveAsync(It.IsAny<Page>(), It.IsAny<CancellationToken>()), Times.Never);
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

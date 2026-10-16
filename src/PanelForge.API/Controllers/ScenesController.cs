@@ -144,7 +144,7 @@ public sealed class ScenesController : ControllerBase
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}/scenes/reorder")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ReorderScenes(
         [FromRoute] Guid chapterId,
@@ -166,7 +166,7 @@ public sealed class ScenesController : ControllerBase
     /// </summary>
     [HttpDelete("api/scenes/{sceneId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteScene(
         [FromRoute] Guid sceneId,

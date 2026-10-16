@@ -1,5 +1,6 @@
 using FluentAssertions;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using Xunit;
@@ -128,6 +129,49 @@ public partial class AssignmentTests
 
         f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, p2.Id));
         (await SubmitWithoutArtwork(f, a)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Submit_SnapshotsPanelLayout_AndKeepsItAfterPanelsChange()
+    {
+        var f = new Fixture();
+        var p1 = f.AddPanel(f.Page, 1);
+        var p2 = f.AddPanel(f.Page, 2);
+        p1.UpdateBoundingBox("{\"x\":1}");
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, a, f.ArtistId);
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, p1.Id));
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, p2.Id));
+        (await SubmitWithoutArtwork(f, a)).IsSuccess.Should().BeTrue();
+
+        // Sau khi nộp: xoá một Panel, đổi toạ độ Panel còn lại. Bố cục của lần nộp không được đổi theo (BR-01).
+        f.Panels.Remove(p2);
+        p1.UpdateBoundingBox("{\"x\":99}");
+
+        var layout = SubmissionDto.From(f.Submissions.Single()).PanelLayout!;
+        layout.Select(l => l.Id).Should().BeEquivalentTo(new[] { p1.Id, p2.Id });
+        layout.Single(l => l.Id == p1.Id).BoundingBox.Should().Be("{\"x\":1}");
+        layout.Should().OnlyContain(l => l.PageId == f.Page.Id);
+    }
+
+    [Fact]
+    public async Task Submit_IgnoresArtworkOfDeletedPanels()
+    {
+        var f = new Fixture();
+        var old = f.AddPanel(f.Page, 1);
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, a, f.ArtistId);
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, old.Id));
+
+        // Artist xoá khung cũ rồi dựng khung mới và tải ảnh cho khung mới
+        f.Panels.Remove(old);
+        var fresh = f.AddPanel(f.Page, 1);
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, fresh.Id));
+        (await SubmitWithoutArtwork(f, a)).IsSuccess.Should().BeTrue();
+
+        var submission = f.Submissions.Single();
+        submission.ArtworkReferenceIds.Should().Equal(f.AssetReferences[1].Id);
+        SubmissionDto.From(submission).PanelLayout!.Select(l => l.Id).Should().Equal(fresh.Id);
     }
 
     private static PanelForge.Domain.Entities.Assets.AssetReference Fixture_Reference(

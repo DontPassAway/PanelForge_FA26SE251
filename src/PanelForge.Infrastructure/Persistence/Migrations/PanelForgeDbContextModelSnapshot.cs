@@ -1792,6 +1792,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("DefaultNarrationMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Present")
+                        .HasColumnName("default_narration_mode");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("deleted_at");
@@ -1867,6 +1874,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<int>("LineOrder")
                         .HasColumnType("int")
                         .HasColumnName("line_order");
+
+                    b.Property<string>("NarrationMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Present")
+                        .HasColumnName("narration_mode");
 
                     b.Property<Guid?>("PanelId")
                         .HasColumnType("uuid")
@@ -3793,6 +3807,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("PanelLayoutJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("panel_layout_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<string>("Status")
                         .IsRequired()

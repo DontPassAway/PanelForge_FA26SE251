@@ -171,7 +171,7 @@ public sealed class PagesController : ControllerBase
     /// </summary>
     [HttpPut("api/pages/{pageId:guid}/canvas-settings")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateCanvasSettings(
@@ -206,7 +206,7 @@ public sealed class PagesController : ControllerBase
     /// </summary>
     [HttpDelete("api/pages/{pageId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePage(
         [FromRoute] Guid pageId,
@@ -215,6 +215,7 @@ public sealed class PagesController : ControllerBase
         var command = new DeletePageCommand(pageId);
         var result = await _mediator.Send(command, cancellationToken);
 
+        // 409: trang (hoặc panel của nó) còn việc đang giao
         if (!result.IsSuccess)
             return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
 

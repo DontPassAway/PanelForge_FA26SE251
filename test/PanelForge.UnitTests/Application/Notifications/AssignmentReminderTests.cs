@@ -173,4 +173,22 @@ public class AssignmentReminderTests
 
         (await RunAsync()).Should().Be(0);
     }
+
+    [Fact]
+    public async Task ManualRun_OnlyRemindsWorkspacesWhereCallerIsProducer()
+    {
+        Job(Now.AddHours(5));
+        var producer = Guid.NewGuid();
+        var writer = Guid.NewGuid();
+        _db.WorkspaceMembers.Add(WorkspaceMember.Create(_series.WorkspaceId, producer, WorkspaceRole.Producer));
+        _db.WorkspaceMembers.Add(WorkspaceMember.Create(_series.WorkspaceId, writer, WorkspaceRole.Writer));
+        await _db.SaveChangesAsync();
+
+        Task<int> RunAs(Guid user) =>
+            new SendAssignmentRemindersCommandHandler(_db).Handle(new SendAssignmentRemindersCommand(Lead, Now, user), default);
+
+        (await RunAs(writer)).Should().Be(0, "không phải Producer của workspace này");
+        (await RunAs(Guid.NewGuid())).Should().Be(0, "không thuộc workspace");
+        (await RunAs(producer)).Should().Be(1);
+    }
 }

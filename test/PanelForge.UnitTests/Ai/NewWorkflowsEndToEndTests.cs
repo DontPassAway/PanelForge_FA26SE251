@@ -441,27 +441,28 @@ public class NewWorkflowsEndToEndTests
     [InlineData(AiWorkflowType.Artist, "Artist")]
     [InlineData(AiWorkflowType.Letterer, "Letterer")]
     [InlineData(AiWorkflowType.Producer, "Producer")]
-    public async Task Supervisor_ChoosingAnAgentOutsideTheWorkflow_IsOverriddenByGuardrail_AndRecorded(AiWorkflowType type, string expectedAgent)
+    public async Task SingleAgentWorkflow_NeverAsksTheSupervisorModel_SoItCannotBeSteeredOutsideTheWorkflow(AiWorkflowType type, string expectedAgent)
     {
         var h = await AiHarness.CreateAsync();
         if (type != AiWorkflowType.Producer) await h.AcceptScriptAndLayoutAsync();
         var runId = await h.StartAsync(type);
         var mock = new MockChatClient();
-        // Supervisor luôn đòi chạy Writer (không thuộc workflow) rồi Finish ngay
+        // Nếu được hỏi, Supervisor sẽ đòi chạy Writer (không thuộc workflow); mọi bước chỉ có một lựa chọn nên code quyết định, model không được hỏi
         var chat = new ScriptedChatClient((_, msg) => msg.Contains("[[agent:supervisor]]")
             ? "{\"action\":\"Writer\",\"reason\":\"viết lại script\",\"instruction\":null}"
             : Ask(mock, msg));
 
         await h.ExecuteWorkflowAsync(runId, chat);
 
+        chat.UserMessages.Should().NotContain(m => m.Contains("[[agent:supervisor]]"));
         var all = await h.StepsAsync(runId);
         var first = AiJson.Deserialize<SupervisorDecision>(all[0].OutputJson!)!;
-        first.GuardrailOverridden.Should().BeTrue();
+        first.GuardrailOverridden.Should().BeFalse();
         first.Action.Should().Be(expectedAgent);
         first.AllowedActions.Should().Equal(expectedAgent);
-        all[0].RepairAttempts.Should().Be(1);
+        all[0].ParametersJson.Should().Contain("single-allowed-action");
         all.Should().NotContain(s => s.Agent == AiAgentType.Writer);
-        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Completed, "workflow vẫn chạy đúng chuỗi của nó sau khi code ghi đè");
+        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Completed);
     }
 
     private static AgentStepReport SupervisorStep(Guid runId, int index, string action, IReadOnlyList<string> allowed, int? parent = null)

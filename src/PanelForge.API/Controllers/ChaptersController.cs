@@ -156,7 +156,7 @@ public sealed class ChaptersController : ControllerBase
     /// </summary>
     [HttpDelete("api/chapters/{chapterId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteChapter(
         [FromRoute] Guid chapterId,
