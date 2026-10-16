@@ -1,6 +1,6 @@
 # PanelForge: 5 Core Flow
 
-> **Phiên bản:** 2.1 (06/10/2026). Đối chiếu lại với phiếu đăng ký V1.2 (`Report/GFA26SE140_Phieu_FA26SE251_JapanComicWorkflow_V1.2.docx`, các dòng Record of Changes ngày 02/10 và 06/10/2026). Phần đổi so với 2.0 gắn nhãn **[Chốt theo phiếu V1.2]**
+> **Phiên bản:** 2.1 (06/10/2026). Đối chiếu lại với phiếu đăng ký V1.2 (`docs/reports/GFA26SE140_Phieu_FA26SE251_JapanComicWorkflow_V1.2.docx`, các dòng Record of Changes ngày 02/10 và 06/10/2026). Phần đổi so với 2.0 gắn nhãn **[Chốt theo phiếu V1.2]**
 > **Nguồn gốc:** mục 10 "Core Flows" của [`PanelForge_Capstone_Content.md`](PanelForge_Capstone_Content.md), cập nhật theo các tài liệu đã sửa ngày 04/10/2026:
 > [`panelforge-design-research.md`](../research/panelforge-design-research.md), [`consistency-design.md`](../research/consistency-design.md), [`manga-consistency-research.md`](../research/manga-consistency-research.md), [`manga-production-collaboration-research.md`](../research/manga-production-collaboration-research.md), [`series-bible.md`](../domain/series-bible.md), [`glossary-and-rules.md`](glossary-and-rules.md).
 

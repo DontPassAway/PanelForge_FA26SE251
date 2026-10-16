@@ -1,6 +1,6 @@
 # PanelForge – Toàn bộ scope theo phiếu đăng ký V1.2
 
-Nguồn: `Report/GFA26SE140_Phieu_FA26SE251_JapanComicWorkflow_V1.2.docx` (bản hiện tại, Record of Changes: dòng 1.0 và 1.1 giữ nguyên, dòng 1.2 là các chỉnh sửa sau Review 1, cập nhật đến 06/10/2026).
+Nguồn: `docs/reports/GFA26SE140_Phieu_FA26SE251_JapanComicWorkflow_V1.2.docx` (bản hiện tại, Record of Changes: dòng 1.0 và 1.1 giữ nguyên, dòng 1.2 là các chỉnh sửa sau Review 1, cập nhật đến 06/10/2026).
 Nhóm 5 người, thời gian 09/2026 – 03/2027, giảng viên hướng dẫn: Nguyễn Tấn Phúc.
 
 ---
