@@ -7,7 +7,10 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 
-public sealed record GetBibleEntriesAtChapterQuery(Guid SeriesId, int ChapterNumber) : IRequest<Result<IReadOnlyList<BibleEntryDto>>>;
+/// <param name="CanonOnly">Nhân vật chỉ lấy bản Producer đã khoá, đúng nguồn AI dùng (AiSnapshotBuilder).</param>
+/// <param name="EntryIds">Chỉ lấy các mục này (vd. nhân vật trong một Panel); null = tất cả.</param>
+public sealed record GetBibleEntriesAtChapterQuery(
+    Guid SeriesId, int ChapterNumber, bool CanonOnly = false, IReadOnlyCollection<Guid>? EntryIds = null) : IRequest<Result<IReadOnlyList<BibleEntryDto>>>;
 
 public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBibleEntriesAtChapterQuery, Result<IReadOnlyList<BibleEntryDto>>>
 {
@@ -32,10 +35,11 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
 
         var results = new List<BibleEntryDto>();
 
-        foreach (var entry in bible.Entries.Where(e => e.IsActive).OrderBy(e => e.Category).ThenBy(e => e.Name))
+        var entries = bible.Entries.Where(e => e.IsActive && (request.EntryIds == null || request.EntryIds.Contains(e.Id)));
+        foreach (var entry in entries.OrderBy(e => e.Category).ThenBy(e => e.Name))
         {
-            // BR-15. Màn hình hiện cả nhân vật chưa khoá (DTO có IsLocked); chỉ AI mới bị giới hạn ở bản khoá (AiSnapshotBuilder).
-            var effectiveRev = entry.EffectiveRevisionAt(request.ChapterNumber);
+            // BR-15. Mặc định hiện cả nhân vật chưa khoá (DTO có IsLocked); CanonOnly = chỉ bản khoá, giống AI.
+            var effectiveRev = entry.EffectiveRevisionAt(request.ChapterNumber, request.CanonOnly);
 
             // Nếu mục này chỉ xuất hiện từ chương sau (EffectiveFrom > ChapterNumber) và không có revision nào trước đó thì bỏ qua tại chapter này
             if (effectiveRev == null)
