@@ -80,6 +80,18 @@ public class ContentConcurrencyTests
     }
 
     [Fact]
+    public async Task Panel_SavingSameValuesAgain_DoesNotBumpVersion()
+    {
+        (await MovePanel(_panel, "{\"x\":10}", expected: 0)).Value!.Version.Should().Be(1);
+
+        // Lưu lại y nguyên (vd bấm Lưu hai lần): không tạo phiên bản mới nên không làm người khác bị xung đột
+        var again = await MovePanel(_panel, "{\"x\":10}", expected: 1);
+
+        again.IsSuccess.Should().BeTrue();
+        again.Value!.Version.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Scene_WithStaleExpectedVersion_IsRejected_AndKeepsFirstWrite()
     {
         var first = await EditScene("Bến cảng đêm", expected: 0);

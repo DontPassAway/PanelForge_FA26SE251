@@ -38,7 +38,8 @@ public sealed record SceneDetailDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     IReadOnlyList<SceneScriptLineSummaryDto> ScriptLines,
-    NarrationMode DefaultNarrationMode = NarrationMode.Present
+    NarrationMode DefaultNarrationMode = NarrationMode.Present,
+    int Version = 0   // BR-11: gửi lại làm expectedVersion khi sửa
 );
 
 public sealed record CreateSceneRequest(

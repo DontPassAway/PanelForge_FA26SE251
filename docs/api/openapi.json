@@ -19356,6 +19356,10 @@
           },
           "defaultNarrationMode": {
             "$ref": "#/components/schemas/NarrationMode"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

@@ -41,12 +41,13 @@ public class Scene : BaseEntity
 
     public void UpdateContent(string? heading, string? summary, NarrationMode? defaultNarrationMode = null)
     {
+        var mode = defaultNarrationMode ?? DefaultNarrationMode;
+        // Lưu lại y nguyên không tăng version (không làm lần sửa của người khác thành xung đột)
+        if (Heading == heading?.Trim() && Summary == summary?.Trim() && DefaultNarrationMode == mode) return;
+
         Heading = heading?.Trim();
         Summary = summary?.Trim();
-        if (defaultNarrationMode.HasValue)
-        {
-            DefaultNarrationMode = defaultNarrationMode.Value;
-        }
+        DefaultNarrationMode = mode;
         Version++;
     }
 

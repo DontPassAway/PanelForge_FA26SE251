@@ -46,8 +46,10 @@ public class Panel : BaseEntity
         };
     }
 
+    // Version chỉ tăng khi giá trị thật sự đổi: lưu lại y nguyên không làm lần sửa của người khác thành xung đột
     public void AssignToScene(Guid? sceneId)
     {
+        if (SceneId == sceneId) return;
         SceneId = sceneId;
         Version++;
     }
@@ -55,6 +57,7 @@ public class Panel : BaseEntity
     public void UpdateBoundingBox(string boundingBoxJson)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(boundingBoxJson);
+        if (BoundingBox == boundingBoxJson) return;
         BoundingBox = boundingBoxJson;
         Version++;
     }
@@ -62,6 +65,7 @@ public class Panel : BaseEntity
     public void UpdateReadingOrder(int readingOrder)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(readingOrder);
+        if (ReadingOrder == readingOrder) return;
         ReadingOrder = readingOrder;
         Version++;
     }

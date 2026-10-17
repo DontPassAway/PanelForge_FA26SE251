@@ -1,7 +1,7 @@
 # Đặc tả thay đổi: Core Flow 4 (CF4): Version Control & Provenance
 
 > **Người thực hiện:** Huỳnh Công Hoà · **Ngày:** 17/10/2026
-> **Nhánh:** BE `feat/cf4` (tách từ `test-feature` @ `63259c0`) · FE chưa làm
+> **Nhánh:** BE `feat/cf4` (tách từ `test-feature` @ `63259c0`) · FE `feat/cf4` (tách từ `trungkien` @ `205c6c6`)
 > **Căn cứ:** `docs/requirements/PanelForge_5_Core_Flows.md` mục 4, ghi chú phối hợp ở `CF5_Approval_Export.md` mục 6.
 
 ## 1. Tổng quan
@@ -14,7 +14,7 @@
 | 4.4 | Khôi phục: dùng `RestoreScriptRevisionCommand` có sẵn, bỏ bản trùng | Xong | `c156cec` |
 | 4.5 | Provenance Report của chương (UC-19, BR-10) | Xong | `48beee8`, `fab27c5` |
 | 4.7 | Trả việc stage trước về làm lại thì vô hiệu các stage sau của cùng Panel | Xong | `17b0f48` |
-| — | FE: màn lịch sử, so sánh, khôi phục, Provenance Report, danh sách snapshot | **Chưa** | — |
+| — | FE: modal Lịch sử & nguồn gốc (bản duyệt, Provenance Report, lịch sử AI), canvas/scene gửi `expectedVersion` | Xong | (FE) |
 
 ## 2. Chi tiết thay đổi
 
@@ -46,7 +46,7 @@ Manifest chỉ lưu tham chiếu, không chép ảnh:
 | `PUT /api/panels/{panelId}/coordinates` | `expectedVersion?` | Lệch → **409 `CONFLICT`**; `null` → không kiểm (client cũ) |
 | `PUT /api/scenes/{sceneId}` | `expectedVersion?` | như trên |
 
-`PanelDto`, `PanelDetailDto`, `SceneDto` trả thêm `version`. Dùng version riêng thay vì `Chapter.VersionVector` để kéo một panel không làm đề xuất AI đang chờ thành cũ, và hai người sửa hai panel khác nhau không xung đột. Mã lỗi là `CONFLICT`, không phải `CHAPTER_READ_ONLY` (theo ghi chú của Danh).
+`PanelDto`, `PanelDetailDto`, `SceneDto`, `SceneDetailDto` trả thêm `version`. Version chỉ tăng khi giá trị thật sự đổi (lưu lại y nguyên không làm người khác bị xung đột). Dùng version riêng thay vì `Chapter.VersionVector` để kéo một panel không làm đề xuất AI đang chờ thành cũ, và hai người sửa hai panel khác nhau không xung đột. Mã lỗi là `CONFLICT`, không phải `CHAPTER_READ_ONLY` (theo ghi chú của Danh).
 
 ### 2.3. Lịch sử và so sánh (4.3)
 
@@ -100,8 +100,9 @@ Khi việc **đã duyệt** ở stage S bị trả về qua "phản hồi xem th
 
 ## 4. Kiểm thử
 
-- **Unit BE:** 943/943 (nền `test-feature` @ `63259c0`: 926). Mới: `ChapterPublishFlowTests` +4 (snapshot), `HistoryProvenanceTests` 7, `ContentConcurrencyTests` 4, `PreviewLinkTests` +2 (4.7).
-- **Chưa:** chạy API trên DB thật, giao diện.
+- **Unit BE:** 944/944 (nền `test-feature` @ `63259c0`: 926). Mới: `ChapterPublishFlowTests` +4 (snapshot), `HistoryProvenanceTests` 7, `ContentConcurrencyTests` 5, `PreviewLinkTests` +2 (4.7).
+- **Unit FE (vitest):** 595/595. Mới: `provenanceRules.test.ts`, `ChapterProvenanceModal.test.tsx`, `splitPanel.test.ts` +1.
+- **API trên DB thật:** dữ liệu mẫu "Studio Hoàng Hôn"; các API CF4 trả đúng dữ liệu. **Chưa** kiểm giao diện bằng trình duyệt.
 
 ## 5. Migration
 
@@ -110,7 +111,7 @@ Khi việc **đã duyệt** ở stage S bị trả về qua "phản hồi xem th
 ## 6. Phối hợp
 
 - **Danh:** đã có `ChapterSnapshot` cho 5.5 và 5.6 (thay danh sách artwork của PreviewLink/ExportJob bằng `ChapterSnapshotId`). Handler Provenance Report dùng được cho export JSON (5.3b).
-- **FE:** canvas gửi `expectedVersion` khi kéo/đổi panel và sửa scene, giữ `version` từ response; 409 `CONFLICT` thì tải lại. Màn lịch sử/so sánh/khôi phục/Provenance Report thay cho `ProvenanceModals.tsx` đang là dữ liệu giả. Tên field lấy từ `docs/api/openapi.json` (đã xuất lại).
+- **FE (đã làm trên `feat/cf4`):** `ChapterProvenanceModal` (shared) mở từ danh sách chương của Producer, bàn Publisher (chỉ tab Bản duyệt + Lịch sử AI) và màn task (thay `ProvenanceModals.tsx` dữ liệu giả). Artist gửi `expectedVersion` khi lưu/kéo/chia khung (hàng chờ ngoại tuyến không gửi để các lần sửa nối tiếp không tự xung đột), Writer gửi khi sửa phân cảnh; 409 `CONFLICT` thì nạp lại, không tự gửi lại. Xem/so sánh/khôi phục script dùng `ScriptHistoryModal` có sẵn của Writer.
 
 ## 7. Checklist khi merge
 
