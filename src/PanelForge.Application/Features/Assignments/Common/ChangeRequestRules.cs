@@ -37,13 +37,15 @@ internal static class ChangeRequestRules
     /// <summary>Ghi lần nộp mới (cùng lần Save với việc nộp); bản còn Pending trước đó thành Superseded.</summary>
     public static async Task RecordSubmissionAsync(
         IPanelForgeDbContext db, Guid assignmentId, Guid chapterId, Guid submittedByUserId, CancellationToken ct,
-        IReadOnlyList<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null)
+        IReadOnlyList<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null,
+        string? canvasVersionsJson = null)
     {
         var previous = await db.Submissions.Where(s => s.AssignmentId == assignmentId).ToListAsync(ct);
         foreach (var pending in previous.Where(s => s.Status == SubmissionStatus.Pending)) pending.Supersede();
 
         db.Submissions.Add(Submission.Create(
-            assignmentId, chapterId, submittedByUserId, previous.Count + 1, artworkReferenceIds, chapterVersion, panelLayoutJson));
+            assignmentId, chapterId, submittedByUserId, previous.Count + 1, artworkReferenceIds, chapterVersion, panelLayoutJson,
+            canvasVersionsJson));
     }
 
     /// <summary>

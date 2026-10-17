@@ -85,6 +85,13 @@ internal sealed class SubmissionConfiguration : IEntityTypeConfiguration<Submiss
                .HasDefaultValueSql("'[]'::jsonb")
                .IsRequired();
 
+        // Version canvas từng trang lúc nộp; lần nộp cũ nhận "{}"
+        builder.Property(s => s.CanvasVersionsJson)
+               .HasColumnName("canvas_versions_json")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'{}'::jsonb")
+               .IsRequired();
+
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

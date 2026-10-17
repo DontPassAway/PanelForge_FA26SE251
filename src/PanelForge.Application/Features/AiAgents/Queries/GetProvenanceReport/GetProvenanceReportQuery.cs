@@ -65,11 +65,13 @@ public sealed class GetProvenanceReportQueryHandler : IRequestHandler<GetProvena
 
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IPageRepository _pages;
 
-    public GetProvenanceReportQueryHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public GetProvenanceReportQueryHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IPageRepository pages)
     {
         _db = db;
         _auth = auth;
+        _pages = pages;
     }
 
     public async Task<Result<ProvenanceReportResponse>> Handle(GetProvenanceReportQuery q, CancellationToken ct)
@@ -110,9 +112,15 @@ public sealed class GetProvenanceReportQueryHandler : IRequestHandler<GetProvena
         var snapshots = await _db.ChapterSnapshots.AsNoTracking()
             .Where(s => s.ChapterId == q.ChapterId).OrderBy(s => s.SnapshotNumber).ToListAsync(ct);
 
+        // Lịch sử sản xuất theo trang (Artist / Letterer / Editor) — chỉ khi xem cả chương (không lọc Scene)
+        var production = q.SceneId is null
+            ? await ProductionHistory.LoadAsync(_db, _pages, q.ChapterId, ct)
+            : ProductionHistory.Empty;
+
         var userIds = runs.Select(r => r.RequestedByUserId)
             .Concat(decisions.Select(d => d.DecidedByUserId))
             .Concat(snapshots.Select(s => s.CreatedByUserId))
+            .Concat(production.UserIds)
             .Distinct().ToList();
         var names = await _db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
@@ -214,6 +222,8 @@ public sealed class GetProvenanceReportQueryHandler : IRequestHandler<GetProvena
             timeline.Add(new ProvenanceTimelineEntry(snap.CreatedAt, "SnapshotCreated",
                 $"{Name(snap.CreatedByUserId)} duyệt chương, tạo bản #{snap.SnapshotNumber}", snap.Id, null));
         }
+
+        production.AppendTo(nodes, edges, timeline, Name);
 
         timeline.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
 

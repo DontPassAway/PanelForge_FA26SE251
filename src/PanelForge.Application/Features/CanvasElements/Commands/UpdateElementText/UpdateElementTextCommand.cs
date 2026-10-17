@@ -14,7 +14,9 @@ public sealed record UpdateElementTextCommand(
     Guid PageId, Guid ElementId, string? Content, Guid? ScriptLineId, Guid UserId, int? ExpectedElementVersion = null)
     : IRequest<Result<UpdateElementTextResponse>>;
 
-public sealed record UpdateElementTextResponse(Guid ElementId, string? Content, Guid? ScriptLineId, Guid? SpeakerId);
+/// <summary>ElementVersion = phiên bản thật sau khi lưu; client dùng số này cho lệnh kế tiếp (BR-11), không tự +1.</summary>
+public sealed record UpdateElementTextResponse(
+    Guid ElementId, string? Content, Guid? ScriptLineId, Guid? SpeakerId, int ElementVersion = 0);
 
 public sealed class UpdateElementTextCommandHandler
     : IRequestHandler<UpdateElementTextCommand, Result<UpdateElementTextResponse>>
@@ -70,6 +72,7 @@ public sealed class UpdateElementTextCommandHandler
         }
 
         return Result<UpdateElementTextResponse>.Success(
-            new UpdateElementTextResponse(cmd.ElementId, content?.Trim(), lineId, speakerId));
+            new UpdateElementTextResponse(cmd.ElementId, content?.Trim(), lineId, speakerId,
+                page.Elements[cmd.ElementId].Version));
     }
 }

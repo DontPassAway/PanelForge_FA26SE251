@@ -55,6 +55,8 @@ public sealed class StartAssignmentCommandHandler : IRequestHandler<StartAssignm
         var panels = await StageProgressRules.ResolvePanelsAsync(_db, assignment, ct);
         if (await StageProgressRules.PriorStageBlockReasonAsync(_db, assignment, stage, panels, ct) is { } blocked)
             return Fail(blocked, ResultErrorCodes.Conflict);
+        if (await StageProgressRules.ChapterWorkBlockReasonAsync(_db, assignment, stage, ct) is { } chapterBlocked)
+            return Fail(chapterBlocked, ResultErrorCodes.Conflict);
 
         try { assignment.StartWork(); }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }

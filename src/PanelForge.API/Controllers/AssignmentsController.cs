@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Assignments.Commands.ReturnWorkFromReview;
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -156,6 +157,22 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
+    /// <summary>
+    /// POST .../assignments/{reviewAssignmentId}/return-work — từ màn duyệt cả chương (vd 7. Review), trả việc của một trang/khung
+    /// về người làm kèm mô tả + vùng khoanh. Body: { targetAssignmentId, description, regionJson?, panelId?, assetReferenceId?, dueDate? }.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{reviewAssignmentId:guid}/return-work")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChangeRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReturnWorkFromReview(
+        Guid chapterId, Guid reviewAssignmentId, [FromBody] ReturnWorkFromReviewRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ReturnWorkFromReviewCommand(
+            chapterId, reviewAssignmentId, body.TargetAssignmentId, GetCurrentUserId(), body.Description ?? "",
+            body.RegionJson, body.PanelId, body.AssetReferenceId, body.DueDate), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
     /// <summary>GET .../assignments/{assignmentId}/submissions — lịch sử các lần nộp (mọi thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/submissions")]
     [RequireWorkspaceRole]
@@ -254,3 +271,8 @@ public sealed class AssignmentsController : ControllerBase
         _ => BadRequest(new { error = result.ErrorMessage })
     };
 }
+
+/// <summary>Body trả việc từ màn duyệt cả chương.</summary>
+public sealed record ReturnWorkFromReviewRequest(
+    Guid TargetAssignmentId, string? Description, string? RegionJson = null, Guid? PanelId = null,
+    Guid? AssetReferenceId = null, DateTime? DueDate = null);

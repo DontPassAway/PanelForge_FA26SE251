@@ -56,6 +56,51 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// Việc cấp Chapter ở stage sau (vd 7. Review) bao phủ cả chương: chỉ bắt đầu / nộp / duyệt được khi MỌI Panel của chương
+    /// đã Approved ở stage đang bật ngay trước (vd Letter), hoặc stage trước là việc cấp Chapter đã Approved (vd Script).
+    /// Chặn duyệt một chương còn trang dở (BR-19 mở rộng cho việc cấp Chapter). Trả lỗi kèm số trang còn thiếu, null nếu đạt.
+    /// </summary>
+    public static async Task<string?> ChapterWorkBlockReasonAsync(
+        IPanelForgeDbContext db, Assignment a, PipelineStage stage, CancellationToken ct)
+    {
+        if (a.EntityType != WorkflowEntityType.Chapter || stage.IsInitial) return null;
+
+        var prior = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
+            .OrderByDescending(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
+        if (prior is null) return null;
+
+        var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
+            x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
+            x.PipelineStageId == prior.Id && x.Status == AssignmentStatus.Approved, ct);
+        if (chapterLevelApproved) return null;
+
+        var pageIds = await db.Pages.AsNoTracking()
+            .Where(pg => pg.ChapterId == a.ChapterId).Select(pg => pg.Id).ToListAsync(ct);
+        var panels = await db.Panels.AsNoTracking()
+            .Where(p => pageIds.Contains(p.PageId))
+            .Select(p => new { p.Id, p.PageId })
+            .ToListAsync(ct);
+        if (panels.Count == 0)
+            return $"Chương chưa có trang nào hoàn tất stage '{prior.Name}', chưa thể làm '{stage.Name}'.";
+
+        var panelIds = panels.Select(p => p.Id).ToList();
+        var approved = (await db.StageProgresses.AsNoTracking()
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
+            .Select(s => s.PanelId).ToListAsync(ct)).ToHashSet();
+
+        var unfinishedPageIds = panels.Where(p => !approved.Contains(p.Id)).Select(p => p.PageId).Distinct().ToList();
+        if (unfinishedPageIds.Count == 0) return null;
+
+        var pageNumbers = await db.Pages.AsNoTracking()
+            .Where(pg => unfinishedPageIds.Contains(pg.Id))
+            .OrderBy(pg => pg.PageNumber)
+            .Select(pg => pg.PageNumber).ToListAsync(ct);
+        return $"Trang {string.Join(", ", pageNumbers)} chưa được duyệt ở stage '{prior.Name}', chưa thể làm '{stage.Name}' cho cả chương.";
+    }
+
+    /// <summary>
     /// Điều kiện nộp theo artifact [Đề xuất, design-research C.2]: Writer cần chapter có dòng script, Artist cần có Panel.
     /// Chưa kiểm được: hash artwork (chưa có upload), thoại đã gắn balloon (nằm ở event store). Trả lỗi hoặc null.
     /// </summary>

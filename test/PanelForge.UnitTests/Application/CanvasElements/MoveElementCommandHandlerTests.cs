@@ -48,7 +48,7 @@ public class MoveElementCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().BeTrue();
+        result.Value.Should().BeGreaterThan(0); // phiên bản element sau khi lưu
         _pageRepositoryMock.Verify(r => r.SaveAsync(page, It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Moq;
 using Microsoft.Extensions.Logging.Abstractions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -50,9 +51,23 @@ public class ExportJobTests
         }
     }
 
+    /// <summary>Lớp chữ giả: ghi lại element chữ nhận được cho từng trang, trả nguyên ảnh.</summary>
+    private sealed class FakeLettering : IPageLetteringCompositor
+    {
+        public readonly Dictionary<int, IReadOnlyList<ExportLetteringElement>> Calls = new();
+
+        public ExportPageImage Compose(ExportPageImage page, int w, int h, IReadOnlyList<ExportLetteringElement> elements)
+        {
+            Calls[page.PageNumber] = elements;
+            return page;
+        }
+    }
+
     private readonly PanelForgeDbContext _db = InMemoryDb.Create();
     private readonly MemoryStorage _storage = new();
     private readonly FakeRenderer _renderer = new();
+    private readonly FakeLettering _lettering = new();
+    private readonly Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository> _pageRepo = new();
     private readonly Guid _producerId = Guid.NewGuid();
     private readonly Chapter _chapter;
     private readonly Page _page1;
@@ -100,7 +115,8 @@ public class ExportJobTests
         new CreateExportJobCommandHandler(_db, _renderer).Handle(new CreateExportJobCommand(_chapter.Id, _producerId, code), default);
 
     private Task<bool> ProcessNext() =>
-        new ProcessNextExportJobCommandHandler(_db, _storage, _renderer, NullLogger<ProcessNextExportJobCommandHandler>.Instance)
+        new ProcessNextExportJobCommandHandler(_db, _storage, _renderer, _pageRepo.Object, _lettering,
+                NullLogger<ProcessNextExportJobCommandHandler>.Instance)
             .Handle(new ProcessNextExportJobCommand(), default);
 
     [Fact]
@@ -152,6 +168,29 @@ public class ExportJobTests
         _renderer.LastManifest!.ReadingDirection.Should().Be(ReadingDirection.RightToLeft);
         _renderer.LastManifest.ConfigOptionsJson.Should().Contain("300dpi");
         _db.Notifications.Should().ContainSingle(n => n.UserId == _producerId && n.Type == NotificationType.ExportCompleted);
+    }
+
+    [Fact]
+    public async Task Process_DrawsLetteringLayer_FromPageTextElements_WithSavedBalloonStyle()
+    {
+        var user = Guid.NewGuid();
+        var style = new TextStyle("Mali", 26, Color: "#FFFFFF", StrokeColor: "#000000", StrokeWidth: 2,
+            BalloonShape: "none", FillOpacity: 0, BorderWidth: 0);
+        _page1.AddElement("SPEECH_BALLOON", 100, 120, 300, 200, 2, user, "Đi thôi!");
+        _page1.AddElement("ARTWORK_LAYER", 0, 0, 1200, 1800, 0, user);
+        var balloon = _page1.Elements.Values.Single(e => e.ElementType == "SPEECH_BALLOON").ElementId;
+        _page1.UpdateElementStyle(balloon, style, user);
+        _pageRepo.Setup(r => r.GetAsync(_page1.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_page1);
+        await Create();
+
+        (await ProcessNext()).Should().BeTrue();
+
+        _db.ExportJobs.Single().Status.Should().Be(ExportJobStatus.Completed);
+        var text = _lettering.Calls[1].Should().ContainSingle().Subject; // chỉ element chữ, không có layer ảnh
+        text.Text.Should().Be("Đi thôi!");
+        text.Style.Should().Be(style);
+        (text.X, text.Y, text.Width, text.Height).Should().Be((100d, 120d, 300d, 200d));
+        _lettering.Calls.Should().NotContainKey(2); // trang 2 không có stream Page → giữ nguyên ảnh
     }
 
     [Fact]

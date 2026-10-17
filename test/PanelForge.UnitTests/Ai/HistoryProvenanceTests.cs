@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Moq;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common;
@@ -17,7 +18,7 @@ namespace PanelForge.UnitTests.Ai;
 public class HistoryProvenanceTests
 {
     private static Task<Result<ProvenanceReportResponse>> Report(AiHarness h, Guid user, Guid? sceneId = null) =>
-        new GetProvenanceReportQueryHandler(h.Db, h.Auth).Handle(
+        new GetProvenanceReportQueryHandler(h.Db, h.Auth, h.Pages.Object).Handle(
             new GetProvenanceReportQuery(AiDemoSeeder.SeriesId, AiDemoSeeder.ChapterId, sceneId, user), default);
 
     private static Task<Result<RevisionDiffResponse>> Compare(AiHarness h, Guid left, Guid right, Guid? user = null) =>
@@ -153,5 +154,69 @@ public class HistoryProvenanceTests
 
         history.Value!.Items.Should().ContainSingle(r => r.Id == runId && r.RejectedCount == 1 && r.StepCount > 0);
         otherChapter.Value!.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Report_IncludesArtistArtwork_LettererHistory_AndEditorReviews_FromExistingData()
+    {
+        var h = await AiHarness.CreateAsync();
+        var chapterId = AiDemoSeeder.ChapterId;
+        var page = Page.CreateNew(chapterId, 99, LayoutFormat.StandardPage, 1200, 1800, 300);
+        h.Db.Pages.Add(page);
+        var def = PanelForge.Domain.Entities.Workflow.PipelineDefinition.Create(Guid.NewGuid(), "P");
+        var ink = PanelForge.Domain.Entities.Workflow.PipelineStage.Create(def.Id, "Ink", "ink", 1, allowedRole: WorkspaceRole.Artist, isInitial: true);
+        h.Db.PipelineStages.Add(ink);
+        // Artist: 2 phiên bản artwork của cùng trang/stage
+        var art1 = PanelForge.Domain.Entities.Assets.AssetReference.Create(Guid.NewGuid(), Guid.NewGuid(), chapterId, page.Id, ink.Id, 1, null, "ink-v1.png", AiHarness.Artist);
+        var art2 = PanelForge.Domain.Entities.Assets.AssetReference.Create(Guid.NewGuid(), Guid.NewGuid(), chapterId, page.Id, ink.Id, 2, null, "ink-v2.png", AiHarness.Artist);
+        h.Db.AssetReferences.AddRange(art1, art2);
+        // Editor: lần 1 trả về, lần 2 duyệt
+        var job = PanelForge.Domain.Entities.Workflow.Assignment.Create(AiDemoSeeder.SeriesId, chapterId, WorkflowEntityType.Page,
+            page.Id, ink.Id, AiHarness.Artist, WorkspaceRole.Artist, "Vẽ trang 99");
+        h.Db.Assignments.Add(job);
+        var s1 = PanelForge.Domain.Entities.Workflow.Submission.Create(job.Id, chapterId, AiHarness.Artist, 1, [art1.Id]);
+        s1.Reject(AiHarness.Editor, "Thiếu nền");
+        var s2 = PanelForge.Domain.Entities.Workflow.Submission.Create(job.Id, chapterId, AiHarness.Artist, 2, [art2.Id]);
+        s2.Approve(AiHarness.Editor);
+        h.Db.Submissions.AddRange(s1, s2);
+        await h.Db.SaveChangesAsync();
+
+        // Letterer: đặt bóng, 3 lần kéo liên tiếp (gộp làm 1), đổi kiểu; layer ảnh không tính
+        page.AddElement("SPEECH_BALLOON", 10, 10, 300, 200, 1, AiHarness.Letterer, "Chạy đi!");
+        page.AddElement("ARTWORK_LAYER", 0, 0, 1200, 1800, 0, AiHarness.Artist);
+        var balloon = page.Elements.Values.Single(e => e.ElementType == "SPEECH_BALLOON").ElementId;
+        var art = page.Elements.Values.Single(e => e.ElementType == "ARTWORK_LAYER").ElementId;
+        page.MoveElement(balloon, 20, 10, 300, 200, AiHarness.Letterer);
+        page.MoveElement(balloon, 30, 10, 300, 200, AiHarness.Letterer);
+        page.MoveElement(balloon, 40, 10, 300, 200, AiHarness.Letterer);
+        page.MoveElement(art, 5, 5, 1200, 1800, AiHarness.Artist);
+        page.UpdateElementStyle(balloon, new TextStyle("Mali", 30, BalloonShape: "none"), AiHarness.Letterer);
+        h.Pages.Setup(p => p.GetEventsAsync(page.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(page.UncommittedEvents.ToList());
+
+        var report = (await Report(h, AiHarness.Editor)).Value!;
+
+        string Kind(ProvenanceNode n) => JsonSerializer.SerializeToElement(n.Details).GetProperty("kind").ToString();
+        var revisions = report.Nodes.Where(n => n.NodeType == "Revision").ToList();
+
+        var artwork = revisions.Where(n => Kind(n) == "Artwork").ToList();
+        artwork.Select(n => n.Id).Should().Contain([art1.Id, art2.Id]);
+        report.Edges.Should().Contain(new ProvenanceEdge(art1.Id, art2.Id, "previousVersion"));
+
+        var lettering = revisions.Where(n => Kind(n) == "Lettering").ToList();
+        lettering.Should().HaveCount(3); // đặt bóng, kéo ×3 (gộp), đổi kiểu — không có layer ảnh
+        lettering.Should().Contain(n => n.Summary.Contains("(3 lần)"));
+        lettering.Should().Contain(n => n.Summary.Contains("bóng none"));
+
+        var reviews = revisions.Where(n => Kind(n) == "Review").ToList();
+        reviews.Should().Contain(n => n.Id == s1.Id && n.Summary.Contains("trả về") && n.Summary.Contains("Thiếu nền"));
+        reviews.Should().Contain(n => n.Id == s2.Id && n.Summary.Contains("đã duyệt"));
+        report.Edges.Should().Contain(new ProvenanceEdge(s1.Id, s2.Id, "previousVersion"));
+        report.Timeline.Should().Contain(t => t.EventType == "ReviewDecided" && t.EntityId == s1.Id);
+
+        // Lọc theo Scene: chỉ còn nội dung kịch bản (lịch sử theo trang không gắn Scene)
+        var sceneId = await h.Db.Scenes.Where(s => s.ChapterId == chapterId).Select(s => s.Id).FirstAsync();
+        var scoped = (await Report(h, AiHarness.Editor, sceneId)).Value!;
+        scoped.Nodes.Should().NotContain(n => n.Id == art1.Id || n.Id == s1.Id);
     }
 }

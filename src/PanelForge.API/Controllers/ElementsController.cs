@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementStyle;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -51,10 +52,14 @@ public sealed class ElementsController : ControllerBase
     public async Task<IActionResult> GetPageSnapshot(
         Guid pageId,
         [FromQuery] bool includeRemoved = false,
+        [FromQuery] long? version = null,
         CancellationToken cancellationToken = default)
     {
+        if (version is < 1)
+            return BadRequest(new { message = "version phải ≥ 1." });
+
         var result = await _mediator.Send(
-            new GetPageSnapshotQuery(pageId, includeRemoved),
+            new GetPageSnapshotQuery(pageId, includeRemoved, version),
             cancellationToken);
 
         return result.IsSuccess
@@ -148,7 +153,7 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new AcknowledgeOverflowCommand(pageId, elementId, request.Reason, GetCurrentUserId()), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ." }) : Failure(result.ErrorMessage, result.ErrorCode);
+        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── PUT — Ghi đè thứ tự đọc (Letterer) ───────────────────────────────────
@@ -165,7 +170,28 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId(), request.ExpectedElementVersion), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage, result.ErrorCode);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
+    }
+
+    // ── PUT — Kiểu chữ (Letterer) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/elements/{elementId}/style — Body: { "style": { fontFamily, fontSize, bold, italic, align, color,
+    /// strokeColor, strokeWidth, lineHeight, preset } | null, "expectedElementVersion": 3 }. null = về kiểu mặc định.
+    /// </summary>
+    [HttpPut("{elementId:guid}/style")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateStyle(
+        Guid pageId, Guid elementId, [FromBody] UpdateElementStyleRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateElementStyleCommand(pageId, elementId, request.Style, GetCurrentUserId(), request.ExpectedElementVersion),
+            cancellationToken);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật kiểu chữ.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── PUT — Di chuyển / Resize Element (Update → ElementMovedEvent APPEND) ─
@@ -213,7 +239,7 @@ public sealed class ElementsController : ControllerBase
 
         if (!result.IsSuccess) return Failure(result.ErrorMessage, result.ErrorCode);
 
-        return Accepted(new { message = "Element đã được di chuyển thành công." });
+        return Accepted(new { message = "Element đã được di chuyển thành công.", elementVersion = result.Value });
     }
 
     // ── DELETE — Xóa mềm Element (Soft Delete → ElementRemovedEvent APPEND) ──
@@ -312,6 +338,7 @@ public sealed record UpdateElementTextRequest(string? Content, Guid? ScriptLineI
 public sealed record AcknowledgeOverflowRequest(string Reason);
 
 public sealed record SetReadingOrderRequest(int? ReadingOrder, int? ExpectedElementVersion = null);
+public sealed record UpdateElementStyleRequest(TextStyle? Style, int? ExpectedElementVersion = null);
 
 public sealed record MoveElementRequest(
     double NewX,

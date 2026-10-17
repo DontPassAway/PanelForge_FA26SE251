@@ -3851,6 +3851,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("int")
                         .HasColumnName("attempt_number");
 
+                    b.Property<string>("CanvasVersionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("canvas_versions_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<Guid>("ChapterId")
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
