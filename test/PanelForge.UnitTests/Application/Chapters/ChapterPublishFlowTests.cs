@@ -8,6 +8,8 @@ using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshot;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshots;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
@@ -278,5 +280,38 @@ public class ChapterPublishFlowTests
             .Handle(new ApproveChapterCommand(empty.Id, _producerId), default)).IsSuccess.Should().BeFalse();
 
         _db.ChapterSnapshots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSnapshots_ShouldListNewestFirst_AndDetailVerifiesHash()
+    {
+        await Approve();
+        await Reopen(_producerId, "Sửa lại");
+        await Approve();
+
+        var list = await new GetChapterSnapshotsQueryHandler(_db).Handle(new GetChapterSnapshotsQuery(_chapter.Id), default);
+        list.IsSuccess.Should().BeTrue();
+        list.Value!.Select(s => (s.SnapshotNumber, s.IsLatest)).Should().Equal((2, true), (1, false));
+
+        var old = list.Value![1];
+        var detail = await new GetChapterSnapshotQueryHandler(_db).Handle(new GetChapterSnapshotQuery(_chapter.Id, old.Id), default);
+        detail.IsSuccess.Should().BeTrue();
+        detail.Value!.HashVerified.Should().BeTrue();
+        detail.Value.Snapshot.IsLatest.Should().BeFalse();
+        detail.Value.Manifest.GetProperty("pages").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetSnapshot_FromAnotherChapter_ShouldBeNotFound()
+    {
+        await Approve();
+        var snapshot = _db.ChapterSnapshots.Single();
+        var other = Chapter.Create(_series.Id, 2);
+        _db.Chapters.Add(other);
+        await _db.SaveChangesAsync();
+
+        var result = await new GetChapterSnapshotQueryHandler(_db).Handle(new GetChapterSnapshotQuery(other.Id, snapshot.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 }
