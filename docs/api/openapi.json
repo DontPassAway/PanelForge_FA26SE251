@@ -2175,6 +2175,216 @@
         }
       }
     },
+    "/api/series/{seriesId}/ai/runs": {
+      "get": {
+        "tags": [
+          "AiAgents"
+        ],
+        "parameters": [
+          {
+            "name": "seriesId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "chapterId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sceneId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AiRunStatus"
+            }
+          },
+          {
+            "name": "workflowType",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AiWorkflowType"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunHistoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunHistoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/{seriesId}/ai/scenes/{sceneId}/revisions/compare": {
+      "get": {
+        "tags": [
+          "AiAgents"
+        ],
+        "parameters": [
+          {
+            "name": "seriesId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sceneId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "left",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "right",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionDiffResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionDiffResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionDiffResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/{seriesId}/ai/chapters/{chapterId}/provenance": {
+      "get": {
+        "tags": [
+          "AiAgents"
+        ],
+        "parameters": [
+          {
+            "name": "seriesId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sceneId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceReportResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceReportResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceReportResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/series/{seriesId}/ai/suggestions/{suggestionId}/accept": {
       "post": {
         "tags": [
@@ -4500,6 +4710,14 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "canonOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -5016,6 +5234,226 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/{seriesId}/bible/assets": {
+      "post": {
+        "tags": [
+          "Bible"
+        ],
+        "parameters": [
+          {
+            "name": "seriesId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BibleReferenceImageDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BibleReferenceImageDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BibleReferenceImageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/{seriesId}/bible/assets/{sha256}": {
+      "get": {
+        "tags": [
+          "Bible"
+        ],
+        "parameters": [
+          {
+            "name": "seriesId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/{panelId}/bible": {
+      "get": {
+        "tags": [
+          "Bible"
+        ],
+        "parameters": [
+          {
+            "name": "panelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BibleEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BibleEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BibleEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5947,6 +6385,104 @@
         }
       }
     },
+    "/api/chapters/{chapterId}/snapshots": {
+      "get": {
+        "tags": [
+          "Chapters"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChapterSnapshotDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChapterSnapshotDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChapterSnapshotDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/snapshots/{snapshotId}": {
+      "get": {
+        "tags": [
+          "Chapters"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterSnapshotDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterSnapshotDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterSnapshotDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chapters/{chapterId}/outline": {
       "put": {
         "tags": [
@@ -6163,6 +6699,113 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConsistencyFindingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/visual-consistency-report": {
+      "get": {
+        "tags": [
+          "Chapters"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/visual-consistency-check": {
+      "post": {
+        "tags": [
+          "Chapters"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunVisualConsistencyCheckRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunVisualConsistencyCheckRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunVisualConsistencyCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualConsistencyReportDto"
                 }
               }
             }
@@ -6935,6 +7578,193 @@
         }
       }
     },
+    "/api/chapters/{chapterId}/exports": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportJobRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportJobRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportJobDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportJobDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExportJobDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/exports/{jobId}/cancel": {
+      "post": {
+        "tags": [
+          "Exports"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJobDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/exports/{jobId}/file": {
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspaceId}/frame-templates": {
       "get": {
         "tags": [
@@ -7448,6 +8278,40 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/notifications/send-reminders": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "leadHours",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 24
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": { }
+              },
+              "application/json": {
+                "schema": { }
+              },
+              "text/json": {
+                "schema": { }
+              }
+            }
           }
         }
       }
@@ -8365,6 +9229,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -8532,6 +9416,101 @@
                     "type": "string",
                     "format": "uuid"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panels/{panelId}/check-image-consistency": {
+      "post": {
+        "tags": [
+          "Panels"
+        ],
+        "parameters": [
+          {
+            "name": "panelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revisionRef",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageConsistencyResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageConsistencyResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageConsistencyResultDto"
                 }
               }
             }
@@ -8858,6 +9837,74 @@
         "responses": {
           "200": {
             "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewFeedbackDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewFeedbackDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewFeedbackDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/preview-feedback/{feedbackId}/change-request": {
+      "post": {
+        "tags": [
+          "PreviewLinks"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "feedbackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChangeRequestFromFeedbackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChangeRequestFromFeedbackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChangeRequestFromFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9315,6 +10362,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -9708,6 +10775,141 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId}": {
+      "get": {
+        "tags": [
+          "ScriptLines"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sceneId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRevisionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRevisionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRevisionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId}/restore": {
+      "post": {
+        "tags": [
+          "ScriptLines"
+        ],
+        "parameters": [
+          {
+            "name": "chapterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sceneId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreScriptRevisionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreScriptRevisionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreScriptRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreScriptRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreScriptRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreScriptRevisionResult"
                 }
               }
             }
@@ -12214,6 +13416,15 @@
             "type": "integer",
             "format": "int32"
           },
+          "stageName": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveToChapterNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "expectedVersionNumber": {
             "type": "integer",
             "format": "int32",
@@ -12862,6 +14073,31 @@
         },
         "additionalProperties": false
       },
+      "AiRunHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiRunSummaryDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AiRunStatus": {
         "enum": [
           "Queued",
@@ -12872,6 +14108,92 @@
           "Interrupted"
         ],
         "type": "string"
+      },
+      "AiRunSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sceneId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "requestedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiRunStatus"
+          },
+          "workflowType": {
+            "$ref": "#/components/schemas/AiWorkflowType"
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "brief": {
+            "type": "string",
+            "nullable": true
+          },
+          "revisionRounds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxRevisionRounds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseChapterVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastActivityAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stepCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "suggestionCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "acceptedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rejectedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
       },
       "AiStepDto": {
         "type": "object",
@@ -14022,6 +15344,15 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "stageName": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveToChapterNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -14033,6 +15364,28 @@
           "StrictCheck"
         ],
         "type": "string"
+      },
+      "BibleReferenceImageDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "BurndownPointDto": {
         "type": "object",
@@ -14547,6 +15900,60 @@
         },
         "additionalProperties": false
       },
+      "ChapterSnapshotDetailDto": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/ChapterSnapshotDto"
+          },
+          "manifest": { },
+          "hashVerified": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChapterSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "snapshotNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chapterVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "manifestHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "isLatest": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChapterStatus": {
         "enum": [
           "InProduction",
@@ -14877,6 +16284,34 @@
           "effectiveFromChapterNumber": {
             "type": "integer",
             "format": "int32"
+          },
+          "stageName": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveToChapterNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateChangeRequestFromFeedbackRequest": {
+        "type": "object",
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -14953,6 +16388,16 @@
             "nullable": true
           },
           "allowedPropertiesJson": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateExportJobRequest": {
+        "type": "object",
+        "properties": {
+          "presetCode": {
             "type": "string",
             "nullable": true
           }
@@ -15106,6 +16551,9 @@
           "summary": {
             "type": "string",
             "nullable": true
+          },
+          "defaultNarrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
           }
         },
         "additionalProperties": false
@@ -15148,6 +16596,9 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "narrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
           }
         },
         "additionalProperties": false
@@ -15296,6 +16747,28 @@
           "revisionId": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiffEntry": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "nullable": true
+          },
+          "changeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "oldValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "newValue": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -15493,6 +16966,84 @@
         },
         "additionalProperties": false
       },
+      "ExportJobDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExportJobStatus"
+          },
+          "requestedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "downloadCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExportJobStatus": {
+        "enum": [
+          "Queued",
+          "Processing",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      },
       "ExportPresetDto": {
         "type": "object",
         "properties": {
@@ -15640,6 +17191,92 @@
             "format": "date-time"
           },
           "createdBy": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageConsistencyDeviationDto": {
+        "type": "object",
+        "properties": {
+          "aspect": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "regionHint": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageConsistencyResultDto": {
+        "type": "object",
+        "properties": {
+          "panelId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "characterId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "characterName": {
+            "type": "string",
+            "nullable": true
+          },
+          "characterSheetVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "summaryReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "deviations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageConsistencyDeviationDto"
+            },
+            "nullable": true
+          },
+          "findingId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "revisionRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "assetReferenceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "characterSheetUrl": {
             "type": "string",
             "nullable": true
           }
@@ -15897,6 +17534,18 @@
         },
         "additionalProperties": false
       },
+      "NarrationMode": {
+        "enum": [
+          "Present",
+          "Flashback",
+          "Dream",
+          "Imagination",
+          "Lie",
+          "Rumor",
+          "UnreliableNarrator"
+        ],
+        "type": "string"
+      },
       "NotificationDto": {
         "type": "object",
         "properties": {
@@ -15982,7 +17631,9 @@
           "AssignmentDueSoon",
           "AssignmentOverdue",
           "ChangeRequestDueSoon",
-          "ChangeRequestOverdue"
+          "ChangeRequestOverdue",
+          "ExportCompleted",
+          "ExportFailed"
         ],
         "type": "string"
       },
@@ -16311,6 +17962,10 @@
               "format": "uuid"
             },
             "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -16360,6 +18015,10 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -16403,6 +18062,9 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -16631,6 +18293,11 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "changeRequestId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -16839,6 +18506,177 @@
           },
           "text": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceEdge": {
+        "type": "object",
+        "properties": {
+          "fromId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "relationship": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceNode": {
+        "type": "object",
+        "properties": {
+          "nodeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceReportResponse": {
+        "type": "object",
+        "properties": {
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sceneId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ProvenanceStats"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProvenanceNode"
+            },
+            "nullable": true
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProvenanceEdge"
+            },
+            "nullable": true
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProvenanceTimelineEntry"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceStats": {
+        "type": "object",
+        "properties": {
+          "totalRuns": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalSteps": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalSuggestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "acceptedSuggestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rejectedSuggestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pendingSuggestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "modifiedByHumanDecisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalRevisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "aiOriginatedRevisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "manualRevisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalSnapshots": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPromptTokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalCompletionTokens": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceTimelineEntry": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "relatedRunId": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           }
         },
@@ -17266,6 +19104,43 @@
         },
         "additionalProperties": false
       },
+      "RestoreScriptRevisionRequest": {
+        "type": "object",
+        "properties": {
+          "expectedChapterVersion": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestoreScriptRevisionResult": {
+        "type": "object",
+        "properties": {
+          "chapterVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "restoredFromRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "restoredFromVersionNumber": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "ReviewSuggestionRequest": {
         "type": "object",
         "properties": {
@@ -17303,6 +19178,80 @@
           "chapterVersion": {
             "type": "integer",
             "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevisionDiffResponse": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "$ref": "#/components/schemas/RevisionSideDto"
+          },
+          "right": {
+            "$ref": "#/components/schemas/RevisionSideDto"
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "nullable": true
+          },
+          "leftPayload": {
+            "nullable": true
+          },
+          "rightPayload": {
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevisionSideDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ContentRevisionKind"
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceSuggestionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunVisualConsistencyCheckRequest": {
+        "type": "object",
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17404,6 +19353,9 @@
               "$ref": "#/components/schemas/SceneScriptLineSummaryDto"
             },
             "nullable": true
+          },
+          "defaultNarrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
           }
         },
         "additionalProperties": false
@@ -17451,6 +19403,13 @@
           "pagesCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "defaultNarrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -17491,6 +19450,9 @@
               "format": "uuid"
             },
             "nullable": true
+          },
+          "narrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
           }
         },
         "additionalProperties": false
@@ -17544,8 +19506,88 @@
             },
             "nullable": true
           },
+          "narrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
+          },
           "replayed": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScriptRevisionDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sceneId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "previousRevisionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceSuggestionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "isCurrent": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScriptRevisionLineDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScriptRevisionLineDto": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lineOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "speakerCharacterId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "dialogueText": {
+            "type": "string",
+            "nullable": true
+          },
+          "stageDirection": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18106,6 +20148,39 @@
           "chapterVersion": {
             "type": "integer",
             "format": "int64"
+          },
+          "panelLayout": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmissionPanelDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SubmissionPanelDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "panelNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "readingOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "boundingBox": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18177,6 +20252,15 @@
             "type": "boolean"
           },
           "expectedVersionNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "stageName": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveToChapterNumber": {
             "type": "integer",
             "format": "int32",
             "nullable": true
@@ -18544,6 +20628,11 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18568,6 +20657,10 @@
           "estimatedDurationDays": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean",
             "nullable": true
           }
         },
@@ -18610,6 +20703,14 @@
           "summary": {
             "type": "string",
             "nullable": true
+          },
+          "defaultNarrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18642,6 +20743,9 @@
               "format": "uuid"
             },
             "nullable": true
+          },
+          "narrationMode": {
+            "$ref": "#/components/schemas/NarrationMode"
           }
         },
         "additionalProperties": false
@@ -18978,6 +21082,177 @@
             "type": "boolean"
           },
           "deviceName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisualConsistencyReportDto": {
+        "type": "object",
+        "properties": {
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterNumber": {
+            "type": "number",
+            "format": "double"
+          },
+          "chapterTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalEvaluated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "passedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "deviationCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "openDeviationCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blockingDeviationCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "deviations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisualDeviationDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisualDeviationDto": {
+        "type": "object",
+        "properties": {
+          "findingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "characterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "characterName": {
+            "type": "string",
+            "nullable": true
+          },
+          "characterSheetVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "characterSheetImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "panelId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "panelNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "assetReferenceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "similarityScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "isDeviation": {
+            "type": "boolean"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ConsistencyFindingSeverity"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConsistencyFindingStatus"
+          },
+          "triageNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "triagedByUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "triagedByUserName": {
+            "type": "string",
+            "nullable": true
+          },
+          "triagedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detailedDeviations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageConsistencyDeviationDto"
+            },
+            "nullable": true
+          },
+          "summaryReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "revisionRef": {
             "type": "string",
             "nullable": true
           }
