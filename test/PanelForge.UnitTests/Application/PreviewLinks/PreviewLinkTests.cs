@@ -293,7 +293,8 @@ public class PreviewLinkTests
         (await new TriagePreviewFeedbackCommandHandler(f.Db).Handle(new TriagePreviewFeedbackCommand(
             f.Chapter.Id, fb.Id, f.ProducerId, PreviewFeedbackStatus.Noted, null), default)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 
-        (await new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommandHandler(f.Db).Handle(
+        (await new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommandHandler(
+            f.Db, new Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>().Object).Handle(
             new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommand(f.Chapter.Id, f.ProducerId), default))
             .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
