@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Commands.RestoreRevision;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunWorkflow;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.AiAgents.Queries.CompareRevisions;
 using PanelForge.Application.Features.AiAgents.Queries.GetContentRevisions;
+using PanelForge.Application.Features.AiAgents.Queries.GetProvenanceReport;
 using PanelForge.Application.Features.AiAgents.Queries.GetRun;
+using PanelForge.Application.Features.AiAgents.Queries.GetRunHistory;
 using PanelForge.Application.Features.AiAgents.Queries.GetSuggestions;
 using PanelForge.Application.Features.AiAgents.Queries.GetWorkflowAvailability;
 using PanelForge.Domain.Enums;
@@ -90,6 +94,76 @@ public sealed class AiAgentsController : ControllerBase
     public async Task<IActionResult> GetSceneRevisions([FromRoute] Guid seriesId, [FromRoute] Guid sceneId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetContentRevisionsQuery(seriesId, sceneId, CurrentUserId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Lịch sử, So sánh, Khôi phục, Provenance Report
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>GET /api/series/{seriesId}/ai/runs — lịch sử AI runs (lọc chapter/scene/status/type, phân trang).</summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/runs")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiRunHistoryResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRunHistory(
+        [FromRoute] Guid seriesId,
+        [FromQuery] Guid? chapterId,
+        [FromQuery] Guid? sceneId,
+        [FromQuery] AiRunStatus? status,
+        [FromQuery] AiWorkflowType? workflowType,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(
+            new GetAiRunHistoryQuery(seriesId, CurrentUserId, chapterId, sceneId, status, workflowType, page, pageSize), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/ai/scenes/{sceneId}/revisions/compare?left=...&amp;right=... — diff giữa 2 revision.</summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/revisions/compare")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(RevisionDiffResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CompareRevisions(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid sceneId,
+        [FromQuery] Guid left,
+        [FromQuery] Guid right,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new CompareRevisionsQuery(seriesId, sceneId, left, right, CurrentUserId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/series/{seriesId}/ai/scenes/{sceneId}/revisions/{revisionId}/restore — tạo revision mới từ payload cũ.</summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/revisions/{revisionId:guid}/restore")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ContentRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestoreRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid sceneId,
+        [FromRoute] Guid revisionId,
+        [FromBody] RestoreRevisionRequest body,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new RestoreRevisionCommand(seriesId, sceneId, revisionId, CurrentUserId, body.Reason), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/ai/scenes/{sceneId}/provenance — chuỗi provenance đầy đủ (nodes, edges, timeline, stats).</summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/provenance")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ProvenanceReportResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProvenanceReport(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid sceneId,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new GetProvenanceReportQuery(seriesId, sceneId, CurrentUserId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
