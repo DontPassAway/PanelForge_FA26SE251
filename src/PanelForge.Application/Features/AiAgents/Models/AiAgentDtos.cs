@@ -134,6 +134,3 @@ public sealed record AiWorkflowAvailabilityResponse(
     Guid ChapterId,
     Guid? SceneId,
     IReadOnlyList<AiWorkflowAvailabilityDto> Workflows);
-
-/// <summary>Body cho endpoint khôi phục revision cũ.</summary>
-public sealed record RestoreRevisionRequest(string? Reason);

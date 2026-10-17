@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.AiAgents.Commands.RestoreRevision;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunWorkflow;
 using PanelForge.Application.Features.AiAgents.Models;
@@ -98,7 +97,8 @@ public sealed class AiAgentsController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Lịch sử, So sánh, Khôi phục, Provenance Report
+    // Lịch sử, So sánh, Provenance Report (CF4). Khôi phục script dùng
+    // POST api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId}/restore (ScriptLinesController)
     // ═══════════════════════════════════════════════════════════════════════
 
     /// <summary>GET /api/series/{seriesId}/ai/runs — lịch sử AI runs (lọc chapter/scene/status/type, phân trang).</summary>
@@ -133,23 +133,6 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(
             new CompareRevisionsQuery(seriesId, sceneId, left, right, CurrentUserId), ct);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
-    }
-
-    /// <summary>POST /api/series/{seriesId}/ai/scenes/{sceneId}/revisions/{revisionId}/restore — tạo revision mới từ payload cũ.</summary>
-    [HttpPost("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/revisions/{revisionId:guid}/restore")]
-    [RequireWorkspaceRole]
-    [ProducesResponseType(typeof(ContentRevisionDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RestoreRevision(
-        [FromRoute] Guid seriesId,
-        [FromRoute] Guid sceneId,
-        [FromRoute] Guid revisionId,
-        [FromBody] RestoreRevisionRequest body,
-        CancellationToken ct)
-    {
-        var result = await _mediator.Send(
-            new RestoreRevisionCommand(seriesId, sceneId, revisionId, CurrentUserId, body.Reason), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
