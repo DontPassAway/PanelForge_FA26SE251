@@ -136,17 +136,20 @@ public sealed class AiAgentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
-    /// <summary>GET /api/series/{seriesId}/ai/scenes/{sceneId}/provenance — chuỗi provenance đầy đủ (nodes, edges, timeline, stats).</summary>
-    [HttpGet("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/provenance")]
-    [RequireWorkspaceRole]
+    /// <summary>
+    /// GET /api/series/{seriesId}/ai/chapters/{chapterId}/provenance?sceneId= — UC-19: Provenance Report của chương
+    /// (Run → Step → Suggestion → Decision → Revision → Snapshot). Producer; Editor xem chỉ đọc.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/chapters/{chapterId:guid}/provenance")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(ProvenanceReportResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetProvenanceReport(
         [FromRoute] Guid seriesId,
-        [FromRoute] Guid sceneId,
+        [FromRoute] Guid chapterId,
+        [FromQuery] Guid? sceneId,
         CancellationToken ct)
     {
-        var result = await _mediator.Send(
-            new GetProvenanceReportQuery(seriesId, sceneId, CurrentUserId), ct);
+        var result = await _mediator.Send(new GetProvenanceReportQuery(seriesId, chapterId, sceneId, CurrentUserId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
