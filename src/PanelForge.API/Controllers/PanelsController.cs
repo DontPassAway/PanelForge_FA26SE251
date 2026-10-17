@@ -113,6 +113,7 @@ public sealed class PanelsController : ControllerBase
     [ProducesResponseType(typeof(PanelDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdatePanelCoordinates(
         [FromRoute] Guid panelId,
         [FromBody] UpdatePanelCoordinatesRequest body,
@@ -122,7 +123,8 @@ public sealed class PanelsController : ControllerBase
             PanelId: panelId,
             UserId: GetCurrentUserId(),
             BoundingBox: body.BoundingBox,
-            ReadingOrder: body.ReadingOrder
+            ReadingOrder: body.ReadingOrder,
+            ExpectedVersion: body.ExpectedVersion
         );
 
         var result = await _mediator.Send(command, cancellationToken);

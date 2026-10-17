@@ -10,6 +10,11 @@ public class Scene : BaseEntity
     public string? Heading { get; private set; }
     public string? Summary { get; private set; }
     public NarrationMode DefaultNarrationMode { get; private set; } = NarrationMode.Present;
+    /// <summary>
+    /// BR-11 / CF4 4.2: tăng mỗi lần đổi nội dung (heading, tóm tắt, narration); là concurrency token. Đổi số thứ tự cảnh
+    /// không tăng để sắp xếp lại không làm hỏng lần sửa nội dung đang dở của người khác.
+    /// </summary>
+    public int Version { get; private set; }
 
     public Chapter Chapter { get; private set; } = default!;
     public ICollection<ScriptLine> ScriptLines { get; private set; } = [];
@@ -42,6 +47,7 @@ public class Scene : BaseEntity
         {
             DefaultNarrationMode = defaultNarrationMode.Value;
         }
+        Version++;
     }
 
     public void Reorder(int newSceneNumber)

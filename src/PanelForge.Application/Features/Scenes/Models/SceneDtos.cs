@@ -13,7 +13,8 @@ public sealed record SceneDto(
     string? CreatedBy,
     int ScriptLinesCount,
     int PagesCount,
-    NarrationMode DefaultNarrationMode = NarrationMode.Present
+    NarrationMode DefaultNarrationMode = NarrationMode.Present,
+    int Version = 0   // BR-11: gửi lại làm expectedVersion khi sửa
 );
 
 public sealed record SceneScriptLineSummaryDto(
@@ -47,10 +48,12 @@ public sealed record CreateSceneRequest(
     NarrationMode? DefaultNarrationMode = null
 );
 
+/// <param name="ExpectedVersion">Version của scene lúc client tải (BR-11). Lệch → 409; null = không kiểm (client cũ).</param>
 public sealed record UpdateSceneRequest(
     string? Heading,
     string? Summary,
-    NarrationMode? DefaultNarrationMode = null
+    NarrationMode? DefaultNarrationMode = null,
+    int? ExpectedVersion = null
 );
 
 public sealed record ReorderSceneItem(

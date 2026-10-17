@@ -39,6 +39,6 @@ public sealed class AssignPanelSceneCommandHandler : IRequestHandler<AssignPanel
 
         return Result<PanelDto>.Success(new PanelDto(
             panel.Id, panel.PageId, panel.PanelNumber, panel.BoundingBox, panel.ReadingOrder,
-            panel.CurrentStageId, panel.CreatedAt, panel.UpdatedAt, panel.CreatedBy, panel.SceneId));
+            panel.CurrentStageId, panel.CreatedAt, panel.UpdatedAt, panel.CreatedBy, panel.SceneId, panel.Version));
     }
 }

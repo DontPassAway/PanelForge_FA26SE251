@@ -10,7 +10,8 @@ public sealed record PanelDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     string? CreatedBy,
-    Guid? SceneId = null
+    Guid? SceneId = null,
+    int Version = 0   // BR-11: gửi lại làm expectedVersion khi sửa
 );
 
 public sealed record PanelDetailDto(
@@ -24,7 +25,8 @@ public sealed record PanelDetailDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     Guid? SceneId = null,
-    IReadOnlyList<Guid>? ScriptLineIds = null   // dòng thoại đang neo vào panel này (V1.2)
+    IReadOnlyList<Guid>? ScriptLineIds = null,   // dòng thoại đang neo vào panel này (V1.2)
+    int Version = 0
 );
 
 public sealed record AssignPanelSceneRequest(Guid? SceneId);
@@ -37,7 +39,9 @@ public sealed record CreatePanelRequest(
     string? BoundingBox = null
 );
 
+/// <param name="ExpectedVersion">Version của panel lúc client tải (BR-11). Lệch → 409; null = không kiểm (client cũ).</param>
 public sealed record UpdatePanelCoordinatesRequest(
     string BoundingBox,
-    int? ReadingOrder = null
+    int? ReadingOrder = null,
+    int? ExpectedVersion = null
 );

@@ -34,7 +34,8 @@ public sealed class GetScenesByChapterQueryHandler : IRequestHandler<GetScenesBy
                 s.CreatedBy,
                 s.ScriptLines.Count,
                 s.Panels.Select(p => p.PageId).Distinct().Count(),  // số Page có Panel của Scene (Scene không chứa Page)
-                s.DefaultNarrationMode
+                s.DefaultNarrationMode,
+                s.Version
             ))
             .ToListAsync(cancellationToken);
 
