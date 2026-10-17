@@ -161,6 +161,61 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// CF4 4.7 (bảng lan truyền thay đổi, BR-06): việc ở stage S đã duyệt bị trả về làm lại thì artwork stage S sẽ đổi, nên công việc
+    /// ở các stage SAU của cùng Panel đang dựa trên bản cũ. Việc sau đã duyệt → ReworkRequired và dòng tiến độ Approved của nó →
+    /// ChangesRequested; việc sau đang làm/chờ duyệt giữ trạng thái, chỉ được báo. BR-19 chặn việc sau bắt đầu lại cho tới khi
+    /// stage S được duyệt lại. Việc cấp Chapter (không có Panel) không lan. Gọi cùng lần Save với việc trả về (BR-18).
+    /// Trả số việc bị trả về theo, hoặc lỗi nếu dòng tiến độ sai trạng thái.
+    /// </summary>
+    public static async Task<(int Reworked, string? Error)> InvalidateLaterStagesAsync(
+        IPanelForgeDbContext db, Assignment reworked, string reason, CancellationToken ct)
+    {
+        var panelIds = (await ResolvePanelsAsync(db, reworked, ct)).Select(p => p.Id).ToHashSet();
+        if (panelIds.Count == 0) return (0, null);
+
+        var stage = await db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == reworked.PipelineStageId, ct);
+        var laterStages = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder > stage.StageOrder)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        if (laterStages.Count == 0) return (0, null);
+
+        var laterStageIds = laterStages.Keys.ToList();
+        var candidates = await db.Assignments.Where(a =>
+            a.ChapterId == reworked.ChapterId && a.Id != reworked.Id && a.EntityType != WorkflowEntityType.Chapter &&
+            laterStageIds.Contains(a.PipelineStageId) &&
+            (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
+             a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);
+
+        var count = 0;
+        foreach (var later in candidates)
+        {
+            if (!(await ResolvePanelsAsync(db, later, ct)).Any(p => panelIds.Contains(p.Id))) continue;
+
+            var message = $"Stage trước ('{stage.Name}') của phần việc này bị trả về làm lại: {reason}";
+            if (later.Status == AssignmentStatus.Approved)
+            {
+                // Mở lại mọi dòng Approved của việc (cả Panel không bị ảnh hưởng) để người làm Start lại được cả việc
+                if (await TransitionAsync(db, later, r =>
+                    {
+                        if (r.Status == StageProgressStatus.Approved) r.ReopenForRework();
+                    }, ct) is { } error)
+                    return (count, error);
+                later.RequestRework(message);
+                count++;
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    $"Việc '{laterStages[later.PipelineStageId]}' cần làm lại", message, later.Id, later.ChapterId));
+            }
+            else
+            {
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    $"Stage trước của việc '{laterStages[later.PipelineStageId]}' sẽ thay đổi", message, later.Id, later.ChapterId));
+            }
+        }
+
+        return (count, null);
+    }
+
+    /// <summary>
     /// Upsert StageProgress của các Panel được giao (start = InProgress, submit = Submitted) rồi suy ra lại
     /// CurrentStageId: Panel = stage cao nhất đã chạm tới; Page = stage thấp nhất trong các Panel của nó.
     /// Trả thông báo lỗi nếu có Panel không ở trạng thái cho phép (chưa Save), null nếu ổn.
