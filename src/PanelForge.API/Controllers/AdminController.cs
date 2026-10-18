@@ -8,8 +8,10 @@ using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
+using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
+using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
 using PanelForge.Application.Features.Audit.Queries.ExportAuditLogs;
 using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
@@ -600,5 +602,32 @@ public class AdminController : ControllerBase
         var result = await _mediator.Send(new DeactivatePipelineTemplateCommand(id), cancellationToken);
         if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
         return Ok(new { message = result.Value });
+    }
+
+    /// <summary>
+    /// GET /api/admin/workspaces
+    /// Danh sách tất cả Studio Workspaces trong hệ thống cho Administrator (BR-16).
+    /// </summary>
+    [HttpGet("workspaces")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminWorkspaceDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetWorkspaces(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminWorkspacesQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{id}/quota
+    /// Cập nhật dung lượng lưu trữ (Storage Quota) của Studio Workspace bởi Administrator (BR-16).
+    /// </summary>
+    [HttpPut("workspaces/{id:guid}/quota")]
+    [ProducesResponseType(typeof(AdminWorkspaceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateWorkspaceQuota(
+        Guid id,
+        [FromBody] UpdateWorkspaceQuotaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateWorkspaceQuotaCommand(id, request.StorageQuotaBytes), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 }

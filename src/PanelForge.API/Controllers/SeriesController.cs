@@ -61,7 +61,12 @@ public sealed class SeriesController : ControllerBase
             WorkspaceId: workspaceId,
             UserId: GetCurrentUserId(),
             Title: body.Title,
-            Format: body.Format ?? "WEBTOON"
+            Format: body.Format ?? "MANGA",
+            ReadingDirection: body.ReadingDirection,
+            Synopsis: body.Synopsis,
+            Genre: body.Genre,
+            StoryArc: body.StoryArc,
+            PipelineTemplateId: body.PipelineTemplateId
         );
 
         var result = await _mediator.Send(command, cancellationToken);
