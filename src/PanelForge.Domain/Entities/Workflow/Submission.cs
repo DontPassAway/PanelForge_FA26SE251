@@ -27,6 +27,11 @@ public class Submission : BaseEntity
     /// và với các lần nộp có trước khi thêm cột này.
     /// </summary>
     public string PanelLayoutJson { get; private set; } = "[]";
+    /// <summary>
+    /// Version event stream (Marten) của từng trang việc bao phủ lúc nộp, dạng JSON <c>{"pageId": version}</c>.
+    /// Việc Letter không có artwork: lớp chữ được dựng lại đúng tại version này để duyệt (BR-01). "{}" với lần nộp cũ.
+    /// </summary>
+    public string CanvasVersionsJson { get; private set; } = "{}";
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -36,7 +41,8 @@ public class Submission : BaseEntity
 
     public static Submission Create(
         Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
-        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null)
+        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null,
+        string? canvasVersionsJson = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
 
@@ -49,6 +55,7 @@ public class Submission : BaseEntity
             ArtworkReferenceIds = artworkReferenceIds?.Distinct().ToList() ?? [],
             ChapterVersion = chapterVersion,
             PanelLayoutJson = string.IsNullOrWhiteSpace(panelLayoutJson) ? "[]" : panelLayoutJson,
+            CanvasVersionsJson = string.IsNullOrWhiteSpace(canvasVersionsJson) ? "{}" : canvasVersionsJson,
             Status = SubmissionStatus.Pending,
             SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow

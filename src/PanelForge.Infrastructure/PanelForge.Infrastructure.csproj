@@ -32,4 +32,8 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
+	<!-- Font cho lớp chữ bản xuất (SkiaPageLetteringCompositor): đặt file Family-Variant.ttf, vd Mali-Regular.ttf -->
+	<ItemGroup>
+		<None Include="Exports/Fonts/*.ttf" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
 </Project>

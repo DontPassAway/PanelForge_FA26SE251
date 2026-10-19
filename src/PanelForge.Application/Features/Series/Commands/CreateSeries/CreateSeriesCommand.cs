@@ -7,6 +7,7 @@ using PanelForge.Domain.Entities.Bible;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.MasterData;
 
 namespace PanelForge.Application.Features.Series.Commands.CreateSeries;
 
@@ -14,14 +15,19 @@ public sealed record CreateSeriesCommand(
     Guid WorkspaceId,
     Guid UserId,
     string Title,
-    string Format = "WEBTOON"
+    string Format = "MANGA",
+    ReadingDirection? ReadingDirection = null,
+    string? Synopsis = null,
+    string? Genre = null,
+    string? StoryArc = null,
+    Guid? PipelineTemplateId = null
 ) : IRequest<Result<SeriesDto>>;
 
 /// <summary>
 /// Lightweight CreateSeriesCommandHandler (UC-03).
-/// Accepts minimal input (Title + Format) and applies robust defaults:
-/// - Auto reading direction (VERTICAL for WEBTOON, RTL for MANGA).
-/// - Clones active PipelineTemplate or generates default 8-stage pipeline (Script -> Approved).
+/// Accepts minimal input (Title + Format) or full initial setup (ReadingDirection, Genre, Synopsis, StoryArc):
+/// - Defaults reading direction to RTL for Manga, Vertical for Webtoon if not specified.
+/// - Clones active or requested PipelineTemplate.
 /// - Initializes empty Series Bible v1.0.
 /// </summary>
 public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCommand, Result<SeriesDto>>
@@ -52,10 +58,10 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             return Result<SeriesDto>.Failure("Chỉ người dùng có vai trò Producer mới có quyền tạo Series trong Workspace (UC-03).");
 
         // 3. Tự động xác định Hướng đọc (ReadingDirection) dựa trên Format nếu không được chỉ định
-        var formatUpper = (command.Format ?? "WEBTOON").Trim().ToUpperInvariant();
-        var readingDir = formatUpper == "MANGA"
+        var formatUpper = (command.Format ?? "MANGA").Trim().ToUpperInvariant();
+        var readingDir = command.ReadingDirection ?? (formatUpper.Contains("MANGA")
             ? ReadingDirection.RightToLeft
-            : ReadingDirection.Vertical;
+            : ReadingDirection.Vertical);
 
         // 4. Tạo Series entity
         DomainSeries series;
@@ -65,11 +71,16 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
                 workspaceId: command.WorkspaceId,
                 title: command.Title,
                 readingDirection: readingDir,
-                synopsis: null,
-                genre: "General",
-                format: command.Format ?? "WEBTOON",
+                synopsis: string.IsNullOrWhiteSpace(command.Synopsis) ? null : command.Synopsis.Trim(),
+                genre: string.IsNullOrWhiteSpace(command.Genre) ? "Shonen Manga" : command.Genre.Trim(),
+                format: command.Format ?? "B5 Tankōbon (600 DPI)",
                 releaseScheduleJson: null
             );
+
+            if (!string.IsNullOrWhiteSpace(command.StoryArc))
+            {
+                series.SetStoryArc(command.StoryArc.Trim());
+            }
 
             series.CreatedBy = command.UserId.ToString();
         }
@@ -79,9 +90,20 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         }
 
         // 5. Khởi tạo PipelineDefinition (8 công đoạn sản xuất)
-        var template = await _dbContext.PipelineTemplates
+        PipelineTemplate? template = null;
+        if (command.PipelineTemplateId.HasValue)
+        {
+            template = await _dbContext.PipelineTemplates
+                .Include(t => t.Stages)
+                .FirstOrDefaultAsync(t => t.Id == command.PipelineTemplateId.Value && t.IsActive, cancellationToken);
+        }
+
+        if (template is null)
+        {
+            template = await _dbContext.PipelineTemplates
                 .Include(t => t.Stages)
                 .FirstOrDefaultAsync(t => t.IsDefault && t.IsActive, cancellationToken);
+        }
 
         var pipelineName = template != null
             ? $"{series.Title} — {template.Name}"
@@ -153,7 +175,8 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             CreatedAt: series.CreatedAt,
             UpdatedAt: series.UpdatedAt,
             CreatedBy: series.CreatedBy,
-            ChaptersCount: 0
+            ChaptersCount: 0,
+            StoryArc: series.StoryArc
         ));
     }
 }

@@ -31,6 +31,9 @@ public sealed class ElementState
     // Thứ tự đọc do Letterer ghi đè (null = suy từ vị trí và hướng đọc của Series)
     public int? ReadingOrder { get; set; }
 
+    // Kiểu chữ Letterer chọn (null = kiểu mặc định theo loại element)
+    public TextStyle? Style { get; set; }
+
     /// <summary>
     /// TRUE = Element đã bị "xóa" (Soft Delete via ElementRemovedEvent).
     /// Không bao giờ hard delete khỏi Event Store.

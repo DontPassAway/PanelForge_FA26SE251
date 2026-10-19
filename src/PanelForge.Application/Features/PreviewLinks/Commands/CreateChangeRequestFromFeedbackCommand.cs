@@ -14,6 +14,7 @@ namespace PanelForge.Application.Features.PreviewLinks.Commands;
 /// ChangeRequest của một việc trong chương. Việc đã duyệt bị trả về làm lại (Approved → ReworkRequired, StageProgress
 /// Approved → ChangesRequested); việc chưa duyệt chỉ nhận thêm yêu cầu sửa. Người làm được báo (BR-14). Chương chỉ duyệt
 /// lại được khi yêu cầu đã được xác minh (ApproveChapter chặn ChangeRequest Open/Resolved).
+/// CF4 4.7: việc ở các stage sau của cùng Panel cũng bị trả về theo (xem StageProgressRules.InvalidateLaterStagesAsync).
 /// </summary>
 public sealed record CreateChangeRequestFromFeedbackCommand(
     Guid ChapterId, Guid FeedbackId, Guid UserId, Guid AssignmentId, string? Description, DateTime? DueDate)
@@ -59,6 +60,11 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
                 return Fail(error, ResultErrorCodes.Conflict);
             assignment.RequestRework(description);
             assignment.UpdatedBy = cmd.UserId.ToString();
+
+            // CF4 4.7: artwork stage này sẽ đổi nên việc ở các stage sau của cùng Panel cũng phải làm lại
+            var (_, laterError) = await StageProgressRules.InvalidateLaterStagesAsync(_db, assignment, description, ct);
+            if (laterError is not null)
+                return Fail(laterError, ResultErrorCodes.Conflict);
         }
 
         var cr = ChangeRequest.Create(assignment.Id, chapter.Id, null, assignment.AssigneeUserId, cmd.UserId,

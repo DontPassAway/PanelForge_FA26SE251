@@ -42,6 +42,14 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .HasColumnType("int")
                .IsRequired();
 
+        // BR-11: chống ghi đè khi hai người sửa cùng panel
+        builder.Property(p => p.Version)
+               .HasColumnName("version")
+               .HasColumnType("int")
+               .HasDefaultValue(0)
+               .IsConcurrencyToken()
+               .IsRequired();
+
         builder.Property(p => p.CurrentStageId)
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");

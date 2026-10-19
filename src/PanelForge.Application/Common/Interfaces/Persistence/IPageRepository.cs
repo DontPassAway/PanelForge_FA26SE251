@@ -14,6 +14,15 @@ public interface IPageRepository
     /// </summary>
     Task<Page?> GetAsync(Guid pageId, CancellationToken ct = default);
 
+    /// <summary>Page dựng lại tới đúng <paramref name="version"/> của stream (xem lại bản đã nộp, BR-01). Null nếu không có.</summary>
+    Task<Page?> GetAtVersionAsync(Guid pageId, long version, CancellationToken ct = default);
+
+    /// <summary>Version hiện tại của event stream (không replay); -1 nếu Page chưa có event nào.</summary>
+    Task<long> GetStreamVersionAsync(Guid pageId, CancellationToken ct = default);
+
+    /// <summary>Toàn bộ event của Page theo thứ tự (chỉ đọc, append-only) — dùng cho truy vết CF4. Rỗng nếu chưa có stream.</summary>
+    Task<IReadOnlyList<PanelForge.Domain.Common.IDomainEvent>> GetEventsAsync(Guid pageId, CancellationToken ct = default);
+
     /// <summary>
     /// Append các uncommitted events từ Page aggregate vào Marten stream.
     /// KHÔNG UPDATE/DELETE bất kỳ row nào — chỉ APPEND.

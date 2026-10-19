@@ -1294,6 +1294,63 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("chapter_reviews", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<long>("ChapterVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chapter_version");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("ManifestHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("manifest_hash");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("manifest_json");
+
+                    b.Property<int>("SnapshotNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("snapshot_number");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId", "SnapshotNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_chapter_snapshots_chapter_number");
+
+                    b.ToTable("chapter_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ConsistencyFinding", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1767,6 +1824,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CurrentStageId");
@@ -1838,6 +1902,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
 
                     b.HasKey("Id");
 
@@ -3780,6 +3851,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("int")
                         .HasColumnName("attempt_number");
 
+                    b.Property<string>("CanvasVersionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("canvas_versions_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<Guid>("ChapterId")
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
@@ -4245,6 +4323,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ConsistencyFinding", b =>

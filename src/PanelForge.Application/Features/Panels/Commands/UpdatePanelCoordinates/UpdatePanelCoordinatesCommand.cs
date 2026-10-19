@@ -11,7 +11,8 @@ public sealed record UpdatePanelCoordinatesCommand(
     Guid PanelId,
     Guid UserId,
     string BoundingBox,
-    int? ReadingOrder = null
+    int? ReadingOrder = null,
+    int? ExpectedVersion = null   // BR-11: version client đã thấy; null = không kiểm
 ) : IRequest<Result<PanelDto>>;
 
 public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<UpdatePanelCoordinatesCommand, Result<PanelDto>>
@@ -32,6 +33,10 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             return Result<PanelDto>.Failure($"Panel {command.PanelId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
             return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (command.ExpectedVersion is { } expected && expected != panel.Version)
+            return Result<PanelDto>.Failure(
+                $"Panel đã được người khác sửa (version hiện tại {panel.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
         try
         {
@@ -47,7 +52,15 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             return Result<PanelDto>.Failure(ex.Message);
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Hai người lưu gần như cùng lúc: Version là concurrency token nên bản lưu sau bị từ chối (BR-11)
+            return Result<PanelDto>.Failure("Panel vừa được người khác sửa. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<PanelDto>.Success(new PanelDto(
             Id: panel.Id,
@@ -59,7 +72,8 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
             CreatedBy: panel.CreatedBy,
-            SceneId: panel.SceneId
+            SceneId: panel.SceneId,
+            Version: panel.Version
         ));
     }
 }

@@ -1,11 +1,15 @@
 using FluentAssertions;
+using Moq;
 using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshot;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshots;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
@@ -23,6 +27,8 @@ namespace PanelForge.UnitTests.Application.Chapters;
 public class ChapterPublishFlowTests
 {
     private readonly PanelForgeDbContext _db = InMemoryDb.Create();
+    // Marten giả: GetAsync trả null nên snapshot ghi CanvasStreamVersion = -1
+    private readonly Mock<IPageRepository> _pages = new();
     private readonly Guid _producerId = Guid.NewGuid();
     private readonly Guid _publisherId = Guid.NewGuid();
     private readonly DomainSeries _series;
@@ -50,7 +56,7 @@ public class ChapterPublishFlowTests
     }
 
     private Task<Result<ChapterReviewDto>> Approve() =>
-        new ApproveChapterCommandHandler(_db).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
+        new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
 
     private Task<Result<ChapterReviewDto>> Publish(DateTime? at = null) =>
         new PublishChapterCommandHandler(_db).Handle(new PublishChapterCommand(_chapter.Id, _publisherId, at), default);
@@ -77,7 +83,7 @@ public class ChapterPublishFlowTests
         _db.Chapters.Add(empty);
         await _db.SaveChangesAsync();
 
-        var result = await new ApproveChapterCommandHandler(_db).Handle(new ApproveChapterCommand(empty.Id, _producerId), default);
+        var result = await new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(empty.Id, _producerId), default);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         empty.Status.Should().Be(ChapterStatus.InProduction);
@@ -242,5 +248,70 @@ public class ChapterPublishFlowTests
             ChapterReviewAction.PublisherRejected,
             ChapterReviewAction.ProducerApproved,
             ChapterReviewAction.PublisherPublished);
+    }
+
+    [Fact]
+    public async Task Approve_ShouldCreateSnapshot_AndReapproveAppendsNewOne_KeepingOldUnchanged()
+    {
+        (await Approve()).IsSuccess.Should().BeTrue();
+
+        var first = _db.ChapterSnapshots.Single();
+        first.SnapshotNumber.Should().Be(1);
+        first.CreatedByUserId.Should().Be(_producerId);
+        first.ManifestJson.Should().Contain(_page.Id.ToString());
+        var firstHash = first.ManifestHash;
+
+        (await Reopen(_producerId, "Sửa lại trang 1")).IsSuccess.Should().BeTrue();
+        (await Approve()).IsSuccess.Should().BeTrue();
+
+        var all = _db.ChapterSnapshots.Where(s => s.ChapterId == _chapter.Id).OrderBy(s => s.SnapshotNumber).ToList();
+        all.Select(s => s.SnapshotNumber).Should().Equal(1, 2);
+        all[0].ManifestHash.Should().Be(firstHash, "snapshot cũ không bị sửa (BR-01)");
+    }
+
+    [Fact]
+    public async Task Approve_WhenBlocked_ShouldNotCreateSnapshot()
+    {
+        var empty = Chapter.Create(_series.Id, 2);
+        _db.Chapters.Add(empty);
+        await _db.SaveChangesAsync();
+
+        (await new ApproveChapterCommandHandler(_db, _pages.Object)
+            .Handle(new ApproveChapterCommand(empty.Id, _producerId), default)).IsSuccess.Should().BeFalse();
+
+        _db.ChapterSnapshots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSnapshots_ShouldListNewestFirst_AndDetailVerifiesHash()
+    {
+        await Approve();
+        await Reopen(_producerId, "Sửa lại");
+        await Approve();
+
+        var list = await new GetChapterSnapshotsQueryHandler(_db).Handle(new GetChapterSnapshotsQuery(_chapter.Id), default);
+        list.IsSuccess.Should().BeTrue();
+        list.Value!.Select(s => (s.SnapshotNumber, s.IsLatest)).Should().Equal((2, true), (1, false));
+
+        var old = list.Value![1];
+        var detail = await new GetChapterSnapshotQueryHandler(_db).Handle(new GetChapterSnapshotQuery(_chapter.Id, old.Id), default);
+        detail.IsSuccess.Should().BeTrue();
+        detail.Value!.HashVerified.Should().BeTrue();
+        detail.Value.Snapshot.IsLatest.Should().BeFalse();
+        detail.Value.Manifest.GetProperty("pages").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetSnapshot_FromAnotherChapter_ShouldBeNotFound()
+    {
+        await Approve();
+        var snapshot = _db.ChapterSnapshots.Single();
+        var other = Chapter.Create(_series.Id, 2);
+        _db.Chapters.Add(other);
+        await _db.SaveChangesAsync();
+
+        var result = await new GetChapterSnapshotQueryHandler(_db).Handle(new GetChapterSnapshotQuery(other.Id, snapshot.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 }

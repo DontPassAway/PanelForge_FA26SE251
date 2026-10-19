@@ -28,6 +28,7 @@ public interface IPanelForgeDbContext
     DbSet<AiSuggestion> AiSuggestions { get; }
     DbSet<AiSuggestionDecision> AiSuggestionDecisions { get; }
     DbSet<ContentRevision> ContentRevisions { get; }
+    DbSet<ChapterSnapshot> ChapterSnapshots { get; }
 
     // Master Data
     DbSet<ElementTypeMasterData> ElementTypes { get; }

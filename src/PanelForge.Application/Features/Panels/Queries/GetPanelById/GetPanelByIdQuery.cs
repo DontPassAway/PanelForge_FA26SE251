@@ -44,7 +44,8 @@ public sealed class GetPanelByIdQueryHandler : IRequestHandler<GetPanelByIdQuery
             UpdatedAt: panel.UpdatedAt,
             CreatedBy: panel.CreatedBy,
             SceneId: panel.SceneId,
-            ScriptLineIds: lineIds
+            ScriptLineIds: lineIds,
+            Version: panel.Version
         );
 
         return Result<PanelDetailDto>.Success(detail);

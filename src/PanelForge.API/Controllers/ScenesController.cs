@@ -113,6 +113,7 @@ public sealed class ScenesController : ControllerBase
     [ProducesResponseType(typeof(SceneDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateScene(
         [FromRoute] Guid sceneId,
         [FromBody] UpdateSceneRequest body,
@@ -123,7 +124,8 @@ public sealed class ScenesController : ControllerBase
             UserId: GetCurrentUserId(),
             Heading: body.Heading,
             Summary: body.Summary,
-            DefaultNarrationMode: body.DefaultNarrationMode
+            DefaultNarrationMode: body.DefaultNarrationMode,
+            ExpectedVersion: body.ExpectedVersion
         );
 
         var result = await _mediator.Send(command, cancellationToken);

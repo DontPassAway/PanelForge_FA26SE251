@@ -90,7 +90,8 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: 0,
             PagesCount: 0,
-            DefaultNarrationMode: scene.DefaultNarrationMode
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         ));
     }
 }

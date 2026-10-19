@@ -110,12 +110,20 @@ public sealed record SubmissionDto(
     string? DecisionComment,
     IReadOnlyList<Guid>? ArtworkReferenceIds = null,  // phiên bản artwork (AssetReference.id) của lần nộp này
     long ChapterVersion = 0,                          // version chương lúc nộp (revision script)
-    IReadOnlyList<SubmissionPanelDto>? PanelLayout = null) // bố cục Panel lúc nộp; rỗng = không có (lần nộp cũ / việc không có Panel)
+    IReadOnlyList<SubmissionPanelDto>? PanelLayout = null, // bố cục Panel lúc nộp; rỗng = không có (lần nộp cũ / việc không có Panel)
+    IReadOnlyDictionary<Guid, long>? CanvasVersions = null) // pageId → version canvas lúc nộp; rỗng = lần nộp cũ
 {
     public static SubmissionDto From(Submission s) => new(
         s.Id, s.AssignmentId, s.ChapterId, s.SubmittedByUserId, s.AttemptNumber, s.Status, s.SubmittedAt,
         s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.ArtworkReferenceIds, s.ChapterVersion,
-        SubmissionPanelDto.Parse(s.PanelLayoutJson));
+        SubmissionPanelDto.Parse(s.PanelLayoutJson), ParseCanvasVersions(s.CanvasVersionsJson));
+
+    private static IReadOnlyDictionary<Guid, long> ParseCanvasVersions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<Guid, long>();
+        try { return JsonSerializer.Deserialize<Dictionary<Guid, long>>(json) ?? new Dictionary<Guid, long>(); }
+        catch (JsonException) { return new Dictionary<Guid, long>(); }
+    }
 }
 
 /// <summary>Một Panel trong bố cục chụp lúc nộp. Cùng tên field với <c>PanelDto</c> để FE ghép trang bằng một kiểu dữ liệu.</summary>

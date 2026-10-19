@@ -65,6 +65,7 @@ public static class DependencyInjection
                 typeof(ElementTextUpdatedEvent),
                 typeof(ElementOverflowAcknowledgedEvent),
                 typeof(ElementReadingOrderSetEvent),
+                typeof(ElementStyleUpdatedEvent),
                 typeof(PageDeletedEvent)
             });
 
@@ -100,6 +101,7 @@ public static class DependencyInjection
 
         // ── UC-12: dựng file xuất chương (SkiaSharp) ──
         services.AddSingleton<IChapterExportRenderer, PanelForge.Infrastructure.Exports.SkiaChapterExportRenderer>();
+        services.AddSingleton<IPageLetteringCompositor, PanelForge.Infrastructure.Exports.SkiaPageLetteringCompositor>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
         services.AddDataProtection();

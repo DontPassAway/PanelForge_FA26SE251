@@ -1,3 +1,4 @@
+using PanelForge.Domain.Entities.Content;
 using MediatR;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Common;
@@ -10,7 +11,8 @@ namespace PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot
 /// </summary>
 public sealed record GetPageSnapshotQuery(
     Guid PageId,
-    bool IncludeRemoved = false  // true = trả về cả elements đã bị soft-delete
+    bool IncludeRemoved = false,  // true = trả về cả elements đã bị soft-delete
+    long? AtVersion = null        // dựng lại tới version stream này (xem bản Letter đã nộp); null = hiện tại
 ) : IRequest<Result<PageSnapshotDto>>;
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -44,5 +46,6 @@ public sealed record ElementSnapshotDto(
     int Version = 0,  // BR-11: gửi lại làm expectedElementVersion khi sửa element này
     Guid? PanelId = null,
     double Rotation = 0,
-    Guid? BibleEntryId = null
+    Guid? BibleEntryId = null,
+    TextStyle? Style = null           // kiểu chữ Letterer chọn; null = mặc định theo loại element
 );

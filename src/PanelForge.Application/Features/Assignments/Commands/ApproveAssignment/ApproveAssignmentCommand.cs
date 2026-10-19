@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MediatR;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -36,6 +37,10 @@ public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAss
         if (unclosed > 0)
             return Result<AssignmentDto>.Failure(
                 $"Còn {unclosed} yêu cầu sửa chưa đóng (Open, hoặc Resolved chưa xác minh), chưa thể duyệt.", ResultErrorCodes.Conflict);
+
+        var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == assignment.PipelineStageId, ct);
+        if (await StageProgressRules.ChapterWorkBlockReasonAsync(_db, assignment, stage, ct) is { } chapterBlocked)
+            return Result<AssignmentDto>.Failure(chapterBlocked, ResultErrorCodes.Conflict);
 
         if (await StageProgressRules.TransitionAsync(_db, assignment, r => r.Approve(), ct) is { } error)
             return Result<AssignmentDto>.Failure(error, ResultErrorCodes.Conflict);

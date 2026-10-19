@@ -11,6 +11,7 @@ namespace PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 
 /// <summary>
 /// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → Approved, chuyển cho Publisher.
+/// Kèm theo: tạo ChapterSnapshot (CF4 / 4.1).
 /// Điều kiện: có ít nhất một Page, mọi việc giao đã Approved, không còn yêu cầu sửa Open/Resolved, không còn lỗi nhất quán Blocking đang mở. Từ đây việc/tiến độ bị khoá (BR-12).
 /// </summary>
 public sealed record ApproveChapterCommand(Guid ChapterId, Guid UserId) : IRequest<Result<ChapterReviewDto>>;
@@ -19,7 +20,13 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 {
     private readonly IPanelForgeDbContext _db;
 
-    public ApproveChapterCommandHandler(IPanelForgeDbContext db) => _db = db;
+    private readonly IPageRepository _pages;
+
+    public ApproveChapterCommandHandler(IPanelForgeDbContext db, IPageRepository pages)
+    {
+        _db = db;
+        _pages = pages;
+    }
 
     public async Task<Result<ChapterReviewDto>> Handle(ApproveChapterCommand cmd, CancellationToken ct)
     {
@@ -52,6 +59,10 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 
         chapter.Approve();
         chapter.UpdatedBy = cmd.UserId.ToString();
+
+        // CF4 / 4.1: manifest bất biến của bản vừa duyệt, lưu cùng SaveChanges với Approve (BR-18);
+        // duyệt lại sau khi mở lại tạo snapshot mới, bản cũ giữ nguyên (BR-01)
+        _db.ChapterSnapshots.Add(await ChapterSnapshotBuilder.CreateAsync(_db, _pages, chapter, cmd.UserId, ct));
 
         var review = ChapterReview.Create(chapter.Id, ChapterReviewAction.ProducerApproved, cmd.UserId, chapter.VersionVector);
         _db.ChapterReviews.Add(review);

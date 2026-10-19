@@ -16,6 +16,8 @@ using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshot;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshots;
 using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
@@ -209,6 +211,21 @@ public sealed class ChaptersController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ChapterReviewDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterReviews([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterReviewsQuery(chapterId), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/snapshots — CF4 / 4.1: các bản chụp bất biến lúc Producer duyệt, mới nhất trước (thành viên Workspace).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/snapshots")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ChapterSnapshotDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChapterSnapshots([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterSnapshotsQuery(chapterId), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/snapshots/{snapshotId} — manifest của một snapshot kèm kết quả kiểm hash.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/snapshots/{snapshotId:guid}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ChapterSnapshotDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChapterSnapshot(
+        [FromRoute] Guid chapterId, [FromRoute] Guid snapshotId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterSnapshotQuery(chapterId, snapshotId), cancellationToken));
 
     /// <summary>PUT /api/chapters/{chapterId}/outline — Producer/Writer ghi outline chương (rỗng = xoá). Trả outline đã lưu.</summary>
     [HttpPut("api/chapters/{chapterId:guid}/outline")]

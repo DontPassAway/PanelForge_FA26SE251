@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Moq;
+using PanelForge.Application.Features.Assignments.Commands.SubmitAssignment;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Domain.Entities.Workflow;
@@ -152,6 +154,32 @@ public partial class AssignmentTests
         layout.Select(l => l.Id).Should().BeEquivalentTo(new[] { p1.Id, p2.Id });
         layout.Single(l => l.Id == p1.Id).BoundingBox.Should().Be("{\"x\":1}");
         layout.Should().OnlyContain(l => l.PageId == f.Page.Id);
+    }
+
+    [Fact]
+    public async Task Submit_RecordsCanvasStreamVersionOfEachCoveredPage()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, a, f.ArtistId);
+        f.AssetReferences.Add(Fixture_Reference(f, f.Page.Id, a.PipelineStageId, panel.Id));
+
+        var pages = new Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>();
+        pages.Setup(p => p.GetStreamVersionAsync(f.Page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(106);
+        (await new SubmitAssignmentCommandHandler(f.Db.Object, pages.Object).Handle(
+            new SubmitAssignmentCommand(f.Chapter.Id, a.Id, f.ArtistId), CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        // Lớp chữ của Letter được duyệt lại đúng tại version này dù sau đó canvas còn đổi (BR-01)
+        SubmissionDto.From(f.Submissions.Single()).CanvasVersions.Should()
+            .BeEquivalentTo(new Dictionary<Guid, long> { [f.Page.Id] = 106 });
+    }
+
+    [Fact]
+    public void SubmissionDto_OldSubmissionWithoutCanvasVersions_ReturnsEmpty()
+    {
+        var old = Submission.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1);
+        SubmissionDto.From(old).CanvasVersions.Should().BeEmpty();
     }
 
     [Fact]

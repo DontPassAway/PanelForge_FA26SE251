@@ -43,6 +43,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<AiSuggestion> AiSuggestions => Set<AiSuggestion>();
     public DbSet<AiSuggestionDecision> AiSuggestionDecisions => Set<AiSuggestionDecision>();
     public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
+    public DbSet<ChapterSnapshot> ChapterSnapshots => Set<ChapterSnapshot>();
 
     // Master Data
     public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();

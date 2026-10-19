@@ -58,7 +58,8 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLines: scriptLines,
-            DefaultNarrationMode: scene.DefaultNarrationMode
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         );
 
         return Result<SceneDetailDto>.Success(detail);

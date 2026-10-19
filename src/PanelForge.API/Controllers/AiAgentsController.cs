@@ -7,8 +7,11 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunWorkflow;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.AiAgents.Queries.CompareRevisions;
 using PanelForge.Application.Features.AiAgents.Queries.GetContentRevisions;
+using PanelForge.Application.Features.AiAgents.Queries.GetProvenanceReport;
 using PanelForge.Application.Features.AiAgents.Queries.GetRun;
+using PanelForge.Application.Features.AiAgents.Queries.GetRunHistory;
 using PanelForge.Application.Features.AiAgents.Queries.GetSuggestions;
 using PanelForge.Application.Features.AiAgents.Queries.GetWorkflowAvailability;
 using PanelForge.Domain.Enums;
@@ -90,6 +93,63 @@ public sealed class AiAgentsController : ControllerBase
     public async Task<IActionResult> GetSceneRevisions([FromRoute] Guid seriesId, [FromRoute] Guid sceneId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetContentRevisionsQuery(seriesId, sceneId, CurrentUserId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Lịch sử, So sánh, Provenance Report (CF4). Khôi phục script dùng
+    // POST api/chapters/{chapterId}/scenes/{sceneId}/script-revisions/{revisionId}/restore (ScriptLinesController)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>GET /api/series/{seriesId}/ai/runs — lịch sử AI runs (lọc chapter/scene/status/type, phân trang).</summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/runs")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiRunHistoryResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRunHistory(
+        [FromRoute] Guid seriesId,
+        [FromQuery] Guid? chapterId,
+        [FromQuery] Guid? sceneId,
+        [FromQuery] AiRunStatus? status,
+        [FromQuery] AiWorkflowType? workflowType,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(
+            new GetAiRunHistoryQuery(seriesId, CurrentUserId, chapterId, sceneId, status, workflowType, page, pageSize), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/ai/scenes/{sceneId}/revisions/compare?left=...&amp;right=... — diff giữa 2 revision.</summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/scenes/{sceneId:guid}/revisions/compare")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(RevisionDiffResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CompareRevisions(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid sceneId,
+        [FromQuery] Guid left,
+        [FromQuery] Guid right,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new CompareRevisionsQuery(seriesId, sceneId, left, right, CurrentUserId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/ai/chapters/{chapterId}/provenance?sceneId= — UC-19: Provenance Report của chương
+    /// (Run → Step → Suggestion → Decision → Revision → Snapshot). Producer; Editor xem chỉ đọc.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/ai/chapters/{chapterId:guid}/provenance")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(ProvenanceReportResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProvenanceReport(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid chapterId,
+        [FromQuery] Guid? sceneId,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetProvenanceReportQuery(seriesId, chapterId, sceneId, CurrentUserId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

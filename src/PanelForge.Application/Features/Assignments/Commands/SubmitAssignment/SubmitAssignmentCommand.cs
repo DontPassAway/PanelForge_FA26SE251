@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -58,6 +59,9 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
             return Fail(letteringBlocked, ResultErrorCodes.Conflict);
 
         var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == assignment.PipelineStageId, ct);
+        // Trang có thể bị trả về làm lại sau khi việc cấp Chapter đã bắt đầu (4.7): kiểm lại lúc nộp
+        if (await StageProgressRules.ChapterWorkBlockReasonAsync(_db, assignment, stage, ct) is { } chapterBlocked)
+            return Fail(chapterBlocked, ResultErrorCodes.Conflict);
 
         try { assignment.SubmitForReview(); }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
@@ -79,9 +83,13 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
             : await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
         var artworkIds = await ChangeRequestRules.LatestArtworkIdsAsync(
             _db, assignment.PipelineStageId, pageIds, pagePanels.Select(p => p.Id), ct);
+        // Lớp chữ (Letter) nằm trong event stream của Page, không phải artwork: chụp version stream để duyệt đúng bản đã nộp
+        var canvasVersions = new Dictionary<Guid, long>();
+        foreach (var pageId in pageIds)
+            canvasVersions[pageId] = await _pages.GetStreamVersionAsync(pageId, ct);
         await ChangeRequestRules.RecordSubmissionAsync(
             _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector,
-            SubmissionPanelDto.Serialize(pagePanels));
+            SubmissionPanelDto.Serialize(pagePanels), JsonSerializer.Serialize(canvasVersions));
 
         assignment.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);

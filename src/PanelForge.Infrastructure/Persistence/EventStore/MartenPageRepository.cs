@@ -58,6 +58,27 @@ public sealed class MartenPageRepository : IPageRepository
         return page;
     }
 
+    public async Task<Page?> GetAtVersionAsync(Guid pageId, long version, CancellationToken ct = default)
+    {
+        var page = await _session.Events.AggregateStreamAsync<Page>(pageId, version: version, token: ct);
+        if (page is null) return null;
+        page.SetVersion(version);
+        return page;
+    }
+
+    public async Task<IReadOnlyList<PanelForge.Domain.Common.IDomainEvent>> GetEventsAsync(
+        Guid pageId, CancellationToken ct = default)
+    {
+        var events = await _session.Events.FetchStreamAsync(pageId, token: ct);
+        return events.Select(e => e.Data).OfType<PanelForge.Domain.Common.IDomainEvent>().ToList();
+    }
+
+    public async Task<long> GetStreamVersionAsync(Guid pageId, CancellationToken ct = default)
+    {
+        var state = await _session.Events.FetchStreamStateAsync(pageId, ct);
+        return state?.Version ?? -1;
+    }
+
     /// <summary>
     /// Append uncommitted events của Page vào Marten stream. KHÔNG update row nào.
     ///   - Version == -1 (chưa từng persist) → StartStream

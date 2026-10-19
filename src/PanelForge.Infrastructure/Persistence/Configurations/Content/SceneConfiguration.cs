@@ -26,6 +26,14 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
                .HasColumnType("int")
                .IsRequired();
 
+        // BR-11: chống ghi đè khi hai người sửa cùng scene
+        builder.Property(s => s.Version)
+               .HasColumnName("version")
+               .HasColumnType("int")
+               .HasDefaultValue(0)
+               .IsConcurrencyToken()
+               .IsRequired();
+
         builder.HasIndex(s => new { s.ChapterId, s.SceneNumber })
                .IsUnique()
                .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự

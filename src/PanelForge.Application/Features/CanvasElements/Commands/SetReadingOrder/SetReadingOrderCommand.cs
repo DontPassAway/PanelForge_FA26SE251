@@ -7,9 +7,9 @@ namespace PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrde
 
 /// <summary>Letterer ghi đè thứ tự đọc của một text element (≥ 1), hoặc bỏ ghi đè bằng null.</summary>
 public sealed record SetReadingOrderCommand(Guid PageId, Guid ElementId, int? ReadingOrder, Guid UserId, int? ExpectedElementVersion = null)
-    : IRequest<Result<bool>>;
+    : IRequest<Result<int>>;
 
-public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOrderCommand, Result<bool>>
+public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOrderCommand, Result<int>>
 {
     private readonly IPageRepository _pages;
     private readonly IPanelForgeDbContext _db;
@@ -20,12 +20,12 @@ public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOr
         _db = db;
     }
 
-    public async Task<Result<bool>> Handle(SetReadingOrderCommand cmd, CancellationToken ct)
+    public async Task<Result<int>> Handle(SetReadingOrderCommand cmd, CancellationToken ct)
     {
         var page = await _pages.GetAsync(cmd.PageId, ct);
-        if (page is null) return Result<bool>.Failure($"Page {cmd.PageId} không tồn tại.");
+        if (page is null) return Result<int>.Failure($"Page {cmd.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, ct) is { } readOnly)
-            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+            return Result<int>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         try
         {
@@ -35,9 +35,10 @@ public sealed class SetReadingOrderCommandHandler : IRequestHandler<SetReadingOr
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or ConcurrentPageUpdateException)
         {
-            return Result<bool>.Failure(ex.Message);
+            return Result<int>.Failure(ex.Message);
         }
 
-        return Result<bool>.Success(true);
+        // Phiên bản thật sau khi lưu (thao tác không đổi gì thì không tăng) — client dùng số này, không tự +1
+        return Result<int>.Success(page.Elements[cmd.ElementId].Version);
     }
 }

@@ -93,7 +93,8 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
             CreatedAt: panel.CreatedAt,
             UpdatedAt: panel.UpdatedAt,
             CreatedBy: panel.CreatedBy,
-            SceneId: panel.SceneId
+            SceneId: panel.SceneId,
+            Version: panel.Version
         ));
     }
 }

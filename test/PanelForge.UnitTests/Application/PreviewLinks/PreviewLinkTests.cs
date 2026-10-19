@@ -267,6 +267,68 @@ public class PreviewLinkTests
     private static Task<Result<PanelForge.Application.Features.Chapters.Models.ChapterReviewDto>> Reopen(Fixture f) =>
         new ReopenChapterCommandHandler(f.Db).Handle(new ReopenChapterCommand(f.Chapter.Id, f.ProducerId, "Sửa theo phản hồi"), default);
 
+    private static async Task<(Assignment Work, StageProgress Row)> ApprovedWork(
+        Fixture f, Guid stageId, Page page, Panel panel, AssignmentStatus status = AssignmentStatus.Approved)
+    {
+        var work = Assignment.Create(f.Chapter.SeriesId, f.Chapter.Id, WorkflowEntityType.Page, page.Id,
+            stageId, Guid.NewGuid(), WorkspaceRole.Artist, $"Việc trang {page.PageNumber}");
+        var row = StageProgress.Begin(panel.Id, stageId);
+        if (status == AssignmentStatus.Approved)
+        {
+            work.MarkApproved();
+            typeof(StageProgress).GetProperty(nameof(StageProgress.Status))!.SetValue(row, StageProgressStatus.Approved);
+        }
+        else
+        {
+            work.StartWork();
+        }
+        f.Db.Assignments.Add(work);
+        f.Db.StageProgresses.Add(row);
+        await f.Db.SaveChangesAsync();
+        return (work, row);
+    }
+
+    [Fact]
+    public async Task FeedbackOnEarlierStage_SendsLaterApprovedStagesOfSamePanelBack_ButNotOtherPages()
+    {
+        var f = new Fixture();
+        var (pencil, pencilRow) = await ApprovedWork(f, f.Pencil.PipelineStageId, f.Page1, f.Panel1);
+        var panel2 = Panel.Create(f.Page2.Id, 1, 1);
+        f.Db.Panels.Add(panel2);
+        var (otherInk, otherRow) = await ApprovedWork(f, f.InkV2.PipelineStageId, f.Page2, panel2);
+        var (fb, ink, inkRow) = await NeedsChange(f);   // Ink trang 1 đã duyệt
+        (await Reopen(f)).IsSuccess.Should().BeTrue();
+
+        var r = await ToChangeRequest(f, fb.Id, pencil.Id);
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        pencil.Status.Should().Be(AssignmentStatus.ReworkRequired);
+        pencilRow.Status.Should().Be(StageProgressStatus.ChangesRequested);
+        // 4.7: Ink của cùng Panel dựa trên Pencil cũ → làm lại theo, người làm được báo
+        ink.Status.Should().Be(AssignmentStatus.ReworkRequired);
+        ink.LastFeedbackComment.Should().Contain("Pencil");
+        inkRow.Status.Should().Be(StageProgressStatus.ChangesRequested);
+        f.Db.Notifications.Should().Contain(n => n.UserId == ink.AssigneeUserId && n.AssignmentId == ink.Id);
+        // Trang khác không bị ảnh hưởng
+        otherInk.Status.Should().Be(AssignmentStatus.Approved);
+        otherRow.Status.Should().Be(StageProgressStatus.Approved);
+    }
+
+    [Fact]
+    public async Task FeedbackOnEarlierStage_LaterWorkInProgress_KeepsStatus_ButIsNotified()
+    {
+        var f = new Fixture();
+        var (pencil, _) = await ApprovedWork(f, f.Pencil.PipelineStageId, f.Page1, f.Panel1);
+        var (fb, _, _) = await NeedsChange(f);
+        var (inkInProgress, _) = await ApprovedWork(f, f.InkV1.PipelineStageId, f.Page1, f.Panel1, AssignmentStatus.InProgress);
+        (await Reopen(f)).IsSuccess.Should().BeTrue();
+
+        (await ToChangeRequest(f, fb.Id, pencil.Id)).IsSuccess.Should().BeTrue();
+
+        inkInProgress.Status.Should().Be(AssignmentStatus.InProgress);
+        f.Db.Notifications.Should().Contain(n => n.UserId == inkInProgress.AssigneeUserId && n.AssignmentId == inkInProgress.Id);
+    }
+
     [Fact]
     public async Task FeedbackToChangeRequest_SendsApprovedWorkBack_LinksFeedback_AndBlocksChapterApproval()
     {
@@ -293,7 +355,8 @@ public class PreviewLinkTests
         (await new TriagePreviewFeedbackCommandHandler(f.Db).Handle(new TriagePreviewFeedbackCommand(
             f.Chapter.Id, fb.Id, f.ProducerId, PreviewFeedbackStatus.Noted, null), default)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 
-        (await new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommandHandler(f.Db).Handle(
+        (await new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommandHandler(
+            f.Db, new Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>().Object).Handle(
             new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommand(f.Chapter.Id, f.ProducerId), default))
             .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }

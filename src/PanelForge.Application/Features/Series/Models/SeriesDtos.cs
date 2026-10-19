@@ -48,7 +48,12 @@ public sealed record SeriesDetailDto(
 
 public sealed record CreateSeriesRequest(
     string Title,
-    string? Format = "WEBTOON"
+    string? Format = "MANGA",
+    ReadingDirection? ReadingDirection = null,
+    string? Synopsis = null,
+    string? Genre = null,
+    string? StoryArc = null,
+    Guid? PipelineTemplateId = null
 );
 
 public sealed record UpdateSeriesRequest(

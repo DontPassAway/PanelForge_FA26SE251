@@ -44,6 +44,12 @@ public class StudioWorkspace : BaseEntity
         Name = newName.Trim();
     }
 
+    public void SetStorageQuota(long quotaBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(quotaBytes);
+        StorageQuotaBytes = quotaBytes;
+    }
+
     /// <summary>Thay toàn bộ session policy (null = bỏ giới hạn đó). Lifetime tối đa 30 ngày (bằng hạn refresh token).</summary>
     public void SetSessionPolicy(int? lifetimeMinutes, int? idleTimeoutMinutes, int? maxConcurrentSessions)
     {

@@ -21,7 +21,9 @@ public sealed class GetPageSnapshotQueryHandler
         GetPageSnapshotQuery query,
         CancellationToken cancellationToken)
     {
-        var page = await _pageRepository.GetAsync(query.PageId, cancellationToken);
+        var page = query.AtVersion is { } version
+            ? await _pageRepository.GetAtVersionAsync(query.PageId, version, cancellationToken)
+            : await _pageRepository.GetAsync(query.PageId, cancellationToken);
         if (page is null)
             return Result<PageSnapshotDto>.Failure(
                 $"Page {query.PageId} không tồn tại.");
@@ -58,7 +60,8 @@ public sealed class GetPageSnapshotQueryHandler
                     Version:         e.Version,
                     PanelId:         e.PanelId,
                     Rotation:        e.Rotation,
-                    BibleEntryId:    e.BibleEntryId
+                    BibleEntryId:    e.BibleEntryId,
+                    Style:           e.Style
                 );
             })
             .ToList();

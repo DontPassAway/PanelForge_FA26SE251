@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
@@ -21,15 +22,20 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
     private readonly IChapterExportRenderer _renderer;
+    private readonly IPageRepository _pages;
+    private readonly IPageLetteringCompositor _lettering;
     private readonly ILogger<ProcessNextExportJobCommandHandler> _logger;
 
     public ProcessNextExportJobCommandHandler(
         IPanelForgeDbContext db, IAssetStorage storage, IChapterExportRenderer renderer,
+        IPageRepository pages, IPageLetteringCompositor lettering,
         ILogger<ProcessNextExportJobCommandHandler> logger)
     {
         _db = db;
         _storage = storage;
         _renderer = renderer;
+        _pages = pages;
+        _lettering = lettering;
         _logger = logger;
     }
 
@@ -79,7 +85,7 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
             where job.SnapshotArtworkIds.Contains(r.Id)
             join a in _db.Assets.AsNoTracking() on r.AssetId equals a.Id
             join p in _db.Pages.IgnoreQueryFilters().AsNoTracking() on r.PageId equals p.Id
-            select new { r.Id, p.PageNumber, a.StorageKey, a.ContentType }).ToListAsync(ct);
+            select new { r.Id, r.PageId, p.PageNumber, a.StorageKey, a.ContentType }).ToListAsync(ct);
 
         var pages = new List<ExportPageImage>();
         foreach (var id in job.SnapshotArtworkIds)
@@ -90,12 +96,28 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
                                      ?? throw new InvalidOperationException($"Không đọc được ảnh trang {r.PageNumber} trong kho.");
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, ct);
-            pages.Add(new ExportPageImage(r.PageNumber, buffer.ToArray(), r.ContentType));
+            pages.Add(await WithLetteringAsync(new ExportPageImage(r.PageNumber, buffer.ToArray(), r.ContentType), r.PageId, ct));
         }
 
         var file = _renderer.Render(job.Format,
             new ExportManifest(info.SeriesTitle, info.ChapterNumber, info.Title, info.ReadingDirection, config), pages);
         return ($"{SafeName($"{info.SeriesTitle} - Chuong {info.ChapterNumber}")}.{file.Extension}", file);
+    }
+
+    /// <summary>
+    /// Vẽ lớp chữ của Page lên ảnh trang (bóng thoại, dẫn truyện, SFX). Chương đã Approved/Published thì Page chỉ đọc
+    /// (ChapterEditGuard), nên trạng thái hiện tại của stream chính là lớp chữ đã duyệt.
+    /// </summary>
+    private async Task<ExportPageImage> WithLetteringAsync(ExportPageImage image, Guid pageId, CancellationToken ct)
+    {
+        var page = await _pages.GetAsync(pageId, ct);
+        if (page is null) return image;
+        var texts = page.Elements.Values
+            .Where(e => !e.IsRemoved && Page.TextElementTypes.Contains(e.ElementType))
+            .Select(e => new ExportLetteringElement(e.ElementType, e.X, e.Y, e.Width, e.Height, e.Rotation, e.ZIndex,
+                e.RenderedText ?? e.Content ?? "", e.Style))
+            .ToList();
+        return _lettering.Compose(image, page.WidthPx, page.HeightPx, texts);
     }
 
     private static string SafeName(string name) =>

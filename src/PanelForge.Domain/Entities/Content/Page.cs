@@ -263,6 +263,19 @@ public sealed class Page : AggregateRoot
             Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, readingOrder, element.ReadingOrder, userId));
     }
 
+    /// <summary>Đổi kiểu chữ (null = về mặc định). → Raises: ElementStyleUpdatedEvent</summary>
+    public void UpdateElementStyle(Guid elementId, TextStyle? style, Guid userId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không phải element chữ.");
+        var validated = style?.Validated();
+        if (element.Style == validated) return;
+
+        RaiseEvent(new ElementStyleUpdatedEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, validated, element.Style, userId));
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // APPLY — Rebuild state từ events (pure, không có side effects)
     // ══════════════════════════════════════════════════════════════════════════
@@ -283,6 +296,7 @@ public sealed class Page : AggregateRoot
             case ElementTextUpdatedEvent e:           Apply(e); break;
             case ElementOverflowAcknowledgedEvent e:  Apply(e); break;
             case ElementReadingOrderSetEvent e:       Apply(e); break;
+            case ElementStyleUpdatedEvent e:          Apply(e); break;
             case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
@@ -381,6 +395,14 @@ public sealed class Page : AggregateRoot
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.ReadingOrder = e.ReadingOrder;
+        element.Version++;
+    }
+
+    internal void Apply(ElementStyleUpdatedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.Style = e.Style;
+        element.OverflowAckReason = null; // đổi cỡ/font làm chữ vừa hộp khác đi
         element.Version++;
     }
 

@@ -12,7 +12,8 @@ public sealed record UpdateSceneCommand(
     Guid UserId,
     string? Heading,
     string? Summary,
-    PanelForge.Domain.Enums.NarrationMode? DefaultNarrationMode = null
+    PanelForge.Domain.Enums.NarrationMode? DefaultNarrationMode = null,
+    int? ExpectedVersion = null   // BR-11: version client đã thấy; null = không kiểm
 ) : IRequest<Result<SceneDto>>;
 
 public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneCommand, Result<SceneDto>>
@@ -35,11 +36,23 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             return Result<SceneDto>.Failure($"Scene {command.SceneId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
             return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (command.ExpectedVersion is { } expected && expected != scene.Version)
+            return Result<SceneDto>.Failure(
+                $"Scene đã được người khác sửa (version hiện tại {scene.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
         scene.UpdateContent(command.Heading, command.Summary, command.DefaultNarrationMode);
         scene.UpdatedBy = command.UserId.ToString();
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Hai người lưu gần như cùng lúc: Version là concurrency token nên bản lưu sau bị từ chối (BR-11)
+            return Result<SceneDto>.Failure("Scene vừa được người khác sửa. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<SceneDto>.Success(new SceneDto(
             Id: scene.Id,
@@ -52,7 +65,8 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: scene.ScriptLines.Count,
             PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count(),
-            DefaultNarrationMode: scene.DefaultNarrationMode
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         ));
     }
 }

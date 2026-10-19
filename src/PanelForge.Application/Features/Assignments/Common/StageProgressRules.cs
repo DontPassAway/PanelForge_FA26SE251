@@ -56,6 +56,51 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// Việc cấp Chapter ở stage sau (vd 7. Review) bao phủ cả chương: chỉ bắt đầu / nộp / duyệt được khi MỌI Panel của chương
+    /// đã Approved ở stage đang bật ngay trước (vd Letter), hoặc stage trước là việc cấp Chapter đã Approved (vd Script).
+    /// Chặn duyệt một chương còn trang dở (BR-19 mở rộng cho việc cấp Chapter). Trả lỗi kèm số trang còn thiếu, null nếu đạt.
+    /// </summary>
+    public static async Task<string?> ChapterWorkBlockReasonAsync(
+        IPanelForgeDbContext db, Assignment a, PipelineStage stage, CancellationToken ct)
+    {
+        if (a.EntityType != WorkflowEntityType.Chapter || stage.IsInitial) return null;
+
+        var prior = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
+            .OrderByDescending(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
+        if (prior is null) return null;
+
+        var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
+            x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
+            x.PipelineStageId == prior.Id && x.Status == AssignmentStatus.Approved, ct);
+        if (chapterLevelApproved) return null;
+
+        var pageIds = await db.Pages.AsNoTracking()
+            .Where(pg => pg.ChapterId == a.ChapterId).Select(pg => pg.Id).ToListAsync(ct);
+        var panels = await db.Panels.AsNoTracking()
+            .Where(p => pageIds.Contains(p.PageId))
+            .Select(p => new { p.Id, p.PageId })
+            .ToListAsync(ct);
+        if (panels.Count == 0)
+            return $"Chương chưa có trang nào hoàn tất stage '{prior.Name}', chưa thể làm '{stage.Name}'.";
+
+        var panelIds = panels.Select(p => p.Id).ToList();
+        var approved = (await db.StageProgresses.AsNoTracking()
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
+            .Select(s => s.PanelId).ToListAsync(ct)).ToHashSet();
+
+        var unfinishedPageIds = panels.Where(p => !approved.Contains(p.Id)).Select(p => p.PageId).Distinct().ToList();
+        if (unfinishedPageIds.Count == 0) return null;
+
+        var pageNumbers = await db.Pages.AsNoTracking()
+            .Where(pg => unfinishedPageIds.Contains(pg.Id))
+            .OrderBy(pg => pg.PageNumber)
+            .Select(pg => pg.PageNumber).ToListAsync(ct);
+        return $"Trang {string.Join(", ", pageNumbers)} chưa được duyệt ở stage '{prior.Name}', chưa thể làm '{stage.Name}' cho cả chương.";
+    }
+
+    /// <summary>
     /// Điều kiện nộp theo artifact [Đề xuất, design-research C.2]: Writer cần chapter có dòng script, Artist cần có Panel.
     /// Chưa kiểm được: hash artwork (chưa có upload), thoại đã gắn balloon (nằm ở event store). Trả lỗi hoặc null.
     /// </summary>
@@ -161,6 +206,61 @@ internal static class StageProgressRules
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// CF4 4.7 (bảng lan truyền thay đổi, BR-06): việc ở stage S đã duyệt bị trả về làm lại thì artwork stage S sẽ đổi, nên công việc
+    /// ở các stage SAU của cùng Panel đang dựa trên bản cũ. Việc sau đã duyệt → ReworkRequired và dòng tiến độ Approved của nó →
+    /// ChangesRequested; việc sau đang làm/chờ duyệt giữ trạng thái, chỉ được báo. BR-19 chặn việc sau bắt đầu lại cho tới khi
+    /// stage S được duyệt lại. Việc cấp Chapter (không có Panel) không lan. Gọi cùng lần Save với việc trả về (BR-18).
+    /// Trả số việc bị trả về theo, hoặc lỗi nếu dòng tiến độ sai trạng thái.
+    /// </summary>
+    public static async Task<(int Reworked, string? Error)> InvalidateLaterStagesAsync(
+        IPanelForgeDbContext db, Assignment reworked, string reason, CancellationToken ct)
+    {
+        var panelIds = (await ResolvePanelsAsync(db, reworked, ct)).Select(p => p.Id).ToHashSet();
+        if (panelIds.Count == 0) return (0, null);
+
+        var stage = await db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == reworked.PipelineStageId, ct);
+        var laterStages = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder > stage.StageOrder)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        if (laterStages.Count == 0) return (0, null);
+
+        var laterStageIds = laterStages.Keys.ToList();
+        var candidates = await db.Assignments.Where(a =>
+            a.ChapterId == reworked.ChapterId && a.Id != reworked.Id && a.EntityType != WorkflowEntityType.Chapter &&
+            laterStageIds.Contains(a.PipelineStageId) &&
+            (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
+             a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);
+
+        var count = 0;
+        foreach (var later in candidates)
+        {
+            if (!(await ResolvePanelsAsync(db, later, ct)).Any(p => panelIds.Contains(p.Id))) continue;
+
+            var message = $"Stage trước ('{stage.Name}') của phần việc này bị trả về làm lại: {reason}";
+            if (later.Status == AssignmentStatus.Approved)
+            {
+                // Mở lại mọi dòng Approved của việc (cả Panel không bị ảnh hưởng) để người làm Start lại được cả việc
+                if (await TransitionAsync(db, later, r =>
+                    {
+                        if (r.Status == StageProgressStatus.Approved) r.ReopenForRework();
+                    }, ct) is { } error)
+                    return (count, error);
+                later.RequestRework(message);
+                count++;
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    $"Việc '{laterStages[later.PipelineStageId]}' cần làm lại", message, later.Id, later.ChapterId));
+            }
+            else
+            {
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    $"Stage trước của việc '{laterStages[later.PipelineStageId]}' sẽ thay đổi", message, later.Id, later.ChapterId));
+            }
+        }
+
+        return (count, null);
     }
 
     /// <summary>
