@@ -35,6 +35,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("synopsis")
                .HasColumnType("text");
 
+        builder.Property(s => s.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(s => s.StoryArc)
                .HasColumnName("story_arc")
                .HasColumnType("text");

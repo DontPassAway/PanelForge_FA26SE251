@@ -10,7 +10,9 @@ using PanelForge.Application.Features.ConsistencyRules.Commands.DeleteConsistenc
 using PanelForge.Application.Features.ConsistencyRules.Queries.GetConsistencyRules;
 using PanelForge.Application.Features.Series.Commands.CreateSeries;
 using PanelForge.Application.Features.Series.Commands.DeleteSeries;
+using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 using PanelForge.Application.Features.Series.Commands.SetSeriesStoryArc;
+using PanelForge.Application.Features.Series.Queries.GetSeriesCover;
 using PanelForge.Application.Features.Series.Commands.UpdateSeries;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
@@ -166,6 +168,62 @@ public sealed class SeriesController : ControllerBase
         var result = await _mediator.Send(new SetSeriesStoryArcCommand(seriesId, GetCurrentUserId(), body.StoryArc), cancellationToken);
         return result.IsSuccess ? Ok(new TextValueResponse(result.Value)) : NotFound(new { error = result.ErrorMessage });
     }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa (PNG/JPEG/WebP, ≤ 5 MB).
+    /// Trả <c>value</c> = coverUrl mới (cũng có trong SeriesDto.coverUrl).
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetCover([FromRoute] Guid seriesId, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh bìa." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return CoverResult(await _mediator.Send(new SetSeriesCoverCommand(seriesId, GetCurrentUserId(), buffer.ToArray()), cancellationToken));
+    }
+
+    /// <summary>DELETE /api/series/{seriesId}/cover — Producer xoá ảnh bìa (FE quay về bìa chữ cái).</summary>
+    [HttpDelete("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearCover([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+        => CoverResult(await _mediator.Send(new SetSeriesCoverCommand(seriesId, GetCurrentUserId(), null), cancellationToken));
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/cover — ảnh bìa hiện tại, mọi thành viên Workspace. Cần Bearer: FE tải bằng fetch rồi
+    /// hiển thị qua blob URL. Dùng đúng <c>coverUrl</c> trong DTO (có <c>?v=</c> theo nội dung) để không dính cache bìa cũ.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCover([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSeriesCoverQuery(seriesId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    private IActionResult CoverResult(PanelForge.Application.Common.Result<string?> result)
+        => result.IsSuccess
+            ? Ok(new TextValueResponse(result.Value))
+            : result.ErrorCode == PanelForge.Application.Common.ResultErrorCodes.NotFound
+                ? NotFound(new { error = result.ErrorMessage })
+                : BadRequest(new { error = result.ErrorMessage });
 
     /// <summary>
     /// DELETE /api/series/{seriesId}

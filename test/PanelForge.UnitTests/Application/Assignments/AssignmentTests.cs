@@ -19,6 +19,7 @@ using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
+using Series = PanelForge.Domain.Entities.Content.Series;
 
 namespace PanelForge.UnitTests.Application.Assignments;
 

@@ -2059,6 +2059,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CoverImageSha256")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("cover_image_sha256");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
