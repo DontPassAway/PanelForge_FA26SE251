@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -50,7 +51,8 @@ public sealed class GetSeriesListQueryHandler : IRequestHandler<GetSeriesListQue
                 s.UpdatedAt,
                 s.CreatedBy,
                 s.Chapters.Count,
-                s.StoryArc
+                s.StoryArc,
+                SetSeriesCoverCommandHandler.CoverUrl(s.Id, s.CoverImageSha256)
             ))
             .ToListAsync(cancellationToken);
 

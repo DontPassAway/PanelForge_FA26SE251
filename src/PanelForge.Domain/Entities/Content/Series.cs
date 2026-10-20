@@ -18,6 +18,8 @@ public class Series : BaseEntity
     public string Genre { get; private set; } = "Action";
     public string Format { get; private set; } = "Manga";
     public string? ReleaseScheduleJson { get; private set; }
+    /// <summary>SHA-256 ảnh bìa hiện tại (file trên kho asset theo hash); null = chưa có bìa.</summary>
+    public string? CoverImageSha256 { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
@@ -77,6 +79,9 @@ public class Series : BaseEntity
 
     /// <summary>Producer/Writer ghi story arc của Series; chuỗi rỗng = xoá.</summary>
     public void SetStoryArc(string? storyArc) => StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
+
+    /// <summary>Producer đặt / xoá ảnh bìa (null = xoá).</summary>
+    public void SetCover(string? sha256) => CoverImageSha256 = sha256;
 
     public void AttachBible(SeriesBible bible)
     {
