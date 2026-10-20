@@ -110,6 +110,14 @@ public static class DependencyInjection
         services.AddScoped<IAiUsageService, AiUsageService>();
         services.AddHttpClient<IImageConsistencyService, ImageConsistencyService>();
 
+        // ── Tách panel/bong bóng từ ảnh cả trang: service Python PanelForge.PanelSplitter ──
+        services.AddHttpClient<IPanelSplitter, PanelSplitterClient>(client =>
+        {
+            var url = configuration["PanelSplitter:ServiceUrl"] ?? "http://127.0.0.1:5066";
+            client.BaseAddress = new Uri(url.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();
         configuration.GetSection(AiAgentSettings.SectionName).Bind(aiSettings);

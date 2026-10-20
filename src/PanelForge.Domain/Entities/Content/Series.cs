@@ -20,6 +20,10 @@ public class Series : BaseEntity
     public string? ReleaseScheduleJson { get; private set; }
     /// <summary>SHA-256 ảnh bìa hiện tại (file trên kho asset theo hash); null = chưa có bìa.</summary>
     public string? CoverImageSha256 { get; private set; }
+    /// <summary>SHA-256 avatar vuông của Series (nhận diện trong danh sách/breadcrumb); độc lập với bìa dọc.</summary>
+    public string? AvatarImageSha256 { get; private set; }
+    /// <summary>SHA-256 banner ngang (~3:1) đầu Series Dashboard; độc lập với bìa dọc và avatar.</summary>
+    public string? BannerImageSha256 { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
@@ -82,6 +86,12 @@ public class Series : BaseEntity
 
     /// <summary>Producer đặt / xoá ảnh bìa (null = xoá).</summary>
     public void SetCover(string? sha256) => CoverImageSha256 = sha256;
+
+    /// <summary>Producer đặt / xoá avatar Series (null = xoá).</summary>
+    public void SetAvatar(string? sha256) => AvatarImageSha256 = sha256;
+
+    /// <summary>Producer đặt / xoá banner Series (null = xoá).</summary>
+    public void SetBanner(string? sha256) => BannerImageSha256 = sha256;
 
     public void AttachBible(SeriesBible bible)
     {

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Features.Users.Models;
 using PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
 using PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
+using PanelForge.Application.Features.Users.Commands.SetMyProfileCover;
 using PanelForge.Application.Features.Users.Queries.GetUserProfile;
 using PanelForge.API.Common;
 
@@ -61,6 +62,31 @@ public class UsersController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Đặt bìa hồ sơ của chính mình từ bộ mẫu hệ thống. Body: { "presetId": "profile-cover-manga-studio" | null }.
+    /// null = bìa mặc định. ID không hợp lệ → 400.
+    /// </summary>
+    [HttpPut("me/profile-cover")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetMyProfileCover([FromBody] SetProfileCoverRequest request, CancellationToken cancellationToken)
+    {
+        Guid? guid = Guid.TryParse(GetCallerUserIdStr(), out var parsedGuid) ? parsedGuid : null;
+        try
+        {
+            var result = await _sender.Send(
+                new SetMyProfileCoverCommand(guid, GetCallerFirebaseUid(), request.PresetId), cancellationToken);
+            return result is null
+                ? NotFound(new { message = "Không tìm thấy thông tin hồ sơ của bạn." })
+                : Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message, code = "INVALID_PROFILE_COVER_PRESET" });
+        }
     }
 
     /// <summary>
@@ -245,3 +271,5 @@ public class UsersController : ControllerBase
         }
     }
 }
+
+public record SetProfileCoverRequest(string? PresetId);

@@ -21,4 +21,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Ảnh mẫu avatar/banner Series: Backend tự đọc khi gắn mẫu (không nhận URL từ client) -->
+    <Content Include="Presets/**/*.webp" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -17,7 +17,9 @@ public sealed record SeriesDto(
     string? CreatedBy,
     int ChaptersCount,
     string? StoryArc = null,
-    string? CoverUrl = null
+    string? CoverUrl = null,
+    string? AvatarUrl = null,
+    string? BannerUrl = null
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -45,7 +47,9 @@ public sealed record SeriesDetailDto(
     string? CreatedBy,
     IReadOnlyList<SeriesChapterSummaryDto> Chapters,
     string? StoryArc = null,
-    string? CoverUrl = null
+    string? CoverUrl = null,
+    string? AvatarUrl = null,
+    string? BannerUrl = null
 );
 
 public sealed record CreateSeriesRequest(

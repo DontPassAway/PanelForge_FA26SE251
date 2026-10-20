@@ -14,6 +14,8 @@ public class User : BaseEntity
     public string FullName { get; private set; } = default!;
     public string? PhoneNumber { get; private set; }
     public string? AvatarUrl { get; private set; }
+    /// <summary>Bìa hồ sơ cá nhân chọn từ bộ mẫu hệ thống (null = bìa mặc định). Độc lập với avatar và bìa Series.</summary>
+    public string? ProfileCoverPresetId { get; private set; }
     public bool IsActive { get; private set; } = true;
     public SystemRole Role { get; private set; } = SystemRole.User;
 
@@ -76,6 +78,15 @@ public class User : BaseEntity
         FullName = fullName.Trim();
         PhoneNumber = phoneNumber?.Trim();
         AvatarUrl = avatarUrl?.Trim();
+    }
+
+    /// <summary>Đặt bìa hồ sơ theo ID mẫu; null/rỗng = về bìa mặc định.</summary>
+    public void SetProfileCoverPreset(string? presetId)
+    {
+        var id = string.IsNullOrWhiteSpace(presetId) ? null : presetId.Trim();
+        if (id is not null && !ProfileCoverPresets.IsValid(id))
+            throw new ArgumentException($"Mẫu ảnh bìa '{id}' không tồn tại.", nameof(presetId));
+        ProfileCoverPresetId = id;
     }
 
     public void UpdatePassword(string passwordHash)
