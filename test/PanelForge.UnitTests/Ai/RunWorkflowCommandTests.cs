@@ -117,7 +117,7 @@ public class RunWorkflowCommandTests
         run.ErrorCode.Should().Be(ResultErrorCodes.AiUnavailable);
 
         // Chức năng Backend không phụ thuộc AI vẫn hoạt động bình thường
-        var update = await new UpdateSceneCommandHandler(h.Db)
+        var update = await new UpdateSceneCommandHandler(h.Db, Mock.Of<IWorkspaceAuthorizationService>())
             .Handle(new UpdateSceneCommand(AiDemoSeeder.SceneId, AiHarness.Writer, "Heading mới", "Tóm tắt mới"), default);
         update.IsSuccess.Should().BeTrue();
         (await h.Db.Scenes.SingleAsync()).Heading.Should().Be("Heading mới");

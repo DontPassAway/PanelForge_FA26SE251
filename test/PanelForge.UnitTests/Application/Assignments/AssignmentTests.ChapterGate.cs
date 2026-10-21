@@ -24,7 +24,7 @@ public partial class AssignmentTests
         f.Progress.Add(done);
         f.Progress.Add(StageProgress.Begin(p2.Id, f.ArtistStage.Id)); // trang 2 còn đang làm
 
-        var review = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id, f.InkStage);
+        var review = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id, f.InkStage, WorkspaceRole.Editor);
 
         var blocked = await Start(f, review, f.ArtistId);
         blocked.IsSuccess.Should().BeFalse();
@@ -40,7 +40,7 @@ public partial class AssignmentTests
     public async Task ChapterLevelLaterStage_ChapterWithoutPages_IsBlocked()
     {
         var f = new Fixture();
-        var review = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id, f.InkStage);
+        var review = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id, f.InkStage, WorkspaceRole.Editor);
 
         var r = await Start(f, review, f.ArtistId);
         r.IsSuccess.Should().BeFalse();

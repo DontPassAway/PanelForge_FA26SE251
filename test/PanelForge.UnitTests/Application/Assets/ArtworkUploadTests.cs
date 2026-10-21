@@ -38,6 +38,7 @@ public class ArtworkUploadTests
         public readonly List<Panel> Panels = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IAssetStorage> Storage = new();
+        public readonly Mock<IImageThumbnailer> Thumbnailer = new();
         public readonly Mock<IAssetLinkSigner> Signer = new();
         public readonly Mock<IWorkspaceAuthorizationService> Auth = new();
 
@@ -400,7 +401,7 @@ public class ArtworkUploadTests
         f.Storage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream([1, 2, 3]));
         f.Auth.Setup(a => a.IsMemberAsync(f.ArtistId, f.Workspace.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        var handler = new DownloadAssetCommandHandler(f.Db.Object, f.Storage.Object, f.Signer.Object, f.Auth.Object);
+        var handler = new DownloadAssetCommandHandler(f.Db.Object, f.Storage.Object, f.Signer.Object, f.Auth.Object, f.Thumbnailer.Object);
         return (f, up, handler);
     }
 
@@ -460,6 +461,78 @@ public class ArtworkUploadTests
         f.AccessLogs.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Download_Twice_WithinWindow_LogsOnce()
+    {
+        var (f, up, handler) = await ReadyToDownload();
+        f.Signer.Setup(s => s.Validate("good")).Returns(new AssetLinkClaims(up.Id, f.ArtistId));
+
+        await handler.Handle(new DownloadAssetCommand("good", null), CancellationToken.None);
+        var second = await handler.Handle(new DownloadAssetCommand("good", null), CancellationToken.None);
+
+        second.IsSuccess.Should().BeTrue();
+        f.AccessLogs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Download_AfterWindow_LogsAgain()
+    {
+        var (f, up, handler) = await ReadyToDownload();
+        f.Signer.Setup(s => s.Validate("good")).Returns(new AssetLinkClaims(up.Id, f.ArtistId));
+        var old = AssetAccessLog.Create(up.Id, f.ArtistId, null);
+        typeof(AssetAccessLog).GetProperty(nameof(AssetAccessLog.AccessedAt))!
+            .SetValue(old, DateTime.UtcNow - DownloadAssetCommandHandler.AccessLogWindow - TimeSpan.FromMinutes(1));
+        f.AccessLogs.Add(old);
+
+        await handler.Handle(new DownloadAssetCommand("good", null), CancellationToken.None);
+
+        f.AccessLogs.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Download_Thumbnail_FirstTime_CreatesAndStoresWebp()
+    {
+        var (f, up, handler) = await ReadyToDownload();
+        f.Signer.Setup(s => s.Validate("good")).Returns(new AssetLinkClaims(up.Id, f.ArtistId));
+        f.Storage.Setup(s => s.OpenReadAsync(It.Is<string>(k => k.StartsWith("thumbs/")), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Stream?)null);
+        f.Thumbnailer.Setup(t => t.CreateWebp(It.IsAny<Stream>(), DownloadAssetCommandHandler.ThumbnailMaxWidth)).Returns([9, 9]);
+
+        var result = await handler.Handle(new DownloadAssetCommand("good", null, Thumbnail: true), CancellationToken.None);
+
+        result.Value!.ContentType.Should().Be("image/webp");
+        result.Value.FileName.Should().Be("page1.webp");
+        f.Storage.Verify(s => s.SaveAsync(It.Is<string>(k => k.StartsWith("thumbs/") && k.EndsWith(".w400.webp")),
+            It.Is<byte[]>(b => b.Length == 2), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Once);
+        f.AccessLogs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Download_Thumbnail_AlreadyStored_IsReusedWithoutResizing()
+    {
+        var (f, up, handler) = await ReadyToDownload();
+        f.Signer.Setup(s => s.Validate("good")).Returns(new AssetLinkClaims(up.Id, f.ArtistId));
+
+        var result = await handler.Handle(new DownloadAssetCommand("good", null, Thumbnail: true), CancellationToken.None);
+
+        result.Value!.ContentType.Should().Be("image/webp");
+        f.Thumbnailer.Verify(t => t.CreateWebp(It.IsAny<Stream>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Download_Thumbnail_WhenNotDecodable_FallsBackToOriginal()
+    {
+        var (f, up, handler) = await ReadyToDownload();
+        f.Signer.Setup(s => s.Validate("good")).Returns(new AssetLinkClaims(up.Id, f.ArtistId));
+        f.Storage.Setup(s => s.OpenReadAsync(It.Is<string>(k => k.StartsWith("thumbs/")), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Stream?)null);
+        f.Thumbnailer.Setup(t => t.CreateWebp(It.IsAny<Stream>(), It.IsAny<int>())).Returns((byte[]?)null);
+
+        var result = await handler.Handle(new DownloadAssetCommand("good", null, Thumbnail: true), CancellationToken.None);
+
+        result.Value!.ContentType.Should().Be("image/png");
+    }
+
     // ── Domain ──
 
     [Theory]
@@ -499,6 +572,103 @@ public class ArtworkUploadTests
         first.Value!.PanelId.Should().Be(panel.Id);
         first.Value.VersionNumber.Should().Be(1);
         second.Value!.VersionNumber.Should().Be(2);
+    }
+
+    /// <summary>Đổi việc của Artist từ cả trang sang đúng một khung của trang.</summary>
+    private static (Panel Mine, Panel Other) HoldOnlyOnePanel(Fixture f)
+    {
+        var mine = Panel.Create(f.Page.Id, 1, 1);
+        var other = Panel.Create(f.Page.Id, 2, 2);
+        f.Panels.AddRange([mine, other]);
+        var panelWork = Assignment.Create(f.Assignment.SeriesId, f.Chapter.Id, WorkflowEntityType.Panel, mine.Id, f.Stage.Id,
+            f.ArtistId, WorkspaceRole.Artist, "Vẽ khung 1");
+        panelWork.StartWork();
+        f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment> { panelWork }));
+        return (mine, other);
+    }
+
+    [Fact]
+    public async Task Upload_PanelHolder_CanUploadOwnPanel()
+    {
+        var f = new Fixture();
+        var (mine, _) = HoldOnlyOnePanel(f);
+
+        var result = await f.Upload(Png(), panelId: mine.Id);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.PanelId.Should().Be(mine.Id);
+    }
+
+    [Fact]
+    public async Task Upload_PanelHolder_CannotUploadWholePage()
+    {
+        var f = new Fixture();
+        HoldOnlyOnePanel(f);
+
+        var result = await f.Upload(Png());
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        result.ErrorMessage.Should().Contain("cả trang");
+        f.References.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_PanelHolder_CannotUploadAnotherPanelOfSamePage()
+    {
+        var f = new Fixture();
+        var (_, other) = HoldOnlyOnePanel(f);
+
+        var result = await f.Upload(Png(), panelId: other.Id);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        f.References.Should().BeEmpty();
+    }
+
+    /// <summary>Artist giữ việc cả chương (InProgress); <paramref name="carved"/> là các việc Page/Panel đã tách cho người khác.</summary>
+    private static void HoldWholeChapter(Fixture f, params (WorkflowEntityType Type, Guid Target)[] carved)
+    {
+        var whole = Assignment.Create(f.Assignment.SeriesId, f.Chapter.Id, WorkflowEntityType.Chapter, f.Chapter.Id, f.Stage.Id,
+            f.ArtistId, WorkspaceRole.Artist, "Vẽ cả chương");
+        whole.StartWork();
+        var all = new List<Assignment> { whole };
+        all.AddRange(carved.Select(c => Assignment.Create(f.Assignment.SeriesId, f.Chapter.Id, c.Type, c.Target, f.Stage.Id,
+            f.OtherId, WorkspaceRole.Artist, "Phần tách")));
+        f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(all));
+    }
+
+    [Fact]
+    public async Task Upload_WholeChapterHolder_CanUploadPageInScope()
+    {
+        var f = new Fixture();
+        HoldWholeChapter(f);
+
+        (await f.Upload(Png())).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Upload_WholeChapterHolder_CannotUploadCarvedOutPage()
+    {
+        var f = new Fixture();
+        HoldWholeChapter(f, (WorkflowEntityType.Page, f.Page.Id));
+
+        var result = await f.Upload(Png());
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        f.References.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_WholeChapterHolder_WithOnePanelCarved_UploadsOtherPanelOnly()
+    {
+        var f = new Fixture();
+        var mine = Panel.Create(f.Page.Id, 1, 1);
+        var carved = Panel.Create(f.Page.Id, 2, 2);
+        f.Panels.AddRange([mine, carved]);
+        HoldWholeChapter(f, (WorkflowEntityType.Panel, carved.Id));
+
+        (await f.Upload(Png(1))).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);              // cả trang sẽ đè khung đã tách
+        (await f.Upload(Png(2), panelId: carved.Id)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await f.Upload(Png(3), panelId: mine.Id)).IsSuccess.Should().BeTrue();
     }
 
     [Fact]

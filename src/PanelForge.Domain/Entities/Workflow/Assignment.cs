@@ -152,10 +152,13 @@ public class Assignment : BaseEntity
     }
 
     /// <summary>
-    /// Phân công lại nhiệm vụ cho thành viên khác hoặc cập nhật vai trò.
+    /// Phân công lại nhiệm vụ cho thành viên khác hoặc cập nhật vai trò. Đang làm dở (InProgress) mà đổi sang người khác thì lùi
+    /// về Assigned: người mới phải bấm Bắt đầu để nhận bàn giao (bài đã tải lên vẫn giữ).
     /// </summary>
     public void Reassign(Guid newAssigneeUserId, WorkspaceRole newRole)
     {
+        if (newAssigneeUserId != AssigneeUserId && Status == AssignmentStatus.InProgress)
+            Status = AssignmentStatus.Assigned;
         AssigneeUserId = newAssigneeUserId;
         AssignedRole = newRole;
         UpdatedAt = DateTime.UtcNow;

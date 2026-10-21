@@ -76,11 +76,11 @@ public class ChapterReadOnlyTests
         ShouldBeReadOnly(await new UpdateChapterCommandHandler(_db).Handle(
             new UpdateChapterCommand(_chapter.Id, _userId, "Tên mới", null, false), default));
         ShouldBeReadOnly(await new DeleteChapterCommandHandler(_db).Handle(new DeleteChapterCommand(_chapter.Id, _userId), default));
-        ShouldBeReadOnly(await new CreateSceneCommandHandler(_db).Handle(new CreateSceneCommand(_chapter.Id, _userId), default));
-        ShouldBeReadOnly(await new UpdateSceneCommandHandler(_db).Handle(new UpdateSceneCommand(_scene.Id, _userId, "x", null), default));
-        ShouldBeReadOnly(await new ReorderScenesCommandHandler(_db).Handle(
+        ShouldBeReadOnly(await new CreateSceneCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new CreateSceneCommand(_chapter.Id, _userId), default));
+        ShouldBeReadOnly(await new UpdateSceneCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new UpdateSceneCommand(_scene.Id, _userId, "x", null), default));
+        ShouldBeReadOnly(await new ReorderScenesCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(
             new ReorderScenesCommand(_chapter.Id, _userId, [new ReorderSceneItem(_scene.Id, 2)]), default));
-        ShouldBeReadOnly(await new DeleteSceneCommandHandler(_db).Handle(new DeleteSceneCommand(_scene.Id, _userId), default));
+        ShouldBeReadOnly(await new DeleteSceneCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new DeleteSceneCommand(_scene.Id, _userId), default));
 
         _db.ChangeTracker.Clear();
         _db.Chapters.Single().Title.Should().Be("Lá thư");
@@ -137,7 +137,7 @@ public class ChapterReadOnlyTests
         (await new ReopenChapterCommandHandler(_db).Handle(
             new ReopenChapterCommand(_chapter.Id, _userId, "Sửa theo phản hồi"), default)).IsSuccess.Should().BeTrue();
 
-        var updated = await new UpdateSceneCommandHandler(_db).Handle(new UpdateSceneCommand(_scene.Id, _userId, "Bến cảng đêm", null), default);
+        var updated = await new UpdateSceneCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new UpdateSceneCommand(_scene.Id, _userId, "Bến cảng đêm", null), default);
 
         updated.IsSuccess.Should().BeTrue(updated.ErrorMessage);
         updated.Value!.Heading.Should().Be("Bến cảng đêm");

@@ -41,20 +41,18 @@ public sealed class DeleteAssignmentCommandHandler : IRequestHandler<DeleteAssig
         if (assignment.Status == AssignmentStatus.Approved)
             return Fail("Không thể xoá Assignment đã được phê duyệt hoàn thành (Approved).", ResultErrorCodes.Conflict);
 
-        // Giải phóng các Assignment khác trong cùng Chapter đang phụ thuộc vào Assignment này (DAG)
-        var allChapterAssignments = await _db.Assignments
-            .Where(a => a.ChapterId == cmd.ChapterId && a.Id != assignment.Id)
-            .ToListAsync(ct);
+        // Đã nộp ít nhất một lần thì giữ lại: lịch sử nộp/duyệt và tiến độ Panel đang trỏ vào việc này
+        if (await _db.Submissions.AnyAsync(s => s.AssignmentId == assignment.Id, ct))
+            return Fail("Không thể xoá việc đã có bài nộp; hãy đổi người nhận thay vì xoá.", ResultErrorCodes.Conflict);
 
-        foreach (var other in allChapterAssignments)
-        {
-            var otherDeps = other.GetDependsOnAssignmentIds();
-            if (otherDeps.Contains(assignment.Id))
-            {
-                var remaining = otherDeps.Where(id => id != assignment.Id).ToList();
-                other.SetDependencies(remaining);
-            }
-        }
+        // Không âm thầm gỡ phụ thuộc: việc phía sau sẽ bắt đầu được mà không cần việc này xong
+        var dependents = (await _db.Assignments.AsNoTracking()
+                .Where(a => a.ChapterId == cmd.ChapterId && a.Id != assignment.Id)
+                .ToListAsync(ct))
+            .Count(a => a.GetDependsOnAssignmentIds().Contains(assignment.Id));
+        if (dependents > 0)
+            return Fail($"Không thể xoá: còn {dependents} việc phụ thuộc vào việc này. Gỡ phụ thuộc ở các việc đó trước.",
+                ResultErrorCodes.Conflict);
 
         // Gửi thông báo cho người đang nhận việc nếu có người nhận và người nhận khác người thực hiện xoá
         if (assignment.AssigneeUserId != Guid.Empty && assignment.AssigneeUserId != cmd.UserId)

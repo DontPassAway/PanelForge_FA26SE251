@@ -28,6 +28,8 @@ using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Application.Features.Audit.Models;
 using PanelForge.Domain.Enums;
 using PanelForge.API.Common;
+using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceCover;
 
 namespace PanelForge.API.Controllers;
 
@@ -112,6 +114,69 @@ public class WorkspacesController : ControllerBase
 
         var result = await _mediator.Send(new DeleteWorkspaceCommand(userId, id), cancellationToken);
         return result.IsSuccess ? Ok(new { message = "Xóa Workspace thành công." }) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/workspaces/{id}/cover (multipart/form-data: file) — Producer đặt ảnh bìa Studio (PNG/JPEG/WebP, ≤ 5 MB).
+    /// </summary>
+    [HttpPut("{id:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetCover([FromRoute] Guid id, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Thiếu file ảnh bìa." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        var result = await _mediator.Send(new SetWorkspaceCoverCommand(id, userId, buffer.ToArray()), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new TextValueResponse(result.Value))
+            : ToError(result);
+    }
+
+    /// <summary>
+    /// DELETE /api/workspaces/{id}/cover — Producer xoá ảnh bìa (quay về bìa mặc định).
+    /// </summary>
+    [HttpDelete("{id:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearCover([FromRoute] Guid id, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new SetWorkspaceCoverCommand(id, userId, null), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new TextValueResponse(result.Value))
+            : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/cover — Ảnh bìa Studio hiện tại.
+    /// </summary>
+    [HttpGet("{id:guid}/cover")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCover([FromRoute] Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceCoverQuery(id), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
     }
 
     [HttpGet("{id:guid}/members")]

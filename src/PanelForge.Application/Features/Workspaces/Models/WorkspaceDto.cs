@@ -14,5 +14,8 @@ public record WorkspaceDto(
     bool IsOwner,
     WorkspaceRole? CurrentUserRole,
     int MemberCount,
-    int PendingTasks = 0
+    int PendingTasks = 0,
+    string? CoverUrl = null,
+    string? Description = null,
+    IReadOnlyList<WorkspaceMemberPreviewDto>? MemberPreviews = null
 );

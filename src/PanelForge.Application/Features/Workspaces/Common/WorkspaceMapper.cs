@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Workspaces;
@@ -14,7 +15,12 @@ internal static class WorkspaceMapper
             : workspace.Members.FirstOrDefault(m => m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)?.Role;
 
     /// <summary>Yêu cầu workspace đã Include(Owner) và Include(Members).</summary>
-    public static WorkspaceDto ToDto(StudioWorkspace workspace, Guid currentUserId, int memberCount, int pendingTasks = 0)
+    public static WorkspaceDto ToDto(
+        StudioWorkspace workspace,
+        Guid currentUserId,
+        int memberCount,
+        int pendingTasks = 0,
+        IReadOnlyList<WorkspaceMemberPreviewDto>? memberPreviews = null)
         => new(
             Id: workspace.Id,
             Name: workspace.Name,
@@ -27,7 +33,10 @@ internal static class WorkspaceMapper
             IsOwner: workspace.OwnerId == currentUserId,
             CurrentUserRole: RoleOf(workspace, currentUserId),
             MemberCount: memberCount,
-            PendingTasks: pendingTasks);
+            PendingTasks: pendingTasks,
+            CoverUrl: SetWorkspaceCoverCommandHandler.CoverUrl(workspace.Id, workspace.CoverImageSha256),
+            Description: null,
+            MemberPreviews: memberPreviews);
 
     public static WorkspaceMemberDto ToMemberDto(WorkspaceMember member, User user, Guid ownerId)
         => new(

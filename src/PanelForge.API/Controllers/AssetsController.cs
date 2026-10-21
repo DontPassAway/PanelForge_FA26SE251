@@ -77,19 +77,20 @@ public sealed class AssetsController : ControllerBase
 
     /// <summary>
     /// GET /api/assets/download?token= — tải artwork bằng link ngắn hạn. Không cần Bearer (dùng được trong thẻ img):
-    /// quyền nằm ở token đã ký, và người nhận link phải còn là thành viên Workspace.
+    /// quyền nằm ở token đã ký, và người nhận link phải còn là thành viên Workspace. <c>size=thumb</c> trả bản WebP rộng tối đa 400px.
     /// </summary>
     [HttpGet("api/assets/download")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Download([FromQuery] string? token, CancellationToken ct)
+    public async Task<IActionResult> Download([FromQuery] string? token, [FromQuery] string? size, CancellationToken ct)
     {
         var result = await _mediator.Send(
-            new DownloadAssetCommand(token ?? string.Empty, HttpContext.Connection.RemoteIpAddress?.ToString()), ct);
+            new DownloadAssetCommand(token ?? string.Empty, HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Thumbnail: string.Equals(size, "thumb", StringComparison.OrdinalIgnoreCase)), ct);
         if (!result.IsSuccess) return Error(result);
 
-        // Không để proxy/trình duyệt cache artwork chưa phát hành; không cho trình duyệt đoán lại loại file
-        Response.Headers.CacheControl = "no-store";
+        // Chỉ trình duyệt của người tải được cache, và không lâu hơn hạn của link (5 phút); proxy dùng chung không được lưu
+        Response.Headers.CacheControl = "private, max-age=300";
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(result.Value!.Content, result.Value.ContentType, result.Value.FileName);
     }
