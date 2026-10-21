@@ -49,6 +49,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasColumnName("avatar_url")
                .HasColumnType("varchar(2048)");
 
+        builder.Property(u => u.ProfileCoverPresetId)
+               .HasColumnName("profile_cover_preset_id")
+               .HasColumnType("varchar(64)");
+
         builder.Property(u => u.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

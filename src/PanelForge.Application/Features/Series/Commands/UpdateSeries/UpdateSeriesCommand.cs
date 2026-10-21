@@ -1,4 +1,5 @@
 using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
+using PanelForge.Application.Features.Series.Commands.SetSeriesImage;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -75,7 +76,9 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             CreatedBy: series.CreatedBy,
             ChaptersCount: series.Chapters.Count,
             StoryArc: series.StoryArc,
-            CoverUrl: SetSeriesCoverCommandHandler.CoverUrl(series.Id, series.CoverImageSha256)
+            CoverUrl: SetSeriesCoverCommandHandler.CoverUrl(series.Id, series.CoverImageSha256),
+            AvatarUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Avatar, series.AvatarImageSha256),
+            BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256)
         ));
     }
 }

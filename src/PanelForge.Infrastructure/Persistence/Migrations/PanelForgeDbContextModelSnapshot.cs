@@ -2059,6 +2059,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AvatarImageSha256")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("avatar_image_sha256");
+
+                    b.Property<string>("BannerImageSha256")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("banner_image_sha256");
+
                     b.Property<string>("CoverImageSha256")
                         .HasColumnType("varchar(64)")
                         .HasColumnName("cover_image_sha256");
@@ -2416,6 +2424,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("varchar(20)")
                         .HasColumnName("phone_number");
+
+                    b.Property<string>("ProfileCoverPresetId")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("profile_cover_preset_id");
 
                     b.Property<string>("Role")
                         .IsRequired()

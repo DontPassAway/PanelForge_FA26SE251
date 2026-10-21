@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Domain.Enums;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Features.Pages.Commands.CreatePage;
 using PanelForge.Application.Features.Pages.Commands.DeletePage;
@@ -221,6 +222,53 @@ public sealed class PagesController : ControllerBase
 
         return Ok(new { message = $"Trang {pageId} đã được xóa thành công." });
     }
+
+    private const long MaxSplitImageBytes = 20 * 1024 * 1024;
+
+    /// <summary>
+    /// POST /api/pages/{pageId}/split-artwork (multipart/form-data): file, rightToLeft?.
+    /// Gợi ý tách panel + bong bóng thoại từ ảnh vẽ cả trang. Chỉ trả toạ độ, KHÔNG lưu gì:
+    /// FE cho người dùng chỉnh/xác nhận rồi mới áp vào layout.
+    /// </summary>
+    [HttpPost("api/pages/{pageId:guid}/split-artwork")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxSplitImageBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxSplitImageBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(PanelSplitResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> SplitArtwork(
+        [FromRoute] Guid pageId,
+        [FromForm] SplitArtworkForm form,
+        [FromServices] IPanelSplitter splitter,
+        CancellationToken cancellationToken)
+    {
+        if (form.File is null || form.File.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh trang." });
+        if (form.File.Length > MaxSplitImageBytes)
+            return BadRequest(new { error = "Ảnh vượt quá 20MB." });
+        if (form.File.ContentType is not ("image/png" or "image/jpeg" or "image/webp"))
+            return BadRequest(new { error = "Chỉ hỗ trợ PNG, JPEG, WEBP." });
+
+        try
+        {
+            await using var stream = form.File.OpenReadStream();
+            var result = await splitter.SplitAsync(stream, form.File.FileName, form.RightToLeft, cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message, code = "PANEL_SPLITTER_UNAVAILABLE" });
+        }
+    }
+}
+
+/// <summary>Form tách panel. RightToLeft = true cho manga đọc phải→trái.</summary>
+public sealed class SplitArtworkForm
+{
+    public IFormFile? File { get; set; }
+    public bool RightToLeft { get; set; }
 }
 
 // ── Request bodies ───────────────────────────────────────────────────────────
