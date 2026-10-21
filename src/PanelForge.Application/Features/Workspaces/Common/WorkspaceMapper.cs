@@ -11,7 +11,7 @@ internal static class WorkspaceMapper
     public static WorkspaceRole? RoleOf(StudioWorkspace workspace, Guid userId)
         => workspace.OwnerId == userId
             ? WorkspaceRole.Producer
-            : workspace.Members.FirstOrDefault(m => m.UserId == userId)?.Role;
+            : workspace.Members.FirstOrDefault(m => m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)?.Role;
 
     /// <summary>Yêu cầu workspace đã Include(Owner) và Include(Members).</summary>
     public static WorkspaceDto ToDto(StudioWorkspace workspace, Guid currentUserId, int memberCount, int pendingTasks = 0)
@@ -39,5 +39,6 @@ internal static class WorkspaceMapper
             Role: member.Role,
             IsOwner: user.Id == ownerId,
             JoinedAt: member.JoinedAt,
-            IsEmailConfirmed: user.IsEmailConfirmed);
+            IsEmailConfirmed: user.IsEmailConfirmed,
+            Status: member.Status);
 }

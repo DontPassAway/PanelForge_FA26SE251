@@ -25,7 +25,7 @@ public sealed class GetMyWorkspacesQueryHandler
         var workspaces = await _dbContext.StudioWorkspaces
             .Include(w => w.Owner)
             .Include(w => w.Members.Where(m => !m.IsDeleted))
-            .Where(w => !w.IsDeleted && (w.OwnerId == userId || w.Members.Any(m => m.UserId == userId && !m.IsDeleted)))
+            .Where(w => !w.IsDeleted && (w.OwnerId == userId || w.Members.Any(m => m.UserId == userId && !m.IsDeleted && m.Status == WorkspaceMemberStatus.Active)))
             .OrderByDescending(w => w.CreatedAt)
             .ToListAsync(cancellationToken);
 

@@ -54,7 +54,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var member = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId, cancellationToken);
 
-        if (member == null) return false;
+        if (member == null || member.Status != WorkspaceMemberStatus.Active) return false;
 
         return allowedRoles.Contains(member.Role);
     }
@@ -68,7 +68,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         if (workspace.OwnerId == userId) return true;
 
         return await _dbContext.WorkspaceMembers
-            .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId, cancellationToken);
+            .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
     }
 
     public async Task<WorkspaceRole?> GetMemberRoleAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
@@ -86,7 +86,9 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var member = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId, cancellationToken);
 
-        return member?.Role;
+        if (member == null || member.Status != WorkspaceMemberStatus.Active) return null;
+
+        return member.Role;
     }
 
     public Task<Guid?> GetWorkspaceIdOfSeriesAsync(Guid seriesId, CancellationToken cancellationToken = default)

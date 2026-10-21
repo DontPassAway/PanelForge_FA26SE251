@@ -93,7 +93,7 @@ public sealed class AddWorkspaceMemberCommandHandler
                 inviteOtp = WorkspaceInvitation.IssueOtp(targetUser);
         }
 
-        var member = WorkspaceMember.Create(command.WorkspaceId, targetUser.Id, command.Role);
+        var member = WorkspaceMember.Create(command.WorkspaceId, targetUser.Id, command.Role, WorkspaceMemberStatus.Pending);
         _dbContext.WorkspaceMembers.Add(member);
 
         // Tạo user (nếu là lời mời) và membership trong cùng một lần lưu

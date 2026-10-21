@@ -39,6 +39,15 @@ internal sealed class WorkspaceMemberConfiguration : IEntityTypeConfiguration<Wo
                    v => Enum.Parse<WorkspaceRole>(v))
                .IsRequired();
 
+        builder.Property(m => m.Status)
+               .HasColumnName("status")
+               .HasColumnType("varchar(30)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<WorkspaceMemberStatus>(v))
+               .HasDefaultValue(WorkspaceMemberStatus.Active)
+               .IsRequired();
+
         builder.Property(m => m.JoinedAt)
                .HasColumnName("joined_at")
                .HasColumnType("timestamptz")

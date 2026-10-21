@@ -12,5 +12,6 @@ public record WorkspaceMemberDto(
     bool IsOwner,
     DateTime JoinedAt,
     bool IsEmailConfirmed = true,
-    bool? InvitationEmailSent = null
+    bool? InvitationEmailSent = null,
+    WorkspaceMemberStatus Status = WorkspaceMemberStatus.Active
 );

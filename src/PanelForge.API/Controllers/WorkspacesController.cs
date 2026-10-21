@@ -21,10 +21,13 @@ using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceMembers;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceActiveSessions;
 using PanelForge.Application.Features.Workspaces.Commands.RevokeWorkspaceSession;
-using PanelForge.Domain.Enums;
-using PanelForge.API.Common;
+using PanelForge.Application.Features.Workspaces.Commands.AcceptInvitation;
+using PanelForge.Application.Features.Workspaces.Commands.RejectInvitation;
+using PanelForge.Application.Features.Workspaces.Queries.GetPendingInvitations;
 using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Application.Features.Audit.Models;
+using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -62,6 +65,18 @@ public class WorkspacesController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(new GetMyWorkspacesQuery(userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/workspaces/pending-invitations — danh sách lời mời đang chờ người dùng hiện tại chấp nhận.</summary>
+    [HttpGet("pending-invitations")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingInvitationDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPendingInvitations(CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetMyPendingInvitationsQuery(userId), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -138,6 +153,40 @@ public class WorkspacesController : ControllerBase
         var result = await _mediator.Send(new ResendWorkspaceInvitationCommand(actorId, id, userId), cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>
+    /// POST /api/workspaces/{id}/accept-invitation
+    /// Thành viên được mời chấp nhận lời mời tham gia Workspace.
+    /// </summary>
+    [HttpPost("{id:guid}/accept-invitation")]
+    [ProducesResponseType(typeof(WorkspaceMemberDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AcceptInvitation(Guid id, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new AcceptWorkspaceInvitationCommand(userId, id), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>
+    /// POST /api/workspaces/{id}/reject-invitation
+    /// Thành viên từ chối lời mời tham gia Workspace.
+    /// </summary>
+    [HttpPost("{id:guid}/reject-invitation")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RejectInvitation(Guid id, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new RejectWorkspaceInvitationCommand(userId, id), cancellationToken);
+        return result.IsSuccess
+            ? Ok(new { message = "Đã từ chối lời mời tham gia Workspace." })
             : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
     }
 
