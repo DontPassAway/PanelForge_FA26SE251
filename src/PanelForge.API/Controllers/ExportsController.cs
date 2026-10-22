@@ -59,7 +59,7 @@ public sealed class ExportsController : ControllerBase
 
     /// <summary>GET /api/chapters/{chapterId}/exports/{jobId}/file — tải file đã xuất (mỗi lần tải được ghi lại).</summary>
     [HttpGet("{jobId:guid}/file")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)] // Editor chỉ tải OPEN_JSON (kiểm ở handler)
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Download(Guid chapterId, Guid jobId, CancellationToken ct)
     {
@@ -72,6 +72,7 @@ public sealed class ExportsController : ControllerBase
     private IActionResult Error<T>(Result<T> result) => result.ErrorCode switch
     {
         ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+        ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage, code = result.ErrorCode }),
         ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
         _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
     };

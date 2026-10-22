@@ -26,5 +26,6 @@ public class PageProjection : SingleStreamProjection<Page, Guid>
     public void Apply(Page page, ElementOverflowAcknowledgedEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementReadingOrderSetEvent @event) => page.Apply(@event);
     public void Apply(Page page, ElementStyleUpdatedEvent @event) => page.Apply(@event);
+    public void Apply(Page page, ElementRestoredEvent @event) => page.Apply(@event);
     public void Apply(Page page, PageDeletedEvent @event) => page.Apply(@event);
 }

@@ -146,6 +146,7 @@ internal sealed class ProductionHistory
         ElementReadingOrderSetEvent x => (x.ElementId, x.SetByUserId, $"thứ tự đọc {x.ReadingOrder?.ToString() ?? "bỏ"}"),
         ElementOverflowAcknowledgedEvent x => (x.ElementId, x.AcknowledgedByUserId, $"xác nhận tràn chữ: {x.Reason}"),
         ElementRemovedEvent x => (x.ElementId, x.RemovedByUserId, $"xoá bóng ({x.Reason})"),
+        ElementRestoredEvent x => (x.ElementId, x.RestoredByUserId, $"khôi phục về bản v{x.RestoredFromVersion} của trang"),
         _ => (null, Guid.Empty, "")
     };
 

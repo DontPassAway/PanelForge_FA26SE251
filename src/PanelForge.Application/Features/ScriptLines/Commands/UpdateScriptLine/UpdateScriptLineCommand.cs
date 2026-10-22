@@ -22,11 +22,13 @@ public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScrip
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IPageRepository _pages;
 
-    public UpdateScriptLineCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public UpdateScriptLineCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IPageRepository pages)
     {
         _db = db;
         _auth = auth;
+        _pages = pages;
     }
 
     public async Task<Result<ScriptLineDto>> Handle(UpdateScriptLineCommand cmd, CancellationToken ct)
@@ -52,6 +54,7 @@ public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScrip
 
         var lines = await _db.ScriptLines.Where(l => l.SceneId == line.SceneId).ToListAsync(ct);
         var before = ScriptLineRules.Snapshot(lines);
+        var (textBefore, speakerBefore) = (ScriptLineRules.LetteringText(line), line.SpeakerCharacterId);
 
         line.UpdateContent(
             string.IsNullOrWhiteSpace(cmd.DialogueText) ? null : cmd.DialogueText,
@@ -62,6 +65,12 @@ public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScrip
 
         var revision = await ScriptLineRules.RecordRevisionAsync(
             _db, chapter, line.SceneId, "Sửa dòng script thủ công", before, ScriptLineRules.Snapshot(lines), ct);
+
+        // CF4: thoại/speaker đổi thật → Lettering đã duyệt của bóng gắn dòng này phải làm lại
+        var sourceChanged = ScriptLineRules.LetteringText(line) != textBefore || line.SpeakerCharacterId != speakerBefore;
+        if (sourceChanged && await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, chapter.Id, line,
+                "Writer đã sửa thoại đã được đặt chữ; cần cập nhật bóng thoại theo script mới.", ct) is { } reworkError)
+            return Result<ScriptLineDto>.Failure(reworkError, ResultErrorCodes.Conflict);
 
         await _db.SaveChangesAsync(ct);
         return Result<ScriptLineDto>.Success(ScriptLineDto.From(line, chapter.VersionVector, revision.Id, bibleEntryIds));

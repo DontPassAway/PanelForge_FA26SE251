@@ -25,5 +25,5 @@ public sealed record ExportJobDto(
         j.ResultFileName, j.ResultSizeBytes, j.ResultSha256, j.Error, j.CreatedAt, j.StartedAt, j.CompletedAt, j.DownloadCount);
 }
 
-/// <summary>PresetCode: mã ExportPreset (CBZ, PDF, PAGE_IMAGES, WEBTOON).</summary>
+/// <summary>PresetCode: mã ExportPreset (CBZ, PDF, PAGE_IMAGES, WEBTOON, OPEN_JSON = manifest bản duyệt + provenance).</summary>
 public sealed record CreateExportJobRequest(string PresetCode);

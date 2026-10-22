@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
@@ -158,7 +159,7 @@ public class ManualScriptLineTests
     {
         var created = await Create("Bản đầu");
 
-        var updated = await new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+        var updated = await new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Bản sửa", null, null, created.Value.ChapterVersion), default);
 
         updated.IsSuccess.Should().BeTrue();
@@ -174,7 +175,7 @@ public class ManualScriptLineTests
         var created = await Create("Giữ nguyên");
         var revisionsBefore = _db.ContentRevisions.Count();
 
-        var same = await new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+        var same = await new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Giữ nguyên", null, null, created.Value.ChapterVersion), default);
 
         same.IsSuccess.Should().BeTrue();
@@ -191,7 +192,7 @@ public class ManualScriptLineTests
         _db.Chapters.Add(other);
         await _db.SaveChangesAsync();
 
-        var r = await new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+        var r = await new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new UpdateScriptLineCommand(other.Id, created.Value!.Id, _writer, "Hack", null, null, null), default);
 
         r.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
@@ -202,7 +203,7 @@ public class ManualScriptLineTests
     {
         var a = await Create("A"); var b = await Create("B");
 
-        var r = await new DeleteScriptLineCommandHandler(_db, _auth.Object).Handle(
+        var r = await new DeleteScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new DeleteScriptLineCommand(_chapter.Id, a.Value!.Id, _writer, null), default);
 
         r.IsSuccess.Should().BeTrue();
@@ -228,7 +229,7 @@ public class ManualScriptLineTests
     }
 
     private Task<Result<PanelForge.Application.Features.ScriptLines.Models.ScriptLineDto>> Update(Guid lineId, IReadOnlyList<Guid>? links) =>
-        new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+        new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new UpdateScriptLineCommand(_chapter.Id, lineId, _writer, "Sửa", null, null, null, links), default);
 
     [Fact]
@@ -312,7 +313,7 @@ public class ManualScriptLineTests
             new RestoreScriptRevisionCommand(_chapter.Id, sceneId ?? _scene.Id, revisionId, _writer, expected), default);
 
     private Task EditLine(Guid lineId, string dialogue) =>
-        new UpdateScriptLineCommandHandler(_db, _auth.Object).Handle(
+        new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new UpdateScriptLineCommand(_chapter.Id, lineId, _writer, dialogue, null, null, null), default);
 
     private List<ContentRevision> ScriptRevisions() => _db.ContentRevisions
@@ -323,7 +324,7 @@ public class ManualScriptLineTests
     {
         var a = await Create("A"); var b = await Create("B");   // v1, v2
         await EditLine(a.Value!.Id, "A sửa");                    // v3
-        await new DeleteScriptLineCommandHandler(_db, _auth.Object).Handle(
+        await new DeleteScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
             new DeleteScriptLineCommand(_chapter.Id, b.Value!.Id, _writer, null), default); // v4
         var payloadsBefore = ScriptRevisions().Select(r => r.PayloadJson).ToList();
 

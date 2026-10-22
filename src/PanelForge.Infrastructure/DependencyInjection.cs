@@ -66,6 +66,7 @@ public static class DependencyInjection
                 typeof(ElementOverflowAcknowledgedEvent),
                 typeof(ElementReadingOrderSetEvent),
                 typeof(ElementStyleUpdatedEvent),
+                typeof(ElementRestoredEvent),
                 typeof(PageDeletedEvent)
             });
 

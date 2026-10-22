@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Exports.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Entities.Workflow;
@@ -24,11 +25,12 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
     private readonly IChapterExportRenderer _renderer;
     private readonly IPageRepository _pages;
     private readonly IPageLetteringCompositor _lettering;
+    private readonly ISender _sender;
     private readonly ILogger<ProcessNextExportJobCommandHandler> _logger;
 
     public ProcessNextExportJobCommandHandler(
         IPanelForgeDbContext db, IAssetStorage storage, IChapterExportRenderer renderer,
-        IPageRepository pages, IPageLetteringCompositor lettering,
+        IPageRepository pages, IPageLetteringCompositor lettering, ISender sender,
         ILogger<ProcessNextExportJobCommandHandler> logger)
     {
         _db = db;
@@ -36,6 +38,7 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
         _renderer = renderer;
         _pages = pages;
         _lettering = lettering;
+        _sender = sender;
         _logger = logger;
     }
 
@@ -51,7 +54,9 @@ public sealed class ProcessNextExportJobCommandHandler : IRequestHandler<Process
 
         try
         {
-            var (fileName, file) = await RenderAsync(job, ct);
+            var (fileName, file) = job.Format == OpenJsonExport.Format
+                ? await OpenJsonExport.BuildAsync(_db, _sender, job, ct)
+                : await RenderAsync(job, ct);
             var key = $"exports/{job.Id}.{file.Extension}";
             await _storage.SaveAsync(key, file.Content, new AssetObjectInfo(file.ContentType,
                 new Dictionary<string, string> { ["export-job"] = job.Id.ToString(), ["format"] = job.Format }), ct);

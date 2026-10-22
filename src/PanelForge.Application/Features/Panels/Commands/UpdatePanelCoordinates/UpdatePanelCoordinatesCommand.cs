@@ -1,9 +1,11 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
 
@@ -38,6 +40,7 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
                 $"Panel đã được người khác sửa (version hiện tại {panel.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",
                 ResultErrorCodes.Conflict);
 
+        var boxBefore = panel.BoundingBox;
         try
         {
             panel.UpdateBoundingBox(command.BoundingBox);
@@ -50,6 +53,17 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
         catch (ArgumentException ex)
         {
             return Result<PanelDto>.Failure(ex.Message);
+        }
+
+        // CF4 (BR-06): đổi khung Panel đã có artwork/chữ được duyệt → các việc đó của đúng Panel này phải làm lại (cùng lần Save)
+        if (panel.BoundingBox != boxBefore)
+        {
+            var chapterId = await _dbContext.Pages.AsNoTracking()
+                .Where(p => p.Id == panel.PageId).Select(p => p.ChapterId).FirstAsync(cancellationToken);
+            var (_, reworkError) = await StageProgressRules.ReworkForSourceChangeAsync(_dbContext, chapterId,
+                new HashSet<Guid> { panel.Id }, [WorkspaceRole.Artist, WorkspaceRole.Letterer],
+                $"Khung Panel {panel.PanelNumber} đã đổi sau khi duyệt, cần làm lại artwork/chữ của Panel này.", cancellationToken);
+            if (reworkError is not null) return Result<PanelDto>.Failure(reworkError, ResultErrorCodes.Conflict);
         }
 
         try

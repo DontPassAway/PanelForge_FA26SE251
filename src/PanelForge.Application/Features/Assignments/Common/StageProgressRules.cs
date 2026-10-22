@@ -264,12 +264,47 @@ internal static class StageProgressRules
             (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
              a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);
 
+        return await ReworkCoveringAsync(db, candidates, panelIds,
+            $"Stage trước ('{stage.Name}') của phần việc này bị trả về làm lại: {reason}",
+            a => $"Việc '{laterStages[a.PipelineStageId]}' cần làm lại",
+            a => $"Stage trước của việc '{laterStages[a.PipelineStageId]}' sẽ thay đổi", ct);
+    }
+
+    /// <summary>
+    /// CF4 (bảng lan truyền, BR-06): nguồn của việc đã duyệt đổi sau khi duyệt — Writer sửa/xoá thoại đã đặt bóng, hoặc đổi khung
+    /// Panel đã có artwork duyệt — thì việc Approved của <paramref name="roles"/> bao phủ <paramref name="panelIds"/> →
+    /// ReworkRequired (dòng tiến độ Approved → ChangesRequested) và người làm được báo. Việc chưa duyệt không đổi (chữ lỗi thời đã
+    /// chặn nộp, BR-05). Chỉ đúng các Panel liên quan; gọi trước SaveChanges của thao tác gốc (BR-18, audit theo SaveChanges).
+    /// </summary>
+    public static async Task<(int Reworked, string? Error)> ReworkForSourceChangeAsync(
+        IPanelForgeDbContext db, Guid chapterId, IReadOnlySet<Guid> panelIds, WorkspaceRole[] roles, string reason,
+        CancellationToken ct)
+    {
+        if (panelIds.Count == 0) return (0, null);
+        var candidates = await db.Assignments.Where(a => a.ChapterId == chapterId &&
+            a.Status == AssignmentStatus.Approved && roles.Contains(a.AssignedRole)).ToListAsync(ct);
+        if (candidates.Count == 0) return (0, null);
+
+        var stageIds = candidates.Select(a => a.PipelineStageId).Distinct().ToList();
+        var stageNames = await db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        return await ReworkCoveringAsync(db, candidates, panelIds, reason,
+            a => $"Việc '{stageNames.GetValueOrDefault(a.PipelineStageId)}' cần làm lại", noticeTitle: null, ct);
+    }
+
+    /// <summary>
+    /// Lõi chung của 4.7 và <see cref="ReworkForSourceChangeAsync"/>: việc trong <paramref name="candidates"/> bao phủ ít nhất một
+    /// Panel của <paramref name="panelIds"/>: Approved → ReworkRequired + báo; việc khác chỉ được báo khi có <paramref name="noticeTitle"/>.
+    /// </summary>
+    private static async Task<(int Reworked, string? Error)> ReworkCoveringAsync(
+        IPanelForgeDbContext db, IEnumerable<Assignment> candidates, IReadOnlySet<Guid> panelIds, string message,
+        Func<Assignment, string> reworkTitle, Func<Assignment, string>? noticeTitle, CancellationToken ct)
+    {
         var count = 0;
         foreach (var later in candidates)
         {
             if (!(await ResolvePanelsAsync(db, later, ct)).Any(p => panelIds.Contains(p.Id))) continue;
 
-            var message = $"Stage trước ('{stage.Name}') của phần việc này bị trả về làm lại: {reason}";
             if (later.Status == AssignmentStatus.Approved)
             {
                 // Mở lại mọi dòng Approved của việc (cả Panel không bị ảnh hưởng) để người làm Start lại được cả việc
@@ -281,12 +316,12 @@ internal static class StageProgressRules
                 later.RequestRework(message);
                 count++;
                 db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
-                    $"Việc '{laterStages[later.PipelineStageId]}' cần làm lại", message, later.Id, later.ChapterId));
+                    reworkTitle(later), message, later.Id, later.ChapterId));
             }
-            else
+            else if (noticeTitle is not null)
             {
                 db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
-                    $"Stage trước của việc '{laterStages[later.PipelineStageId]}' sẽ thay đổi", message, later.Id, later.ChapterId));
+                    noticeTitle(later), message, later.Id, later.ChapterId));
             }
         }
 

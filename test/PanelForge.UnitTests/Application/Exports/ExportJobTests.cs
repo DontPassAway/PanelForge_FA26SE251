@@ -1,5 +1,8 @@
+using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Moq;
+using PanelForge.Application.Features.AiAgents.Queries.GetProvenanceReport;
 using Microsoft.Extensions.Logging.Abstractions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -68,6 +71,8 @@ public class ExportJobTests
     private readonly FakeRenderer _renderer = new();
     private readonly FakeLettering _lettering = new();
     private readonly Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository> _pageRepo = new();
+    private readonly Mock<IWorkspaceAuthorizationService> _auth = new();
+    private readonly Mock<ISender> _sender = new();
     private readonly Guid _producerId = Guid.NewGuid();
     private readonly Chapter _chapter;
     private readonly Page _page1;
@@ -98,7 +103,29 @@ public class ExportJobTests
         AddArtwork(_page1, _ink, 1, [1]);
         AddArtwork(_page2, _ink, 1, [2]);
         _db.SaveChanges();
+
+        // Producer có mọi quyền; worker gọi report qua ISender → handler thật (dùng lại GetProvenanceReportQuery)
+        _auth.Setup(a => a.HasWorkspaceRoleAsync(_producerId, It.IsAny<Guid>(), It.IsAny<WorkspaceRole[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _sender.Setup(s => s.Send(It.IsAny<GetProvenanceReportQuery>(), It.IsAny<CancellationToken>()))
+            .Returns((GetProvenanceReportQuery q, CancellationToken ct) =>
+                new GetProvenanceReportQueryHandler(_db, _auth.Object, _pageRepo.Object).Handle(q, ct));
     }
+
+    /// <summary>Snapshot bản duyệt như ApproveChapter tạo (manifest + SHA-256).</summary>
+    private ChapterSnapshot AddSnapshot()
+    {
+        var manifest = $$"""{"chapterId":"{{_chapter.Id}}","pages":[{"pageNumber":1},{"pageNumber":2}]}""";
+        var snapshot = ChapterSnapshot.Create(_chapter.Id, 1, _chapter.VersionVector, _producerId, manifest, Sha256(manifest));
+        _db.ChapterSnapshots.Add(snapshot);
+        _db.SaveChanges();
+        return snapshot;
+    }
+
+    private static string Sha256(string text) => Sha256(System.Text.Encoding.UTF8.GetBytes(text));
+
+    private static string Sha256(byte[] bytes) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
     private void AddArtwork(Page page, PipelineStage stage, int version, byte[] bytes)
     {
@@ -115,7 +142,7 @@ public class ExportJobTests
         new CreateExportJobCommandHandler(_db, _renderer).Handle(new CreateExportJobCommand(_chapter.Id, _producerId, code), default);
 
     private Task<bool> ProcessNext() =>
-        new ProcessNextExportJobCommandHandler(_db, _storage, _renderer, _pageRepo.Object, _lettering,
+        new ProcessNextExportJobCommandHandler(_db, _storage, _renderer, _pageRepo.Object, _lettering, _sender.Object,
                 NullLogger<ProcessNextExportJobCommandHandler>.Instance)
             .Handle(new ProcessNextExportJobCommand(), default);
 
@@ -138,7 +165,6 @@ public class ExportJobTests
     public async Task Create_RejectsUnapprovedChapter_UnknownOrUnsupportedPreset_AndPagesWithoutFinalArtwork()
     {
         (await Create("KHONG_CO")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        (await Create("OPEN_JSON")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
 
         _db.Pages.Add(Page.CreateNew(_chapter.Id, 3, default, 1200, 1800, 300));
         await _db.SaveChangesAsync();
@@ -211,7 +237,7 @@ public class ExportJobTests
     public async Task Cancel_OnlyQueued_AndDownload_OnlyCompleted_IsRecorded()
     {
         var queued = (await Create()).Value!;
-        var download = new DownloadExportFileCommandHandler(_db, _storage);
+        var download = new DownloadExportFileCommandHandler(_db, _storage, _auth.Object);
         (await download.Handle(new DownloadExportFileCommand(_chapter.Id, queued.Id, _producerId), default))
             .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 
@@ -235,5 +261,92 @@ public class ExportJobTests
 
         var list = await new GetExportJobsQueryHandler(_db).Handle(new GetExportJobsQuery(_chapter.Id), default);
         list.Value!.Select(j => j.Status).Should().Equal(ExportJobStatus.Completed, ExportJobStatus.Cancelled);
+    }
+
+    // ── CF4 4.6: JSON mở kèm provenance ──────────────────────────────────────
+
+    [Fact]
+    public async Task OpenJson_WithoutSnapshot_IsRejected()
+    {
+        var r = await Create("OPEN_JSON");
+
+        r.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        r.ErrorMessage.Should().Contain("snapshot");
+        _db.ExportJobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OpenJson_ExportsSnapshotManifestAndProvenance_VerifiableOutsidePlatform()
+    {
+        var snapshot = AddSnapshot();
+        (await Create("open_json")).IsSuccess.Should().BeTrue();
+
+        (await ProcessNext()).Should().BeTrue();
+
+        var job = _db.ExportJobs.Single();
+        job.Status.Should().Be(ExportJobStatus.Completed, job.Error);
+        job.ResultContentType.Should().Be("application/json");
+        job.ResultFileName.Should().Be("Đèn biển - Chuong 2 - provenance.json");
+        var bytes = _storage.Files[job.ResultStorageKey!];
+        Sha256(bytes).Should().Be(job.ResultSha256); // SHA-256 của file khớp bản ghi job
+
+        using var doc = JsonDocument.Parse(bytes);
+        var root = doc.RootElement;
+        root.GetProperty("schema").GetString().Should().Be("panelforge.open-json");
+        root.GetProperty("chapter").GetProperty("id").GetGuid().Should().Be(_chapter.Id);
+        var snap = root.GetProperty("snapshot");
+        snap.GetProperty("id").GetGuid().Should().Be(snapshot.Id);
+        // Tính lại manifestHash từ chính manifest trong file
+        Sha256(snap.GetProperty("manifestJson").GetString()!).Should().Be(snap.GetProperty("manifestHash").GetString());
+        snap.GetProperty("manifest").GetProperty("pages").GetArrayLength().Should().Be(2);
+        var provenance = root.GetProperty("provenance");
+        provenance.GetProperty("chapterId").GetGuid().Should().Be(_chapter.Id);
+        provenance.GetProperty("nodes").EnumerateArray()
+            .Should().Contain(n => n.GetProperty("nodeType").GetString() == "Snapshot"); // dựng bằng GetProvenanceReportQuery
+    }
+
+    [Fact]
+    public async Task OpenJson_TamperedManifest_OrRequesterLostAccess_FailsWithReason()
+    {
+        var snapshot = AddSnapshot();
+        await Create("OPEN_JSON");
+        typeof(ChapterSnapshot).GetProperty(nameof(ChapterSnapshot.ManifestJson))!.SetValue(snapshot, """{"pages":[]}""");
+        await _db.SaveChangesAsync();
+
+        await ProcessNext();
+        _db.ExportJobs.Single().Error.Should().Contain("không khớp hash");
+
+        typeof(ChapterSnapshot).GetProperty(nameof(ChapterSnapshot.ManifestJson))!
+            .SetValue(snapshot, $$"""{"chapterId":"{{_chapter.Id}}","pages":[{"pageNumber":1},{"pageNumber":2}]}""");
+        await _db.SaveChangesAsync();
+        _auth.Reset(); // người yêu cầu không còn là Producer/Editor lúc job chạy (BR-07)
+        _db.ExportJobs.Add(PanelForge.Domain.Entities.Publishing.ExportJob.Create(
+            _chapter.Id, Guid.NewGuid(), Guid.NewGuid(), "OPEN_JSON", _producerId, _chapter.VersionVector, [Guid.NewGuid()]));
+        await _db.SaveChangesAsync();
+
+        await ProcessNext();
+        _db.ExportJobs.OrderBy(j => j.CreatedAt).Last().Error.Should().Contain("Provenance Report");
+    }
+
+    [Fact]
+    public async Task Download_EditorGetsOnlyOpenJson_OutsiderGetsNothing()
+    {
+        var editor = Guid.NewGuid();
+        _auth.Setup(a => a.HasWorkspaceRoleAsync(editor, It.IsAny<Guid>(),
+                It.Is<WorkspaceRole[]>(r => r.Contains(WorkspaceRole.Editor)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        AddSnapshot();
+        var pdf = (await Create("PDF")).Value!;
+        var json = (await Create("OPEN_JSON")).Value!;
+        await ProcessNext();
+        await ProcessNext();
+        var download = new DownloadExportFileCommandHandler(_db, _storage, _auth.Object);
+
+        (await download.Handle(new DownloadExportFileCommand(_chapter.Id, pdf.Id, editor), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await download.Handle(new DownloadExportFileCommand(_chapter.Id, json.Id, editor), default))
+            .Value!.ContentType.Should().Be("application/json");
+        (await download.Handle(new DownloadExportFileCommand(_chapter.Id, json.Id, Guid.NewGuid()), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
     }
 }
