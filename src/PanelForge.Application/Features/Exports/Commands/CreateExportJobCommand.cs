@@ -51,7 +51,7 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
         var missingNumbers = missing.Where(p => artwork.All(a => a.PageId != p.Id)).Select(p => p.PageNumber).OrderBy(n => n).ToList();
         if (artwork.Count == 0 || missingNumbers.Count > 0)
             return Fail(missingNumbers.Count > 0
-                ? $"Trang {string.Join(", ", missingNumbers)} chưa có ảnh cả trang ở bản đã duyệt, chưa xuất được."
+                ? $"Trang {string.Join(", ", missingNumbers)} chưa có artwork (cả trang hoặc theo khung) ở bản đã duyệt, chưa xuất được."
                 : "Chương chưa có trang nào có artwork.", ResultErrorCodes.Conflict);
         // CF4 4.6: JSON mang manifest của bản duyệt nên phải có snapshot
         if (openJson && await OpenJsonExport.SnapshotOfAsync(_db, chapter.Id, chapter.VersionVector, ct) is null)
@@ -59,11 +59,11 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var job = ExportJob.Create(chapter.Id, workspaceId, preset.Id, preset.Code, cmd.UserId, chapter.VersionVector,
-            artwork.Select(a => a.AssetReferenceId));
+            artwork.SelectMany(a => a.AssetReferenceIds));
         job.CreatedBy = cmd.UserId.ToString();
         _db.ExportJobs.Add(job);
         await _db.SaveChangesAsync(ct);
 
-        return Result<ExportJobDto>.Success(ExportJobDto.From(job));
+        return Result<ExportJobDto>.Success(ExportJobDto.From(job, artwork.Count));
     }
 }

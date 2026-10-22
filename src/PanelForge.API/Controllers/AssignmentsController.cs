@@ -13,8 +13,10 @@ using PanelForge.Application.Features.Assignments.Commands.RejectChangeRequest;
 using PanelForge.Application.Features.Assignments.Commands.ReopenChangeRequest;
 using PanelForge.Application.Features.Assignments.Commands.RequestAssignmentChanges;
 using PanelForge.Application.Features.Assignments.Commands.ResolveChangeRequest;
+using PanelForge.Application.Features.Assignments.Commands.ResolveImpactReview;
 using PanelForge.Application.Features.Assignments.Commands.StartAssignment;
 using PanelForge.Application.Features.Assignments.Commands.SubmitAssignment;
+using PanelForge.Application.Features.Assignments.Commands.TransferAssignmentScope;
 using PanelForge.Application.Features.Assignments.Commands.UpdateAssignment;
 using PanelForge.Application.Features.Assignments.Commands.VerifyChangeRequest;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissions;
@@ -92,14 +94,42 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
-    /// <summary>DELETE /api/chapters/{chapterId}/assignments/{assignmentId} — Producer xoá mềm hoặc huỷ Assignment (UC-05).</summary>
+    /// <summary>DELETE /api/chapters/{chapterId}/assignments/{assignmentId}?reason= — Producer huỷ Assignment, lý do bắt buộc (UC-05).</summary>
     [HttpDelete("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Delete(Guid chapterId, Guid assignmentId, CancellationToken ct)
+    public async Task<IActionResult> Delete(Guid chapterId, Guid assignmentId, [FromQuery] string? reason, CancellationToken ct)
     {
-        var result = await _mediator.Send(new DeleteAssignmentCommand(chapterId, assignmentId, GetCurrentUserId()), ct);
+        var result = await _mediator.Send(new DeleteAssignmentCommand(chapterId, assignmentId, GetCurrentUserId(), reason), ct);
         return result.IsSuccess ? NoContent() : Error(result);
+    }
+
+    /// <summary>
+    /// POST .../assignments/{assignmentId}/transfer — Producer chuyển giao trang/khung của việc cả chương (Artist/Letterer) sang
+    /// người khác; trả các việc mới tạo. Lý do bắt buộc.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/transfer")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<AssignmentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Transfer(
+        Guid chapterId, Guid assignmentId, [FromBody] TransferAssignmentScopeRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new TransferAssignmentScopeCommand(
+            chapterId, assignmentId, GetCurrentUserId(), body.TargetType, body.TargetIds ?? [], body.NewAssigneeUserId,
+            body.Reason ?? "", body.Brief, body.DueDate), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>POST .../assignments/{assignmentId}/impact-review — Editor/Producer quyết giữ kết quả hay làm lại (lý do bắt buộc).</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/impact-review")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResolveImpactReview(
+        Guid chapterId, Guid assignmentId, [FromBody] ResolveImpactReviewRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ResolveImpactReviewCommand(
+            chapterId, assignmentId, GetCurrentUserId(), body.Decision, body.Reason ?? ""), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>POST .../assignments/{assignmentId}/start — chỉ người được giao.</summary>
@@ -276,3 +306,11 @@ public sealed class AssignmentsController : ControllerBase
 public sealed record ReturnWorkFromReviewRequest(
     Guid TargetAssignmentId, string? Description, string? RegionJson = null, Guid? PanelId = null,
     Guid? AssetReferenceId = null, DateTime? DueDate = null);
+
+/// <summary>Body chuyển giao trang/khung: <c>targetType</c> = Page | Panel.</summary>
+public sealed record TransferAssignmentScopeRequest(
+    WorkflowEntityType TargetType, IReadOnlyList<Guid>? TargetIds, Guid NewAssigneeUserId, string? Reason,
+    string? Brief = null, DateTime? DueDate = null);
+
+/// <summary>Body quyết định kiểm tra ảnh hưởng: <c>decision</c> = Keep | Rework.</summary>
+public sealed record ResolveImpactReviewRequest(ImpactReviewDecision Decision, string? Reason);

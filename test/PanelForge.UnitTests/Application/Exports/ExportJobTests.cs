@@ -64,6 +64,15 @@ public class ExportJobTests
             Calls[page.PageNumber] = elements;
             return page;
         }
+
+        /// <summary>Ghép giả: nối ảnh các Panel theo thứ tự để test kiểm được đúng những ảnh nào đã được ghép.</summary>
+        public readonly Dictionary<int, IReadOnlyList<PagePanelLayer>> Composed = new();
+
+        public ExportPageImage ComposePanels(int pageNumber, int w, int h, IReadOnlyList<PagePanelLayer> panels)
+        {
+            Composed[pageNumber] = panels;
+            return new ExportPageImage(pageNumber, panels.SelectMany(p => p.Content ?? []).ToArray(), "image/png");
+        }
     }
 
     private readonly PanelForgeDbContext _db = InMemoryDb.Create();
@@ -348,5 +357,54 @@ public class ExportJobTests
             .Value!.ContentType.Should().Be("application/json");
         (await download.Handle(new DownloadExportFileCommand(_chapter.Id, json.Id, Guid.NewGuid()), default))
             .ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+    }
+
+    /// <summary>Artwork của một Panel (ảnh tải theo khung).</summary>
+    private AssetReference AddPanelArtwork(Page page, Panel panel, PipelineStage stage, int version, byte[] bytes)
+    {
+        var asset = Asset.Create(_chapter.Id, AssetRulesHash(bytes, panel.Id, stage.Id), bytes.Length, "image/png");
+        _db.Assets.Add(asset);
+        _storage.Files[asset.StorageKey] = bytes;
+        var reference = AssetReference.Create(asset.Id, Guid.NewGuid(), _chapter.Id, page.Id, stage.Id, version, null,
+            "panel.png", _producerId, panelId: panel.Id);
+        _db.AssetReferences.Add(reference);
+        return reference;
+    }
+
+    [Fact]
+    public async Task PageDrawnPerPanel_IsComposedFromLatestPanelArtwork_NotAnOlderWholePageDraft()
+    {
+        // Trang 3: ảnh cả trang chỉ có ở Pencil (bản nháp), còn Ink tải theo từng khung → phải ghép từ ảnh khung
+        var page3 = Page.CreateNew(_chapter.Id, 3, default, 1200, 1800, 300);
+        _db.Pages.Add(page3);
+        var pencil = _db.PipelineStages.Local.Single(s => s.Name == "Pencil");
+        var panelA = Panel.Create(page3.Id, 1, 1);
+        panelA.UpdateBoundingBox("""{"x":60,"y":60,"unit":"px","width":1080,"height":600,"pageWidthPx":1200,"pageHeightPx":1800}""");
+        var panelB = Panel.Create(page3.Id, 2, 2);
+        panelB.UpdateBoundingBox("""{"x":60,"y":720,"unit":"px","width":528,"height":516,"pageWidthPx":1200,"pageHeightPx":1800}""");
+        var deleted = Panel.Create(page3.Id, 3, 3);
+        _db.Panels.AddRange(panelA, panelB, deleted);
+        AddArtwork(page3, pencil, 1, [5]);
+        AddPanelArtwork(page3, panelA, pencil, 1, [6]);
+        var aInk = AddPanelArtwork(page3, panelA, _ink, 1, [7]);
+        var bInk = AddPanelArtwork(page3, panelB, _ink, 2, [8]);
+        AddPanelArtwork(page3, deleted, _ink, 1, [9]);
+        _db.SaveChanges();
+        _db.Panels.Remove(deleted); // khung đã xoá không còn được ghép
+        _db.SaveChanges();
+
+        var r = await Create();
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        r.Value!.PageCount.Should().Be(3);
+        _db.ExportJobs.Single().SnapshotArtworkIds.Should().Contain([aInk.Id, bInk.Id]).And.HaveCount(4);
+
+        (await ProcessNext()).Should().BeTrue();
+        _db.ExportJobs.Single().Status.Should().Be(ExportJobStatus.Completed, _db.ExportJobs.Single().Error);
+        var layers = _lettering.Composed[3];
+        layers.Select(l => l.Content).Should().BeEquivalentTo(new[] { new byte[] { 7 }, new byte[] { 8 } },
+            o => o.WithStrictOrdering());
+        layers[1].Should().Match<PagePanelLayer>(l => l.X == 60 && l.Y == 720 && l.Width == 528 && l.Height == 516);
+        _lettering.Composed.Should().NotContainKeys(1, 2); // trang có ảnh cả trang ở stage cuối giữ nguyên
     }
 }

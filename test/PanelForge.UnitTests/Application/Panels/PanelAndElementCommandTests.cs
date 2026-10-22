@@ -18,6 +18,7 @@ public class PanelAndElementCommandTests
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page>()));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Models;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Exports.Common;
 using PanelForge.Application.Features.Exports.Models;
 using PanelForge.Domain.Enums;
@@ -31,7 +32,8 @@ public sealed class CancelExportJobCommandHandler : IRequestHandler<CancelExport
 
         job.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
-        return Result<ExportJobDto>.Success(ExportJobDto.From(job));
+        var pageCount = (await FinalArtwork.PageCountsAsync(_db, [job.SnapshotArtworkIds], ct))[0];
+        return Result<ExportJobDto>.Success(ExportJobDto.From(job, pageCount));
     }
 }
 

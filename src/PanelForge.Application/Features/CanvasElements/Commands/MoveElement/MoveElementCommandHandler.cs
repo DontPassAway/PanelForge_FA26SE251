@@ -3,6 +3,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
 
@@ -28,6 +29,9 @@ public sealed class MoveElementCommandHandler
             return Result<int>.Failure($"Page {command.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, cancellationToken) is { } readOnly)
             return Result<int>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, command.MovedByUserId, page.Id, page.Elements.TryGetValue(command.ElementId, out var scoped) ? scoped.PanelId : null, cancellationToken) is { } outOfScope)
+            return Result<int>.Failure(outOfScope, ResultErrorCodes.Forbidden);
 
         // 2. Optimistic Concurrency (BR-11): theo element nếu client gửi, nếu không thì theo cả Page (client cũ)
         if (command.ExpectedElementVersion is null)

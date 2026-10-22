@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Models;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Catalog;
@@ -72,8 +73,8 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
 // ─── Ảnh một trang ────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Ảnh Reader thấy = artwork của Page ở stage có <c>StageOrder</c> cao nhất, bản <c>VersionNumber</c> mới nhất
-/// (stage cuối đã qua cổng duyệt, vì chương chỉ Published sau khi mọi việc Approved).
+/// Ảnh Reader thấy = trang hoàn chỉnh theo <see cref="FinalArtwork"/> (ảnh cả trang, hoặc ghép ảnh từng Panel vào khung)
+/// kèm lớp chữ — cùng kết quả với xem thử và xuất file. Chương chỉ Published sau khi mọi việc Approved.
 /// </summary>
 public sealed record GetPublicPageImageQuery(Guid ChapterId, Guid PageId) : IRequest<Result<AssetDownloadDto>>;
 
@@ -81,11 +82,16 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
+    private readonly IPageRepository _pages;
+    private readonly IPageLetteringCompositor _compositor;
 
-    public GetPublicPageImageQueryHandler(IPanelForgeDbContext db, IAssetStorage storage)
+    public GetPublicPageImageQueryHandler(
+        IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pages, IPageLetteringCompositor compositor)
     {
         _db = db;
         _storage = storage;
+        _pages = pages;
+        _compositor = compositor;
     }
 
     public async Task<Result<AssetDownloadDto>> Handle(GetPublicPageImageQuery q, CancellationToken ct)
@@ -95,19 +101,15 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
             .AnyAsync(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now, ct);
         if (!visible) return NotFound();
 
-        var reference = await (
-            from r in _db.AssetReferences.AsNoTracking()
-            where r.ChapterId == q.ChapterId && r.PageId == q.PageId
-            join s in _db.PipelineStages.AsNoTracking() on r.PipelineStageId equals s.Id
-            orderby s.StageOrder descending, r.VersionNumber descending
-            select r).FirstOrDefaultAsync(ct);
-        if (reference is null) return NotFound();
+        var artwork = (await FinalArtwork.SelectAsync(_db, q.ChapterId, ct, q.PageId)).FirstOrDefault();
+        if (artwork is null) return NotFound();
 
-        var asset = await _db.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.Id == reference.AssetId, ct);
-        var stream = asset is null ? null : await _storage.OpenReadAsync(asset.StorageKey, ct);
-        if (asset is null || stream is null) return NotFound();
+        var image = await PageImageBuilder.BuildAsync(
+            _db, _storage, _pages, _compositor, q.PageId, artwork.AssetReferenceIds.ToList(), ct);
+        if (image is null) return NotFound();
 
-        return Result<AssetDownloadDto>.Success(new AssetDownloadDto(stream, asset.ContentType, reference.FileName));
+        return Result<AssetDownloadDto>.Success(new AssetDownloadDto(
+            new MemoryStream(image.Content), image.ContentType, $"trang-{image.PageNumber}.png"));
     }
 
     private static Result<AssetDownloadDto> NotFound() =>

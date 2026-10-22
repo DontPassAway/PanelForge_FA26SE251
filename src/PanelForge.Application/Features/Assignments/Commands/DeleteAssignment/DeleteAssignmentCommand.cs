@@ -8,11 +8,15 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 
-/// <summary>Producer xoá mềm / huỷ Assignment khỏi Chapter (UC-05). Giải phóng các dependency phụ thuộc vào nó.</summary>
+/// <summary>
+/// Producer huỷ Assignment khỏi Chapter (UC-05): lý do bắt buộc, ghi vào việc rồi xoá mềm (giữ lịch sử, audit log). Việc bị huỷ
+/// không bao giờ tính là Approved; không huỷ được khi còn việc phụ thuộc vào nó.
+/// </summary>
 public sealed record DeleteAssignmentCommand(
     Guid ChapterId,
     Guid AssignmentId,
-    Guid UserId
+    Guid UserId,
+    string? Reason = null
 ) : IRequest<Result<bool>>;
 
 public sealed class DeleteAssignmentCommandHandler : IRequestHandler<DeleteAssignmentCommand, Result<bool>>
@@ -25,6 +29,9 @@ public sealed class DeleteAssignmentCommandHandler : IRequestHandler<DeleteAssig
     {
         static Result<bool> Fail(string msg, string? code = ResultErrorCodes.Validation) =>
             Result<bool>.Failure(msg, code);
+
+        if (string.IsNullOrWhiteSpace(cmd.Reason))
+            return Fail("Huỷ việc bắt buộc có lý do.");
 
         var assignment = await _db.Assignments
             .FirstOrDefaultAsync(a => a.Id == cmd.AssignmentId && a.ChapterId == cmd.ChapterId, ct);
@@ -61,12 +68,13 @@ public sealed class DeleteAssignmentCommandHandler : IRequestHandler<DeleteAssig
                 assignment.AssigneeUserId,
                 NotificationType.AssignmentUnassigned,
                 "Nhiệm vụ phân công đã bị huỷ",
-                $"Nhiệm vụ '{assignment.Brief}' đã bị Producer huỷ khỏi chương.",
+                $"Nhiệm vụ '{assignment.Brief}' đã bị Producer huỷ khỏi chương. Lý do: {cmd.Reason!.Trim()}",
                 assignment.Id,
                 assignment.ChapterId);
             _db.Notifications.Add(notification);
         }
 
+        assignment.Cancel(cmd.Reason!);
         // DbContext tự động chuyển Remove thành soft-delete (ISoftDelete: IsDeleted = true, DeletedAt, DeletedBy)
         _db.Assignments.Remove(assignment);
 

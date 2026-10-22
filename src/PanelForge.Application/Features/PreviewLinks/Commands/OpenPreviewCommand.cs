@@ -45,8 +45,10 @@ public sealed class OpenPreviewCommandHandler : IRequestHandler<OpenPreviewComma
                 .Select(p => new { p.Id, p.PageId, p.PanelNumber, p.BoundingBox }).ToListAsync(ct))
             .ToLookup(p => p.PageId);
 
+        // Trang ghép có nhiều artwork (mỗi Panel một ảnh): link ảnh ký theo một artwork đại diện của trang,
+        // GetPreviewImage dựng lại cả trang từ mọi artwork của trang đó trong snapshot
         var items = (
-            from r in refs
+            from r in refs.GroupBy(x => x.PageId).Select(g => g.OrderBy(x => x.Id).First())
             join p in pages on r.PageId equals p.Id
             orderby p.PageNumber
             select new PreviewPageDto(

@@ -135,15 +135,29 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasColumnName("last_feedback_comment")
                .HasColumnType("text");
 
+        builder.Property(a => a.ImpactReviewReason)
+               .HasColumnName("impact_review_reason")
+               .HasColumnType("text");
+
+        builder.Property(a => a.ImpactReviewRequestedAt)
+               .HasColumnName("impact_review_requested_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(a => a.CancelReason)
+               .HasColumnName("cancel_reason")
+               .HasColumnType("text");
+
         builder.Property(a => a.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        // Chuyển giao / nộp / duyệt cùng lúc trên một việc: lần lưu sau thấy updated_at đã đổi → 409, không ghi đè quyền/phiên bản
         builder.Property(a => a.UpdatedAt)
                .HasColumnName("updated_at")
                .HasColumnType("timestamptz")
-               .IsRequired();
+               .IsRequired()
+               .IsConcurrencyToken();
 
         builder.HasOne(a => a.Series)
                .WithMany()

@@ -61,10 +61,8 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
             assignment.RequestRework(description);
             assignment.UpdatedBy = cmd.UserId.ToString();
 
-            // CF4 4.7: artwork stage này sẽ đổi nên việc ở các stage sau của cùng Panel cũng phải làm lại
-            var (_, laterError) = await StageProgressRules.InvalidateLaterStagesAsync(_db, assignment, description, ct);
-            if (laterError is not null)
-                return Fail(laterError, ResultErrorCodes.Conflict);
+            // CF4 4.7: kết quả stage này sẽ đổi nên việc đã dựa vào nó được đánh dấu cần kiểm tra ảnh hưởng (không tự làm lại)
+            await StageProgressRules.FlagImpactedWorkAsync(_db, assignment, description, ct);
         }
 
         var cr = ChangeRequest.Create(assignment.Id, chapter.Id, null, assignment.AssigneeUserId, cmd.UserId,

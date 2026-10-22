@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Exports.Models;
 
 namespace PanelForge.Application.Features.Exports.Queries;
@@ -19,6 +20,7 @@ public sealed class GetExportJobsQueryHandler : IRequestHandler<GetExportJobsQue
     {
         var jobs = await _db.ExportJobs.AsNoTracking().Where(j => j.ChapterId == q.ChapterId)
             .OrderByDescending(j => j.CreatedAt).ToListAsync(ct);
-        return Result<IReadOnlyList<ExportJobDto>>.Success(jobs.Select(ExportJobDto.From).ToList());
+        var pageCounts = await FinalArtwork.PageCountsAsync(_db, jobs.Select(j => (IReadOnlyCollection<Guid>)j.SnapshotArtworkIds).ToList(), ct);
+        return Result<IReadOnlyList<ExportJobDto>>.Success(jobs.Select((j, i) => ExportJobDto.From(j, pageCounts[i])).ToList());
     }
 }

@@ -67,6 +67,45 @@ public sealed class GetMyWorkspaceAssignmentsQueryHandler
             .ThenBy(x => x.Assignment.CreatedAt)
             .ToListAsync(ct);
 
+        // Nhãn phạm vi (Trang / Khung / Cảnh): nạp theo lô, không truy vấn từng việc
+        var targetIds = rawList.Where(x => x.Assignment.EntityType != WorkflowEntityType.Chapter)
+            .Select(x => x.Assignment.TargetEntityId).ToList();
+        var targetPanels = await _db.Panels.AsNoTracking().Where(p => targetIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.PageId, p.PanelNumber, p.SceneId }).ToListAsync(ct);
+        var pageIds = targetIds.Concat(targetPanels.Select(p => p.PageId)).Distinct().ToList();
+        var pageNumbers = await _db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PageNumber, ct);
+        var pagePanels = await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId) && p.SceneId != null)
+            .Select(p => new { p.PageId, p.SceneId }).ToListAsync(ct);
+        var sceneIds = pagePanels.Select(p => p.SceneId!.Value).Distinct().ToList();
+        var sceneNumbers = await _db.Scenes.AsNoTracking().Where(s => sceneIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.SceneNumber, ct);
+
+        string Scenes(IEnumerable<Guid?> ids)
+        {
+            var numbers = ids.Where(id => id != null && sceneNumbers.ContainsKey(id.Value))
+                .Select(id => sceneNumbers[id!.Value]).Distinct().Order().ToList();
+            return numbers.Count == 0 ? "" : $" · Cảnh {string.Join(", ", numbers)}";
+        }
+
+        string? ScopeLabel(Domain.Entities.Workflow.Assignment a)
+        {
+            switch (a.EntityType)
+            {
+                case WorkflowEntityType.Chapter:
+                    return "Cả chương";
+                case WorkflowEntityType.Page:
+                    return pageNumbers.TryGetValue(a.TargetEntityId, out var pageNo)
+                        ? $"Trang {pageNo}{Scenes(pagePanels.Where(p => p.PageId == a.TargetEntityId).Select(p => p.SceneId))}"
+                        : null;
+                default:
+                    var panel = targetPanels.FirstOrDefault(p => p.Id == a.TargetEntityId);
+                    return panel is null || !pageNumbers.TryGetValue(panel.PageId, out var no)
+                        ? null
+                        : $"Trang {no} · Khung {panel.PanelNumber}{Scenes([panel.SceneId])}";
+            }
+        }
+
         var dtos = rawList.Select(x => new WorkspaceAssignmentDto(
             x.Assignment.Id,
             x.Assignment.SeriesId,
@@ -93,7 +132,8 @@ public sealed class GetMyWorkspaceAssignmentsQueryHandler
             x.Assignment.LastFeedbackComment,
             x.Assignment.CreatedAt,
             x.Assignment.UpdatedAt,
-            x.Assignment.GetDependsOnAssignmentIds()
+            x.Assignment.GetDependsOnAssignmentIds(),
+            ScopeLabel(x.Assignment)
         )).ToList();
 
         return Result<IReadOnlyList<WorkspaceAssignmentDto>>.Success(dtos);

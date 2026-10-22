@@ -39,8 +39,10 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
         if (cmd.PageId is { } pageId)
         {
             var snapshotIds = link.SnapshotArtworkIds;
+            // Trang ghép: phản hồi cấp panel gắn đúng ảnh của Panel đó; còn lại lấy artwork bất kỳ của trang
             assetReferenceId = await _db.AssetReferences.AsNoTracking()
                 .Where(r => snapshotIds.Contains(r.Id) && r.PageId == pageId)
+                .OrderByDescending(r => cmd.PanelId != null && r.PanelId == cmd.PanelId)
                 .Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
             if (assetReferenceId is null) return Fail("Trang không thuộc bản xem thử này.", ResultErrorCodes.Validation);
 

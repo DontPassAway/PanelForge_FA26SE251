@@ -295,6 +295,8 @@ public sealed class ElementsController : ControllerBase
         message ??= "Yêu cầu không hợp lệ.";
         if (code == ResultErrorCodes.ChapterReadOnly) // BR-12, không có field conflict nên FE không mở hộp thoại tải lại
             return Conflict(new { message, code });
+        if (code == ResultErrorCodes.Forbidden) // ngoài phạm vi việc được giao (WorkScopeGuard)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message, code });
         if (message.Contains(Page.DuplicateBindingCode))
             return Conflict(new { message, code = Page.DuplicateBindingCode });
         if (message.Contains(Page.ElementVersionConflictCode))

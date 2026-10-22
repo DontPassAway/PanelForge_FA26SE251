@@ -35,6 +35,9 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             return Result<PanelDto>.Failure($"Panel {command.PanelId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
             return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, panel.PageId, panel.Id, cancellationToken) is { } outOfScope)
+            return Result<PanelDto>.Failure(outOfScope, ResultErrorCodes.Forbidden);
         if (command.ExpectedVersion is { } expected && expected != panel.Version)
             return Result<PanelDto>.Failure(
                 $"Panel đã được người khác sửa (version hiện tại {panel.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",

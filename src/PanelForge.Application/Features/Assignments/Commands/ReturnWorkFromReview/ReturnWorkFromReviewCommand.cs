@@ -12,7 +12,7 @@ namespace PanelForge.Application.Features.Assignments.Commands.ReturnWorkFromRev
 /// <summary>
 /// Màn duyệt việc cấp Chapter (vd 7. Review): Editor thấy lỗi ở một trang thì trả đúng việc của trang/khung đó về người làm
 /// (vd 6. Letter của Trang 2), kèm mô tả và vùng khoanh. Việc đã duyệt → ReworkRequired, StageProgress → ChangesRequested,
-/// các stage sau của cùng Panel làm lại theo (CF4 4.7). Việc Review vì thế không nộp/duyệt được tới khi trang xong lại
+/// việc đã dựa vào nó (stage sau cùng Panel, phụ thuộc trực tiếp) được đánh dấu cần kiểm tra ảnh hưởng (CF4 4.7). Việc Review vì thế không nộp/duyệt được tới khi trang xong lại
 /// (StageProgressRules.ChapterWorkBlockReasonAsync). Việc đang chờ duyệt thì phải trả qua cổng duyệt CF3 như thường.
 /// </summary>
 public sealed record ReturnWorkFromReviewCommand(
@@ -72,8 +72,7 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
             target.RequestRework(description);
             target.UpdatedBy = cmd.UserId.ToString();
 
-            var (_, laterError) = await StageProgressRules.InvalidateLaterStagesAsync(_db, target, description, ct);
-            if (laterError is not null) return Fail(laterError, ResultErrorCodes.Conflict);
+            await StageProgressRules.FlagImpactedWorkAsync(_db, target, description, ct);
         }
 
         ChangeRequest cr;

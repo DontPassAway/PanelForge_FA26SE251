@@ -168,7 +168,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => options.Filters.Add<PanelForge.API.Common.ConcurrencyConflictFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());

@@ -69,13 +69,14 @@ internal static class AssignmentRules
     }
 
     /// <summary>
-    /// Một phần nội dung chỉ thuộc một việc ở mỗi stage. Việc cấp Page phủ các Panel của trang đó. Riêng stage Artist/Letterer,
-    /// việc cấp Page/Panel mới được TÁCH khỏi việc cả chương (việc cả chương mất phần đó, xem StageProgressRules.ResolvePanelsAsync),
-    /// miễn việc cả chương còn đang làm (chưa nộp/duyệt). Chặn việc trùng đúng đối tượng, hoặc chồng lên việc Page/Panel đã có.
-    /// Trả lý do (409) hoặc null.
+    /// Một phần nội dung chỉ thuộc một việc ở mỗi stage. Việc cấp Page phủ các Panel của trang đó. Tạo thêm việc chồng phạm vi
+    /// luôn bị chặn, kể cả chồng lên việc cả chương. Riêng nghiệp vụ chuyển giao (<paramref name="transfer"/> = true, stage
+    /// Artist/Letterer) được TÁCH trang/khung khỏi việc cả chương (việc cả chương mất phần đó, xem
+    /// StageProgressRules.ResolvePanelsAsync), miễn việc cả chương còn đang làm (chưa nộp/duyệt). Trả lý do (409) hoặc null.
     /// </summary>
     public static async Task<string?> ScopeOverlapReasonAsync(
-        IPanelForgeDbContext db, Guid chapterId, PipelineStage stage, WorkflowEntityType type, Guid targetId, CancellationToken ct)
+        IPanelForgeDbContext db, Guid chapterId, PipelineStage stage, WorkflowEntityType type, Guid targetId, CancellationToken ct,
+        bool transfer = false)
     {
         var existing = await db.Assignments.AsNoTracking()
             .Where(a => a.ChapterId == chapterId && a.PipelineStageId == stage.Id)
@@ -89,6 +90,8 @@ internal static class AssignmentRules
             return "Stage này đã có việc giao theo trang/khung trong chương; không thể giao thêm việc cho cả chương.";
         if (existing.FirstOrDefault(a => a.EntityType == WorkflowEntityType.Chapter) is { } whole)
         {
+            if (!transfer && StageProgressRules.IsProductionRole(whole.AssignedRole))
+                return "Phần này thuộc việc cả chương ở stage này. Dùng chuyển giao để chuyển trang/khung sang người khác.";
             if (!StageProgressRules.IsProductionRole(whole.AssignedRole))
                 return "Stage này đã giao việc cho cả chương; không thể giao thêm việc theo trang/khung.";
             if (whole.Status is not (AssignmentStatus.Assigned or AssignmentStatus.InProgress or AssignmentStatus.ReworkRequired))

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -90,4 +91,24 @@ public class SceneAssignmentGateTests
     [Fact]
     public async Task AnyWriter_CanCreate_WhenChapterHasNoWriterAssignment() =>
         (await CreateAs(_otherWriter)).IsSuccess.Should().BeTrue();
+
+    [Fact]
+    public async Task DeleteScene_SoftDeletesItsLines_AndUnlinksPanels()
+    {
+        var page = Page.CreateNew(_chapter.Id, 1, default, 1200, 1800, 300);
+        _db.Pages.Add(page);
+        var panel = Panel.Create(page.Id, 1, 1);
+        panel.AssignToScene(_scene.Id);
+        _db.Panels.Add(panel);
+        _db.ScriptLines.AddRange(ScriptLine.Create(_scene.Id, 1, "a"), ScriptLine.Create(_scene.Id, 2, "b"));
+        _db.SaveChanges();
+
+        (await new DeleteSceneCommandHandler(_db, _auth.Object).Handle(
+            new DeleteSceneCommand(_scene.Id, _producer), default)).IsSuccess.Should().BeTrue();
+
+        _db.Scenes.Should().BeEmpty();
+        _db.ScriptLines.Should().BeEmpty();
+        _db.ScriptLines.IgnoreQueryFilters().Should().HaveCount(2).And.OnlyContain(l => l.IsDeleted);
+        _db.Panels.Should().ContainSingle(p => p.Id == panel.Id && p.SceneId == null);
+    }
 }

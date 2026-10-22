@@ -71,11 +71,6 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         if (await AssignmentRules.ScopeOverlapReasonAsync(_db, chapter.Id, stage, cmd.EntityType, target.Value, ct) is { } overlap)
             return Fail(overlap, ResultErrorCodes.Conflict);
 
-        // Tách trang/khung khỏi việc cả chương: báo người đang giữ cả chương là phần này đã chuyển cho người khác
-        var whole = cmd.EntityType == WorkflowEntityType.Chapter ? null : await _db.Assignments.AsNoTracking()
-            .FirstOrDefaultAsync(a => a.ChapterId == chapter.Id && a.PipelineStageId == stage.Id &&
-                                      a.EntityType == WorkflowEntityType.Chapter, ct);
-
         var assignment = Assignment.Create(
             chapter.SeriesId, chapter.Id, cmd.EntityType, target.Value, stage.Id,
             cmd.AssigneeUserId, role.Value, cmd.Brief,
@@ -87,11 +82,6 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         _db.Assignments.Add(assignment);
         // BR-14: thông báo ghi cùng lần Save với Assignment, không bao giờ có việc thiếu thông báo
         _db.Notifications.Add(AssignmentNotifications.Assigned(assignment));
-        if (whole is not null && whole.AssigneeUserId != cmd.AssigneeUserId)
-            _db.Notifications.Add(Notification.Create(whole.AssigneeUserId, NotificationType.AssignmentUnassigned,
-                "Một phần việc cả chương đã chuyển cho người khác",
-                $"{(cmd.EntityType == WorkflowEntityType.Page ? "Một trang" : "Một khung")} trong việc '{whole.Brief}' đã được giao riêng; bạn không còn sửa phần đó.",
-                whole.Id, whole.ChapterId));
         await _db.SaveChangesAsync(ct);
 
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));

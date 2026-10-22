@@ -95,6 +95,18 @@ public class ChangeRequest : BaseEntity
         Close(ChangeRequestStatus.Rejected, byUserId, reason.Trim());
     }
 
+    /// <summary>
+    /// Chuyển giao: yêu cầu còn mở đi theo phần việc sang việc/người mới. Lịch sử (người tạo, lần nộp gốc, mô tả) giữ nguyên;
+    /// yêu cầu đã đóng ở lại với việc cũ.
+    /// </summary>
+    public void TransferTo(Guid assignmentId, Guid responsibleUserId)
+    {
+        if (IsClosed) throw new InvalidOperationException("Yêu cầu sửa đã đóng, không chuyển giao.");
+        AssignmentId = assignmentId;
+        ResponsibleUserId = responsibleUserId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>Còn mở thì chặn nộp lại / duyệt: Open và Resolved (chưa xác minh) đều chưa đóng.</summary>
     public bool IsClosed => Status is ChangeRequestStatus.Verified or ChangeRequestStatus.Rejected;
 

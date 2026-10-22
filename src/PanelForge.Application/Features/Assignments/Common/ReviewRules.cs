@@ -25,6 +25,10 @@ internal static class ReviewRules
         if (assignment.AssigneeUserId == reviewerId)
             return Result<Assignment>.Failure("Không thể tự duyệt việc do chính mình được giao.", ResultErrorCodes.Forbidden);
 
+        // Sau khi đổi người, người làm trước vẫn là người đóng góp vào kết quả: không được duyệt việc mình từng nộp
+        if (await db.Submissions.AnyAsync(s => s.AssignmentId == assignmentId && s.SubmittedByUserId == reviewerId, ct))
+            return Result<Assignment>.Failure("Không thể duyệt việc mà chính bạn đã từng nộp bài.", ResultErrorCodes.Forbidden);
+
         var chapter = await db.Chapters.AsNoTracking().FirstAsync(c => c.Id == chapterId, ct);
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<Assignment>.Failure(locked, ResultErrorCodes.Conflict);

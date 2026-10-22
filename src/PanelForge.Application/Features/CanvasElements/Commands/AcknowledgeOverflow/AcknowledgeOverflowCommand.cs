@@ -3,6 +3,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.CanvasElements.Common;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.AcknowledgeOverflow;
 
@@ -27,6 +28,9 @@ public sealed class AcknowledgeOverflowCommandHandler : IRequestHandler<Acknowle
         if (page is null) return Result<int>.Failure($"Page {cmd.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, ct) is { } readOnly)
             return Result<int>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, cmd.UserId, page.Id, page.Elements.TryGetValue(cmd.ElementId, out var scoped) ? scoped.PanelId : null, ct) is { } outOfScope)
+            return Result<int>.Failure(outOfScope, ResultErrorCodes.Forbidden);
         if (!page.Elements.TryGetValue(cmd.ElementId, out var element) || element.IsRemoved)
             return Result<int>.Failure($"Element {cmd.ElementId} không tồn tại trên Page {cmd.PageId}.");
 

@@ -34,7 +34,16 @@ public sealed class DeleteSceneCommandHandler : IRequestHandler<DeleteSceneComma
         if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, scene.ChapterId, cancellationToken) is { } notAssigned)
             return Result<bool>.Failure(notAssigned, ResultErrorCodes.Forbidden);
 
-        scene.DeletedBy = command.UserId.ToString();
+        var deletedBy = command.UserId.ToString();
+        scene.DeletedBy = deletedBy;
+
+        // Soft-delete không lan xuống con: dòng script của cảnh xoá theo, Panel gắn cảnh này được gỡ gắn (giữ Panel)
+        var lines = await _dbContext.ScriptLines.Where(l => l.SceneId == scene.Id).ToListAsync(cancellationToken);
+        foreach (var line in lines) line.DeletedBy = deletedBy;
+        _dbContext.ScriptLines.RemoveRange(lines);
+
+        var panels = await _dbContext.Panels.Where(p => p.SceneId == scene.Id).ToListAsync(cancellationToken);
+        foreach (var panel in panels) panel.AssignToScene(null);
 
         // Xóa thông thường -> DbContext tự động đổi thành Soft-delete
         _dbContext.Scenes.Remove(scene);

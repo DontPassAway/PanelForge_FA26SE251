@@ -68,12 +68,23 @@ internal static class StageProgressRules
             .FirstOrDefaultAsync(ct);
         if (prior is null) return null;
 
+        var panelIds = panels.Select(p => p.Id).ToList();
+
+        // Kết quả stage trước đang chờ kiểm tra ảnh hưởng thì chưa được dùng làm đầu vào
+        var flagged = await db.Assignments.Where(x =>
+            x.ChapterId == a.ChapterId && x.PipelineStageId == prior.Id && x.ImpactReviewReason != null).ToListAsync(ct);
+        foreach (var f in flagged)
+        {
+            var fPanels = await ResolvePanelsAsync(db, f, ct);
+            if (fPanels.Count == 0 || fPanels.Any(p => panelIds.Contains(p.Id)))
+                return $"Kết quả stage trước ('{prior.Name}') đang chờ kiểm tra ảnh hưởng, chưa thể dùng làm đầu vào.";
+        }
+
         var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
             x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
             x.PipelineStageId == prior.Id && x.Status == AssignmentStatus.Approved, ct);
         if (chapterLevelApproved) return null;
 
-        var panelIds = panels.Select(p => p.Id).ToList();
         var approved = await db.StageProgresses.AsNoTracking()
             .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
             .Select(s => s.PanelId).ToListAsync(ct);
@@ -100,6 +111,10 @@ internal static class StageProgressRules
             .OrderByDescending(s => s.StageOrder)
             .FirstOrDefaultAsync(ct);
         if (prior is null) return null;
+
+        if (await db.Assignments.AnyAsync(x =>
+                x.ChapterId == a.ChapterId && x.PipelineStageId == prior.Id && x.ImpactReviewReason != null, ct))
+            return $"Có việc ở stage '{prior.Name}' đang chờ kiểm tra ảnh hưởng, chưa thể làm '{stage.Name}' cho cả chương.";
 
         var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
             x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
@@ -239,35 +254,47 @@ internal static class StageProgressRules
     }
 
     /// <summary>
-    /// CF4 4.7 (bảng lan truyền thay đổi, BR-06): việc ở stage S đã duyệt bị trả về làm lại thì artwork stage S sẽ đổi, nên công việc
-    /// ở các stage SAU của cùng Panel đang dựa trên bản cũ. Việc sau đã duyệt → ReworkRequired và dòng tiến độ Approved của nó →
-    /// ChangesRequested; việc sau đang làm/chờ duyệt giữ trạng thái, chỉ được báo. BR-19 chặn việc sau bắt đầu lại cho tới khi
-    /// stage S được duyệt lại. Việc cấp Chapter (không có Panel) không lan. Gọi cùng lần Save với việc trả về (BR-18).
-    /// Trả số việc bị trả về theo, hoặc lỗi nếu dòng tiến độ sai trạng thái.
+    /// CF4 4.7 (lan truyền thay đổi, BR-06): việc <paramref name="reopened"/> đã duyệt bị mở lại thì những việc đã dựa vào nó có thể
+    /// không còn hợp lệ — nhưng KHÔNG mặc định phải làm lại (vd sửa thoại không ảnh hưởng Color). Mọi việc bị ảnh hưởng được đánh
+    /// dấu "Cần kiểm tra ảnh hưởng": giữ nguyên trạng thái, kết quả và quyết định duyệt cũ; bị chặn nộp/duyệt (và stage sau không
+    /// bắt đầu dựa trên nó) tới khi người duyệt quyết giữ hay làm lại (ResolveImpactReview). Bị ảnh hưởng = phụ thuộc trực tiếp
+    /// (DAG), hoặc ở stage sau và chung Panel; việc tổng hợp cấp Chapter (không có Panel) ở stage sau luôn bị ảnh hưởng.
+    /// Việc chưa bắt đầu chưa dựa vào gì nên bỏ qua (BR-19 vẫn chặn nó bắt đầu). Gọi cùng lần Save với việc mở lại (BR-18).
+    /// Trả số việc được đánh dấu.
     /// </summary>
-    public static async Task<(int Reworked, string? Error)> InvalidateLaterStagesAsync(
-        IPanelForgeDbContext db, Assignment reworked, string reason, CancellationToken ct)
+    public static async Task<int> FlagImpactedWorkAsync(
+        IPanelForgeDbContext db, Assignment reopened, string reason, CancellationToken ct)
     {
-        var panelIds = (await ResolvePanelsAsync(db, reworked, ct)).Select(p => p.Id).ToHashSet();
-        if (panelIds.Count == 0) return (0, null);
-
-        var stage = await db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == reworked.PipelineStageId, ct);
+        var stage = await db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == reopened.PipelineStageId, ct);
         var laterStages = await db.PipelineStages.AsNoTracking()
             .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder > stage.StageOrder)
             .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
-        if (laterStages.Count == 0) return (0, null);
+        var panelIds = (await ResolvePanelsAsync(db, reopened, ct)).Select(p => p.Id).ToHashSet();
 
-        var laterStageIds = laterStages.Keys.ToList();
         var candidates = await db.Assignments.Where(a =>
-            a.ChapterId == reworked.ChapterId && a.Id != reworked.Id &&
-            laterStageIds.Contains(a.PipelineStageId) &&
+            a.ChapterId == reopened.ChapterId && a.Id != reopened.Id &&
             (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
              a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);
 
-        return await ReworkCoveringAsync(db, candidates, panelIds,
-            $"Stage trước ('{stage.Name}') của phần việc này bị trả về làm lại: {reason}",
-            a => $"Việc '{laterStages[a.PipelineStageId]}' cần làm lại",
-            a => $"Stage trước của việc '{laterStages[a.PipelineStageId]}' sẽ thay đổi", ct);
+        var count = 0;
+        foreach (var later in candidates)
+        {
+            if (!later.GetDependsOnAssignmentIds().Contains(reopened.Id))
+            {
+                if (!laterStages.ContainsKey(later.PipelineStageId)) continue;
+                var laterPanels = await ResolvePanelsAsync(db, later, ct);
+                var affected = panelIds.Count == 0 || laterPanels.Count == 0 || laterPanels.Any(p => panelIds.Contains(p.Id));
+                if (!affected) continue;
+            }
+
+            var message = $"Đầu vào '{stage.Name}' của việc này bị mở lại: {reason}";
+            later.FlagImpactReview(message);
+            count++;
+            db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                "Việc cần kiểm tra ảnh hưởng", message, later.Id, later.ChapterId));
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -326,6 +353,28 @@ internal static class StageProgressRules
         }
 
         return (count, null);
+    }
+
+    /// <summary>
+    /// Đầu vào phải còn hợp lệ ở lúc nộp và duyệt, không chỉ lúc bắt đầu: việc không chờ kiểm tra ảnh hưởng, mọi việc tiền đề (DAG)
+    /// đã Approved và không chờ kiểm tra, stage trước của các Panel đã duyệt (BR-19). Trả lý do chặn hoặc null.
+    /// </summary>
+    public static async Task<string?> InputBlockReasonAsync(
+        IPanelForgeDbContext db, Assignment a, PipelineStage stage, IReadOnlyList<Panel> panels, CancellationToken ct)
+    {
+        if (a.ImpactReviewReason is not null)
+            return $"Việc đang chờ kiểm tra ảnh hưởng ({a.ImpactReviewReason}). Người duyệt cần quyết giữ kết quả hay làm lại trước.";
+
+        var depIds = a.GetDependsOnAssignmentIds();
+        if (depIds.Count > 0)
+        {
+            var invalid = await db.Assignments.AsNoTracking().CountAsync(x =>
+                depIds.Contains(x.Id) && (x.Status != AssignmentStatus.Approved || x.ImpactReviewReason != null), ct);
+            if (invalid > 0)
+                return $"Có {invalid} việc tiền đề không còn ở trạng thái đã duyệt hợp lệ; đầu vào đã thay đổi.";
+        }
+
+        return await PriorStageBlockReasonAsync(db, a, stage, panels, ct);
     }
 
     /// <summary>
