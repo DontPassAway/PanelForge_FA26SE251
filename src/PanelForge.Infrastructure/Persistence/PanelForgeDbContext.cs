@@ -52,6 +52,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PipelineTemplateStage> PipelineTemplateStages => Set<PipelineTemplateStage>();
 
     public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesMember> SeriesMembers => Set<SeriesMember>();
     public DbSet<TypographyPreset> TypographyPresets => Set<TypographyPreset>();
     public DbSet<ConsistencyRule> ConsistencyRules => Set<ConsistencyRule>();
     public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();

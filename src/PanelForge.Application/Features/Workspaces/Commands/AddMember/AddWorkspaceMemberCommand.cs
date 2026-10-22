@@ -83,18 +83,30 @@ public sealed class AddWorkspaceMemberCommandHandler
                 return Result<WorkspaceMemberDto>.Failure(
                     "Administrator không được phép tham gia Workspace với tư cách thành viên (BR-07).");
 
-            var isAlreadyMember = await _dbContext.WorkspaceMembers
-                .AnyAsync(m => m.WorkspaceId == command.WorkspaceId && m.UserId == targetUser.Id, cancellationToken);
-            if (isAlreadyMember)
-                return Result<WorkspaceMemberDto>.Failure("Người dùng này đã là thành viên của Workspace.");
-
             // Đã được mời trước đó nhưng chưa kích hoạt: cấp OTP mới để lời mời lần này dùng được
             if (targetUser.IsPendingInvitation)
                 inviteOtp = WorkspaceInvitation.IssueOtp(targetUser);
         }
 
-        var member = WorkspaceMember.Create(command.WorkspaceId, targetUser.Id, command.Role, WorkspaceMemberStatus.Pending);
-        _dbContext.WorkspaceMembers.Add(member);
+        WorkspaceMember member;
+        var existingMember = await _dbContext.WorkspaceMembers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.WorkspaceId == command.WorkspaceId && m.UserId == targetUser.Id, cancellationToken);
+
+        if (existingMember is not null)
+        {
+            if (!existingMember.IsDeleted)
+                return Result<WorkspaceMemberDto>.Failure("Người dùng này đã là thành viên của Workspace.");
+
+            // Thành viên từng bị xóa mềm -> Khôi phục lại với vai trò mới
+            existingMember.Reactivate(command.Role, targetUser.IsPendingInvitation ? WorkspaceMemberStatus.Pending : WorkspaceMemberStatus.Active);
+            member = existingMember;
+        }
+        else
+        {
+            member = WorkspaceMember.Create(command.WorkspaceId, targetUser.Id, command.Role, WorkspaceMemberStatus.Pending);
+            _dbContext.WorkspaceMembers.Add(member);
+        }
 
         // Tạo user (nếu là lời mời) và membership trong cùng một lần lưu
         try

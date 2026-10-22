@@ -37,6 +37,7 @@ public interface IPanelForgeDbContext
     DbSet<PipelineTemplateStage> PipelineTemplateStages { get; }
 
     DbSet<Series> Series { get; }
+    DbSet<SeriesMember> SeriesMembers { get; }
     DbSet<TypographyPreset> TypographyPresets { get; }
     DbSet<ConsistencyRule> ConsistencyRules { get; }
     DbSet<SeriesBible> SeriesBibles { get; }

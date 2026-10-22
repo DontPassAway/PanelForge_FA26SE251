@@ -36,6 +36,7 @@ public class Series : BaseEntity
     public ICollection<ConsistencyRule> ConsistencyRules { get; private set; } = [];
 
     public ICollection<Chapter> Chapters { get; private set; } = [];
+    public ICollection<SeriesMember> Members { get; private set; } = [];
 
     private Series() { }
 
