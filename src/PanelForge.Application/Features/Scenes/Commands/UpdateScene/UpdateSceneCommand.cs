@@ -1,3 +1,5 @@
+using PanelForge.Application.Features.Scenes.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -20,9 +22,12 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
 {
     private readonly IPanelForgeDbContext _dbContext;
 
-    public UpdateSceneCommandHandler(IPanelForgeDbContext dbContext)
+    private readonly IWorkspaceAuthorizationService _auth;
+
+    public UpdateSceneCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<SceneDto>> Handle(UpdateSceneCommand command, CancellationToken cancellationToken)
@@ -36,6 +41,8 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             return Result<SceneDto>.Failure($"Scene {command.SceneId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
             return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, scene.ChapterId, cancellationToken) is { } notAssigned)
+            return Result<SceneDto>.Failure(notAssigned, ResultErrorCodes.Forbidden);
         if (command.ExpectedVersion is { } expected && expected != scene.Version)
             return Result<SceneDto>.Failure(
                 $"Scene đã được người khác sửa (version hiện tại {scene.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",

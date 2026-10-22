@@ -45,7 +45,7 @@ internal static class AssignmentRules
         return editors.Count > 0 ? editors : await WithRole(WorkspaceRole.Producer);
     }
 
-    /// <summary>BR-07: người nhận phải là thành viên Workspace; vai trò lấy từ membership, phải khớp stage.</summary>
+    /// <summary>BR-07: người nhận phải là thành viên Workspace đã chấp nhận lời mời (Active); vai trò lấy từ membership, phải khớp stage.</summary>
     public static async Task<Result<WorkspaceRole>> ResolveAssigneeRoleAsync(
         IPanelForgeDbContext db, Guid workspaceId, Guid assigneeUserId, PipelineStage stage, CancellationToken ct)
     {
@@ -57,11 +57,58 @@ internal static class AssignmentRules
         if (member is null)
             return Result<WorkspaceRole>.Failure("Người nhận không phải thành viên của Workspace.", ResultErrorCodes.Validation);
 
+        if (member.Status != WorkspaceMemberStatus.Active)
+            return Result<WorkspaceRole>.Failure(
+                "Người nhận chưa chấp nhận lời mời vào Workspace nên chưa thể nhận việc.", ResultErrorCodes.Validation);
+
         if (stage.AllowedRole is { } allowed && allowed != member.Role)
             return Result<WorkspaceRole>.Failure(
                 $"Stage '{stage.Name}' dành cho vai trò {allowed}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
 
         return Result<WorkspaceRole>.Success(member.Role);
+    }
+
+    /// <summary>
+    /// Một phần nội dung chỉ thuộc một việc ở mỗi stage. Việc cấp Page phủ các Panel của trang đó. Riêng stage Artist/Letterer,
+    /// việc cấp Page/Panel mới được TÁCH khỏi việc cả chương (việc cả chương mất phần đó, xem StageProgressRules.ResolvePanelsAsync),
+    /// miễn việc cả chương còn đang làm (chưa nộp/duyệt). Chặn việc trùng đúng đối tượng, hoặc chồng lên việc Page/Panel đã có.
+    /// Trả lý do (409) hoặc null.
+    /// </summary>
+    public static async Task<string?> ScopeOverlapReasonAsync(
+        IPanelForgeDbContext db, Guid chapterId, PipelineStage stage, WorkflowEntityType type, Guid targetId, CancellationToken ct)
+    {
+        var existing = await db.Assignments.AsNoTracking()
+            .Where(a => a.ChapterId == chapterId && a.PipelineStageId == stage.Id)
+            .Select(a => new { a.EntityType, a.TargetEntityId, a.AssignedRole, a.Status })
+            .ToListAsync(ct);
+        if (existing.Count == 0) return null;
+
+        if (existing.Any(a => a.EntityType == type && a.TargetEntityId == targetId))
+            return "Đối tượng này đã được giao việc ở stage này.";
+        if (type == WorkflowEntityType.Chapter)
+            return "Stage này đã có việc giao theo trang/khung trong chương; không thể giao thêm việc cho cả chương.";
+        if (existing.FirstOrDefault(a => a.EntityType == WorkflowEntityType.Chapter) is { } whole)
+        {
+            if (!StageProgressRules.IsProductionRole(whole.AssignedRole))
+                return "Stage này đã giao việc cho cả chương; không thể giao thêm việc theo trang/khung.";
+            if (whole.Status is not (AssignmentStatus.Assigned or AssignmentStatus.InProgress or AssignmentStatus.ReworkRequired))
+                return $"Việc cả chương ở stage này đang {whole.Status}; chỉ tách trang/khung khi việc đó còn đang làm.";
+        }
+
+        if (type == WorkflowEntityType.Page)
+        {
+            var assignedPanels = existing.Where(a => a.EntityType == WorkflowEntityType.Panel).Select(a => a.TargetEntityId).ToList();
+            return assignedPanels.Count > 0 &&
+                   await db.Panels.AsNoTracking().AnyAsync(p => p.PageId == targetId && assignedPanels.Contains(p.Id), ct)
+                ? "Trang này đã có khung được giao việc ở stage này; không thể giao thêm việc cho cả trang."
+                : null;
+        }
+
+        var assignedPages = existing.Where(a => a.EntityType == WorkflowEntityType.Page).Select(a => a.TargetEntityId).ToList();
+        return assignedPages.Count > 0 &&
+               await db.Panels.AsNoTracking().AnyAsync(p => p.Id == targetId && assignedPages.Contains(p.PageId), ct)
+            ? "Trang chứa khung này đã được giao việc ở stage này."
+            : null;
     }
 
     /// <summary>

@@ -95,16 +95,30 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         if (layerType is not null && !await _db.ElementTypes.AnyAsync(t => t.Code == layerType, ct))
             return Fail($"Loại layer '{layerType}' không tồn tại.");
 
-        // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage cho Page này ──
-        var panelIds = await _db.Panels.AsNoTracking().Where(p => p.PageId == cmd.PageId).Select(p => p.Id).ToListAsync(ct);
+        // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage. Việc cấp Page: ảnh cả trang hoặc khung bất kỳ của trang.
+        //    Việc cấp Panel: chỉ ảnh của đúng khung đó (không được ghi ảnh cả trang, vì sẽ đè phần người khác làm) ──
         var holdsTheWork = await _db.Assignments.AnyAsync(a =>
             a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
             a.Status == AssignmentStatus.InProgress &&
             ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
-             (a.EntityType == WorkflowEntityType.Panel && panelIds.Contains(a.TargetEntityId) &&
-              (cmd.PanelId == null || a.TargetEntityId == cmd.PanelId))), ct);
+             (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
+        // Việc cả chương: được tải cho trang/khung còn trong phạm vi thực tế (chưa tách sang việc Page/Panel riêng).
+        // Ảnh cả trang chỉ khi không phần nào của trang đã tách, để không đè lên phần người khác làm.
+        if (!holdsTheWork && await _db.Assignments.AnyAsync(a =>
+                a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
+                a.Status == AssignmentStatus.InProgress && a.EntityType == WorkflowEntityType.Chapter, ct))
+        {
+            var carved = await StageProgressRules.CarvedOutAsync(_db, chapter.Id, cmd.StageId, ct);
+            holdsTheWork = cmd.PanelId is { } pid
+                ? !carved.Panels.Contains(pid)
+                : !carved.Pages.Contains(cmd.PageId) &&
+                  !await _db.Panels.AsNoTracking().AnyAsync(p => p.PageId == cmd.PageId && carved.Panels.Contains(p.Id), ct);
+        }
         if (!holdsTheWork)
-            return Fail("Chỉ người đang làm việc (InProgress) ở stage này cho Page này mới được tải artwork.", ResultErrorCodes.Forbidden);
+            return Fail(cmd.PanelId is null
+                    ? "Chỉ người giữ việc cả trang (InProgress) ở stage này mới được tải artwork cả trang; việc theo khung phải tải ảnh cho đúng khung."
+                    : "Chỉ người đang làm việc (InProgress) ở stage này cho Page/khung này mới được tải artwork.",
+                ResultErrorCodes.Forbidden);
 
         // ── BR-13: dùng lại Asset nếu nội dung đã có; ngược lại giữ chỗ quota rồi lưu ──
         var workspaceId = await _db.Series.AsNoTracking()

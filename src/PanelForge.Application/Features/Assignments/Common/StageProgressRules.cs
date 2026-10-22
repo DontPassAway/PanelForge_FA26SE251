@@ -13,14 +13,43 @@ namespace PanelForge.Application.Features.Assignments.Common;
 /// </summary>
 internal static class StageProgressRules
 {
-    /// <summary>Các Panel mà Assignment bao phủ. Assignment cấp Chapter (vd stage Script) không có Panel.</summary>
-    public static async Task<List<Panel>> ResolvePanelsAsync(IPanelForgeDbContext db, Assignment a, CancellationToken ct) =>
-        a.EntityType switch
+    /// <summary>Vai trò sản xuất hình (Artist, Letterer): việc cả chương của họ làm theo từng Panel và tách trang được.</summary>
+    public static bool IsProductionRole(WorkspaceRole role) => role is WorkspaceRole.Artist or WorkspaceRole.Letterer;
+
+    /// <summary>
+    /// Phạm vi thực tế: các Panel mà Assignment đang chịu trách nhiệm. Việc cả chương của Artist/Letterer = mọi Panel của chương
+    /// TRỪ phần đã tách sang việc cấp Page/Panel cùng stage. Việc cả chương của vai trò khác (Script, Review) không có Panel.
+    /// </summary>
+    public static async Task<List<Panel>> ResolvePanelsAsync(IPanelForgeDbContext db, Assignment a, CancellationToken ct)
+    {
+        switch (a.EntityType)
         {
-            WorkflowEntityType.Panel => await db.Panels.Where(p => p.Id == a.TargetEntityId).ToListAsync(ct),
-            WorkflowEntityType.Page => await db.Panels.Where(p => p.PageId == a.TargetEntityId).ToListAsync(ct),
-            _ => []
-        };
+            case WorkflowEntityType.Panel:
+                return await db.Panels.Where(p => p.Id == a.TargetEntityId).ToListAsync(ct);
+            case WorkflowEntityType.Page:
+                return await db.Panels.Where(p => p.PageId == a.TargetEntityId).ToListAsync(ct);
+            default:
+                if (!IsProductionRole(a.AssignedRole)) return [];
+                var carved = await CarvedOutAsync(db, a.ChapterId, a.PipelineStageId, ct);
+                var pageIds = await db.Pages.AsNoTracking().Where(pg => pg.ChapterId == a.ChapterId).Select(pg => pg.Id).ToListAsync(ct);
+                return (await db.Panels.Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct))
+                    .Where(p => !carved.Panels.Contains(p.Id)).ToList();
+        }
+    }
+
+    /// <summary>Page/Panel đã tách khỏi việc cả chương: có việc cấp Page hoặc Panel riêng ở cùng stage.</summary>
+    public static async Task<(HashSet<Guid> Pages, HashSet<Guid> Panels)> CarvedOutAsync(
+        IPanelForgeDbContext db, Guid chapterId, Guid stageId, CancellationToken ct)
+    {
+        var subs = await db.Assignments.AsNoTracking()
+            .Where(x => x.ChapterId == chapterId && x.PipelineStageId == stageId && x.EntityType != WorkflowEntityType.Chapter)
+            .Select(x => new { x.EntityType, x.TargetEntityId }).ToListAsync(ct);
+        var pages = subs.Where(x => x.EntityType == WorkflowEntityType.Page).Select(x => x.TargetEntityId).ToHashSet();
+        var panels = subs.Where(x => x.EntityType == WorkflowEntityType.Panel).Select(x => x.TargetEntityId).ToHashSet();
+        if (pages.Count > 0)
+            panels.UnionWith(await db.Panels.AsNoTracking().Where(p => pages.Contains(p.PageId)).Select(p => p.Id).ToListAsync(ct));
+        return (pages, panels);
+    }
 
     /// <summary>
     /// BR-19: mỗi Panel chỉ bắt đầu khi stage trước của chính nó đã Approved (hoặc việc cấp Chapter ở stage trước đã Approved,
@@ -63,7 +92,8 @@ internal static class StageProgressRules
     public static async Task<string?> ChapterWorkBlockReasonAsync(
         IPanelForgeDbContext db, Assignment a, PipelineStage stage, CancellationToken ct)
     {
-        if (a.EntityType != WorkflowEntityType.Chapter || stage.IsInitial) return null;
+        // Việc cả chương của Artist/Letterer đi theo phạm vi thực tế từng Panel (PriorStageBlockReasonAsync), không chờ cả chương
+        if (a.EntityType != WorkflowEntityType.Chapter || IsProductionRole(a.AssignedRole) || stage.IsInitial) return null;
 
         var prior = await db.PipelineStages.AsNoTracking()
             .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
@@ -113,7 +143,7 @@ internal static class StageProgressRules
             var hasLines = await db.ScriptLines.AsNoTracking().AnyAsync(l => sceneIds.Contains(l.SceneId), ct);
             if (!hasLines) return "Chapter chưa có dòng script nào để nộp.";
         }
-        else if (a.AssignedRole == WorkspaceRole.Artist && a.EntityType != WorkflowEntityType.Chapter)
+        else if (a.AssignedRole == WorkspaceRole.Artist)
         {
             if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
 
@@ -155,8 +185,8 @@ internal static class StageProgressRules
         var pageIds = a.EntityType switch
         {
             WorkflowEntityType.Page => new List<Guid> { a.TargetEntityId },
-            WorkflowEntityType.Panel => panels.Select(p => p.PageId).Distinct().ToList(),
-            _ => await db.Pages.AsNoTracking().Where(p => p.ChapterId == a.ChapterId).Select(p => p.Id).ToListAsync(ct)
+            // Panel, hoặc cả chương: chỉ các trang còn trong phạm vi thực tế
+            _ => panels.Select(p => p.PageId).Distinct().ToList()
         };
 
         foreach (var pageId in pageIds)
@@ -229,7 +259,7 @@ internal static class StageProgressRules
 
         var laterStageIds = laterStages.Keys.ToList();
         var candidates = await db.Assignments.Where(a =>
-            a.ChapterId == reworked.ChapterId && a.Id != reworked.Id && a.EntityType != WorkflowEntityType.Chapter &&
+            a.ChapterId == reworked.ChapterId && a.Id != reworked.Id &&
             laterStageIds.Contains(a.PipelineStageId) &&
             (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
              a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);

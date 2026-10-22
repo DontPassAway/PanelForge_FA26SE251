@@ -1,3 +1,5 @@
+using PanelForge.Application.Features.Scenes.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -12,9 +14,12 @@ public sealed class DeleteSceneCommandHandler : IRequestHandler<DeleteSceneComma
 {
     private readonly IPanelForgeDbContext _dbContext;
 
-    public DeleteSceneCommandHandler(IPanelForgeDbContext dbContext)
+    private readonly IWorkspaceAuthorizationService _auth;
+
+    public DeleteSceneCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<bool>> Handle(DeleteSceneCommand command, CancellationToken cancellationToken)
@@ -26,6 +31,8 @@ public sealed class DeleteSceneCommandHandler : IRequestHandler<DeleteSceneComma
             return Result<bool>.Failure($"Scene {command.SceneId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
             return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, scene.ChapterId, cancellationToken) is { } notAssigned)
+            return Result<bool>.Failure(notAssigned, ResultErrorCodes.Forbidden);
 
         scene.DeletedBy = command.UserId.ToString();
 

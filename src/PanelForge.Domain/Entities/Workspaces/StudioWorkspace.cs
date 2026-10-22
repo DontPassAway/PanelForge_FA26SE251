@@ -18,11 +18,16 @@ public class StudioWorkspace : BaseEntity
 
     public const int MaxSessionLifetimeMinutes = 30 * 24 * 60;
 
+    /// <summary>SHA-256 của ảnh bìa Studio lưu trong IAssetStorage (R2); null nếu dùng bìa mặc định.</summary>
+    public string? CoverImageSha256 { get; private set; }
+
     public User Owner { get; private set; } = default!;
     public ICollection<WorkspaceMember> Members { get; private set; } = [];
     public ICollection<Series> Series { get; private set; } = [];
 
     private StudioWorkspace() { }
+
+    public void SetCover(string? sha256) => CoverImageSha256 = sha256;
 
     public static StudioWorkspace Create(string name, Guid ownerId, long storageQuotaBytes = 0)
     {

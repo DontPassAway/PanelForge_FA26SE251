@@ -1,3 +1,5 @@
+using PanelForge.Application.Common.Interfaces.Services;
+using Moq;
 using FluentAssertions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
@@ -44,7 +46,7 @@ public class ContentConcurrencyTests
             new UpdatePanelCoordinatesCommand(panel.Id, _userId, bbox, ExpectedVersion: expected), default);
 
     private Task<Result<PanelForge.Application.Features.Scenes.Models.SceneDto>> EditScene(string heading, int? expected) =>
-        new UpdateSceneCommandHandler(_db).Handle(
+        new UpdateSceneCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(
             new UpdateSceneCommand(_scene.Id, _userId, heading, null, ExpectedVersion: expected), default);
 
     [Fact]

@@ -24,7 +24,8 @@ public sealed class GetMyWorkspacesQueryHandler
 
         var workspaces = await _dbContext.StudioWorkspaces
             .Include(w => w.Owner)
-            .Include(w => w.Members.Where(m => !m.IsDeleted))
+            .Include(w => w.Members.Where(m => !m.IsDeleted && m.Status == WorkspaceMemberStatus.Active))
+                .ThenInclude(m => m.User)
             .Where(w => !w.IsDeleted && (w.OwnerId == userId || w.Members.Any(m => m.UserId == userId && !m.IsDeleted && m.Status == WorkspaceMemberStatus.Active)))
             .OrderByDescending(w => w.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -38,11 +39,21 @@ public sealed class GetMyWorkspacesQueryHandler
             .ToDictionaryAsync(x => x.WorkspaceId, x => x.Count, cancellationToken);
 
         IReadOnlyList<WorkspaceDto> result = workspaces
-            .Select(w => WorkspaceMapper.ToDto(
-                w,
-                userId,
-                memberCount: w.Members.Count(m => !m.IsDeleted),
-                pendingTasks: pendingByWorkspace.GetValueOrDefault(w.Id)))
+            .Select(w =>
+            {
+                var previews = w.Members
+                    .Where(m => !m.IsDeleted && m.User != null)
+                    .Take(4)
+                    .Select(m => new WorkspaceMemberPreviewDto(m.UserId, m.User.FullName, m.User.AvatarUrl))
+                    .ToList();
+
+                return WorkspaceMapper.ToDto(
+                    w,
+                    userId,
+                    memberCount: w.Members.Count(m => !m.IsDeleted),
+                    pendingTasks: pendingByWorkspace.GetValueOrDefault(w.Id),
+                    memberPreviews: previews);
+            })
             .ToList();
 
         return Result<IReadOnlyList<WorkspaceDto>>.Success(result);

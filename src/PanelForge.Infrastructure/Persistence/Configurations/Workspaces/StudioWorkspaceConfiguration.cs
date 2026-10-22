@@ -44,6 +44,11 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
         builder.Property(w => w.SessionIdleTimeoutMinutes).HasColumnName("session_idle_timeout_minutes").HasColumnType("integer");
         builder.Property(w => w.MaxConcurrentSessions).HasColumnName("max_concurrent_sessions").HasColumnType("integer");
 
+        builder.Property(w => w.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)")
+               .IsRequired(false);
+
         builder.Property(w => w.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
