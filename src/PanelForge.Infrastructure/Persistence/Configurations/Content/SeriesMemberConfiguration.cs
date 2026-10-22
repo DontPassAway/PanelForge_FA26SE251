@@ -30,6 +30,7 @@ internal sealed class SeriesMemberConfiguration : IEntityTypeConfiguration<Serie
 
         builder.HasIndex(m => new { m.SeriesId, m.UserId })
                .IsUnique()
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_series_members_series_user");
 
         builder.Property(m => m.Role)

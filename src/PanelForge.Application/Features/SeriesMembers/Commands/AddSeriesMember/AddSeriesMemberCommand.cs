@@ -68,19 +68,35 @@ public sealed class AddSeriesMemberCommandHandler
                 ResultErrorCodes.Conflict);
         }
 
-        // Kiểm tra xem đã có trong Series chưa
-        var alreadyExists = await _dbContext.SeriesMembers
-            .AnyAsync(sm => sm.SeriesId == command.SeriesId && sm.UserId == command.TargetUserId, cancellationToken);
+        // Kiểm tra xem đã từng tồn tại trong Series chưa (kể cả đã bị xóa mềm)
+        var existingMember = await _dbContext.SeriesMembers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(sm => sm.SeriesId == command.SeriesId && sm.UserId == command.TargetUserId, cancellationToken);
 
-        if (alreadyExists)
+        SeriesMember memberToSave;
+
+        if (existingMember is not null)
         {
-            return Result<SeriesMemberDto>.Failure(
-                "Thành viên này đã có trong đội ngũ của Series. Hãy đổi vai trò thay vì thêm mới.",
-                ResultErrorCodes.Conflict);
+            if (!existingMember.IsDeleted)
+            {
+                return Result<SeriesMemberDto>.Failure(
+                    "Thành viên này đã có trong đội ngũ của Series. Hãy đổi vai trò thay vì thêm mới.",
+                    ResultErrorCodes.Conflict);
+            }
+
+            // Đã từng bị xóa mềm -> Khôi phục lại (Restore) với vai trò mới
+            existingMember.IsDeleted = false;
+            existingMember.DeletedAt = null;
+            existingMember.DeletedBy = null;
+            existingMember.ChangeRole(command.Role);
+            memberToSave = existingMember;
+        }
+        else
+        {
+            memberToSave = SeriesMember.Create(command.SeriesId, command.TargetUserId, command.Role);
+            _dbContext.SeriesMembers.Add(memberToSave);
         }
 
-        var newMember = SeriesMember.Create(command.SeriesId, command.TargetUserId, command.Role);
-        _dbContext.SeriesMembers.Add(newMember);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var user = await _dbContext.Users
@@ -90,14 +106,14 @@ public sealed class AddSeriesMemberCommandHandler
             return Result<SeriesMemberDto>.Failure("Không tìm thấy thông tin tài khoản người dùng.", ResultErrorCodes.NotFound);
 
         return Result<SeriesMemberDto>.Success(new SeriesMemberDto(
-            newMember.Id,
-            newMember.SeriesId,
+            memberToSave.Id,
+            memberToSave.SeriesId,
             user.Id,
             user.FullName,
             user.Email,
             user.AvatarUrl,
-            newMember.Role,
-            newMember.AssignedAt
+            memberToSave.Role,
+            memberToSave.AssignedAt
         ));
     }
 }
