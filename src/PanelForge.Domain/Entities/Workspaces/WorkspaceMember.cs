@@ -37,4 +37,14 @@ public class WorkspaceMember : BaseEntity
     public void Accept() => Status = WorkspaceMemberStatus.Active;
 
     public void Reject() => Status = WorkspaceMemberStatus.Rejected;
+
+    public void Reactivate(WorkspaceRole role, WorkspaceMemberStatus status = WorkspaceMemberStatus.Active)
+    {
+        Role = role;
+        Status = status;
+        JoinedAt = DateTime.UtcNow;
+        IsDeleted = false;
+        DeletedAt = null;
+        DeletedBy = null;
+    }
 }

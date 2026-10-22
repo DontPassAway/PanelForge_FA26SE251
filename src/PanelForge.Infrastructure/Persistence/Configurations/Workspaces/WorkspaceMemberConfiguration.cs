@@ -29,6 +29,7 @@ internal sealed class WorkspaceMemberConfiguration : IEntityTypeConfiguration<Wo
 
         builder.HasIndex(m => new { m.WorkspaceId, m.UserId })
                .IsUnique()
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_workspace_members_workspace_user");
 
         builder.Property(m => m.Role)

@@ -44,6 +44,25 @@ public sealed class RemoveWorkspaceMemberCommandHandler : IRequestHandler<Remove
             return Result<bool>.Failure("Thành viên không tồn tại trong Workspace này.", ResultErrorCodes.NotFound);
 
         _dbContext.WorkspaceMembers.Remove(member);
+
+        // Đồng thời rút thành viên khỏi các Series thuộc Workspace này
+        var seriesIds = await _dbContext.Series
+            .Where(s => s.WorkspaceId == command.WorkspaceId)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+
+        if (seriesIds.Count > 0)
+        {
+            var seriesMembers = await _dbContext.SeriesMembers
+                .Where(sm => seriesIds.Contains(sm.SeriesId) && sm.UserId == command.TargetUserId)
+                .ToListAsync(cancellationToken);
+
+            if (seriesMembers.Count > 0)
+            {
+                _dbContext.SeriesMembers.RemoveRange(seriesMembers);
+            }
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<bool>.Success(true);

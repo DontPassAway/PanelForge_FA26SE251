@@ -121,6 +121,55 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
             .Select(s => (Guid?)s.Chapter.Series.WorkspaceId)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)
+    {
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
+
+        var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
+        if (!workspaceId.HasValue) return false;
+
+        // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
+        if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
+
+        // Thành viên Series được phân quyền chuyên môn cụ thể
+        var member = await _dbContext.SeriesMembers
+            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId, cancellationToken);
+
+        return member != null && allowedRoles.Contains(member.Role);
+    }
+
+    public async Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
+    {
+        if (await IsAdminAsync(userId, cancellationToken)) return null;
+
+        var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
+        if (!workspaceId.HasValue) return null;
+
+        var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId.Value, cancellationToken);
+        if (workspace != null && workspace.OwnerId == userId)
+        {
+            return WorkspaceRole.Producer;
+        }
+
+        var seriesMember = await _dbContext.SeriesMembers
+            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId, cancellationToken);
+
+        if (seriesMember != null)
+        {
+            return seriesMember.Role;
+        }
+
+        var wsMember = await _dbContext.WorkspaceMembers
+            .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
+
+        if (wsMember?.Role == WorkspaceRole.Producer)
+        {
+            return WorkspaceRole.Producer;
+        }
+
+        return null;
+    }
+
     // BR-07: Administrator không bao giờ có quyền cấp Workspace.
     private Task<bool> IsAdminAsync(Guid userId, CancellationToken cancellationToken)
         => _dbContext.Users.AnyAsync(u => u.Id == userId && u.Role == SystemRole.Admin, cancellationToken);

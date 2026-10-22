@@ -22,4 +22,8 @@ public interface IWorkspaceAuthorizationService
     /// <summary>Workspace chứa Panel (qua Page, Chapter, Series); null nếu Panel không tồn tại.</summary>
     Task<Guid?> GetWorkspaceIdOfPanelAsync(Guid panelId, CancellationToken cancellationToken = default);
     Task<Guid?> GetWorkspaceIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default);
+
+    /// <summary>Kiểm tra vai trò cấp Series: Workspace Owner/Producer luôn có quyền, thành viên khác cần được chỉ định trong SeriesMember.</summary>
+    Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default);
+    Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default);
 }
