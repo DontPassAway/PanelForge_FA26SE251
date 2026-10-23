@@ -8,9 +8,13 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Common;
 
 /// <param name="CanvasStreamVersion">Version event stream (Marten) của Page lúc chụp; -1 = Page chưa có event nào.</param>
-/// <param name="ArtworkReferenceId">Artwork cuối của trang theo <see cref="FinalArtwork"/>; null = trang chưa có ảnh cả trang.</param>
+/// <param name="ArtworkReferenceId">Ảnh cả trang theo <see cref="FinalArtwork"/>; null = trang ghép từ ảnh Panel hoặc chưa có ảnh.</param>
+/// <param name="PanelArtworks">Ảnh Panel tạo nên trang khi không dùng ảnh cả trang (trang được ghép); null với snapshot cũ.</param>
 public sealed record SnapshotPage(
-    Guid PageId, int PageNumber, long CanvasStreamVersion, Guid? ArtworkReferenceId, string? ArtworkSha256);
+    Guid PageId, int PageNumber, long CanvasStreamVersion, Guid? ArtworkReferenceId, string? ArtworkSha256,
+    IReadOnlyList<SnapshotPanelArtwork>? PanelArtworks = null);
+
+public sealed record SnapshotPanelArtwork(Guid PanelId, Guid ArtworkReferenceId, string? ArtworkSha256);
 
 public sealed record SnapshotManifest(
     Guid ChapterId, long ChapterVersion, IReadOnlyList<SnapshotPage> Pages,
@@ -27,7 +31,7 @@ internal static class ChapterSnapshotBuilder
     {
         // 1. Artwork cuối từng trang + SHA-256 của file (BR-04)
         var finals = await FinalArtwork.SelectAsync(db, chapter.Id, ct);
-        var refIds = finals.Select(f => f.AssetReferenceId).ToList();
+        var refIds = finals.SelectMany(f => f.AssetReferenceIds).ToList();
         var shas = await (
             from r in db.AssetReferences.AsNoTracking()
             where refIds.Contains(r.Id)
@@ -42,8 +46,13 @@ internal static class ChapterSnapshotBuilder
         {
             var art = finals.FirstOrDefault(f => f.PageId == p.Id);
             var streamVersion = (await pages.GetAsync(p.Id, ct))?.Version ?? -1;
-            snapshotPages.Add(new SnapshotPage(p.Id, p.PageNumber, streamVersion, art?.AssetReferenceId,
-                art is null ? null : shas.GetValueOrDefault(art.AssetReferenceId)));
+            var whole = art?.WholePageReferenceId;
+            var panelArtworks = art is null || whole is not null
+                ? null
+                : art.Parts.Select(x => new SnapshotPanelArtwork(x.PanelId!.Value, x.AssetReferenceId,
+                    shas.GetValueOrDefault(x.AssetReferenceId))).ToList();
+            snapshotPages.Add(new SnapshotPage(p.Id, p.PageNumber, streamVersion, whole,
+                whole is null ? null : shas.GetValueOrDefault(whole.Value), panelArtworks));
         }
 
         // 3. Revision script mới nhất của từng scene (group trong bộ nhớ để chạy được cả Npgsql lẫn InMemory)

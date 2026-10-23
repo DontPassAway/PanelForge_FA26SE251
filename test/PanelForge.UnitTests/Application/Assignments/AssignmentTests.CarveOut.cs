@@ -23,7 +23,7 @@ public partial class AssignmentTests
         var p2 = f.AddPanel(page2, 1);
         (await Create(f, WholeChapter(f))).IsSuccess.Should().BeTrue();
         var whole = f.Assignments.Single();
-        (await Create(f, f.CreateCmd(assignee: f.Artist2Id, target: page2.Id))).IsSuccess.Should().BeTrue();
+        (await Transfer(f, whole, f.Artist2Id, WorkflowEntityType.Page, page2.Id)).IsSuccess.Should().BeTrue();
         return (whole, p1, p2);
     }
 
@@ -39,7 +39,7 @@ public partial class AssignmentTests
     }
 
     [Fact]
-    public async Task CarveOut_PageFromWholeChapter_IsAllowed_NotifiesHolder_AndShrinksScope()
+    public async Task Transfer_PageFromWholeChapter_IsAllowed_NotifiesHolder_AndShrinksScope()
     {
         var f = new Fixture();
         var (whole, p1, _) = await ChapterWithPage2CarvedOut(f);
@@ -52,17 +52,33 @@ public partial class AssignmentTests
     }
 
     [Fact]
-    public async Task CarveOut_WhenWholeChapterAlreadySubmitted_IsConflict()
+    public async Task Transfer_WhenWholeChapterAlreadySubmitted_IsConflict_UntilThePendingSubmissionIsDecided()
     {
         var f = new Fixture();
         var page2 = f.AddPage(2);
         (await Create(f, WholeChapter(f))).IsSuccess.Should().BeTrue();
-        typeof(Assignment).GetProperty(nameof(Assignment.Status))!.SetValue(f.Assignments.Single(), AssignmentStatus.Submitted);
+        var whole = f.Assignments.Single();
+        typeof(Assignment).GetProperty(nameof(Assignment.Status))!.SetValue(whole, AssignmentStatus.Submitted);
+
+        var result = await Transfer(f, whole, f.Artist2Id, WorkflowEntityType.Page, page2.Id);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("chờ duyệt");
+        f.Assignments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Create_PageInsideWholeChapterScope_IsConflict_TransferIsTheOnlyWay()
+    {
+        var f = new Fixture();
+        var page2 = f.AddPage(2);
+        (await Create(f, WholeChapter(f))).IsSuccess.Should().BeTrue();
 
         var result = await Create(f, f.CreateCmd(assignee: f.Artist2Id, target: page2.Id));
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("còn đang làm");
+        result.ErrorMessage.Should().Contain("chuyển giao");
+        f.Assignments.Should().ContainSingle();
     }
 
     [Fact]

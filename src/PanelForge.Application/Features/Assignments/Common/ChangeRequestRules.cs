@@ -34,18 +34,40 @@ internal static class ChangeRequestRules
         db.ChangeRequests.CountAsync(c => c.AssignmentId == assignmentId &&
             (c.Status == ChangeRequestStatus.Open || (includeResolved && c.Status == ChangeRequestStatus.Resolved)), ct);
 
+    /// <summary>
+    /// Chuyển giao: yêu cầu sửa còn mở (Open/Resolved) của <paramref name="from"/> sang việc <paramref name="to"/> và người nhận
+    /// của nó. <paramref name="panelIds"/> null = mọi yêu cầu (đổi người cả việc); khác null = chỉ yêu cầu gắn Panel trong phạm vi
+    /// được chuyển (yêu cầu không gắn Panel ở lại việc cũ). Yêu cầu đã đóng ở lại làm lịch sử. Trả số yêu cầu đã chuyển.
+    /// </summary>
+    public static async Task<int> TransferOpenAsync(
+        IPanelForgeDbContext db, Assignment from, Assignment to, IReadOnlySet<Guid>? panelIds, CancellationToken ct)
+    {
+        var open = await db.ChangeRequests
+            .Where(c => c.AssignmentId == from.Id &&
+                        (c.Status == ChangeRequestStatus.Open || c.Status == ChangeRequestStatus.Resolved))
+            .ToListAsync(ct);
+        var moved = 0;
+        foreach (var cr in open.Where(c => panelIds is null || (c.PanelId is { } p && panelIds.Contains(p))))
+        {
+            cr.TransferTo(to.Id, to.AssigneeUserId);
+            moved++;
+        }
+
+        return moved;
+    }
+
     /// <summary>Ghi lần nộp mới (cùng lần Save với việc nộp); bản còn Pending trước đó thành Superseded.</summary>
     public static async Task RecordSubmissionAsync(
         IPanelForgeDbContext db, Guid assignmentId, Guid chapterId, Guid submittedByUserId, CancellationToken ct,
         IReadOnlyList<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null,
-        string? canvasVersionsJson = null)
+        string? canvasVersionsJson = null, IReadOnlyList<Guid>? scriptRevisionIds = null)
     {
         var previous = await db.Submissions.Where(s => s.AssignmentId == assignmentId).ToListAsync(ct);
         foreach (var pending in previous.Where(s => s.Status == SubmissionStatus.Pending)) pending.Supersede();
 
         db.Submissions.Add(Submission.Create(
             assignmentId, chapterId, submittedByUserId, previous.Count + 1, artworkReferenceIds, chapterVersion, panelLayoutJson,
-            canvasVersionsJson));
+            canvasVersionsJson, scriptRevisionIds));
     }
 
     /// <summary>

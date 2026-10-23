@@ -166,7 +166,9 @@ public class PreviewLinkTests
     {
         var f = new Fixture();
         var (id, _) = await f.CreateLink();
-        var images = new GetPreviewImageQueryHandler(f.Db, f.Signer, new Moq.Mock<IAssetStorage>().Object);
+        var images = new GetPreviewImageQueryHandler(f.Db, f.Signer, new Moq.Mock<IAssetStorage>().Object,
+            new Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>().Object,
+            new Moq.Mock<IPageLetteringCompositor>().Object);
 
         // Ink v1 không thuộc snapshot (snapshot là v2)
         (await images.Handle(new GetPreviewImageQuery(f.Signer.Create(f.InkV1.Id, id, TimeSpan.Zero), null), default))
@@ -289,7 +291,7 @@ public class PreviewLinkTests
     }
 
     [Fact]
-    public async Task FeedbackOnEarlierStage_SendsLaterApprovedStagesOfSamePanelBack_ButNotOtherPages()
+    public async Task FeedbackOnEarlierStage_FlagsLaterApprovedStagesOfSamePanelForImpactReview_ButNotOtherPages()
     {
         var f = new Fixture();
         var (pencil, pencilRow) = await ApprovedWork(f, f.Pencil.PipelineStageId, f.Page1, f.Panel1);
@@ -304,13 +306,14 @@ public class PreviewLinkTests
         r.IsSuccess.Should().BeTrue(r.ErrorMessage);
         pencil.Status.Should().Be(AssignmentStatus.ReworkRequired);
         pencilRow.Status.Should().Be(StageProgressStatus.ChangesRequested);
-        // 4.7: Ink của cùng Panel dựa trên Pencil cũ → làm lại theo, người làm được báo
-        ink.Status.Should().Be(AssignmentStatus.ReworkRequired);
-        ink.LastFeedbackComment.Should().Contain("Pencil");
-        inkRow.Status.Should().Be(StageProgressStatus.ChangesRequested);
+        // 4.7: Ink của cùng Panel dựa trên Pencil cũ → không tự làm lại, mà "cần kiểm tra ảnh hưởng"; kết quả và duyệt cũ giữ nguyên
+        ink.Status.Should().Be(AssignmentStatus.Approved);
+        ink.ImpactReviewReason.Should().Contain("Pencil");
+        inkRow.Status.Should().Be(StageProgressStatus.Approved);
         f.Db.Notifications.Should().Contain(n => n.UserId == ink.AssigneeUserId && n.AssignmentId == ink.Id);
         // Trang khác không bị ảnh hưởng
         otherInk.Status.Should().Be(AssignmentStatus.Approved);
+        otherInk.ImpactReviewReason.Should().BeNull();
         otherRow.Status.Should().Be(StageProgressStatus.Approved);
     }
 

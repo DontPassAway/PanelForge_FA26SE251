@@ -17,6 +17,44 @@ internal static class ScriptLineRules
 {
     public const int MaxTextLength = 4000;
 
+    /// <summary>Chữ của dòng như Lettering so khớp (BR-05): thoại, không có thì chỉ dẫn.</summary>
+    public static string? LetteringText(ScriptLine line) => line.DialogueText ?? line.StageDirection;
+
+    /// <summary>
+    /// CF4 (BR-05, BR-06): Writer sửa/xoá dòng đã đặt bóng → việc Lettering đã duyệt của đúng các Panel có bóng gắn dòng đó phải
+    /// làm lại. Panel của bóng = PanelId của element, không có thì Panel neo dòng, không có nữa thì các Panel cùng trang với bóng.
+    /// Gọi trước SaveChanges của thao tác sửa (BR-18). Trả lỗi hoặc null.
+    /// </summary>
+    public static async Task<string?> ReworkApprovedLetteringAsync(
+        IPanelForgeDbContext db, IPageRepository pages, Guid chapterId, ScriptLine line, string reason, CancellationToken ct)
+    {
+        // Không có việc Lettering nào đã duyệt thì khỏi dựng lại canvas
+        if (!await db.Assignments.AnyAsync(a => a.ChapterId == chapterId && a.Status == AssignmentStatus.Approved
+                                                && a.AssignedRole == WorkspaceRole.Letterer, ct))
+            return null;
+
+        var pageIds = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapterId).Select(p => p.Id).ToListAsync(ct);
+        var panelIds = new HashSet<Guid>();
+        foreach (var pageId in pageIds)
+        {
+            var page = await pages.GetAsync(pageId, ct);
+            var bound = page?.Elements.Values.Where(e => !e.IsRemoved && e.ScriptLineId == line.Id).ToList() ?? [];
+            if (bound.Count == 0) continue;
+
+            var pagePanels = await db.Panels.AsNoTracking().Where(p => p.PageId == pageId).Select(p => p.Id).ToListAsync(ct);
+            foreach (var element in bound)
+            {
+                if (element.PanelId is { } own) panelIds.Add(own);
+                else if (line.PanelId is { } anchor && pagePanels.Contains(anchor)) panelIds.Add(anchor);
+                else panelIds.UnionWith(pagePanels);
+            }
+        }
+
+        var (_, error) = await StageProgressRules.ReworkForSourceChangeAsync(
+            db, chapterId, panelIds, [WorkspaceRole.Letterer], reason, ct);
+        return error;
+    }
+
     /// <summary>Nội dung hợp lệ: có thoại hoặc chỉ dẫn, không quá dài. Trả lỗi hoặc null.</summary>
     public static string? ValidateContent(string? dialogue, string? stageDirection)
     {

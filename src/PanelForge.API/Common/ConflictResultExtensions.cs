@@ -9,8 +9,13 @@ namespace PanelForge.API.Common;
 /// </summary>
 public static class ConflictResultExtensions
 {
-    public static IActionResult? ConflictOrNull<T>(this ControllerBase controller, Result<T> result) =>
-        result.ErrorCode is ResultErrorCodes.Conflict or ResultErrorCodes.ChapterReadOnly
-            ? controller.Conflict(new { error = result.ErrorMessage, code = result.ErrorCode })
-            : null;
+    public static IActionResult? ConflictOrNull<T>(this ControllerBase controller, Result<T> result) => result.ErrorCode switch
+    {
+        ResultErrorCodes.Conflict or ResultErrorCodes.ChapterReadOnly =>
+            controller.Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+        // Ngoài phạm vi việc được giao (WorkScopeGuard)
+        ResultErrorCodes.Forbidden =>
+            controller.StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage, code = result.ErrorCode }),
+        _ => null
+    };
 }

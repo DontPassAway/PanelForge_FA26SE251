@@ -42,8 +42,8 @@ public sealed class CreatePreviewLinkCommandHandler : IRequestHandler<CreatePrev
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId)
             .Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
 
-        // Snapshot: mỗi trang lấy bản cả trang ở stage cuối cùng có artwork, phiên bản mới nhất
-        var snapshot = (await FinalArtwork.SelectAsync(_db, chapter.Id, ct)).Select(a => a.AssetReferenceId).ToList();
+        // Snapshot: mọi artwork tạo nên từng trang theo FinalArtwork (ảnh cả trang, hoặc ảnh từng Panel để ghép)
+        var snapshot = (await FinalArtwork.SelectAsync(_db, chapter.Id, ct)).SelectMany(a => a.AssetReferenceIds).ToList();
         if (snapshot.Count == 0)
             return Fail("Chương chưa có artwork nào để xem thử.", ResultErrorCodes.Conflict);
 

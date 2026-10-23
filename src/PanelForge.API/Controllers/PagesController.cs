@@ -14,6 +14,11 @@ using PanelForge.Application.Features.Pages.Queries.GetPageHierarchy;
 using PanelForge.Application.Features.Pages.Queries.GetPagesByChapter;
 using PanelForge.Application.Features.Pages.Commands.ReorderPage;
 using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
+using PanelForge.Application.Common;
+using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
+using PanelForge.Application.Features.Pages.Commands.RestorePageVersion;
+using PanelForge.Application.Features.Pages.Queries.ComparePageVersions;
+using PanelForge.Application.Features.Pages.Queries.GetPageHistory;
 
 namespace PanelForge.API.Controllers;
 
@@ -262,7 +267,77 @@ public sealed class PagesController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message, code = "PANEL_SPLITTER_UNAVAILABLE" });
         }
     }
+
+    // ── CF4 4.3: lịch sử, xem lại, so sánh và khôi phục canvas ────────────────
+
+    /// <summary>GET /api/pages/{pageId}/history?page=1&amp;pageSize=50 — event của stream Page, mới nhất trước (tối đa 100/trang).</summary>
+    [HttpGet("api/pages/{pageId:guid}/history")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(PageHistoryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPageHistory(
+        Guid pageId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(new GetPageHistoryQuery(pageId, page, pageSize), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    /// <summary>GET /api/pages/{pageId}/versions/{version} — canvas dựng lại tại version đó (kể cả element đã xoá nếu includeRemoved).</summary>
+    [HttpGet("api/pages/{pageId:guid}/versions/{version:long}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(PageSnapshotDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPageVersion(
+        Guid pageId, long version, [FromQuery] bool includeRemoved = false, CancellationToken cancellationToken = default)
+    {
+        if (version < 1) return BadRequest(new { error = "version phải ≥ 1.", code = ResultErrorCodes.Validation });
+        var result = await _mediator.Send(new GetPageSnapshotQuery(pageId, includeRemoved, version), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.ErrorMessage });
+    }
+
+    /// <summary>GET /api/pages/{pageId}/compare?left=3&amp;right=7 — khác biệt theo elementId: Added / Removed / Modified.</summary>
+    [HttpGet("api/pages/{pageId:guid}/compare")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(PageVersionCompareDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ComparePageVersions(
+        Guid pageId, [FromQuery] long left, [FromQuery] long right, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ComparePageVersionsQuery(pageId, left, right), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    /// <summary>
+    /// POST /api/pages/{pageId}/versions/{version}/restore — Body: { "expectedPageVersion": 12 }. Thêm event đưa canvas về bản cũ,
+    /// không xoá lịch sử. 409 CONFLICT khi version lệch, 409 CHAPTER_READ_ONLY khi chương không còn sản xuất.
+    /// </summary>
+    [HttpPost("api/pages/{pageId:guid}/versions/{version:long}/restore")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(RestorePageVersionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestorePageVersion(
+        Guid pageId, long version, [FromBody] RestorePageVersionRequest body, CancellationToken cancellationToken)
+    {
+        if (body.ExpectedPageVersion is not { } expected)
+            return BadRequest(new { error = "Phải gửi expectedPageVersion.", code = ResultErrorCodes.Validation });
+        var result = await _mediator.Send(
+            new RestorePageVersionCommand(pageId, version, expected, GetCurrentUserId()), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    private IActionResult HistoryError<T>(Result<T> result) => this.ConflictOrNull(result) ?? (result.ErrorCode switch
+    {
+        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+        _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+    });
 }
+
+/// <summary>Body khôi phục Page: version stream client đang thấy (BR-11).</summary>
+public sealed record RestorePageVersionRequest(long? ExpectedPageVersion);
 
 /// <summary>Form tách panel. RightToLeft = true cho manga đọc phải→trái.</summary>
 public sealed class SplitArtworkForm

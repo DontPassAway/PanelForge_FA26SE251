@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Models;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Domain.Entities.Preview;
 
 namespace PanelForge.Application.Features.PreviewLinks.Queries;
@@ -19,12 +20,17 @@ public sealed class GetPreviewImageQueryHandler : IRequestHandler<GetPreviewImag
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetLinkSigner _signer;
     private readonly IAssetStorage _storage;
+    private readonly IPageRepository _pages;
+    private readonly IPageLetteringCompositor _compositor;
 
-    public GetPreviewImageQueryHandler(IPanelForgeDbContext db, IAssetLinkSigner signer, IAssetStorage storage)
+    public GetPreviewImageQueryHandler(IPanelForgeDbContext db, IAssetLinkSigner signer, IAssetStorage storage,
+        IPageRepository pages, IPageLetteringCompositor compositor)
     {
         _db = db;
         _signer = signer;
         _storage = storage;
+        _pages = pages;
+        _compositor = compositor;
     }
 
     public async Task<Result<AssetDownloadDto>> Handle(GetPreviewImageQuery q, CancellationToken ct)
@@ -40,12 +46,14 @@ public sealed class GetPreviewImageQueryHandler : IRequestHandler<GetPreviewImag
         if (deny is not null)
             return Result<AssetDownloadDto>.Failure("Không xem được ảnh: link hết hạn, bị thu hồi hoặc không hợp lệ.", ResultErrorCodes.Forbidden);
 
-        var reference = await _db.AssetReferences.AsNoTracking().FirstAsync(r => r.Id == claims!.AssetReferenceId, ct);
-        var asset = await _db.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.Id == reference.AssetId, ct);
-        var stream = asset is null ? null : await _storage.OpenReadAsync(asset.StorageKey, ct);
-        if (asset is null || stream is null)
+        // Dựng cả trang từ mọi artwork của trang này trong snapshot (ảnh cả trang, hoặc ghép ảnh từng Panel) + lớp chữ
+        var pageId = await _db.AssetReferences.AsNoTracking().Where(r => r.Id == claims!.AssetReferenceId)
+            .Select(r => r.PageId).FirstAsync(ct);
+        var image = await PageImageBuilder.BuildAsync(_db, _storage, _pages, _compositor, pageId, link!.SnapshotArtworkIds, ct);
+        if (image is null)
             return Result<AssetDownloadDto>.Failure("Không tìm thấy ảnh.", ResultErrorCodes.NotFound);
 
-        return Result<AssetDownloadDto>.Success(new AssetDownloadDto(stream, asset.ContentType, reference.FileName));
+        return Result<AssetDownloadDto>.Success(new AssetDownloadDto(
+            new MemoryStream(image.Content), image.ContentType, $"trang-{image.PageNumber}.png"));
     }
 }

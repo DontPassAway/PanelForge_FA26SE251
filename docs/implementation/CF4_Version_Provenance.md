@@ -15,6 +15,11 @@
 | 4.5 | Provenance Report của chương (UC-19, BR-10) | Xong | `48beee8`, `fab27c5` |
 | 4.7 | Trả việc stage trước về làm lại thì vô hiệu các stage sau của cùng Panel | Xong | `17b0f48` |
 | — | FE: modal Lịch sử & nguồn gốc (bản duyệt, Provenance Report, lịch sử AI), canvas/scene gửi `expectedVersion` | Xong | (FE) |
+| 4.3 (trang) | Lịch sử, xem lại, so sánh và khôi phục canvas Page (UC-18, US-12) | Xong | `feat/cf4` 22/10 |
+| 4.6 | Xuất JSON kèm provenance (`ExportJob` định dạng `OPEN_JSON`) | Xong | `feat/cf4` 22/10 |
+| 4.7 (mở rộng) | Sửa/xoá thoại hoặc đổi khung Panel sau khi duyệt → việc đã duyệt của đúng Panel đó làm lại | Xong | `feat/cf4` 22/10 |
+| 4.8 | Chốt Q4, Q6, `expectedVersion` (mục 2.10) | Xong, chờ GVHD xác nhận | `feat/cf4` 22/10 |
+| — | FE: tab "Lịch sử trang" trong modal, định dạng "JSON kèm nguồn gốc" ở màn Xuất | Xong | FE `CongHoa` 22/10 |
 
 ## 2. Chi tiết thay đổi
 
@@ -87,6 +92,55 @@ Khi việc **đã duyệt** ở stage S bị trả về qua "phản hồi xem th
 - BR-19 có sẵn chặn việc sau bắt đầu lại cho tới khi stage S được duyệt lại.
 - Trang/Panel khác và việc cấp Chapter không bị ảnh hưởng.
 
+### 2.7. Lịch sử canvas Page (phần trang của 4.3)
+
+Version = vị trí event trong stream Marten của Page (1 = `PageCreated`). Khôi phục thêm event mới, không xoá event nào: element đang có mà bản cũ không có → `ElementRemovedEvent` (lý do `RESTORE_TO_VERSION_n`); element khác bản cũ hoặc đã xoá mềm → `ElementRestoredEvent` mới (mang đủ trạng thái element). Xoá trước rồi mới dựng lại nên ràng buộc một ScriptLine – một element (BR-05) giữ đúng như bản cũ. Version của element tiếp tục tăng, không quay về số cũ.
+
+| Endpoint | Quyền | Ghi chú |
+|---|---|---|
+| `GET /api/pages/{pageId}/history?page=1&pageSize=50` | Thành viên | Mới nhất trước, tối đa 100/trang |
+| `GET /api/pages/{pageId}/versions/{version}?includeRemoved=` | Thành viên | Dùng lại `GetPageSnapshotQuery` (như `GET .../elements?version=`) |
+| `GET /api/pages/{pageId}/compare?left=&right=` | Thành viên | Khớp theo `elementId`: `Added`, `Removed`, `Modified` (+ `changedFields`) |
+| `POST /api/pages/{pageId}/versions/{version}/restore` | Producer, Artist | Body `{ expectedPageVersion }` **bắt buộc**; lệch → 409 `CONFLICT`; chương không InProduction → 409 `CHAPTER_READ_ONLY`; `version` phải < version hiện tại → 400 |
+
+### 2.8. Xuất JSON kèm provenance (4.6)
+
+Dùng chung `ExportJob` (preset `OPEN_JSON` đã seed sẵn), không làm endpoint riêng: tạo `POST /api/chapters/{chapterId}/exports` body `{ "presetCode": "OPEN_JSON" }`, theo dõi và tải như các định dạng khác. Tạo job đòi chương Approved/Published, đủ artwork như cũ, **và có `ChapterSnapshot`** (không có → 409). Worker gọi lại `GetProvenanceReportQuery` qua MediatR (không tổng hợp lại), theo người yêu cầu tại lúc chạy: người đó không còn là Producer/Editor thì job `Failed`.
+
+File (`application/json`, `<Series> - Chuong <n> - provenance.json`):
+
+| Trường | Nội dung |
+|---|---|
+| `schema`, `schemaVersion` | `panelforge.open-json`, `1.0` |
+| `series`, `chapter` | id, tiêu đề, số chương, `chapterVersion` của job |
+| `snapshot` | id, số bản duyệt, người duyệt, `manifestHash`, `manifestJson` (chuỗi gốc), `manifest` (object để đọc) |
+| `provenance` | Nguyên Provenance Report: `stats`, `nodes`, `edges`, `timeline` |
+| `verification` | Cách kiểm chứng (bên dưới) |
+
+Kiểm chứng ngoài nền tảng: SHA-256 (hex thường) của bytes UTF-8 của `snapshot.manifestJson` phải bằng `snapshot.manifestHash`; SHA-256 của cả file phải bằng `sha256` của job trong `GET /api/chapters/{chapterId}/exports` (màn Xuất hiện 12 ký tự đầu, rê chuột xem đủ). Manifest hỏng hash thì job `Failed`, không xuất.
+
+Tải file: Producer tải mọi định dạng; **Editor chỉ tải `OPEN_JSON`** (Q4), định dạng khác → 403 `FORBIDDEN`.
+
+### 2.9. Vô hiệu phê duyệt khi nguồn đổi (mở rộng 4.7)
+
+Dùng chung lõi với 4.7 (`StageProgressRules.ReworkForSourceChangeAsync`): việc **đã duyệt** bao phủ Panel liên quan → `ReworkRequired`, dòng tiến độ `Approved` → `ChangesRequested`, người làm được báo (`AssignmentChangesRequested`). Ghi cùng lần SaveChanges với thao tác gốc (audit theo SaveChanges). Việc chưa duyệt không đổi: chữ lỗi thời đã chặn nộp (BR-05).
+
+| Thao tác | Điều kiện | Việc bị trả về | Panel bị ảnh hưởng |
+|---|---|---|---|
+| `PUT /api/chapters/{id}/script-lines/{lineId}` (sửa dòng) | Thoại/chỉ dẫn hoặc speaker đổi thật | Lettering (Letterer) đã duyệt | Panel có bóng gắn dòng đó: `PanelId` của element → Panel neo dòng → các Panel cùng trang với bóng |
+| `DELETE /api/chapters/{id}/script-lines/{lineId}` | Luôn (dòng đã đặt chữ bị xoá) | như trên | như trên |
+| `PUT /api/panels/{panelId}/coordinates` | `boundingBox` đổi thật (chỉ đổi thứ tự đọc thì không) | Artwork (Artist) + Lettering (Letterer) đã duyệt | Đúng Panel đó |
+
+### 2.10. Quyết định 4.8
+
+| Câu hỏi | Quyết định | Ghi chú |
+|---|---|---|
+| Q4: Editor xem Provenance Report? | **Có**, chỉ đọc; tải được file JSON provenance | Như code và mục Decision #69 của `PanelForge_Capstone_Content.md`; ghi thêm #88. Chờ GVHD xác nhận |
+| Q6: Xung đột phiên bản 409 hay 412? | **409 `CONFLICT`** | Chương chỉ đọc cũng 409 nhưng mã `CHAPTER_READ_ONLY` để FE phân biệt (#89) |
+| E: bắt buộc `expectedVersion`? | **Không** với Panel/Scene (null = không kiểm) | Hàng chờ ngoại tuyến cố ý không gửi; nhánh FE khác còn gọi bản cũ. Endpoint mới (khôi phục Page) bắt buộc (#90) |
+
+Không có thay đổi breaking cho API đã `DONE`: chỉ thêm endpoint, thêm định dạng `OPEN_JSON`, thêm quyền Editor tải JSON.
+
 ## 3. Business rule liên quan
 
 | BR | Cách giữ |
@@ -101,8 +155,10 @@ Khi việc **đã duyệt** ở stage S bị trả về qua "phản hồi xem th
 ## 4. Kiểm thử
 
 - **Unit BE:** 944/944 (nền `test-feature` @ `63259c0`: 926). Mới: `ChapterPublishFlowTests` +4 (snapshot), `HistoryProvenanceTests` 7, `ContentConcurrencyTests` 5, `PreviewLinkTests` +2 (4.7).
+- **Unit BE đợt 22/10:** 1052/1052 (nền `test-feature` @ `a824a39`: 1039). Mới: `ExportJobTests` +4 (JSON: cần snapshot, tính lại hash file và `manifestHash` khớp, manifest hỏng / mất quyền → Failed, Editor chỉ tải JSON, người ngoài 403), `PageVersionHistoryTests` 4 (lịch sử + phân trang, compare, khôi phục giữ lịch sử, 409/400/chương chỉ đọc), `SourceChangeReworkTests` 5 (sửa/xoá thoại, đổi khung, lưu y nguyên không ảnh hưởng, Panel khác không bị ảnh hưởng).
 - **Unit FE (vitest):** 595/595. Mới: `provenanceRules.test.ts`, `ChapterProvenanceModal.test.tsx`, `splitPanel.test.ts` +1.
-- **API trên DB thật:** dữ liệu mẫu "Studio Hoàng Hôn"; các API CF4 trả đúng dữ liệu. **Chưa** kiểm giao diện bằng trình duyệt.
+- **Unit FE đợt 22/10:** 600/600. Mới: `PageHistoryPanel.test.tsx` 4, `provenanceRules.test.ts` +1.
+- **API trên DB thật:** dữ liệu mẫu "Studio Hoàng Hôn"; các API CF4 trả đúng dữ liệu. **Chưa** kiểm giao diện bằng trình duyệt (mục F, checklist ở mục 8).
 
 ## 5. Migration
 
@@ -115,6 +171,21 @@ Khi việc **đã duyệt** ở stage S bị trả về qua "phản hồi xem th
 
 ## 7. Checklist khi merge
 
-- [ ] Merge BE `feat/cf4` vào `test-feature`; chạy 2 migration ở mục 5.
-- [ ] Báo Danh mục 6 (5.5, 5.6, 5.3b).
-- [ ] FE dùng `expectedVersion` cho Panel/Scene trước khi bật kiểm tra bắt buộc.
+- [x] Merge BE `feat/cf4` vào `test-feature`; chạy 2 migration ở mục 5.
+- [ ] Báo Danh mục 6 (5.5, 5.6, 5.3b) và 2.8 (JSON đã dùng `ExportJob`; khi 5.6 thêm `ChapterSnapshotId` vào `ExportJob` thì thay `OpenJsonExport.SnapshotOfAsync` bằng id đó).
+- [x] FE dùng `expectedVersion` cho Panel/Scene (không bật kiểm tra bắt buộc, xem 2.10).
+- [ ] Merge đợt 22/10 (BE `feat/cf4`, FE `CongHoa`). Không có migration EF mới; event Marten mới `ElementRestoredEvent` đã đăng ký trong `DependencyInjection`.
+- [ ] Chép route/DTO ở mục 2.7–2.9 vào `HANDOFF.md` (không có trong repo), đánh dấu `DONE`.
+
+## 8. Kiểm thử bằng trình duyệt (mục F, chưa chạy)
+
+| # | Bước | Kỳ vọng | Kết quả |
+|---|---|---|---|
+| 1 | Producer duyệt chương | Snapshot mới ở tab "Bản duyệt" của modal Lịch sử & nguồn gốc, hash khớp | |
+| 2 | Hai tab cùng sửa một Panel (kéo khung) hoặc một Scene | Tab sau nhận 409, nạp lại, không ghi đè | |
+| 3 | Writer so sánh rồi khôi phục script (ScriptHistoryModal) | Revision mới, nội dung về bản cũ | |
+| 4 | Tab Provenance | Đủ chuỗi Run → Step → Suggestion → Decision → Revision → Snapshot | |
+| 5 | Writer/Artist mở report | Tab ẩn; gọi thẳng API → 403 | |
+| 6 | Tab "Lịch sử trang": so sánh rồi khôi phục (Artist) | Thêm event, canvas về bản cũ, lịch sử cũ còn | |
+| 7 | Màn Xuất: "JSON kèm nguồn gốc" | Tải được; tính SHA-256 file khớp, `manifestHash` khớp | |
+| 8 | Writer sửa thoại đã đặt chữ (Lettering đã duyệt) | Việc Lettering của Panel đó → cần làm lại, Letterer nhận thông báo | |

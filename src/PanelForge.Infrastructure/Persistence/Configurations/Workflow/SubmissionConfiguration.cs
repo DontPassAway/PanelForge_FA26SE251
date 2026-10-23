@@ -73,6 +73,12 @@ internal sealed class SubmissionConfiguration : IEntityTypeConfiguration<Submiss
                .HasColumnType("uuid[]")
                .IsRequired();
 
+        builder.Property(s => s.ScriptRevisionIds)
+               .HasColumnName("script_revision_ids")
+               .HasColumnType("uuid[]")
+               .HasDefaultValueSql("'{}'::uuid[]")
+               .IsRequired();
+
         builder.Property(s => s.ChapterVersion)
                .HasColumnName("chapter_version")
                .HasColumnType("bigint")

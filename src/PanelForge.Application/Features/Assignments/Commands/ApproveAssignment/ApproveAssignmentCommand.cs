@@ -41,6 +41,10 @@ public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAss
         var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == assignment.PipelineStageId, ct);
         if (await StageProgressRules.ChapterWorkBlockReasonAsync(_db, assignment, stage, ct) is { } chapterBlocked)
             return Result<AssignmentDto>.Failure(chapterBlocked, ResultErrorCodes.Conflict);
+        // Đầu vào có thể đã đổi trong lúc chờ duyệt: không duyệt kết quả dựa trên đầu vào chưa hợp lệ
+        var panels = await StageProgressRules.ResolvePanelsAsync(_db, assignment, ct);
+        if (await StageProgressRules.InputBlockReasonAsync(_db, assignment, stage, panels, ct) is { } inputBlocked)
+            return Result<AssignmentDto>.Failure(inputBlocked, ResultErrorCodes.Conflict);
 
         if (await StageProgressRules.TransitionAsync(_db, assignment, r => r.Approve(), ct) is { } error)
             return Result<AssignmentDto>.Failure(error, ResultErrorCodes.Conflict);

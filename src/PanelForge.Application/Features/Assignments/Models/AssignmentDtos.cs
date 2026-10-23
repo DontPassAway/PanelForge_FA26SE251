@@ -25,13 +25,14 @@ public sealed record AssignmentDto(
     string? LastFeedbackComment,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<Guid>? DependsOnAssignmentIds = null)
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null,
+    string? ImpactReviewReason = null)
 {
     public static AssignmentDto From(Assignment a) => new(
         a.Id, a.SeriesId, a.ChapterId, a.EntityType, a.TargetEntityId, a.PipelineStageId,
         a.AssigneeUserId, a.AssignedRole, a.Brief, a.ReferenceNotes, a.DueDate, a.Priority,
         a.Status, a.DependsOnAssignmentId, a.StartedAt, a.CompletedAt, a.LastFeedbackComment,
-        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds());
+        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds(), a.ImpactReviewReason);
 }
 
 /// <summary>DTO dành cho màn hình làm việc cá nhân xuyên suốt toàn bộ Studio (Cross-Chapter Worklist).</summary>
@@ -61,7 +62,9 @@ public sealed record WorkspaceAssignmentDto(
     string? LastFeedbackComment,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null,
+    // Nhãn phạm vi để hiển thị: "Cả chương" | "Trang 2 · Cảnh 3, 4" | "Trang 2 · Khung 1 · Cảnh 3"
+    string? ScopeLabel = null);
 
 /// <summary>TargetEntityId bỏ trống khi EntityType = Chapter (mặc định là chính Chapter trên route).</summary>
 public sealed record CreateAssignmentRequest(
@@ -111,12 +114,13 @@ public sealed record SubmissionDto(
     IReadOnlyList<Guid>? ArtworkReferenceIds = null,  // phiên bản artwork (AssetReference.id) của lần nộp này
     long ChapterVersion = 0,                          // version chương lúc nộp (revision script)
     IReadOnlyList<SubmissionPanelDto>? PanelLayout = null, // bố cục Panel lúc nộp; rỗng = không có (lần nộp cũ / việc không có Panel)
-    IReadOnlyDictionary<Guid, long>? CanvasVersions = null) // pageId → version canvas lúc nộp; rỗng = lần nộp cũ
+    IReadOnlyDictionary<Guid, long>? CanvasVersions = null, // pageId → version canvas lúc nộp; rỗng = lần nộp cũ
+    IReadOnlyList<Guid>? ScriptRevisionIds = null)           // revision script (mỗi Scene) lúc nộp; rỗng = lần nộp cũ
 {
     public static SubmissionDto From(Submission s) => new(
         s.Id, s.AssignmentId, s.ChapterId, s.SubmittedByUserId, s.AttemptNumber, s.Status, s.SubmittedAt,
         s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.ArtworkReferenceIds, s.ChapterVersion,
-        SubmissionPanelDto.Parse(s.PanelLayoutJson), ParseCanvasVersions(s.CanvasVersionsJson));
+        SubmissionPanelDto.Parse(s.PanelLayoutJson), ParseCanvasVersions(s.CanvasVersionsJson), s.ScriptRevisionIds);
 
     private static IReadOnlyDictionary<Guid, long> ParseCanvasVersions(string? json)
     {

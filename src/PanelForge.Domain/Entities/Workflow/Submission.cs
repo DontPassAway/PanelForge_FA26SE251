@@ -32,6 +32,11 @@ public class Submission : BaseEntity
     /// Việc Letter không có artwork: lớp chữ được dựng lại đúng tại version này để duyệt (BR-01). "{}" với lần nộp cũ.
     /// </summary>
     public string CanvasVersionsJson { get; private set; } = "{}";
+    /// <summary>
+    /// ContentRevision (Script, append-only) mới nhất của từng Scene trong chương lúc nộp: bản script mà kết quả này viết ra
+    /// (Writer) hoặc dựa vào (Artist, Letterer). Không đổi theo script "latest" về sau. Rỗng với lần nộp cũ.
+    /// </summary>
+    public List<Guid> ScriptRevisionIds { get; private set; } = [];
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -42,7 +47,7 @@ public class Submission : BaseEntity
     public static Submission Create(
         Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
         IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null,
-        string? canvasVersionsJson = null)
+        string? canvasVersionsJson = null, IEnumerable<Guid>? scriptRevisionIds = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
 
@@ -56,6 +61,7 @@ public class Submission : BaseEntity
             ChapterVersion = chapterVersion,
             PanelLayoutJson = string.IsNullOrWhiteSpace(panelLayoutJson) ? "[]" : panelLayoutJson,
             CanvasVersionsJson = string.IsNullOrWhiteSpace(canvasVersionsJson) ? "{}" : canvasVersionsJson,
+            ScriptRevisionIds = scriptRevisionIds?.Distinct().ToList() ?? [],
             Status = SubmissionStatus.Pending,
             SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow

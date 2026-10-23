@@ -18,6 +18,7 @@ public class PanelAndElementCommandTests
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page>()));
     }
 
     [Fact]
@@ -64,6 +65,12 @@ public class PanelAndElementCommandTests
         var panelsDbSet = DbSetMockHelper.CreateDbSetMock(new List<Panel> { panel });
         _dbContextMock.Setup(db => db.Panels).Returns(panelsDbSet);
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        // Khung đổi → handler tìm việc đã duyệt của Panel để trả về làm lại (CF4); ở đây chưa có việc nào
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
+        typeof(Page).GetProperty("Id")!.SetValue(page, panel.PageId);
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page> { page }));
+        _dbContextMock.Setup(db => db.Assignments).Returns(
+            DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workflow.Assignment>()));
 
         var handler = new UpdatePanelCoordinatesCommandHandler(_dbContextMock.Object);
         var command = new UpdatePanelCoordinatesCommand(

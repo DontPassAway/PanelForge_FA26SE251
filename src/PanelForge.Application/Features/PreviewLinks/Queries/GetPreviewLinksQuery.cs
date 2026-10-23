@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Domain.Enums;
 
@@ -30,10 +31,11 @@ public sealed class GetPreviewLinksQueryHandler : IRequestHandler<GetPreviewLink
                 .Select(f => f.PreviewLinkId).ToListAsync(ct))
             .GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
 
+        var pageCounts = await FinalArtwork.PageCountsAsync(_db, links.Select(l => (IReadOnlyCollection<Guid>)l.SnapshotArtworkIds).ToList(), ct);
         var now = DateTime.UtcNow;
-        var items = links.Select(l => new PreviewLinkDto(
+        var items = links.Select((l, i) => new PreviewLinkDto(
             l.Id, l.ChapterId, l.RecipientEmail, l.DenyReason(now) ?? "Active", l.CreatedAt, l.ExpiresAt, l.RevokedAt,
-            l.RevokeReason, l.ChapterVersion, l.SnapshotArtworkIds.Count,
+            l.RevokeReason, l.ChapterVersion, pageCounts[i],
             logs[l.Id].Count(a => a.Allowed), logs[l.Id].Count(a => !a.Allowed),
             logs[l.Id].Where(a => a.Allowed).Select(a => (DateTime?)a.AccessedAt).Max(),
             feedback.GetValueOrDefault(l.Id))).ToList();

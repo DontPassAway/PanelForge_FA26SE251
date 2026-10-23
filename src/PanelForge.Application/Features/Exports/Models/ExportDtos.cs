@@ -20,10 +20,11 @@ public sealed record ExportJobDto(
     DateTime? CompletedAt,
     int DownloadCount)
 {
-    public static ExportJobDto From(ExportJob j) => new(
-        j.Id, j.ChapterId, j.Format, j.Status, j.RequestedByUserId, j.ChapterVersion, j.SnapshotArtworkIds.Count,
+    /// <param name="pageCount">Số trang của snapshot; trang ghép có nhiều artwork nên không bằng số artwork.</param>
+    public static ExportJobDto From(ExportJob j, int pageCount) => new(
+        j.Id, j.ChapterId, j.Format, j.Status, j.RequestedByUserId, j.ChapterVersion, pageCount,
         j.ResultFileName, j.ResultSizeBytes, j.ResultSha256, j.Error, j.CreatedAt, j.StartedAt, j.CompletedAt, j.DownloadCount);
 }
 
-/// <summary>PresetCode: mã ExportPreset (CBZ, PDF, PAGE_IMAGES, WEBTOON).</summary>
+/// <summary>PresetCode: mã ExportPreset (CBZ, PDF, PAGE_IMAGES, WEBTOON, OPEN_JSON = manifest bản duyệt + provenance).</summary>
 public sealed record CreateExportJobRequest(string PresetCode);

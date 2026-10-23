@@ -3,6 +3,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.CanvasElements.Common;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
 
@@ -38,6 +39,9 @@ public sealed class UpdateElementTextCommandHandler
         if (page is null) return Fail($"Page {cmd.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, ct) is { } readOnly)
             return Result<UpdateElementTextResponse>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, cmd.UserId, page.Id, page.Elements.TryGetValue(cmd.ElementId, out var scoped) ? scoped.PanelId : null, ct) is { } outOfScope)
+            return Result<UpdateElementTextResponse>.Failure(outOfScope, ResultErrorCodes.Forbidden);
         if (!page.Elements.TryGetValue(cmd.ElementId, out var element) || element.IsRemoved)
             return Fail($"Element {cmd.ElementId} không tồn tại trên Page {cmd.PageId}.");
         try { page.EnsureElementVersion(cmd.ElementId, cmd.ExpectedElementVersion); }

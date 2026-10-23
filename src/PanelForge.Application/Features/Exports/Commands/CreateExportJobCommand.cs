@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Exports.Common;
 using PanelForge.Application.Features.Exports.Models;
 using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Enums;
@@ -35,7 +36,8 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
         var preset = string.IsNullOrEmpty(code) ? null
             : await _db.ExportPresets.AsNoTracking().FirstOrDefaultAsync(p => p.Code == code && p.IsActive, ct);
         if (preset is null) return Fail($"Không có preset xuất '{cmd.PresetCode}' đang dùng.", ResultErrorCodes.Validation);
-        if (!_renderer.Supports(preset.Code))
+        var openJson = preset.Code == OpenJsonExport.Format;
+        if (!openJson && !_renderer.Supports(preset.Code))
             return Fail($"Định dạng {preset.Code} chưa được hỗ trợ xuất.", ResultErrorCodes.Validation);
 
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
@@ -49,16 +51,19 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
         var missingNumbers = missing.Where(p => artwork.All(a => a.PageId != p.Id)).Select(p => p.PageNumber).OrderBy(n => n).ToList();
         if (artwork.Count == 0 || missingNumbers.Count > 0)
             return Fail(missingNumbers.Count > 0
-                ? $"Trang {string.Join(", ", missingNumbers)} chưa có ảnh cả trang ở bản đã duyệt, chưa xuất được."
+                ? $"Trang {string.Join(", ", missingNumbers)} chưa có artwork (cả trang hoặc theo khung) ở bản đã duyệt, chưa xuất được."
                 : "Chương chưa có trang nào có artwork.", ResultErrorCodes.Conflict);
+        // CF4 4.6: JSON mang manifest của bản duyệt nên phải có snapshot
+        if (openJson && await OpenJsonExport.SnapshotOfAsync(_db, chapter.Id, chapter.VersionVector, ct) is null)
+            return Fail("Chương chưa có bản duyệt (snapshot) nên chưa xuất JSON được.", ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var job = ExportJob.Create(chapter.Id, workspaceId, preset.Id, preset.Code, cmd.UserId, chapter.VersionVector,
-            artwork.Select(a => a.AssetReferenceId));
+            artwork.SelectMany(a => a.AssetReferenceIds));
         job.CreatedBy = cmd.UserId.ToString();
         _db.ExportJobs.Add(job);
         await _db.SaveChangesAsync(ct);
 
-        return Result<ExportJobDto>.Success(ExportJobDto.From(job));
+        return Result<ExportJobDto>.Success(ExportJobDto.From(job, artwork.Count));
     }
 }

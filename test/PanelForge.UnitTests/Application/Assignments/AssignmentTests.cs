@@ -47,6 +47,7 @@ public partial class AssignmentTests
         public readonly List<AssetReference> AssetReferences = [];
         public readonly List<Submission> Submissions = [];
         public readonly List<ChangeRequest> ChangeRequests = [];
+        public readonly List<ContentRevision> Revisions = [];
         public readonly Guid Artist2Id = Guid.NewGuid();
         public readonly Guid PendingArtistId = Guid.NewGuid();
         public readonly Guid RejectedArtistId = Guid.NewGuid();
@@ -91,6 +92,7 @@ public partial class AssignmentTests
             Db.Setup(d => d.Submissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(ChangeRequests));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
+            Db.Setup(d => d.ContentRevisions).Returns(DbSetMockHelper.CreateDbSetMock(Revisions));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -1067,7 +1069,7 @@ public partial class AssignmentTests
         var a = f.Seed();
 
         var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
-        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         f.Assignments.Should().NotContain(a);
@@ -1080,7 +1082,7 @@ public partial class AssignmentTests
     {
         var f = new Fixture();
         var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
-        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, Guid.NewGuid(), f.ProducerId), CancellationToken.None);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, Guid.NewGuid(), f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
@@ -1094,7 +1096,7 @@ public partial class AssignmentTests
         f.LockChapter();
 
         var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
-        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
@@ -1108,7 +1110,7 @@ public partial class AssignmentTests
         a.MarkApproved();
 
         var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
-        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
@@ -1179,7 +1181,7 @@ public partial class AssignmentTests
         c.SetDependencies([a.Id, b.Id]);
 
         var delRes = await new DeleteAssignmentCommandHandler(f.Db.Object)
-            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         delRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         delRes.ErrorMessage.Should().Contain("1 việc phụ thuộc");
@@ -1195,7 +1197,7 @@ public partial class AssignmentTests
         f.Submissions.Add(Submission.Create(a.Id, f.Chapter.Id, a.AssigneeUserId, 1));
 
         var result = await new DeleteAssignmentCommandHandler(f.Db.Object)
-            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId), CancellationToken.None);
+            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         result.ErrorMessage.Should().Contain("bài nộp");

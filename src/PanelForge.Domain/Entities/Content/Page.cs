@@ -276,6 +276,51 @@ public sealed class Page : AggregateRoot
             Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, validated, element.Style, userId));
     }
 
+    /// <summary>
+    /// CF4 4.3 / US-12 (BR-01, BR-08): đưa canvas về trạng thái của <paramref name="target"/> (Page dựng lại tới version cũ)
+    /// bằng event mới; không xoá event nào. Element đang có mà bản cũ không có → xoá mềm; element khác bản cũ → ElementRestoredEvent.
+    /// Xoá trước rồi mới dựng lại nên ràng buộc một ScriptLine – một element (BR-05) giữ như ở bản cũ. Trả số thay đổi.
+    /// </summary>
+    public int RestoreTo(Page target, Guid restoredByUserId)
+    {
+        if (target.Id != Id)
+            throw new InvalidOperationException("Bản cần khôi phục không thuộc Page này.");
+        if (target.Version < 1 || target.Version >= Version)
+            throw new InvalidOperationException($"Chỉ khôi phục được về version cũ hơn version hiện tại ({Version}).");
+        if (target.IsDeleted)
+            throw new InvalidOperationException($"Page đã bị xoá ở version {target.Version}, không khôi phục về bản đó được.");
+
+        var before = UncommittedEvents.Count;
+        UpdateCanvasSettings(target.WidthPx, target.HeightPx, target.Dpi, target.LayoutFormat);
+
+        var keep = target.Elements.Values.Where(e => !e.IsRemoved).ToDictionary(e => e.ElementId);
+        foreach (var current in _elements.Values.Where(e => !e.IsRemoved && !keep.ContainsKey(e.ElementId)).ToList())
+            RemoveElement(current.ElementId, $"RESTORE_TO_VERSION_{target.Version}", restoredByUserId);
+
+        foreach (var old in keep.Values)
+        {
+            if (_elements.TryGetValue(old.ElementId, out var current) && !current.IsRemoved && SameState(current, old))
+                continue;
+            RaiseEvent(new ElementRestoredEvent(
+                Guid.NewGuid(), DateTimeOffset.UtcNow, Id, old.ElementId, target.Version,
+                old.ElementType, old.ZIndex, old.X, old.Y, old.Width, old.Height, old.Rotation,
+                old.Content, old.AssetId, old.PanelId, old.BibleEntryId,
+                old.ScriptLineId, old.SpeakerId, old.RenderedText, old.SourceLineText,
+                old.OverflowAckReason, old.ReadingOrder, old.Style, restoredByUserId));
+        }
+
+        return UncommittedEvents.Count - before;
+    }
+
+    /// <summary>Hai trạng thái element giống nhau (bỏ qua version và cờ xoá).</summary>
+    public static bool SameState(ElementState a, ElementState b) =>
+        a.ElementType == b.ElementType && a.ZIndex == b.ZIndex
+        && a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.Rotation == b.Rotation
+        && a.Content == b.Content && a.AssetId == b.AssetId && a.PanelId == b.PanelId && a.BibleEntryId == b.BibleEntryId
+        && a.ScriptLineId == b.ScriptLineId && a.SpeakerId == b.SpeakerId
+        && a.RenderedText == b.RenderedText && a.SourceLineText == b.SourceLineText
+        && a.OverflowAckReason == b.OverflowAckReason && a.ReadingOrder == b.ReadingOrder && a.Style == b.Style;
+
     // ══════════════════════════════════════════════════════════════════════════
     // APPLY — Rebuild state từ events (pure, không có side effects)
     // ══════════════════════════════════════════════════════════════════════════
@@ -297,6 +342,7 @@ public sealed class Page : AggregateRoot
             case ElementOverflowAcknowledgedEvent e:  Apply(e); break;
             case ElementReadingOrderSetEvent e:       Apply(e); break;
             case ElementStyleUpdatedEvent e:          Apply(e); break;
+            case ElementRestoredEvent e:              Apply(e); break;
             case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
@@ -404,6 +450,35 @@ public sealed class Page : AggregateRoot
         element.Style = e.Style;
         element.OverflowAckReason = null; // đổi cỡ/font làm chữ vừa hộp khác đi
         element.Version++;
+    }
+
+    internal void Apply(ElementRestoredEvent e)
+    {
+        var version = _elements.TryGetValue(e.ElementId, out var existing) ? existing.Version : 0;
+        _elements[e.ElementId] = new ElementState
+        {
+            ElementId         = e.ElementId,
+            ElementType       = e.ElementType,
+            ZIndex            = e.ZIndex,
+            X                 = e.X,
+            Y                 = e.Y,
+            Width             = e.Width,
+            Height            = e.Height,
+            Rotation          = e.Rotation,
+            Content           = e.Content,
+            AssetId           = e.AssetId,
+            PanelId           = e.PanelId,
+            BibleEntryId      = e.BibleEntryId,
+            ScriptLineId      = e.ScriptLineId,
+            SpeakerId         = e.SpeakerId,
+            RenderedText      = e.RenderedText,
+            SourceLineText    = e.SourceLineText,
+            OverflowAckReason = e.OverflowAckReason,
+            ReadingOrder      = e.ReadingOrder,
+            Style             = e.Style,
+            IsRemoved         = false,
+            Version           = version + 1
+        };
     }
 
     internal void Apply(PageDeletedEvent e)

@@ -62,6 +62,9 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
         // Trang có thể bị trả về làm lại sau khi việc cấp Chapter đã bắt đầu (4.7): kiểm lại lúc nộp
         if (await StageProgressRules.ChapterWorkBlockReasonAsync(_db, assignment, stage, ct) is { } chapterBlocked)
             return Fail(chapterBlocked, ResultErrorCodes.Conflict);
+        // Đầu vào có thể đã đổi trong lúc làm (stage trước / việc tiền đề bị mở lại): kiểm lại, không chỉ lúc bắt đầu
+        if (await StageProgressRules.InputBlockReasonAsync(_db, assignment, stage, panels, ct) is { } inputBlocked)
+            return Fail(inputBlocked, ResultErrorCodes.Conflict);
 
         try { assignment.SubmitForReview(); }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
@@ -87,9 +90,15 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
         var canvasVersions = new Dictionary<Guid, long>();
         foreach (var pageId in pageIds)
             canvasVersions[pageId] = await _pages.GetStreamVersionAsync(pageId, ct);
+        // Bản script (mỗi Scene) lúc nộp: kết quả gắn với revision bất biến, không với script "latest"
+        var sceneIds = await _db.Scenes.AsNoTracking().Where(s => s.ChapterId == chapter.Id).Select(s => s.Id).ToListAsync(ct);
+        var scriptRevisionIds = (await _db.ContentRevisions.AsNoTracking()
+                .Where(r => sceneIds.Contains(r.SceneId) && r.Kind == ContentRevisionKind.Script)
+                .Select(r => new { r.Id, r.SceneId, r.VersionNumber }).ToListAsync(ct))
+            .GroupBy(r => r.SceneId).Select(g => g.OrderByDescending(r => r.VersionNumber).First().Id).ToList();
         await ChangeRequestRules.RecordSubmissionAsync(
             _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector,
-            SubmissionPanelDto.Serialize(pagePanels), JsonSerializer.Serialize(canvasVersions));
+            SubmissionPanelDto.Serialize(pagePanels), JsonSerializer.Serialize(canvasVersions), scriptRevisionIds);
 
         assignment.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);

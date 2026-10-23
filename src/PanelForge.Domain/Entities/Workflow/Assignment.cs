@@ -37,6 +37,16 @@ public class Assignment : BaseEntity
     public DateTime? CompletedAt { get; private set; }
     public string? LastFeedbackComment { get; private set; }
 
+    /// <summary>
+    /// "Cần kiểm tra ảnh hưởng": đầu vào (stage trước / việc phụ thuộc) bị mở lại sau khi việc này đã dựa vào nó. Khác null thì
+    /// không nộp/duyệt được, và stage sau không bắt đầu dựa trên nó, tới khi người duyệt quyết giữ kết quả hoặc làm lại.
+    /// </summary>
+    public string? ImpactReviewReason { get; private set; }
+    public DateTime? ImpactReviewRequestedAt { get; private set; }
+
+    /// <summary>Lý do Producer huỷ việc (bắt buộc); việc bị huỷ được xoá mềm, giữ lịch sử, không bao giờ tính là Approved.</summary>
+    public string? CancelReason { get; private set; }
+
     public Series Series { get; private set; } = default!;
     public Chapter Chapter { get; private set; } = default!;
     public PipelineStage Stage { get; private set; } = default!;
@@ -161,6 +171,34 @@ public class Assignment : BaseEntity
             Status = AssignmentStatus.Assigned;
         AssigneeUserId = newAssigneeUserId;
         AssignedRole = newRole;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Đánh dấu cần kiểm tra ảnh hưởng (giữ nguyên trạng thái và kết quả cũ). Đã đánh dấu thì giữ lý do đầu tiên.</summary>
+    public void FlagImpactReview(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (ImpactReviewReason is not null) return;
+        ImpactReviewReason = reason.Trim();
+        ImpactReviewRequestedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Người duyệt đã quyết (giữ kết quả hoặc làm lại): gỡ cờ. Quyết định và lý do nằm trong audit log.</summary>
+    public void ClearImpactReview()
+    {
+        ImpactReviewReason = null;
+        ImpactReviewRequestedAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Ghi lý do huỷ trước khi xoá mềm. Việc đã Approved không huỷ được.</summary>
+    public void Cancel(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Status == AssignmentStatus.Approved)
+            throw new InvalidOperationException("Không thể huỷ việc đã được duyệt (Approved).");
+        CancelReason = reason.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 

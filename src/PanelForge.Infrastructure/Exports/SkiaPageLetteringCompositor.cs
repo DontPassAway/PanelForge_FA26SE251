@@ -37,6 +37,87 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
         return page with { Content = data.ToArray(), ContentType = "image/png" };
     }
 
+    public ExportPageImage ComposePanels(int pageNumber, int pageWidthPx, int pageHeightPx, IReadOnlyList<PagePanelLayer> panels)
+    {
+        var info = new SKImageInfo(Math.Max(1, pageWidthPx), Math.Max(1, pageHeightPx));
+        using var surface = SKSurface.Create(info);
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.White);
+        using var paint = new SKPaint { IsAntialias = true };
+        var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
+
+        foreach (var panel in panels)
+        {
+            var bounds = SKRect.Create((float)panel.X, (float)panel.Y, (float)panel.Width, (float)panel.Height);
+            using var clip = PanelPath(panel, bounds);
+
+            if (panel.Content is { } content)
+            {
+                using var image = SKImage.FromEncodedData(content);
+                if (image is not null)
+                {
+                    // "contain": giữ tỉ lệ, căn giữa trong hộp khung (FE containRect)
+                    var scale = Math.Min(bounds.Width / image.Width, bounds.Height / image.Height);
+                    var w = image.Width * scale;
+                    var h = image.Height * scale;
+                    var dest = SKRect.Create(bounds.MidX - w / 2, bounds.MidY - h / 2, w, h);
+                    canvas.Save();
+                    canvas.ClipPath(clip, antialias: true);
+                    canvas.DrawImage(image, dest, sampling, paint);
+                    canvas.Restore();
+                }
+                else
+                {
+                    DrawPlaceholder(canvas, bounds);
+                }
+            }
+
+            if (!panel.Borderless)
+            {
+                using var border = new SKPaint
+                {
+                    IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2, Color = SKColor.Parse("#171717")
+                };
+                canvas.DrawPath(clip, border);
+            }
+        }
+
+        canvas.Flush();
+        using var snapshot = surface.Snapshot();
+        using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
+        return new ExportPageImage(pageNumber, data.ToArray(), "image/png");
+    }
+
+    /// <summary>Đường khung: đa giác theo corners (0–1 trong hộp) nếu có ≥ 3 góc, ngược lại hình chữ nhật (FE getPanelClipPoints).</summary>
+    private static SKPath PanelPath(PagePanelLayer panel, SKRect bounds)
+    {
+        var path = new SKPath();
+        if (panel.Corners is { Count: >= 3 } corners)
+        {
+            path.MoveTo(bounds.Left + (float)corners[0].X * bounds.Width, bounds.Top + (float)corners[0].Y * bounds.Height);
+            foreach (var c in corners.Skip(1))
+                path.LineTo(bounds.Left + (float)c.X * bounds.Width, bounds.Top + (float)c.Y * bounds.Height);
+            path.Close();
+        }
+        else
+        {
+            path.AddRect(bounds);
+        }
+        return path;
+    }
+
+    private static void DrawPlaceholder(SKCanvas canvas, SKRect bounds)
+    {
+        using var fill = new SKPaint { Color = SKColor.Parse("#F4F4F5") };
+        canvas.DrawRect(bounds, fill);
+        using var dash = new SKPaint
+        {
+            IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2, Color = SKColor.Parse("#A1A1AA"),
+            PathEffect = SKPathEffect.CreateDash([10, 8], 0)
+        };
+        canvas.DrawRect(bounds, dash);
+    }
+
     // ── Giao diện bóng: mặc định theo loại (FE defaultAppearance), ghi đè bằng trường đã lưu trong TextStyle ──
 
     public sealed record Appearance(string Shape, string FillColor, double FillOpacity, string BorderColor, double BorderWidth);

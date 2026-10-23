@@ -19,11 +19,13 @@ public sealed class DeleteScriptLineCommandHandler : IRequestHandler<DeleteScrip
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IPageRepository _pages;
 
-    public DeleteScriptLineCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public DeleteScriptLineCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IPageRepository pages)
     {
         _db = db;
         _auth = auth;
+        _pages = pages;
     }
 
     public async Task<Result<DeleteScriptLineResult>> Handle(DeleteScriptLineCommand cmd, CancellationToken ct)
@@ -47,6 +49,11 @@ public sealed class DeleteScriptLineCommandHandler : IRequestHandler<DeleteScrip
 
         var revision = await ScriptLineRules.RecordRevisionAsync(
             _db, chapter, line.SceneId, "Xoá dòng script thủ công", before, ScriptLineRules.Snapshot(remaining), ct);
+
+        // CF4: dòng đã đặt chữ bị xoá → Lettering đã duyệt của bóng gắn dòng này phải làm lại
+        if (await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, chapter.Id, line,
+                "Writer đã xoá dòng thoại đã được đặt chữ; cần gỡ hoặc gắn lại bóng thoại.", ct) is { } reworkError)
+            return Result<DeleteScriptLineResult>.Failure(reworkError, ResultErrorCodes.Conflict);
 
         await _db.SaveChangesAsync(ct);
         return Result<DeleteScriptLineResult>.Success(new DeleteScriptLineResult(chapter.VersionVector, revision.Id));
