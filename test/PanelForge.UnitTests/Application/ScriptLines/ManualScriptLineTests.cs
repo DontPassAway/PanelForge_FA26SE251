@@ -133,13 +133,12 @@ public class ManualScriptLineTests
     }
 
     [Fact]
-    public async Task Create_ByWriterWhenChapterAssignedToAnotherWriter_IsForbidden()
+    public async Task Create_ByWriterWhenScriptIsFrozen_IsConflict()
     {
-        _db.Assignments.Add(Assignment.Create(_series.Id, _chapter.Id, WorkflowEntityType.Chapter, _chapter.Id,
-            Guid.NewGuid(), Guid.NewGuid(), WorkspaceRole.Writer, "Viết kịch bản"));
+        _chapter.FreezeScript(Guid.NewGuid());
         await _db.SaveChangesAsync();
 
-        (await Create()).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await Create()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
 
     [Fact]

@@ -79,7 +79,10 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             PagesCount: 0,
             Status: chapter.Status,
             PublishedAt: chapter.PublishedAt,
-            Outline: chapter.Outline
+            Outline: chapter.Outline,
+            IsScriptFrozen: chapter.IsScriptFrozen,
+            ScriptFrozenAt: chapter.ScriptFrozenAt,
+            ScriptFrozenById: chapter.ScriptFrozenById
         ));
     }
 }

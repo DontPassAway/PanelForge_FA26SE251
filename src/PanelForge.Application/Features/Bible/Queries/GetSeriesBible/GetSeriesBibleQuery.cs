@@ -55,8 +55,11 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
                         IsLocked: latestRev.IsLocked,
                         LockedAt: latestRev.LockedAt,
                         LockedById: latestRev.LockedById,
-            StageName: latestRev.StageName,
-            EffectiveToChapterNumber: latestRev.EffectiveToChapterNumber
+                        StageName: latestRev.StageName,
+                        EffectiveToChapterNumber: latestRev.EffectiveToChapterNumber,
+                        ArtistUserId: latestRev.ArtistUserId,
+                        ReviewStatus: latestRev.ReviewStatus,
+                        ReworkFeedback: latestRev.ReworkFeedback
                     );
                 }
 

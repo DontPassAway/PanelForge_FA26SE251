@@ -14,6 +14,8 @@ using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
 using PanelForge.Application.Features.Bible.Queries.GetSeriesBible;
+using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -189,6 +191,140 @@ public sealed class BibleController : ControllerBase
     {
         var result = await _mediator.Send(
             new LockBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId()), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/bible/design-queue
+    /// V2.5: Lấy hàng đợi việc thiết kế Bible cho Artist (các mục ở trạng thái Draft hoặc ReworkRequired).
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/bible/design-queue")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<BibleDesignQueueItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBibleDesignQueue(
+        [FromRoute] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetBibleDesignQueueQuery(seriesId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/endorse
+    /// V2.5: Writer hoặc Editor xác nhận duyệt thiết kế Model Sheet của Artist đã chuẩn với cốt truyện (-> WriterEndorsed).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/endorse")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> EndorseBibleEntryRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        [FromBody] EndorseBibleRevisionRequest? body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new EndorseBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body?.Note),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/request-rework
+    /// V2.5: Writer hoặc Editor yêu cầu Artist vẽ lại kèm nhận xét/feedback (-> ReworkRequired).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/request-rework")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RequestReworkBibleEntryRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        [FromBody] RequestReworkBibleRevisionRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RequestReworkBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body.Reason),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/concept
+    /// V2.5: Artist tải lên bản vẽ thiết kế / Model Sheet (CAS SHA-256) cho mục Bible (-> ConceptSubmitted, lưu ArtistUserId).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/concept")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SubmitConceptArt(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromBody] SubmitConceptArtRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new AddBibleEntryRevisionCommand(
+            SeriesId: seriesId,
+            BibleEntryId: entryId,
+            UserId: GetCurrentUserId(),
+            Summary: body.Summary,
+            Name: body.Name,
+            Description: body.Description,
+            Subtitle: body.Subtitle,
+            DetailsJson: body.DetailsJson,
+            ReferenceImageUrl: body.ReferenceImageUrl,
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
+            ExpectedVersionNumber: body.ExpectedVersionNumber,
+            ArtistUserId: GetCurrentUserId(),
+            ReviewStatus: BibleRevisionStatus.ConceptSubmitted
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             return result.ErrorCode switch

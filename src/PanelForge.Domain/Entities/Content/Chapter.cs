@@ -18,6 +18,11 @@ public class Chapter : BaseEntity
     public ChapterStatus Status { get; private set; } = ChapterStatus.InProduction;
     public DateTime? PublishedAt { get; private set; }
 
+    /// <summary>V2.5: Kịch bản thuần túy được Producer duyệt và đóng băng (Frozen / Read-only) để đưa vào guồng sản xuất tranh.</summary>
+    public bool IsScriptFrozen { get; private set; } = false;
+    public DateTime? ScriptFrozenAt { get; private set; }
+    public Guid? ScriptFrozenById { get; private set; }
+
     public Series Series { get; private set; } = default!;
     public ICollection<Scene> Scenes { get; private set; } = [];
     public ICollection<Page> Pages { get; private set; } = [];
@@ -53,6 +58,30 @@ public class Chapter : BaseEntity
     public void SetOutline(string? outline) => Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
 
     public void IncrementVersion() => VersionVector++;
+
+    /// <summary>V2.5: Producer duyệt kịch bản và đóng băng (InProduction, kịch bản thành read-only với Writer).</summary>
+    public void FreezeScript(Guid userId)
+    {
+        RequireStatus(ChapterStatus.InProduction, "đóng băng kịch bản");
+        if (IsScriptFrozen)
+            throw new InvalidOperationException("Kịch bản của chương này đã được duyệt và đóng băng trước đó.");
+        IsScriptFrozen = true;
+        ScriptFrozenAt = DateTime.UtcNow;
+        ScriptFrozenById = userId;
+        IncrementVersion();
+    }
+
+    /// <summary>V2.5: Mở lại kịch bản cho Writer sửa (sẽ đánh cờ Stage Impact Flag nếu đã có thumbnail/artwork).</summary>
+    public void UnfreezeScript(Guid userId)
+    {
+        RequireStatus(ChapterStatus.InProduction, "mở lại kịch bản");
+        if (!IsScriptFrozen)
+            throw new InvalidOperationException("Kịch bản của chương này chưa bị đóng băng.");
+        IsScriptFrozen = false;
+        ScriptFrozenAt = null;
+        ScriptFrozenById = null;
+        IncrementVersion();
+    }
 
     /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → Approved), chờ Publisher.</summary>
     public void Approve()

@@ -61,19 +61,20 @@ flowchart LR
 | 4 | **User không có quyền tạo Studio** hoặc thành viên được mời: vào "Your Workspaces", chỉ thấy Studio có dòng `workspace_members` của mình. Không thuộc Studio nào thì thấy catalog công khai các Series đã `Published` | BR-23 |
 | 5 | Producer tạo Series: thể loại, định dạng, **hướng đọc** (RTL/LTR), pipeline stage, lịch phát hành; ghi **synopsis và story arc** của Series (Writer dựa vào đó lập chapter outline ở CF2) | UC-03 |
 | 6 | Producer mời thành viên; mỗi lời mời tạo một dòng `workspace_members` mang `WorkspaceRole` (Producer, Writer, Artist, Letterer, Editor) cho riêng Workspace đó | BR-07 |
-| 7 | Producer dựng Series Bible: mỗi mục là `BibleEntry`, mỗi thay đổi là `BibleEntryVersion` có **chương bắt đầu hiệu lực**. Mục nhân vật chứa **character sheet**: sketch hành động, cảm xúc, chuyển động do Artist cung cấp, cùng tính cách, cách nói, phong cách vẽ, chế độ màu. Producer **phê duyệt và khoá** một phiên bản làm tham chiếu duy nhất, có hiệu lực từ chương được chọn; đã khoá thì chỉ thay được bằng phiên bản mới, không sửa | UC-04, BR-15 |
+| 7 | **Hợp tác sản xuất Series Bible (Writer ↔ Artist ↔ Producer)**: Mỗi mục là `BibleEntry`, phiên bản hóa qua `BibleEntryRevision` có **chương bắt đầu hiệu lực** (hỗ trợ nhân vật lúc nhỏ Ch.1 và lúc lớn Ch.15). Áp dụng **Vòng đời kiểm duyệt 2 tầng**: (1) Writer khởi tạo đặc tả (`Draft / Specifying`), (2) Artist nhận việc qua **Bible Design Queue** để vẽ và tải Character Sheet lên kho Asset CAS SHA-256 (`ConceptSubmitted`, ghi nhận `ArtistUserId`), (3) Writer/Editor đối chiếu nguyên tác (`ReworkRequired` kèm phản hồi hoặc `WriterEndorsed`), (4) Producer phê duyệt và chốt khóa canon (`🔒 CanonLocked`). Bản đã khóa tuyệt đối không mở khóa; muốn thay đổi bắt buộc dùng `/supersede` tạo revision mới. | UC-04, BR-15, V2.5 |
 | 8 | Producer bật consistency rule và typography preset cho Series | NFR-08 |
 | 9 | Hệ thống ghi phiên bản đầu của mọi mục kèm người tạo và thời điểm | BR-18 |
 | 10 | Administrator xem audit log, báo cáo AI usage và usage storage, token AI, sinh ảnh của từng Workspace bất kỳ lúc nào; Producer xem **màn hình usage** của Studio mình (storage, token AI, ảnh, session so với giới hạn) **[Chốt theo phiếu V1.2]** | UC-15 |
-| 11 | Series sẵn sàng nhận giao việc | |
+| 11 | Series sẵn sàng cho Writer sáng tác tiền kỳ và Artist chuẩn bị tài nguyên | |
 
-**Cập nhật từ research**
+**Cập nhật từ research & Kiến trúc V2.5**
 
-- **Bible có trạng thái canon [Đề xuất].** Thêm `Status` cho revision: `Proposed` (Writer/Editor đề xuất), `Canon` (Producer duyệt), `Retired` (bị thay). Chỉ revision `Canon` được dùng để kết luận lỗi nhất quán; AI không bao giờ tự đưa nội dung vào canon. Phiếu V1.2 mới chốt phần **khoá character sheet** (bước 7); `Status` tổng quát cho mọi mục Bible vẫn là đề xuất. *Nguồn: `consistency-design.md` 3.2.*
+- **Vòng đời kiểm duyệt Series Bible 2 tầng [V2.5].** Thay vì chỉ có cờ `isLocked`, mỗi revision trải qua máy trạng thái chuẩn: `Draft` (Writer đặc tả) ➔ `ConceptSubmitted` (Artist tải Concept Art / Model Sheet) ➔ `ReworkRequired` (Writer/Editor yêu cầu sửa) ➔ `WriterEndorsed` (Writer/Editor xác nhận khớp cốt truyện) ➔ `CanonLocked` (Producer chốt khóa canon). Cấp quyền cho role `Artist` tham gia thiết kế và tải Asset CAS SHA-256 vào Series Bible.
+- **Hàng đợi thiết kế Bible cho Artist (Bible Design Queue) [V2.5].** Artist theo dõi danh sách mục Bible cần vẽ (`Pending Concept Art / Rework`) trực tiếp từ Series Bible và dashboard mà không cần Producer tạo Assignment chương.
 - **Bible tách ba tầng sự thật [Đề xuất].** Sự thật của thế giới, nhân vật biết (`knownBy`: nhân vật → từ chương), độc giả biết (`revealedToReaderFromChapter`). MVP lưu trong `DetailsJson`. *Nguồn: `consistency-design.md` 3.3.*
 - **Không có `SeriesMember`.** MVP giới hạn phạm vi làm việc bằng **Assignment** (CF2), không thêm bảng thành viên theo Series. *Nguồn: design-research M1.*
 - **Một người nhiều role [Đề xuất].** Cho phép một User có nhiều dòng role trong cùng Workspace (mangaka thường vừa viết vừa vẽ). Đi kèm quy tắc tách vai: không tự duyệt bài mình nộp (CF3). *Nguồn: design-research M11, collaboration-research 1.4.*
-- **Ai chia trang/panel [Đề xuất].** Mặc định Artist chia trong thumbnail, Writer ghi ý đồ nhịp; cấu hình được theo Series. *Nguồn: collaboration-research D2.*
+- **Ai chia trang/panel [Đề xuất & V2.5].** Writer chỉ tập trung vào cây tự sự thuần túy (`Story Arc -> Chapter Outline -> Scene -> ScriptLine`); Artist chia trang/khung tranh trong giai đoạn Thumbnail/Layout (hoặc có sự hỗ trợ của Storyboard Agent). Writer không bị bắt buộc chia Page hay Panel.
 - **Admin không có truy cập khẩn cấp vào nội dung** trong MVP. *Nguồn: design-research M16 (spec ghi "to be confirmed").*
 - **Character sheet khoá, versioned theo chương [Chốt theo phiếu V1.2].** Sheet gồm sketch hành động, cảm xúc, chuyển động do Artist upload cùng tính cách, cách nói, phong cách vẽ và chế độ màu (lõi là trắng đen, màu là mở rộng). Phiên bản mới có hiệu lực từ chương được chọn; sau khi khoá chỉ thay được bằng phiên bản mới, không sửa. Agent và các kiểm tra luôn đọc phiên bản đang hiệu lực ở chương đang làm. Nền tảng vẫn dùng được khi không có sinh ảnh: khoá sheet, kiểm tra nhất quán và upload thủ công không phụ thuộc sinh ảnh.
 - **Bible là bộ nhớ có phiên bản của AI agent [Chốt theo phiếu V1.2].** Các mục thuộc revision đang hiệu lực ở chương được đưa vào ngữ cảnh agent qua truy vấn có cấu trúc. Truy hồi vector chỉ thêm khi ngữ cảnh vượt ngân sách của mô hình (ngưỡng thống nhất với giảng viên).
@@ -91,13 +92,13 @@ flowchart LR
 - Vượt dung lượng, quota token hoặc quota ảnh, hoặc vượt số phiên đồng thời: thao tác bị từ chối kèm thông báo nêu giới hạn nào đã vượt; phần còn lại của Workspace vẫn dùng được.
 - Pipeline, element type, preset, consistency rule sửa được mà không cần deploy lại (NFR-08).
 
-**Liên kết.** Cấp cho CF2 (pipeline, giao việc), CF3 (Bible để kiểm tra), CF5 (Series `Published` vào catalog công khai).
+**Liên kết.** Cấp cho CF2 (pipeline, kịch bản, Bible), CF3 (Bible để kiểm tra), CF5 (Series `Published` vào catalog công khai).
 
 ---
 
 ## 2. CF2: Chapter Production
 
-**Mục tiêu.** Biến việc được giao thành nội dung hoàn chỉnh: script có cấu trúc, layout, artwork, lettering. Mỗi Page/Panel đi qua stage của nó **độc lập**, nên các Page được sản xuất song song.
+**Mục tiêu.** Biến kịch bản đã duyệt và tài nguyên Bible thành nội dung hoàn chỉnh: layout, artwork, lettering. Mỗi Page/Panel đi qua stage của nó **độc lập**, nên các Page được sản xuất song song.
 
 **Actor.** Producer, Writer, Artist, Letterer, AI Service (Writer, Continuity, Storyboard, Artist, Letterer agent; Storyboard Agent chia script thành Page và Panel là lõi theo phiếu V1.2; Producer Agent và dịch thoại là mở rộng).
 
@@ -105,17 +106,17 @@ flowchart LR
 
 | # | Bước | Quy tắc |
 |---|---|---|
-| 1 | Producer tạo **Assignment** cho Chapter, Page hoặc Panel: người nhận, hạn, ưu tiên, dependency | UC-05, BR-19 |
-| 2 | Hệ thống thông báo người nhận khi được giao/đổi việc và trước hạn. Việc chỉ có hiệu lực sau khi đã thông báo | BR-14, UC-14 |
-| 3 | Writer lập **chapter outline** từ synopsis và story arc của Series, rồi viết script trong editor có cấu trúc (scene, mô tả panel, thoại, speaker, chỉ dẫn), liên kết thực thể với Bible | UC-06 |
-| 4 | Writer viết script theo Scene (các `ScriptLine`, lập từ chapter outline); Storyboard Agent hoặc Artist chia thành Page và Panel (thứ tự đọc, cỡ cảnh wide/medium/close-up, liên kết tới dòng script nguồn) và gán `ScriptLine` cho Panel, bằng AI hoặc tay (phiếu V1.2) | |
-| 5 | Nếu dùng AI: workflow **Writer → Continuity (tối đa hai vòng sửa quay lại Writer) → Storyboard → Editor** chạy bất đồng bộ trong service AI riêng, không gọi trong request nghiệp vụ lõi. Writer nhận brief, chapter outline, revision Bible hiệu lực tại chương và các script trước. Provenance (model, tham số, phiên bản prompt, revision đầu vào) lưu ngay khi `AISuggestion` trả về | BR-10 |
-| 6 | Writer Accept, sửa rồi Accept, hoặc Reject; quyết định và mức độ sửa đều được ghi, kể cả khi Reject. Output gốc của AI không bị sửa: chỉnh sửa tạo revision dẫn xuất | BR-02, BR-10 |
-| 7 | Writer **nộp** stage Script sang CF3 | |
-| 8 | Khi cổng Script đạt, các Page có Panel mang `ScriptLine` của Scene đó mở cho Artist **từng trang**, không phải cả chương | BR-19 |
-| 9 | Artist dựng layout (Artist chốt layout cuối; có thể bắt đầu từ frame template hoặc xin gợi ý từ Storyboard Agent) và tải artwork theo stage: Thumbnail, Pencil, Ink, và Color khi bật chế độ màu. Lõi demo là manga trắng đen; stage Color là cấu hình mở rộng **[Chốt theo phiếu V1.2]** | UC-07 |
-| 10 | Client tính SHA-256, server tính lại và so; trùng hash trong cùng Workspace thì dùng lại Asset qua `AssetReference` mới. Asset chỉ truy cập qua link ngắn hạn | BR-04, BR-13, BR-16 |
-| 11 | Artist nộp stage | |
+| 1 | **Writer sáng tác độc lập (Pre-Production)**: Writer có `WorkspaceRole = WRITER` (hoặc Producer) chủ động tạo Chapter Draft và viết kịch bản thuần túy theo cấu trúc `Story Arc -> Chapter Outline -> Scene -> ScriptLine` + gắn thẻ `bibleEntryIds` / `speakerCharacterId`. **Tuyệt đối KHÔNG yêu cầu Producer tạo thẻ Assignment Script** và không ép Writer chia Page/Panel. | V2.5 |
+| 2 | Hệ thống thông báo khi có phân công công việc từ giai đoạn hình ảnh (Layout/Artwork) trở đi | BR-14, UC-14 |
+| 3 | Writer viết script theo Scene (các `ScriptLine`, lập từ chapter outline), liên kết thực thể nhân vật/bối cảnh với Bible | UC-06 |
+| 4 | Writer có thể chạy kiểm tra nhất quán sớm (Consistency Checker / Continuity Agent) để đảm bảo không sai lệch cốt truyện và tính cách nhân vật | BR-10, BR-21 |
+| 5 | Writer bấm **"Nộp kịch bản cho Producer (Submit Script)"** khi hoàn tất nội dung chương | V2.5 |
+| 6 | **Cổng kiểm tra Series Bible theo Chương (Chapter-Scoped Bible Gate)**: Khi Producer kiểm tra kịch bản Chương N để duyệt đưa vào sản xuất, hệ thống quét toàn bộ `speakerCharacterId` và `bibleEntryIds` được dùng trong Chương N. Nếu có nhân vật/bối cảnh nào chưa có revision hiệu lực ở trạng thái `CanonLocked` (`CHARACTER_NOT_LOCKED`), hệ thống hiển thị cảnh báo đỏ và chặn đưa vào sản xuất cho tới khi Bible của chương đó được khóa canon. | V2.5 |
+| 8 | Storyboard Agent hoặc Artist chia ScriptLine thành Page và Panel (thứ tự đọc, cỡ cảnh wide/medium/close-up, liên kết tới dòng script nguồn) và dựng layout (Artist chốt layout cuối; có thể bắt đầu từ frame template hoặc xin gợi ý từ Storyboard Agent) | BR-19, V1.2 |
+| 9 | Nếu dùng AI hỗ trợ kịch bản: workflow **Writer → Continuity (tối đa hai vòng sửa quay lại Writer) → Storyboard → Editor** chạy bất đồng bộ trong service AI riêng, không gọi trong request nghiệp vụ lõi. Writer nhận brief, chapter outline, revision Bible hiệu lực tại chương và các script trước. Provenance lưu khi `AISuggestion` trả về. Writer Accept, sửa rồi Accept, hoặc Reject | BR-02, BR-10 |
+| 10 | Artist tải artwork theo stage: Thumbnail, Pencil, Ink, và Color (khi bật chế độ màu). Lõi demo là manga trắng đen; stage Color là cấu hình mở rộng **[Chốt theo phiếu V1.2]** | UC-07 |
+| 11 | Client tính SHA-256, server tính lại và so; trùng hash trong cùng Workspace thì dùng lại Asset qua `AssetReference` mới. Asset chỉ truy cập qua link ngắn hạn | BR-04, BR-13, BR-16 |
+| 12 | Artist nộp stage | |
 | 12 | Khi stage trước Letter được duyệt (Ink trong lõi trắng đen, Color khi bật chế độ màu), Letterer đặt balloon, caption, SFX và **gắn mỗi cái với đúng một `ScriptLine` và speaker**. Letterer có thể nhờ **Letterer Agent rút gọn thoại cho vừa balloon** trong giới hạn độ dài (lõi); dịch thoại sang ngôn ngữ khác là mở rộng. Thoại đổi nghĩa phải được Writer hoặc Editor duyệt | UC-08, BR-05 |
 | 13 | **Code** (không phải mô hình) cảnh báo tràn chữ, sai thứ tự đọc, đè lên Key Artwork Region | BR-20 |
 | 14 | Producer theo dõi tiến độ theo stage, panel, khối lượng công việc, việc quá hạn và burndown | UC-16 |

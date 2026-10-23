@@ -78,6 +78,21 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasDefaultValue(false)
                .IsRequired();
 
+        builder.Property(r => r.ArtistUserId)
+               .HasColumnName("artist_user_id")
+               .HasColumnType("uuid");
+
+        builder.Property(r => r.ReviewStatus)
+               .HasColumnName("review_status")
+               .HasColumnType("varchar(30)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<PanelForge.Domain.Enums.BibleRevisionStatus>(v))
+               .HasDefaultValue(PanelForge.Domain.Enums.BibleRevisionStatus.Draft)
+               .IsRequired();
+
+        builder.Property(r => r.ReworkFeedback)
+               .HasColumnName("rework_feedback")
+               .HasColumnType("varchar(1000)");
+
         builder.Property(r => r.LockedAt)
                .HasColumnName("locked_at")
                .HasColumnType("timestamptz");

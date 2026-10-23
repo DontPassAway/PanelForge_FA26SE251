@@ -130,7 +130,10 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             IsInitialVersion: revision.IsInitialVersion,
             CreatedAt: revision.CreatedAt,
             StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber
+            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
+            ArtistUserId: revision.ArtistUserId,
+            ReviewStatus: revision.ReviewStatus,
+            ReworkFeedback: revision.ReworkFeedback
         );
 
         return Result<BibleEntryDto>.Success(new BibleEntryDto(

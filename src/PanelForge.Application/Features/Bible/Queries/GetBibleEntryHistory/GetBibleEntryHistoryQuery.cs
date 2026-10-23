@@ -52,7 +52,10 @@ public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleE
                 r.LockedAt,
                 r.LockedById,
                 r.StageName,
-                r.EffectiveToChapterNumber
+                r.EffectiveToChapterNumber,
+                r.ArtistUserId,
+                r.ReviewStatus,
+                r.ReworkFeedback
             ))
             .ToListAsync(cancellationToken);
 

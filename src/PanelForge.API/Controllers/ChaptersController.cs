@@ -22,6 +22,9 @@ using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
+using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
+using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -172,6 +175,44 @@ public sealed class ChaptersController : ControllerBase
 
         return Ok(new { message = $"Chương {chapterId} đã được xóa thành công." });
     }
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/bible-gate
+    /// V2.5: Cổng kiểm tra Series Bible theo Chương (Chapter-Scoped Bible Gate).
+    /// Quét toàn bộ nhân vật và bối cảnh được dùng trong kịch bản chương, xác thực có bản CanonLocked tại chương hay chưa.
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/bible-gate")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ChapterBibleGateResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckChapterBibleGate(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new CheckChapterBibleGateQuery(chapterId), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/freeze-script
+    /// V2.5: Producer duyệt kịch bản và bắt đầu sản xuất (Freeze Script & Hand-off Gate).
+    /// Đóng băng kịch bản thành read-only cho Writer và mở khóa phân công layout cho Artist.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/freeze-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> FreezeChapterScript(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new FreezeChapterScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/unfreeze-script
+    /// V2.5: Producer mở lại kịch bản cho Writer sửa đổi.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/unfreeze-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UnfreezeChapterScript(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new UnfreezeChapterScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/approve

@@ -100,7 +100,10 @@ public class BibleEntry : BaseEntity
         int effectiveFromChapterNumber = 1,
         bool isInitialVersion = false,
         string? stageName = null,
-        int? effectiveToChapterNumber = null)
+        int? effectiveToChapterNumber = null,
+        Guid? artistUserId = null,
+        BibleRevisionStatus reviewStatus = BibleRevisionStatus.Draft,
+        string? reworkFeedback = null)
     {
         var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
         var revision = BibleEntryRevision.Create(
@@ -114,7 +117,10 @@ public class BibleEntry : BaseEntity
             effectiveFromChapterNumber,
             isInitialVersion,
             stageName,
-            effectiveToChapterNumber);
+            effectiveToChapterNumber,
+            artistUserId,
+            reviewStatus,
+            reworkFeedback);
 
         Revisions.Add(revision);
         UpdatedAt = DateTime.UtcNow;

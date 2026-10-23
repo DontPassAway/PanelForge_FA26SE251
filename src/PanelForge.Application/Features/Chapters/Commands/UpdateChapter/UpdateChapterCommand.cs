@@ -61,7 +61,10 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             PagesCount: chapter.Pages.Count,
             Status: chapter.Status,
             PublishedAt: chapter.PublishedAt,
-            Outline: chapter.Outline
+            Outline: chapter.Outline,
+            IsScriptFrozen: chapter.IsScriptFrozen,
+            ScriptFrozenAt: chapter.ScriptFrozenAt,
+            ScriptFrozenById: chapter.ScriptFrozenById
         ));
     }
 }

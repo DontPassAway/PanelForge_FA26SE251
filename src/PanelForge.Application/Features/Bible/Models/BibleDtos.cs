@@ -19,7 +19,11 @@ public sealed record BibleEntryRevisionDto(
     Guid? LockedById = null,
     // Giai đoạn và phạm vi hiệu lực [from, to] (to null = tới hết truyện)
     string? StageName = null,
-    int? EffectiveToChapterNumber = null
+    int? EffectiveToChapterNumber = null,
+    // V2.5: Provenance & 2-tier review
+    Guid? ArtistUserId = null,
+    BibleRevisionStatus ReviewStatus = BibleRevisionStatus.Draft,
+    string? ReworkFeedback = null
 );
 
 public sealed record BibleEntryDto(
@@ -96,3 +100,58 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     string? StageName = null,
     int? EffectiveToChapterNumber = null
 );
+
+public sealed record EndorseBibleRevisionRequest(string? Note = null);
+
+public sealed record RequestReworkBibleRevisionRequest(string Reason);
+
+public sealed record SubmitConceptArtRequest(
+    string Summary,
+    string Name,
+    string Description,
+    string ReferenceImageUrl,
+    string? Subtitle = null,
+    string? DetailsJson = null,
+    string? StageName = null,
+    int? EffectiveToChapterNumber = null,
+    int? ExpectedVersionNumber = null
+);
+
+public sealed record BibleDesignQueueItemDto(
+    Guid EntryId,
+    Guid SeriesId,
+    string Code,
+    string Name,
+    BibleEntryCategory Category,
+    string Description,
+    string? ReferenceImageUrl,
+    int EffectiveFromChapterNumber,
+    string? StageName,
+    BibleRevisionStatus Status,
+    int VersionNumber,
+    string? ReworkFeedback,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt
+);
+
+public sealed record ChapterBibleGateItemDto(
+    Guid EntryId,
+    string Code,
+    string Name,
+    BibleEntryCategory Category,
+    BibleRevisionStatus CurrentStatus,
+    bool IsLocked,
+    int? EffectiveFromChapter,
+    int? EffectiveToChapter,
+    string WarningCode,
+    string Message
+);
+
+public sealed record ChapterBibleGateResultDto(
+    bool IsPassed,
+    int TotalReferenced,
+    int LockedCount,
+    int PendingCount,
+    IReadOnlyList<ChapterBibleGateItemDto> Items
+);
+

@@ -22,6 +22,12 @@ internal static class SceneAssignmentGate
         var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
         if (role is null or WorkspaceRole.Producer) return null;
 
+        if (chapter.IsScriptFrozen)
+            return "Kịch bản của chương này đã được đóng băng (Frozen / Read-only) để đưa vào sản xuất hình ảnh. Producer cần mở lại kịch bản nếu muốn sửa đổi.";
+
+        // V2.5: Writer chủ động tạo và sửa phân cảnh tiền kỳ mà không cần assignment
+        if (role == WorkspaceRole.Writer) return null;
+
         return (await AiWorkflowFacts.EvaluateAssignmentAsync(db, userId, chapter, role.Value, ct)).BlockedReason;
     }
 }

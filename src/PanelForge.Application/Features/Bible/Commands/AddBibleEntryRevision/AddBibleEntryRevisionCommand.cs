@@ -31,7 +31,9 @@ public sealed record AddBibleEntryRevisionCommand(
     Guid? SupersedesRevisionId = null,
     string? SupersedeReason = null,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null
+    int? EffectiveToChapterNumber = null,
+    Guid? ArtistUserId = null,
+    BibleRevisionStatus? ReviewStatus = null
 ) : IRequest<Result<BibleEntryRevisionDto>>;
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
@@ -145,7 +147,9 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: false,
             stageName: stageName,
-            effectiveToChapterNumber: effectiveTo
+            effectiveToChapterNumber: effectiveTo,
+            artistUserId: command.ArtistUserId,
+            reviewStatus: command.ReviewStatus ?? (command.ArtistUserId.HasValue ? BibleRevisionStatus.ConceptSubmitted : BibleRevisionStatus.Draft)
         );
         // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
         if (command.SupersedesRevisionId is not null) revision.Lock(command.UserId);
@@ -195,7 +199,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             LockedAt: revision.LockedAt,
             LockedById: revision.LockedById,
             StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber
+            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
+            ArtistUserId: revision.ArtistUserId,
+            ReviewStatus: revision.ReviewStatus,
+            ReworkFeedback: revision.ReworkFeedback
         ));
     }
 

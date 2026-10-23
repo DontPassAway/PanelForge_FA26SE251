@@ -63,9 +63,20 @@ public class SceneAssignmentGateTests
         new CreateSceneCommandHandler(_db, _auth.Object).Handle(new CreateSceneCommand(_chapter.Id, user), default);
 
     [Fact]
-    public async Task OtherWriter_IsForbidden_OnAllSceneCommands_WhenChapterIsAssigned()
+    public async Task Writer_CanCreateAndUpdateScenes_IndependentlyOfAssignment()
     {
         AssignWriter();
+
+        (await CreateAs(_otherWriter)).IsSuccess.Should().BeTrue();
+        (await new UpdateSceneCommandHandler(_db, _auth.Object).Handle(
+            new UpdateSceneCommand(_scene.Id, _otherWriter, "x", null), default)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Writer_IsBlocked_OnAllSceneCommands_WhenScriptIsFrozen()
+    {
+        _chapter.FreezeScript(_producer);
+        await _db.SaveChangesAsync();
 
         (await CreateAs(_otherWriter)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         (await new UpdateSceneCommandHandler(_db, _auth.Object).Handle(
@@ -75,8 +86,6 @@ public class SceneAssignmentGateTests
             .ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         (await new DeleteSceneCommandHandler(_db, _auth.Object).Handle(
             new DeleteSceneCommand(_scene.Id, _otherWriter), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
-
-        _db.Scenes.Should().ContainSingle();
     }
 
     [Fact]

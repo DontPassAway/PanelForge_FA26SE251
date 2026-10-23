@@ -133,15 +133,15 @@ Nếu Producer nhận ra Bible ghi sai từ đầu, không sửa đè v1. Cô t�
 
 ---
 
-## 5. Ai làm gì với Bible
+## 5. Ai làm gì với Bible (Kiến trúc V2.5 - Hợp tác 3 bên)
 
 | Role | Quyền với Bible |
 |---|---|
-| **Producer** | Tạo và sửa mục; **duyệt và khoá** bản nháp thành canon; thay thế bản đã khoá (kèm lý do) |
-| **Writer** | Tạo mục và bản nháp (mô tả, tính cách, vai trò, giai đoạn); liên kết script với mục Bible |
-| **Artist** | Thêm bản nháp có ảnh reference sheet cho mục do Writer tạo; xem bản canon khi vẽ |
+| **Writer** | Khởi tạo mục và bản nháp (`Draft / Specifying`: mô tả ngoại hình, tính cách, vai trò, mốc chương bắt đầu `EffectiveFromChapterNumber`); liên kết script với mục Bible; duyệt sơ bộ bản vẽ của Artist (`WriterEndorsed`) hoặc yêu cầu vẽ lại (`ReworkRequired`) |
+| **Artist** | Nhận yêu cầu vẽ từ **Bible Design Queue** (`Pending Concept Art / Rework`); vẽ Character Sheet / Model Sheet / Concept bối cảnh và tải ảnh Asset lên qua CAS SHA-256 (`ConceptSubmitted`, ghi nhận `ArtistUserId`); xem bản `CanonLocked` khi vẽ layout/artwork chương |
+| **Editor** | Góp ý, đối chiếu nguyên tác cốt truyện; xác nhận thiết kế (`WriterEndorsed`) hoặc gửi Change Request yêu cầu vẽ lại (`ReworkRequired`); chạy kiểm tra nhất quán |
+| **Producer** | Phê duyệt chốt và khóa canon cuối cùng (`🔒 CanonLocked`); khi đã khóa thì không mở khóa (`/unlock` bị cấm hoàn toàn); thay thế bản đã khoá bằng `/supersede` (kèm lý do bắt buộc và tạo revision mới cùng chương); kiểm tra **Chapter-Scoped Bible Gate** trước khi duyệt kịch bản đưa vào sản xuất |
 | **Letterer** | Xem: thuật ngữ, cách xưng hô |
-| **Editor** | Góp ý; chạy kiểm tra nhất quán và xử lý các phát hiện |
 | **Admin** | Không có quyền nội dung trong Workspace |
 | **Người xem thử, độc giả công khai** | Không thấy Bible |
 
@@ -150,20 +150,13 @@ Nếu Producer nhận ra Bible ghi sai từ đầu, không sửa đè v1. Cô t�
 ## 6. Bible được dùng ở đâu
 
 ### 6.1 Liên kết script với Bible (Writer)
-Writer gắn tên nhân vật, địa điểm, đạo cụ trong script với mục Bible tương ứng. Nhờ đó hệ thống biết "An" trong dòng thoại này chính là nhân vật An trong Bible, chứ không chỉ là một chuỗi chữ.
+Writer gắn tên nhân vật, địa điểm, đạo cụ trong script với mục Bible tương ứng (`bibleEntryIds` và `speakerCharacterId`). Nhờ đó hệ thống biết "An" trong dòng thoại này chính là nhân vật An trong Bible, chứ không chỉ là một chuỗi chữ.
 
 ### 6.2 Tham chiếu khi vẽ (Artist)
 Artist mở hồ sơ nhân vật để xem ngoại hình khi vẽ. ArtistAgent chỉ lấy reference từ Bible của lần chạy đó, và mọi nhân vật xuất hiện trong panel đều phải được tham chiếu.
 
-### 6.3 Kiểm tra nhất quán bằng AI (Editor)
-ContinuityAgent đối chiếu script với **các mục Bible có hiệu lực tại chương đang kiểm tra**:
-
-- Mỗi phát hiện kèm **bằng chứng** trích từ Bible. Ví dụ: "Theo Bible, An chưa từng nhìn thấy chiếc chìa khóa này trước Chương 5."
-- Mô hình AI chỉ trả về **khóa ngắn** của mục Bible (dạng `B1`, `B2`), còn mã định danh thật do code cấp, để AI không bịa ra mục không tồn tại.
-- Dữ liệu Bible đưa vào prompt được coi là **dữ liệu**, không phải mệnh lệnh, nhằm chống prompt injection.
-- Kết quả là **đề xuất/báo cáo**; Editor phân loại từng phát hiện (BR-21).
-
-Dữ liệu của lần chạy (bản chụp Bible, phiên bản đã dùng, prompt, kết quả) được lưu để truy vết.
+### 6.3 Kiểm tra nhất quán và Rào chắn theo Chương (Chapter-Scoped Bible Gate)
+Trước khi đưa Chương N vào sản xuất hình ảnh, hệ thống quét mọi nhân vật và bối cảnh xuất hiện trong kịch bản Chương N. Chỉ khi tất cả thực thể này có Revision hiệu lực ở trạng thái `CanonLocked` tại Chương N thì kịch bản mới được Producer duyệt khóa (`Freeze Script`) để chuyển giao sang Artist.
 
 ---
 
@@ -171,32 +164,35 @@ Dữ liệu của lần chạy (bản chụp Bible, phiên bản đã dùng, pro
 
 Bộ truyện "Thành phố mưa", Workspace Moonlight.
 
-1. **Lập Bible.** Lan (Producer) ghi nhân vật An, địa điểm Ga Mưa, đạo cụ chìa khóa bạc, và plot fact "An chỉ nhận chìa khóa bạc từ Chương 5", có hiệu lực từ Chương 1.
-2. **Viết script.** Minh (Writer) viết cảnh ở Chương 3; AI Writer viết bản đầu "An mở gói vải thấy chiếc chìa khóa bạc…".
-3. **AI bắt lỗi.** ContinuityAgent đối chiếu với plot fact đang hiệu lực ở Chương 3 và báo mâu thuẫn, kèm bằng chứng.
-4. **Sửa.** Minh sửa cảnh để An chưa mở gói vải. Hoặc, nếu nhóm quyết định đổi cốt truyện, Lan tạo phiên bản mới của plot fact có hiệu lực từ chương liên quan và được duyệt. Không được bỏ qua lỗi continuity chỉ để cảnh trôi chảy.
-5. **Editor xử lý.** Thu (Editor) phân loại phát hiện: Confirmed. Một cảnh báo nhầm khác bị Ignored kèm lý do.
-6. **Chương 5.** Lan tạo phiên bản v2 của plot fact: An đã nhận chìa khóa, hiệu lực từ Chương 5. Từ đó cảnh An cầm chìa khóa ở Chương 5 trở đi hợp lệ, còn Chương 3 vẫn được kiểm bằng v1.
+1. **Lập Bible.** Lan (Producer) và Minh (Writer) khởi tạo thông tin nhân vật An, địa điểm Ga Mưa, đạo cụ chìa khóa bạc, và plot fact "An chỉ nhận chìa khóa bạc từ Chương 5", có hiệu lực từ Chương 1 (`Draft`).
+2. **Artist thiết kế.** Hùng (Artist) thấy An trong **Bible Design Queue**, vẽ Model Sheet và tải ảnh lên (`ConceptSubmitted`, lưu SHA-256 vào kho Asset và ghi nhận `ArtistUserId = Hùng`).
+3. **Writer/Editor review.** Minh (Writer) thấy đúng trang phục thời học sinh của An, bấm xác nhận (`WriterEndorsed`).
+4. **Producer khóa Canon.** Lan (Producer) kiểm tra tổng thể và bấm `Approve & Lock Canon` (`🔒 CanonLocked`).
+5. **Sản xuất Chương 1.** Minh nộp kịch bản Chương 1. Vì An đã có bản `CanonLocked` hiệu lực tại Ch.1, **Chapter-Scoped Bible Gate** thông qua. Lan bấm "Duyệt kịch bản & Đưa vào sản xuất" (`Freeze Script`), mở khóa bàn làm việc Thumbnail/Layout cho Hùng.
+6. **Thay đổi ở Chương 15.** Khi An trưởng thành ở Chương 15, Minh tạo giai đoạn mới "Trưởng thành" (`EffectiveFromChapterNumber = 15`). Hùng vẽ Model Sheet mới. Các chương 1–14 vẫn đối chiếu theo bản Lúc nhỏ, không bao giờ bị ảnh hưởng.
 
 ---
 
-## 8. API hiện có cho Bible
+## 8. API cho Bible (Kiến trúc V2.5)
 
-| Việc | Cách làm |
-|---|---|
-| Xem toàn bộ Bible kèm phiên bản mới nhất của từng mục | Lấy Series Bible theo Series |
-| Xem Bible **có hiệu lực tại một chương** | Lấy mục Bible theo số chương (đúng BR-15) |
-| Tạo mục mới (tự tạo phiên bản 1) | Tạo `BibleEntry` |
-| Thêm phiên bản mới có hiệu lực từ một chương | Thêm `BibleEntryRevision` (chỉ thêm, BR-01) |
-| Xem lịch sử các phiên bản của một mục | Lấy lịch sử mục |
-
-Các thao tác nằm ở `BibleController`.
+| Việc | Endpoint | Quyền |
+|---|---|---|
+| Xem toàn bộ Bible kèm phiên bản mới nhất của từng mục | `GET /api/series/{seriesId}/bible` | Thành viên Workspace |
+| Xem Bible **có hiệu lực tại một chương** | `GET /api/series/{seriesId}/bible/at-chapter/{n}` | Thành viên Workspace |
+| Lấy hàng đợi thiết kế cho Artist | `GET /api/series/{seriesId}/bible/design-queue` | Thành viên Workspace |
+| Tải ảnh reference / model sheet (CAS SHA-256) | `POST /api/series/{seriesId}/bible/assets` | Producer, Writer, Artist |
+| Tạo mục mới (tự tạo phiên bản 1 `Draft`) | `POST /api/series/{seriesId}/bible/entries` | Producer, Writer, Artist |
+| Thêm phiên bản mới / Nộp Concept Art | `POST /api/series/{seriesId}/bible/entries/{id}/revisions` | Producer, Writer, Artist |
+| Writer/Editor xác nhận duyệt thiết kế | `POST .../revisions/{id}/endorse` | Producer, Writer, Editor |
+| Yêu cầu Artist vẽ lại (kèm nhận xét) | `POST .../revisions/{id}/request-rework` | Producer, Writer, Editor |
+| Producer duyệt và chốt khóa canon | `POST .../revisions/{id}/lock` | Producer |
+| Thay thế bản đã khóa (tạo revision cùng chương, khoá luôn) | `POST .../revisions/{id}/supersede` | Producer |
 
 ---
 
-## 9. Lưu ý về ảnh tham chiếu
+## 9. Lưu trữ ảnh tham chiếu: Content-Addressed Storage (CAS SHA-256)
 
-Ảnh tham chiếu của một mục (ví dụ model sheet nhân vật) hiện được lưu dưới dạng chuỗi URL. Theo `storage-strategy.md`, nên chuyển sang tham chiếu bằng `AssetId` của hệ thống lưu trữ ảnh, để quyền truy cập nhất quán, ảnh không bị lấy từ nguồn ngoài, và ảnh thuộc Workspace.
+Toàn bộ ảnh Model Sheet, sketch biểu cảm, concept art trong Series Bible được tải lên qua `POST /api/series/{seriesId}/bible/assets`, tính mã băm `SHA-256`, lưu trữ trong kho lưu trữ Asset của Workspace và truy xuất bằng signed URL ngắn hạn hoặc endpoint Asset bảo mật `/api/series/{seriesId}/bible/assets/{sha}`. Tuyệt đối không nhập link ảnh tùy tiện từ bên ngoài.
 
 ---
 

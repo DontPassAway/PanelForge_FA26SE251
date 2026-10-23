@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Bible;
 
@@ -29,6 +30,15 @@ public class BibleEntryRevision : BaseEntity
 
     public bool IsInitialVersion { get; private set; } = false;
 
+    /// <summary>V2.5: Provenance của Artist vẽ bản thiết kế/Model Sheet (P0 1.10 & 1.11).</summary>
+    public Guid? ArtistUserId { get; private set; }
+
+    /// <summary>V2.5: Vòng đời kiểm duyệt 2 tầng cho Series Bible.</summary>
+    public BibleRevisionStatus ReviewStatus { get; private set; } = BibleRevisionStatus.Draft;
+
+    /// <summary>V2.5: Nhận xét/yêu cầu sửa của Writer hoặc Editor khi chuyển sang trạng thái ReworkRequired.</summary>
+    public string? ReworkFeedback { get; private set; }
+
     public bool CoversChapter(int chapterNumber)
         => EffectiveFromChapterNumber <= chapterNumber
            && (EffectiveToChapterNumber is null || chapterNumber <= EffectiveToChapterNumber);
@@ -36,7 +46,7 @@ public class BibleEntryRevision : BaseEntity
     /// <summary>V1.2: Producer đã duyệt và khoá revision này làm tham chiếu. Chỉ thêm metadata, nội dung (snapshot, hash) vẫn bất biến; không có thao tác mở khoá.</summary>
     public DateTime? LockedAt { get; private set; }
     public Guid? LockedById { get; private set; }
-    public bool IsLocked => LockedAt.HasValue;
+    public bool IsLocked => LockedAt.HasValue || ReviewStatus == BibleRevisionStatus.CanonLocked;
 
     public BibleEntry BibleEntry { get; private set; } = default!;
 
@@ -47,6 +57,27 @@ public class BibleEntryRevision : BaseEntity
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
         LockedAt = DateTime.UtcNow;
         LockedById = userId;
+        ReviewStatus = BibleRevisionStatus.CanonLocked;
+    }
+
+    public void Endorse(Guid reviewerId)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
+        ReviewStatus = BibleRevisionStatus.WriterEndorsed;
+        ReworkFeedback = null;
+    }
+
+    public void RequestRework(Guid reviewerId, string feedback)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá, không thể yêu cầu sửa trực tiếp; phải dùng /supersede.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(feedback);
+        ReviewStatus = BibleRevisionStatus.ReworkRequired;
+        ReworkFeedback = feedback.Trim();
+    }
+
+    public void AssignArtist(Guid artistId)
+    {
+        ArtistUserId = artistId;
     }
 
     public static BibleEntryRevision Create(
@@ -60,7 +91,10 @@ public class BibleEntryRevision : BaseEntity
         int effectiveFromChapterNumber = 1,
         bool isInitialVersion = false,
         string? stageName = null,
-        int? effectiveToChapterNumber = null)
+        int? effectiveToChapterNumber = null,
+        Guid? artistUserId = null,
+        BibleRevisionStatus reviewStatus = BibleRevisionStatus.Draft,
+        string? reworkFeedback = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
@@ -84,6 +118,9 @@ public class BibleEntryRevision : BaseEntity
             EffectiveToChapterNumber = effectiveToChapterNumber,
             StageName = string.IsNullOrWhiteSpace(stageName) ? null : stageName.Trim(),
             IsInitialVersion = isInitialVersion,
+            ArtistUserId = artistUserId,
+            ReviewStatus = reviewStatus,
+            ReworkFeedback = reworkFeedback?.Trim(),
             CreatedAt = DateTime.UtcNow
         };
     }

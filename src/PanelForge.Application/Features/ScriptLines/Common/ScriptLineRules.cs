@@ -79,13 +79,23 @@ internal static class ScriptLineRules
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<(Chapter, Guid)>.Failure(locked, ResultErrorCodes.Conflict);
 
+        if (chapter.IsScriptFrozen)
+            return Result<(Chapter, Guid)>.Failure(
+                "Kịch bản của chương này đã được đóng băng (Frozen / Read-only) để đưa vào sản xuất hình ảnh. Producer cần mở lại kịch bản nếu muốn sửa đổi.",
+                ResultErrorCodes.Conflict);
+
         if (expectedVersion is { } v && v != chapter.VersionVector)
             return Result<(Chapter, Guid)>.Failure(
                 $"Chapter đã đổi (version hiện tại {chapter.VersionVector}, bạn đang sửa bản {v}). Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
 
         var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
-        if (role is not null and not WorkspaceRole.Producer)
+        if (role is null)
+            return Result<(Chapter, Guid)>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
+
+        // V2.5: Producer và Writer trong Series có quyền tự do sáng tác tiền kỳ khi kịch bản chưa đóng băng,
+        // KHÔNG yêu cầu phải có thẻ Assignment do Producer giao.
+        if (role != WorkspaceRole.Producer && role != WorkspaceRole.Writer)
         {
             var gate = await AiWorkflowFacts.EvaluateAssignmentAsync(db, userId, chapter, role.Value, ct);
             if (gate.BlockedReason is not null)

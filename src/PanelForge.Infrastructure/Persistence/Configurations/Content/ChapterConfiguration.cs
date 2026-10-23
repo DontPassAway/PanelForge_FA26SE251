@@ -59,6 +59,20 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("outline")
                .HasColumnType("text");
 
+        builder.Property(c => c.IsScriptFrozen)
+               .HasColumnName("is_script_frozen")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptFrozenAt)
+               .HasColumnName("script_frozen_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.ScriptFrozenById)
+               .HasColumnName("script_frozen_by_id")
+               .HasColumnType("uuid");
+
         builder.Property(c => c.TargetReleaseDate)
                .HasColumnName("target_release_date")
                .HasColumnType("date");
