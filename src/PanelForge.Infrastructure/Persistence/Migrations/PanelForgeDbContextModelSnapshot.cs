@@ -965,6 +965,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ArtistUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("artist_user_id");
+
                     b.Property<Guid?>("AssociatedChapterId")
                         .HasColumnType("uuid")
                         .HasColumnName("associated_chapter_id");
@@ -1025,6 +1029,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("LockedById")
                         .HasColumnType("uuid")
                         .HasColumnName("locked_by_id");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Draft")
+                        .HasColumnName("review_status");
+
+                    b.Property<string>("ReworkFeedback")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("rework_feedback");
 
                     b.Property<string>("SnapshotJson")
                         .IsRequired()
@@ -1169,6 +1184,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsScriptFrozen")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_script_frozen");
+
                     b.Property<string>("Outline")
                         .HasColumnType("text")
                         .HasColumnName("outline");
@@ -1176,6 +1197,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("published_at");
+
+                    b.Property<DateTime?>("ScriptFrozenAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("script_frozen_at");
+
+                    b.Property<Guid?>("ScriptFrozenById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_frozen_by_id");
 
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
@@ -2208,7 +2237,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SeriesId", "UserId")
                         .IsUnique()
-                        .HasDatabaseName("ix_series_members_series_user");
+                        .HasDatabaseName("ix_series_members_series_user")
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("series_members", (string)null);
                 });
