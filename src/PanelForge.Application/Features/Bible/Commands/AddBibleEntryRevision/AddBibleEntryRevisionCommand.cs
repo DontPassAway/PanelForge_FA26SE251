@@ -75,6 +75,16 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ResultErrorCodes.Conflict);
         }
 
+        if (command.Name is not null && string.IsNullOrWhiteSpace(command.Name))
+        {
+            return Result<BibleEntryRevisionDto>.Failure("Tên của mục Bible không được để trống.");
+        }
+
+        if (command.Description is not null && string.IsNullOrWhiteSpace(command.Description))
+        {
+            return Result<BibleEntryRevisionDto>.Failure("Mô tả của mục Bible không được để trống.");
+        }
+
         var name = string.IsNullOrWhiteSpace(command.Name) ? entry.Name : command.Name.Trim();
         var description = string.IsNullOrWhiteSpace(command.Description) ? entry.Description : command.Description.Trim();
         var subtitle = command.Subtitle ?? entry.Subtitle;

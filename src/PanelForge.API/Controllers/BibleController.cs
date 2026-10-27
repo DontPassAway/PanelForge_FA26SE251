@@ -296,7 +296,7 @@ public sealed class BibleController : ControllerBase
     /// V2.5: Artist tải lên bản vẽ thiết kế / Model Sheet (CAS SHA-256) cho mục Bible (-> ConceptSubmitted, lưu ArtistUserId).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/concept")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [RequireWorkspaceRole(WorkspaceRole.Artist)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -389,11 +389,11 @@ public sealed class BibleController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Producer tải ảnh reference sheet (PNG/JPEG/WebP, ≤ 10 MB).
+    /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Artist tải ảnh reference sheet (PNG/JPEG/WebP, ≤ 10 MB).
     /// Trả về <c>url</c> để gửi vào <c>referenceImageUrl</c> khi tạo mục hoặc thêm revision.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/assets")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)]
+    [RequireWorkspaceRole(WorkspaceRole.Artist)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
