@@ -16,8 +16,8 @@ public sealed record AddBibleEntryRevisionCommand(
     Guid BibleEntryId,
     Guid UserId,
     string Summary,
-    string Name,
-    string Description,
+    string? Name = null,
+    string? Description = null,
     string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
@@ -75,7 +75,12 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ResultErrorCodes.Conflict);
         }
 
-        if (string.IsNullOrWhiteSpace(command.Name) || string.IsNullOrWhiteSpace(command.Description))
+        var name = string.IsNullOrWhiteSpace(command.Name) ? entry.Name : command.Name.Trim();
+        var description = string.IsNullOrWhiteSpace(command.Description) ? entry.Description : command.Description.Trim();
+        var subtitle = command.Subtitle ?? entry.Subtitle;
+        var detailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? entry.DetailsJson : command.DetailsJson.Trim();
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(description))
         {
             return Result<BibleEntryRevisionDto>.Failure("Tên và mô tả của mục Bible không được để trống.");
         }
@@ -124,10 +129,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         {
             entry.Id,
             entry.Code,
-            Name = command.Name.Trim(),
-            Subtitle = command.Subtitle?.Trim(),
-            Description = command.Description.Trim(),
-            DetailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? "{}" : command.DetailsJson.Trim(),
+            Name = name,
+            Subtitle = subtitle?.Trim(),
+            Description = description,
+            DetailsJson = detailsJson,
             ReferenceImageUrl = command.ReferenceImageUrl?.Trim(),
             command.Priority,
             command.StrictCheck,
@@ -159,10 +164,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         if (entry.GetCurrentRevision() == revision)
         {
             entry.UpdateDetails(
-                name: command.Name,
-                description: command.Description,
-                subtitle: command.Subtitle,
-                detailsJson: command.DetailsJson,
+                name: name,
+                description: description,
+                subtitle: subtitle,
+                detailsJson: detailsJson,
                 referenceImageUrl: command.ReferenceImageUrl,
                 priority: command.Priority,
                 strictCheck: command.StrictCheck

@@ -67,7 +67,10 @@ public sealed record CreateBibleEntryRequest(
     int EffectiveFromChapterNumber = 1,
     string? StageName = null,
     int? EffectiveToChapterNumber = null
-);
+)
+{
+    public string? EffectiveImageUrl => ReferenceImageUrl;
+}
 
 public sealed record AddBibleEntryRevisionRequest(
     string Summary,
@@ -83,7 +86,11 @@ public sealed record AddBibleEntryRevisionRequest(
     int? EffectiveToChapterNumber = null,
     // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
     int? ExpectedVersionNumber = null
-);
+)
+{
+    public string EffectiveSummary => Summary;
+    public string? EffectiveImageUrl => ReferenceImageUrl;
+}
 
 /// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do; chương hiệu lực lấy theo bản bị thay.</summary>
 public sealed record SupersedeBibleEntryRevisionRequest(
@@ -99,23 +106,38 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     // null = giữ giai đoạn và chương kết thúc của bản bị thay
     string? StageName = null,
     int? EffectiveToChapterNumber = null
-);
+)
+{
+    public string? EffectiveImageUrl => ReferenceImageUrl;
+}
 
-public sealed record EndorseBibleRevisionRequest(string? Note = null);
+public sealed record EndorseBibleRevisionRequest(string? Note = null, string? EndorsementNote = null)
+{
+    public string? EffectiveNote => !string.IsNullOrWhiteSpace(Note) ? Note.Trim() : (!string.IsNullOrWhiteSpace(EndorsementNote) ? EndorsementNote.Trim() : null);
+}
 
-public sealed record RequestReworkBibleRevisionRequest(string Reason);
+public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, string? ReworkReason = null)
+{
+    public string EffectiveReason => (!string.IsNullOrWhiteSpace(Reason) ? Reason : ReworkReason)?.Trim() ?? string.Empty;
+}
 
 public sealed record SubmitConceptArtRequest(
-    string Summary,
-    string Name,
-    string Description,
-    string ReferenceImageUrl,
+    string? Summary = null,
+    string? Name = null,
+    string? Description = null,
+    string? ReferenceImageUrl = null,
+    string? ImageAssetUrl = null,
+    string? Note = null,
     string? Subtitle = null,
     string? DetailsJson = null,
     string? StageName = null,
     int? EffectiveToChapterNumber = null,
     int? ExpectedVersionNumber = null
-);
+)
+{
+    public string EffectiveSummary => (!string.IsNullOrWhiteSpace(Summary) ? Summary : (!string.IsNullOrWhiteSpace(Note) ? Note : "Nộp bản vẽ Concept Art")).Trim();
+    public string EffectiveImageUrl => (!string.IsNullOrWhiteSpace(ReferenceImageUrl) ? ReferenceImageUrl : ImageAssetUrl)?.Trim() ?? string.Empty;
+}
 
 public sealed record BibleDesignQueueItemDto(
     Guid EntryId,
@@ -132,7 +154,10 @@ public sealed record BibleDesignQueueItemDto(
     string? ReworkFeedback,
     DateTime CreatedAt,
     DateTime? UpdatedAt
-);
+)
+{
+    public BibleRevisionStatus ReviewStatus => Status;
+}
 
 public sealed record ChapterBibleGateItemDto(
     Guid EntryId,
@@ -154,4 +179,3 @@ public sealed record ChapterBibleGateResultDto(
     int PendingCount,
     IReadOnlyList<ChapterBibleGateItemDto> Items
 );
-

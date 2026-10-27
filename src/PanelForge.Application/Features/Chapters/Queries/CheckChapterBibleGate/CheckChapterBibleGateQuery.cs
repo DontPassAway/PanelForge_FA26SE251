@@ -92,7 +92,9 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
             var effectiveAny = entry.EffectiveRevisionAt(chapterNumber, canonOnly: false);
             var latestRev = entry.GetCurrentRevision();
 
-            if (effectiveCanon != null && effectiveCanon.IsLocked)
+            bool isSatisfied = effectiveCanon != null && (entry.Category != BibleEntryCategory.Character || effectiveCanon.IsLocked);
+
+            if (isSatisfied)
             {
                 lockedCount++;
                 items.Add(new ChapterBibleGateItemDto(
@@ -100,12 +102,14 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
                     Code: entry.Code,
                     Name: entry.Name,
                     Category: entry.Category,
-                    CurrentStatus: effectiveCanon.ReviewStatus,
-                    IsLocked: true,
+                    CurrentStatus: effectiveCanon!.ReviewStatus,
+                    IsLocked: entry.Category == BibleEntryCategory.Character ? effectiveCanon.IsLocked : true,
                     EffectiveFromChapter: effectiveCanon.EffectiveFromChapterNumber,
                     EffectiveToChapter: effectiveCanon.EffectiveToChapterNumber,
                     WarningCode: "OK",
-                    Message: $"Đã có phiên bản Canon khóa tại Chương {chapterNumber}."
+                    Message: entry.Category == BibleEntryCategory.Character
+                        ? $"Đã có phiên bản Canon khóa tại Chương {chapterNumber}."
+                        : $"Đã có phiên bản hiệu lực tại Chương {chapterNumber}."
                 ));
             }
             else
@@ -119,10 +123,15 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
                     warnCode = "ENTRY_NOT_YET_EFFECTIVE";
                     message = $"Mục '{entry.Name}' ({entry.Code}) chưa có phiên bản nào bao phủ Chương {chapterNumber} (mới nhất từ Ch.{latestRev?.EffectiveFromChapterNumber ?? 1}).";
                 }
-                else
+                else if (entry.Category == BibleEntryCategory.Character)
                 {
                     warnCode = "CHARACTER_NOT_LOCKED";
-                    message = $"Mục '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa được Producer khóa Canon tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
+                    message = $"Mục nhân vật '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa được Producer khóa Canon tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
+                }
+                else
+                {
+                    warnCode = "ENTRY_NOT_LOCKED";
+                    message = $"Mục '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa có phiên bản hợp lệ tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
                 }
 
                 items.Add(new ChapterBibleGateItemDto(

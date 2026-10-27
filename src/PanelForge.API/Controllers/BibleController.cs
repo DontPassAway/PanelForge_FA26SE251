@@ -104,7 +104,7 @@ public sealed class BibleController : ControllerBase
             Description: body.Description,
             Subtitle: body.Subtitle,
             DetailsJson: body.DetailsJson,
-            ReferenceImageUrl: body.ReferenceImageUrl,
+            ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
@@ -144,12 +144,12 @@ public sealed class BibleController : ControllerBase
             SeriesId: seriesId,
             BibleEntryId: entryId,
             UserId: GetCurrentUserId(),
-            Summary: body.Summary,
+            Summary: body.EffectiveSummary,
             Name: body.Name,
             Description: body.Description,
             Subtitle: body.Subtitle,
             DetailsJson: body.DetailsJson,
-            ReferenceImageUrl: body.ReferenceImageUrl,
+            ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
@@ -241,7 +241,7 @@ public sealed class BibleController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new EndorseBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body?.Note),
+            new EndorseBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body?.EffectiveNote),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -275,7 +275,7 @@ public sealed class BibleController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new RequestReworkBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body.Reason),
+            new RequestReworkBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body.EffectiveReason),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -311,12 +311,12 @@ public sealed class BibleController : ControllerBase
             SeriesId: seriesId,
             BibleEntryId: entryId,
             UserId: GetCurrentUserId(),
-            Summary: body.Summary,
+            Summary: body.EffectiveSummary,
             Name: body.Name,
             Description: body.Description,
             Subtitle: body.Subtitle,
             DetailsJson: body.DetailsJson,
-            ReferenceImageUrl: body.ReferenceImageUrl,
+            ReferenceImageUrl: body.EffectiveImageUrl,
             StageName: body.StageName,
             EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
@@ -365,7 +365,7 @@ public sealed class BibleController : ControllerBase
             Description: body.Description,
             Subtitle: body.Subtitle,
             DetailsJson: body.DetailsJson,
-            ReferenceImageUrl: body.ReferenceImageUrl,
+            ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
