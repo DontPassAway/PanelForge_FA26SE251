@@ -37,10 +37,10 @@ public sealed class GetSeriesMembersQueryHandler
         if (series is null)
             return Result<IReadOnlyList<SeriesMemberDto>>.Failure("Series không tồn tại.", ResultErrorCodes.NotFound);
 
-        // Người dùng phải là thành viên của Workspace để xem danh sách thành viên Series
-        if (!await _authorizationService.IsMemberAsync(query.UserId, series.WorkspaceId, cancellationToken))
+        // Người dùng phải là thành viên của Series (hoặc Producer / Owner của Workspace) để xem danh sách thành viên Series
+        if (!await _authorizationService.IsSeriesMemberAsync(query.UserId, query.SeriesId, cancellationToken))
             return Result<IReadOnlyList<SeriesMemberDto>>.Failure(
-                "Bạn phải là thành viên của Studio Workspace để xem danh sách thành viên dự án.",
+                "Bạn phải là thành viên được phân công vào dự án Series hoặc quản trị viên để xem danh sách thành viên.",
                 ResultErrorCodes.Forbidden);
 
         var members = await _dbContext.SeriesMembers

@@ -23,6 +23,21 @@ public interface IWorkspaceAuthorizationService
     Task<Guid?> GetWorkspaceIdOfPanelAsync(Guid panelId, CancellationToken cancellationToken = default);
     Task<Guid?> GetWorkspaceIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default);
 
+    /// <summary>Series chứa Chapter; null nếu Chapter không tồn tại.</summary>
+    Task<Guid?> GetSeriesIdOfChapterAsync(Guid chapterId, CancellationToken cancellationToken = default);
+
+    /// <summary>Series chứa Page (qua Chapter); null nếu Page không tồn tại.</summary>
+    Task<Guid?> GetSeriesIdOfPageAsync(Guid pageId, CancellationToken cancellationToken = default);
+
+    /// <summary>Series chứa Panel (qua Page, Chapter); null nếu Panel không tồn tại.</summary>
+    Task<Guid?> GetSeriesIdOfPanelAsync(Guid panelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Series chứa Scene (qua Chapter); null nếu Scene không tồn tại.</summary>
+    Task<Guid?> GetSeriesIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default);
+
+    /// <summary>Kiểm tra xem người dùng có phải là thành viên của Series hay không (Workspace Owner / Producer luôn có quyền, thành viên khác phải có trong SeriesMember).</summary>
+    Task<bool> IsSeriesMemberAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default);
+
     /// <summary>Kiểm tra vai trò cấp Series: Workspace Owner/Producer luôn có quyền, thành viên khác cần được chỉ định trong SeriesMember.</summary>
     Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default);
     Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default);

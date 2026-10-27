@@ -6,7 +6,7 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Infrastructure.Services;
 
 /// <summary>
-/// Kiểm tra quyền cấp Workspace (BR-07 two-level access control).
+/// Kiểm tra quyền cấp Workspace và cấp Series (BR-07 two-level access control).
 /// Administrator KHÔNG có WorkspaceRole và KHÔNG có quyền nội dung trong bất kỳ Studio nào,
 /// nên mọi kiểm tra ở đây đều trả về false cho Admin. Chức năng quản trị đi qua AdminController.
 /// </summary>
@@ -121,6 +121,45 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
             .Select(s => (Guid?)s.Chapter.Series.WorkspaceId)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<Guid?> GetSeriesIdOfChapterAsync(Guid chapterId, CancellationToken cancellationToken = default)
+        => _dbContext.Chapters
+            .Where(c => c.Id == chapterId)
+            .Select(c => (Guid?)c.SeriesId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Guid?> GetSeriesIdOfPageAsync(Guid pageId, CancellationToken cancellationToken = default)
+        => _dbContext.Pages
+            .Where(p => p.Id == pageId)
+            .Select(p => (Guid?)p.Chapter.SeriesId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Guid?> GetSeriesIdOfPanelAsync(Guid panelId, CancellationToken cancellationToken = default)
+        => _dbContext.Panels
+            .Where(p => p.Id == panelId)
+            .Select(p => (Guid?)p.Page.Chapter.SeriesId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Guid?> GetSeriesIdOfSceneAsync(Guid sceneId, CancellationToken cancellationToken = default)
+        => _dbContext.Scenes
+            .Where(s => s.Id == sceneId)
+            .Select(s => (Guid?)s.Chapter.SeriesId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<bool> IsSeriesMemberAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
+    {
+        if (await IsAdminAsync(userId, cancellationToken)) return false;
+
+        var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
+        if (!workspaceId.HasValue) return false;
+
+        // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
+        if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
+
+        // Thành viên Series được phân công chuyên môn cụ thể (chưa bị xóa mềm)
+        return await _dbContext.SeriesMembers
+            .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
+    }
+
     public async Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)
     {
         if (await IsAdminAsync(userId, cancellationToken)) return false;
@@ -131,9 +170,9 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Thành viên Series được phân quyền chuyên môn cụ thể
+        // Thành viên Series được phân quyền chuyên môn cụ thể (chưa bị xóa mềm)
         var member = await _dbContext.SeriesMembers
-            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
 
         return member != null && allowedRoles.Contains(member.Role);
     }
@@ -152,7 +191,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         }
 
         var seriesMember = await _dbContext.SeriesMembers
-            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
 
         if (seriesMember != null)
         {

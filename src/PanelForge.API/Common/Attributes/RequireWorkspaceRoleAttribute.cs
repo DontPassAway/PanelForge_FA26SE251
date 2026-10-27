@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -40,8 +41,10 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
             return;
         }
 
-        // Tìm workspaceId từ RouteData (ví dụ: {id}, {workspaceId} hoặc gián tiếp qua {seriesId})
+        // Tìm workspaceId và seriesId (nếu có) từ RouteData
         Guid workspaceId = Guid.Empty;
+        Guid? resolvedSeriesId = null;
+
         if (context.RouteData.Values.TryGetValue("workspaceId", out var wsVal) && wsVal is string wsStr && Guid.TryParse(wsStr, out var parsedWsId))
         {
             workspaceId = parsedWsId;
@@ -52,6 +55,7 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("seriesId", out var seriesVal) && seriesVal is string seriesStr && Guid.TryParse(seriesStr, out var parsedSeriesId))
         {
+            resolvedSeriesId = parsedSeriesId;
             var seriesWsId = await _authorizationService.GetWorkspaceIdOfSeriesAsync(
                 parsedSeriesId, context.HttpContext.RequestAborted);
 
@@ -65,6 +69,9 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("chapterId", out var chapterVal) && chapterVal is string chapterStr && Guid.TryParse(chapterStr, out var parsedChapterId))
         {
+            resolvedSeriesId = await _authorizationService.GetSeriesIdOfChapterAsync(
+                parsedChapterId, context.HttpContext.RequestAborted);
+
             var chapterWsId = await _authorizationService.GetWorkspaceIdOfChapterAsync(
                 parsedChapterId, context.HttpContext.RequestAborted);
 
@@ -76,9 +83,11 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
             workspaceId = chapterWsId.Value;
         }
-
         else if (context.RouteData.Values.TryGetValue("pageId", out var pageVal) && pageVal is string pageStr && Guid.TryParse(pageStr, out var parsedPageId))
         {
+            resolvedSeriesId = await _authorizationService.GetSeriesIdOfPageAsync(
+                parsedPageId, context.HttpContext.RequestAborted);
+
             var pageWsId = await _authorizationService.GetWorkspaceIdOfPageAsync(
                 parsedPageId, context.HttpContext.RequestAborted);
 
@@ -92,6 +101,9 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("sceneId", out var sceneVal) && sceneVal is string sceneStr && Guid.TryParse(sceneStr, out var parsedSceneId))
         {
+            resolvedSeriesId = await _authorizationService.GetSeriesIdOfSceneAsync(
+                parsedSceneId, context.HttpContext.RequestAborted);
+
             var sceneWsId = await _authorizationService.GetWorkspaceIdOfSceneAsync(
                 parsedSceneId, context.HttpContext.RequestAborted);
 
@@ -105,6 +117,9 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
         else if (context.RouteData.Values.TryGetValue("panelId", out var panelVal) && panelVal is string panelStr && Guid.TryParse(panelStr, out var parsedPanelId))
         {
+            resolvedSeriesId = await _authorizationService.GetSeriesIdOfPanelAsync(
+                parsedPanelId, context.HttpContext.RequestAborted);
+
             var panelWsId = await _authorizationService.GetWorkspaceIdOfPanelAsync(
                 parsedPanelId, context.HttpContext.RequestAborted);
 
@@ -124,20 +139,38 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         }
 
         bool hasPermission;
-        if (_allowedRoles.Length == 0)
+        if (resolvedSeriesId.HasValue)
         {
-            hasPermission = await _authorizationService.IsMemberAsync(userId, workspaceId, context.HttpContext.RequestAborted);
+            if (_allowedRoles.Length == 0)
+            {
+                hasPermission = await _authorizationService.IsSeriesMemberAsync(userId, resolvedSeriesId.Value, context.HttpContext.RequestAborted);
+            }
+            else
+            {
+                hasPermission = await _authorizationService.HasSeriesRoleAsync(userId, resolvedSeriesId.Value, _allowedRoles, context.HttpContext.RequestAborted);
+            }
         }
         else
         {
-            hasPermission = await _authorizationService.HasWorkspaceRoleAsync(userId, workspaceId, _allowedRoles, context.HttpContext.RequestAborted);
+            if (_allowedRoles.Length == 0)
+            {
+                hasPermission = await _authorizationService.IsMemberAsync(userId, workspaceId, context.HttpContext.RequestAborted);
+            }
+            else
+            {
+                hasPermission = await _authorizationService.HasWorkspaceRoleAsync(userId, workspaceId, _allowedRoles, context.HttpContext.RequestAborted);
+            }
         }
 
         if (!hasPermission)
         {
-            var roleMsg = _allowedRoles.Length == 0
-                ? "Bạn không phải là thành viên của Workspace này."
-                : $"Bạn không có quyền thực hiện thao tác này trong Workspace. Yêu cầu một trong các vai trò: {string.Join(", ", _allowedRoles)}.";
+            var roleMsg = resolvedSeriesId.HasValue
+                ? (_allowedRoles.Length == 0
+                    ? "Bạn không phải là thành viên được phân công vào Series này."
+                    : $"Bạn không có quyền thực hiện thao tác này trong Series. Yêu cầu một trong các vai trò: {string.Join(", ", _allowedRoles)}.")
+                : (_allowedRoles.Length == 0
+                    ? "Bạn không phải là thành viên của Workspace này."
+                    : $"Bạn không có quyền thực hiện thao tác này trong Workspace. Yêu cầu một trong các vai trò: {string.Join(", ", _allowedRoles)}.");
 
             context.Result = new ObjectResult(new { message = roleMsg })
             {

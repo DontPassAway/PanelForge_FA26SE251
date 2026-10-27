@@ -27,6 +27,7 @@ using PanelForge.Application.Features.TypographyPresets.Models;
 using PanelForge.Application.Features.TypographyPresets.Queries.GetTypographyPresets;
 using PanelForge.Domain.Enums;
 using PanelForge.API.Common;
+using PanelForge.Application.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -113,11 +114,16 @@ public sealed class SeriesController : ControllerBase
         [FromRoute] Guid seriesId,
         CancellationToken cancellationToken)
     {
-        var query = new GetSeriesByIdQuery(seriesId);
+        var query = new GetSeriesByIdQuery(seriesId, GetCurrentUserId());
         var result = await _mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.Forbidden)
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage });
+
             return NotFound(new { error = result.ErrorMessage });
+        }
 
         return Ok(result.Value);
     }
