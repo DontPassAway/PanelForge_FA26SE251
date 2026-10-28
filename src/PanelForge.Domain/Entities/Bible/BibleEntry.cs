@@ -127,6 +127,20 @@ public class BibleEntry : BaseEntity
         return revision;
     }
 
+    public void RemoveRevision(BibleEntryRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+
+        if (revision.IsLocked)
+            throw new InvalidOperationException("Không thể xóa revision đã được khóa Canon.");
+
+        if (revision.IsInitialVersion)
+            throw new InvalidOperationException("Không thể xóa phiên bản gốc ban đầu (Initial Version).");
+
+        Revisions.Remove(revision);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>
     /// Revision có hiệu lực tại một chương (BR-15): phạm vi [from, to] chứa chương (to null = tới hết truyện);
     /// nhiều bản cùng phủ thì lấy from lớn nhất (giai đoạn mới hơn) rồi đến VersionNumber lớn nhất (bản sửa mới hơn).

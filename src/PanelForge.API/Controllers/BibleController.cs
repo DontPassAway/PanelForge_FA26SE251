@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryEra;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
@@ -473,5 +475,55 @@ public sealed class BibleController : ControllerBase
             return NotFound(new { error = result.ErrorMessage });
 
         return Ok(result.Value);
+    }
+    /// <summary>
+    /// DELETE /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}
+    /// Xóa một bản sửa đổi (revision) của mục Bible (chỉ cho phép nếu chưa khóa Canon và không phải bản gốc ban đầu).
+    /// </summary>
+    [HttpDelete("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var result = await _mediator.Send(new DeleteBibleEntryRevisionCommand(seriesId, entryId, revisionId, userId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+        return NoContent();
+    }
+
+    /// <summary>
+    /// DELETE /api/series/{seriesId}/bible/entries/{entryId}/eras
+    /// Xóa toàn bộ một thời kỳ (Era) của mục Bible (chỉ cho phép nếu không có bản khóa Canon và không phải era gốc).
+    /// </summary>
+    [HttpDelete("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/eras")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteEra(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromQuery] int chapterNumber,
+        [FromQuery] string? stageName,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var result = await _mediator.Send(new DeleteBibleEntryEraCommand(seriesId, entryId, chapterNumber, stageName, userId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+        return NoContent();
     }
 }
