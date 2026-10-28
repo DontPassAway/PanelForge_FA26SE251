@@ -205,7 +205,7 @@ Các quy tắc nghiệp vụ BR-01 đến BR-24 lấy từ đặc tả. Phần g
 | **BR-01** | Bất biến | Dữ liệu chỉ thêm; bản đã lưu không bị xóa hay ghi đè | Tải Ink v2 vẫn giữ Ink v1 |
 | **BR-08** | Khôi phục không phá hủy | Khôi phục tạo bản mới ở đầu lịch sử, không xóa bản giữa | Đang ở v5 khôi phục v2 thì tạo v6 có nội dung của v2 |
 | **BR-11** | Chống ghi đè đồng thời | Cập nhật dựa trên phiên bản cũ bị từ chối; xung đột phải báo ra | Hai người sửa cùng script; người lưu sau nhận lỗi xung đột |
-| **BR-15** | Bible theo phiên bản chương | Mỗi thay đổi Bible gắn chương có hiệu lực; kiểm tra ở chương N dùng bản có hiệu lực tại N; sửa về quá khứ là bản mới | Chìa khóa: v1 từ Chương 1, v2 từ Chương 5 |
+| **BR-15** | Bible theo phiên bản chương & Biến thể vòng đời | Mỗi thay đổi Bible gắn chương có hiệu lực (`effectiveFromChapterNumber`); nhân vật hỗ trợ các biến thể vòng đời theo thời gian (ví dụ: Akira lúc nhỏ Ch.1 vs Akira trưởng thành Ch.15); kiểm tra ở chương N dùng đúng bản có hiệu lực tại N; sửa ngược về quá khứ là bản mới, không ghi đè | Akira lúc nhỏ: v1 từ Chương 1; Akira trưởng thành: v2 từ Chương 15 |
 | **BR-18** | Kiểm toán đầy đủ | Mọi thao tác thay đổi dữ liệu ghi người, thời điểm, nội dung đổi; thao tác không ghi được thì bị từ chối | Truy ra ai mở khóa chương và lý do |
 
 ### Nhóm C. Phân quyền và truy cập

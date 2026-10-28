@@ -1,7 +1,7 @@
 # Series Bible
 
 > **Tài liệu:** Giải thích Series Bible trong PanelForge: nó là gì, chứa gì, được phiên bản hóa ra sao, ai dùng và dùng để làm gì.
-> **Cập nhật:** 04/10/2026 (thêm mục 10 và 11: tham khảo thiết kế và quy tắc kiểm tra bằng code)
+> **Cập nhật:** 27/10/2026 (Kiến trúc V2.5: Phân cấp 2 tầng Giai đoạn độ tuổi BR-15 vs. Lần sửa đổi, Quy trình Rework Writer ↔ Artist)
 > **Nguồn:** `requirements.md` (3.2, 4.5, 5.2), `PanelForge_Capstone_Content.md` (BR-01, BR-08, BR-15, BR-18, BR-21, US-01), `project-plan.md` (2.2), và code `Domain/Entities/Bible`, `BibleController`.
 
 ---
@@ -100,20 +100,50 @@ Mục PlotFact "Chiếc chìa khóa bạc":
 
 Nhờ vậy, khi một sự thật thay đổi hợp lệ ở chương sau, hệ thống **không báo lỗi giả** cho các chương trước, và trạng thái cũ vẫn luôn dựng lại được.
 
-### Giai đoạn của nhân vật (vd. Goku lúc nhỏ và trưởng thành)
+### 3.1 Cấu trúc phân cấp 2 tầng: Giai đoạn độ tuổi (Era Stages) vs. Lần sửa đổi (Revision Iterations)
 
-Không đặt tên kiểu "Goku V1 / V1.x / V2", vì dễ hiểu nhầm thành số lần chỉnh sửa. Giữ **một mục** `CHR-GOKU`, mỗi giai đoạn là một bản ghi có **tên** và **phạm vi chương**:
+Nhằm tránh tuyệt đối sự nhầm lẫn giữa việc "sửa nét vẽ/màu sắc" với "nhân vật lớn lên qua các mốc thời gian/timeskip", PanelForge áp dụng kiến trúc phân cấp 2 tầng rõ ràng theo chuẩn **BR-15**:
 
-| Giai đoạn | Hiệu lực từ | Hết hiệu lực ở |
-|---|---|---|
-| Lúc nhỏ | Chương 1 | Chương 19 |
-| Trưởng thành | Chương 20 | (trống = tới hết truyện) |
+```
+Character Entry (vd: "CHR-AKIRA" - Akira)
+  │
+  ├── TẦNG 1: GIAI ĐOẠN ĐỘ TUỔI / DÒNG THỜI GIAN (Era Lifecycle Stages)
+  │     ├── [ 🧒 Lúc nhỏ (Chương 1 – 14) ] ── (Trạng thái: 🔒 Canon Locked)
+  │     ├── [ 🧑 Trưởng thành (Từ Chương 15) ] ── (Trạng thái: 🎨 Concept Submitted)
+  │     └── [ ⚡ Dạng thức đặc biệt (Chương 40 – 45) ]
+  │
+  └── TẦNG 2: LẦN CHỈNH SỬA NỘI BỘ TRONG TỪNG GIAI ĐOẠN (Revision Iterations)
+        ├── Lần sửa #1: Bản nháp đặc tả kịch bản (Writer phác thảo lore)
+        ├── Lần sửa #2: Artist nộp Concept Art (Chờ kiểm duyệt)
+        ├── Lần sửa #3: Writer yêu cầu sửa màu tóc (Rework Required)
+        └── Lần sửa #4: Artist nộp lại & Producer duyệt khóa (Canon Locked)
+```
 
-Quy tắc chọn bản ở Chương N: lấy bản có phạm vi chứa N; nếu nhiều bản cùng chứa thì lấy bản bắt đầu muộn nhất (giai đoạn mới hơn), rồi tới bản sửa mới nhất. Nếu không bản nào chứa N (vd. nhân vật rời truyện sau chương 50), mục đó không xuất hiện ở chương N. Sửa chi tiết trong cùng giai đoạn (thêm mặt nghiêng, chỉnh màu áo) là một bản mới **cùng tên giai đoạn và cùng phạm vi**; nếu bản cũ đã khoá thì Producer dùng "Thay thế bản khoá", bản thay thế giữ nguyên giai đoạn và phạm vi.
+1. **Tầng 1 - Giai đoạn độ tuổi theo dòng thời gian (Character Era Stages):**
+   - Được xác định bằng tên giai đoạn (`StageName`) và phạm vi chương (`EffectiveFromChapterNumber` đến `EffectiveToChapterNumber`).
+   - Ví dụ: `Lúc nhỏ (Ch.1–14)`, `Trưởng thành (Ch.15+)`.
+   - Mỗi giai đoạn đại diện cho một mốc tiến hóa ngoại hình/tâm lý của nhân vật trong cốt truyện.
+
+2. **Tầng 2 - Lần chỉnh sửa nội bộ (Revision Iteration):**
+   - Được đánh số bằng `VersionNumber` tăng dần (vd: `Lần sửa #1`, `Lần sửa #2`).
+   - Đại diện cho các vòng lặp phác thảo, góp ý, nộp ảnh concept art giữa Writer ↔ Artist trước khi Producer khóa Canon.
+
+### 3.2 Quy trình Rework (Yêu cầu vẽ lại) giữa Writer và Artist
+
+Khi Artist tải bản vẽ Model Sheet lên (`ConceptSubmitted`), quy trình kiểm duyệt diễn ra minh bạch:
+- **Writer / Editor:** Kiểm tra tính phù hợp với kịch bản và lore:
+  - Nếu đạt chuẩn: Bấm **"✓ Duyệt thiết kế (Endorse)"** (`POST .../revisions/{id}/endorse`) ➔ Chuyển sang `WriterEndorsed`.
+  - Nếu cần chỉnh sửa: Bấm **"↺ Yêu cầu vẽ lại"** (`POST .../revisions/{id}/request-rework`), nhập nhận xét chi tiết `reworkFeedback` (ví dụ: *"Vẽ lại áo khoác màu vàng có mũ theo kịch bản Chương 1"*) ➔ Trạng thái chuyển thành `ReworkRequired`.
+- **Artist:** Mục cần sửa tự động xuất hiện nổi bật trong **Bible Design Queue** của Artist kèm nhận xét `reworkFeedback`. Khi Artist bấm nộp lại, giao diện hiển thị lại nhận xét của Writer để Artist đối chiếu và tải bản vẽ mới lên.
+- **Producer:** Giữ quyền hạn tối cao duy nhất bấm **"🔒 Khóa Canon"** (`CanonLocked`). Bản vẽ bị yêu cầu vẽ lại (`ReworkRequired`) không thể bị khóa Canon.
+
+### 3.3 Quy tắc chọn bản ở Chương N
+
+Lấy bản có phạm vi chứa N; nếu nhiều bản cùng chứa thì lấy bản bắt đầu muộn nhất (giai đoạn mới hơn), rồi tới bản sửa mới nhất. Nếu không bản nào chứa N (vd. nhân vật rời truyện sau chương 50), mục đó không xuất hiện ở chương N. Sửa chi tiết trong cùng giai đoạn (thêm mặt nghiêng, chỉnh màu áo) là một bản mới **cùng tên giai đoạn và cùng phạm vi**; nếu bản cũ đã khoá thì Producer dùng "Thay thế bản khoá", bản thay thế giữ nguyên giai đoạn và phạm vi.
 
 Hạn chế hiện tại: cảnh hồi tưởng (Chương 25 có Goku lúc nhỏ) chưa chọn được giai đoạn riêng cho từng Panel.
 
-### Sửa Bible khi phát hiện sai
+### 3.4 Sửa Bible khi phát hiện sai
 
 Nếu Producer nhận ra Bible ghi sai từ đầu, không sửa đè v1. Cô tạo v2 có hiệu lực từ chương liên quan, ghi rõ lý do trong tóm tắt. Cả hai phiên bản vẫn còn trong lịch sử.
 
@@ -180,13 +210,14 @@ Bộ truyện "Thành phố mưa", Workspace Moonlight.
 | Xem toàn bộ Bible kèm phiên bản mới nhất của từng mục | `GET /api/series/{seriesId}/bible` | Thành viên Workspace |
 | Xem Bible **có hiệu lực tại một chương** | `GET /api/series/{seriesId}/bible/at-chapter/{n}` | Thành viên Workspace |
 | Lấy hàng đợi thiết kế cho Artist | `GET /api/series/{seriesId}/bible/design-queue` | Thành viên Workspace |
-| Tải ảnh reference / model sheet (CAS SHA-256) | `POST /api/series/{seriesId}/bible/assets` | Producer, Writer, Artist |
-| Tạo mục mới (tự tạo phiên bản 1 `Draft`) | `POST /api/series/{seriesId}/bible/entries` | Producer, Writer, Artist |
-| Thêm phiên bản mới / Nộp Concept Art | `POST /api/series/{seriesId}/bible/entries/{id}/revisions` | Producer, Writer, Artist |
-| Writer/Editor xác nhận duyệt thiết kế | `POST .../revisions/{id}/endorse` | Producer, Writer, Editor |
-| Yêu cầu Artist vẽ lại (kèm nhận xét) | `POST .../revisions/{id}/request-rework` | Producer, Writer, Editor |
-| Producer duyệt và chốt khóa canon | `POST .../revisions/{id}/lock` | Producer |
-| Thay thế bản đã khóa (tạo revision cùng chương, khoá luôn) | `POST .../revisions/{id}/supersede` | Producer |
+| Tải ảnh reference / model sheet (CAS SHA-256) | POST /api/series/{seriesId}/bible/assets | Artist (Chỉ Artist được tải ảnh Series Bible lên) |
+| Tạo mục mới (tự tạo phiên bản 1 Draft) | POST /api/series/{seriesId}/bible/entries | Producer, Writer (Series Bible chỉ tạo bởi Writer/Producer) |
+| Thêm phiên bản mới (đặc tả lore mới) | POST /api/series/{seriesId}/bible/entries/{id}/revisions | Producer, Writer |
+| Artist nộp bản vẽ Concept Art / Model Sheet | POST /api/series/{seriesId}/bible/entries/{id}/concept | Artist |
+| Writer/Editor xác nhận duyệt thiết kế | POST .../revisions/{id}/endorse | Producer, Writer, Editor |
+| Yêu cầu Artist vẽ lại (kèm nhận xét) | POST .../revisions/{id}/request-rework | Producer, Writer, Editor |
+| Producer phê duyệt và chốt khóa canon | POST .../revisions/{id}/lock | Producer (Giữ chìa khóa duy nhất khóa Canon) |
+| Thay thế bản đã khóa (tạo revision cùng chương, khoá luôn) | POST .../revisions/{id}/supersede | Producer (Chỉ Producer được thay thế bản đã khóa) |
 
 ---
 

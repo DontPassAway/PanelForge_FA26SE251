@@ -44,10 +44,11 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
             var latestRev = entry.GetCurrentRevision();
             if (latestRev is null) continue;
 
-            // Đưa vào hàng đợi nếu đang ở trạng thái Draft (cần vẽ Concept) hoặc ReworkRequired (cần vẽ lại)
+            // Đưa vào hàng đợi việc vẽ nếu đang ở trạng thái Draft (chưa nộp Concept), ReworkRequired (cần vẽ lại),
+            // hoặc ConceptSubmitted (đã nộp nhưng chưa khoá, cho phép Artist xem lại hoặc nộp lại nếu gửi nhầm)
             if (latestRev.ReviewStatus == BibleRevisionStatus.Draft ||
                 latestRev.ReviewStatus == BibleRevisionStatus.ReworkRequired ||
-                (entry.Category == BibleEntryCategory.Character && !entry.Revisions.Any(r => r.IsLocked)))
+                (latestRev.ReviewStatus == BibleRevisionStatus.ConceptSubmitted && !latestRev.IsLocked))
             {
                 queue.Add(new BibleDesignQueueItemDto(
                     EntryId: entry.Id,
@@ -68,9 +69,10 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
             }
         }
 
-        // Ưu tiên ReworkRequired lên trước, sau đó sắp xếp theo ngày cập nhật mới nhất
+        // Ưu tiên ReworkRequired lên trước, sau đó tới Draft, rồi tới ConceptSubmitted
         var sorted = queue
             .OrderByDescending(q => q.Status == BibleRevisionStatus.ReworkRequired)
+            .ThenByDescending(q => q.Status == BibleRevisionStatus.Draft)
             .ThenByDescending(q => q.UpdatedAt ?? q.CreatedAt)
             .ToList();
 

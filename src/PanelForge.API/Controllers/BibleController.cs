@@ -84,9 +84,10 @@ public sealed class BibleController : ControllerBase
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries
     /// Thêm mục mới vào Series Bible (Tự động khởi tạo Version 1 - BR-18, CF1 Step 8).
+    /// Chỉ Writer và Producer mới có quyền tạo mục Bible; Artist nhận việc qua Design Queue.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // Hướng B: Writer/Artist tạo bản nháp, chỉ Producer khoá thành canon
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -129,7 +130,7 @@ public sealed class BibleController : ControllerBase
     /// Tạo phiên bản sửa đổi mới cho BibleEntry có hiệu lực từ một Chapter (Append-only BR-01, BR-15).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)] // bản nháp (chưa khoá)
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)] // Chỉ Writer và Producer tạo revision text, Artist nộp qua /concept
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

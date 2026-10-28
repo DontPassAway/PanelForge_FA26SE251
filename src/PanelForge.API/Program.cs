@@ -179,7 +179,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Cho phép cả React và Vite
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:5174") // Cho phép cả React và Vite
               .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
               .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
               .AllowCredentials();                  // Cần thiết nếu dùng Cookie hoặc xác thực đặc thù

@@ -59,6 +59,12 @@ public sealed class LockBibleEntryRevisionCommandHandler
             return Result<BibleEntryRevisionDto>.Failure("Revision này đã được khoá trước đó.", ResultErrorCodes.Conflict);
         }
 
+        if (revision.ReviewStatus == BibleRevisionStatus.ReworkRequired)
+        {
+            return Result<BibleEntryRevisionDto>.Failure(
+                "Không thể khoá Canon phiên bản đang bị yêu cầu vẽ lại (ReworkRequired).", ResultErrorCodes.Conflict);
+        }
+
         revision.Lock(command.UserId);
         entry.UpdatedBy = command.UserId.ToString();
         await _dbContext.SaveChangesAsync(cancellationToken);
