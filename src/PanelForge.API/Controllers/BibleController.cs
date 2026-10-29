@@ -111,7 +111,6 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
-            StageName: body.StageName,
             EffectiveToChapterNumber: body.EffectiveToChapterNumber
         );
 
@@ -321,6 +320,7 @@ public sealed class BibleController : ControllerBase
             DetailsJson: body.DetailsJson,
             ReferenceImageUrl: body.EffectiveImageUrl,
             StageName: body.StageName,
+            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber ?? 1,
             EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
             ArtistUserId: GetCurrentUserId(),
