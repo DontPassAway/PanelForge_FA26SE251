@@ -120,14 +120,6 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             stageName ??= superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
         }
-        // V1.2: bản đã khoá không bị ghi đè tại chỗ: thêm bản ở chương khác, hoặc Producer thay thế có lý do (ở trên).
-        else if (entry.HasLockedRevisionStartingAt(effectiveFrom))
-        {
-            return Result<BibleEntryRevisionDto>.Failure(
-                $"Chương {effectiveFrom} đã có phiên bản được khoá cho mục này, không thể thay tại chỗ. " +
-                "Hãy chọn chương bắt đầu có hiệu lực khác, hoặc nhờ Producer thay thế bản đã khoá (kèm lý do).",
-                ResultErrorCodes.Conflict);
-        }
 
         if (effectiveTo < effectiveFrom)
             return Result<BibleEntryRevisionDto>.Failure(

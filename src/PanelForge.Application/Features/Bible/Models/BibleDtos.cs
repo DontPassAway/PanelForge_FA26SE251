@@ -131,6 +131,7 @@ public sealed record SubmitConceptArtRequest(
     string? Subtitle = null,
     string? DetailsJson = null,
     string? StageName = null,
+    int? EffectiveFromChapterNumber = null,
     int? EffectiveToChapterNumber = null,
     int? ExpectedVersionNumber = null
 )
