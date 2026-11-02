@@ -8,7 +8,10 @@ public sealed record PageDto(
     int WidthPx,
     int HeightPx,
     int Dpi,
-    int ElementsCount
+    int ElementsCount,
+    bool IsContentReady = false,
+    DateTime? ContentReadyAt = null,
+    Guid? ContentReadyById = null
 );
 
 public sealed record PageDetailDto(
@@ -20,7 +23,10 @@ public sealed record PageDetailDto(
     int HeightPx,
     int Dpi,
     long Version,
-    int ActiveElementsCount
+    int ActiveElementsCount,
+    bool IsContentReady = false,
+    DateTime? ContentReadyAt = null,
+    Guid? ContentReadyById = null
 );
 
 public sealed record PageContentHierarchyDto(
@@ -33,7 +39,10 @@ public sealed record PageContentHierarchyDto(
     int Dpi,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<PagePanelDetailDto> Panels
+    IReadOnlyList<PagePanelDetailDto> Panels,
+    bool IsContentReady = false,
+    DateTime? ContentReadyAt = null,
+    Guid? ContentReadyById = null
 );
 
 public sealed record PagePanelDetailDto(

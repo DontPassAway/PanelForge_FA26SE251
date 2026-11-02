@@ -73,6 +73,26 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("script_frozen_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.ScriptReopenStatus)
+               .HasColumnName("script_reopen_status")
+               .HasColumnType("varchar(20)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<ScriptReopenStatus>(v))
+               .HasDefaultValue(ScriptReopenStatus.None)
+               .HasSentinel(ScriptReopenStatus.None)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptReopenReason)
+               .HasColumnName("script_reopen_reason")
+               .HasColumnType("text");
+
+        builder.Property(c => c.ScriptReopenRequestedById)
+               .HasColumnName("script_reopen_requested_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptReopenRequestedAt)
+               .HasColumnName("script_reopen_requested_at")
+               .HasColumnType("timestamptz");
+
         builder.Property(c => c.TargetReleaseDate)
                .HasColumnName("target_release_date")
                .HasColumnType("date");

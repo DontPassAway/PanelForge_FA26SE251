@@ -8,6 +8,7 @@ using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptRevision;
+using PanelForge.Application.Features.ScriptLines.Commands.LinkBibleEntries;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptLines.Queries.GetScriptRevision;
@@ -62,6 +63,18 @@ public sealed class ScriptLinesController : ControllerBase
         Guid chapterId, Guid lineId, [FromQuery] long? expectedChapterVersion, CancellationToken ct)
     {
         var result = await _mediator.Send(new DeleteScriptLineCommand(chapterId, lineId, GetCurrentUserId(), expectedChapterVersion), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/script-lines/{lineId}/bible-links — gắn liên kết @-mentions từ kịch bản vào Series Bible (hỗ trợ Stub Entity).</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-lines/{lineId:guid}/bible-links")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptLineBibleLinkDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> LinkBibleEntries(
+        Guid chapterId, Guid lineId, [FromBody] LinkBibleEntriesRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new LinkBibleEntriesCommand(
+            GetCurrentUserId(), chapterId, lineId, body.Mentions), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

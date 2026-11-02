@@ -218,6 +218,43 @@ public sealed class ChaptersController : ControllerBase
     /// POST /api/chapters/{chapterId}/approve
     /// Producer duyệt bản hoàn chỉnh (InProduction → Approved) và chuyển cho Publisher.
     /// </summary>
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/request-script-reopen
+    /// V2.5 & WF04: Writer gửi yêu cầu mở lại kịch bản có lý do chính đáng tới Producer.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/request-script-reopen")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RequestScriptReopen(
+        [FromRoute] Guid chapterId,
+        [FromBody] RequestScriptReopenRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RequestScriptReopenCommand(chapterId, GetCurrentUserId(), body.Reason), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/approve-script-reopen
+    /// V2.5 & WF04: Producer duyệt mở lại kịch bản (ScriptFrozen -> ScriptOpen).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/approve-script-reopen")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApproveScriptReopen(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new ApproveScriptReopenCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/reject-script-reopen
+    /// V2.5 & WF04: Producer từ chối yêu cầu mở lại kịch bản.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/reject-script-reopen")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RejectScriptReopen(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RejectScriptReopenCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
     [HttpPost("api/chapters/{chapterId:guid}/approve")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
@@ -337,6 +374,8 @@ public sealed class ChaptersController : ControllerBase
         _ => BadRequest(new { error = result.ErrorMessage })
     };
 }
+
+public sealed record RequestScriptReopenRequest(string Reason);
 
 public sealed record SetChapterOutlineRequest(string? Outline);
 

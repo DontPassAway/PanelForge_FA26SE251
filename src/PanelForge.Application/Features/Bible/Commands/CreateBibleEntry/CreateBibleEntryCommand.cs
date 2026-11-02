@@ -117,6 +117,32 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // V2.5 Stub Auto-Matching: Remap toàn bộ script_line_bible_links của Stub có cùng tên sang BibleEntry chính thức vừa tạo
+        var cleanName = entry.Name.Trim();
+        var matchingStubs = await _dbContext.BibleEntries
+            .Where(e => e.SeriesBibleId == bible.Id && e.IsStub && e.Name.ToLower() == cleanName.ToLower() && e.Id != entry.Id)
+            .ToListAsync(cancellationToken);
+
+        if (matchingStubs.Count > 0)
+        {
+            var stubIds = matchingStubs.Select(s => s.Id).ToList();
+            var linksToRemap = await _dbContext.ScriptLineBibleLinks
+                .Where(l => stubIds.Contains(l.BibleEntryId))
+                .ToListAsync(cancellationToken);
+
+            foreach (var link in linksToRemap)
+            {
+                link.RemapTargetEntry(entry.Id, revision.Id);
+            }
+
+            foreach (var stub in matchingStubs)
+            {
+                stub.SetActiveStatus(false);
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         var revisionDto = new BibleEntryRevisionDto(
             Id: revision.Id,
             BibleEntryId: revision.BibleEntryId,
@@ -151,7 +177,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             IsActive: entry.IsActive,
             EffectiveRevision: revisionDto,
             CreatedAt: entry.CreatedAt,
-            UpdatedAt: entry.UpdatedAt
+            UpdatedAt: entry.UpdatedAt,
+            IsStub: entry.IsStub
         ));
     }
 }

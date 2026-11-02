@@ -19,6 +19,7 @@ public class ScriptLine : BaseEntity
     public Scene Scene { get; private set; } = default!;
     public Panel? Panel { get; private set; }
     public BibleEntry? SpeakerCharacter { get; private set; }
+    public ICollection<ScriptLineBibleLink> BibleLinks { get; private set; } = [];
 
     private ScriptLine() { }
 
@@ -57,6 +58,7 @@ public class ScriptLine : BaseEntity
         StageDirection = stageDirection?.Trim();
         SpeakerCharacterId = speakerCharacterId;
         NarrationMode = narrationMode;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdateNarrationMode(NarrationMode narrationMode) => NarrationMode = narrationMode;

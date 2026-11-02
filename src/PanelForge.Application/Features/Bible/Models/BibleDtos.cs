@@ -41,7 +41,8 @@ public sealed record BibleEntryDto(
     bool IsActive,
     BibleEntryRevisionDto? EffectiveRevision,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    bool IsStub = false
 );
 
 public sealed record SeriesBibleDto(
@@ -154,7 +155,8 @@ public sealed record BibleDesignQueueItemDto(
     int VersionNumber,
     string? ReworkFeedback,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    bool IsStub = false
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;

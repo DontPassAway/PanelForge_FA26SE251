@@ -56,6 +56,20 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .HasDefaultValue(300)
                .IsRequired();
 
+        builder.Property(p => p.IsContentReady)
+               .HasColumnName("is_content_ready")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(p => p.ContentReadyAt)
+               .HasColumnName("content_ready_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(p => p.ContentReadyById)
+               .HasColumnName("content_ready_by_id")
+               .HasColumnType("uuid");
+
         builder.Property(p => p.CurrentStageId)
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");
