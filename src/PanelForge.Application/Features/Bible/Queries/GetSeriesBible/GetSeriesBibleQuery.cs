@@ -78,7 +78,8 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
                     IsActive: e.IsActive,
                     EffectiveRevision: revDto,
                     CreatedAt: e.CreatedAt,
-                    UpdatedAt: e.UpdatedAt
+                    UpdatedAt: e.UpdatedAt,
+                    IsStub: e.IsStub
                 );
             })
             .ToList();

@@ -908,6 +908,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsStub")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_stub");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("varchar(255)")
@@ -1205,6 +1211,25 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ScriptFrozenById")
                         .HasColumnType("uuid")
                         .HasColumnName("script_frozen_by_id");
+
+                    b.Property<string>("ScriptReopenReason")
+                        .HasColumnType("text")
+                        .HasColumnName("script_reopen_reason");
+
+                    b.Property<DateTime?>("ScriptReopenRequestedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("script_reopen_requested_at");
+
+                    b.Property<Guid?>("ScriptReopenRequestedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_reopen_requested_by_id");
+
+                    b.Property<string>("ScriptReopenStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("None")
+                        .HasColumnName("script_reopen_status");
 
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
@@ -1725,6 +1750,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
 
+                    b.Property<DateTime?>("ContentReadyAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("content_ready_at");
+
+                    b.Property<Guid?>("ContentReadyById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_ready_by_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -1754,6 +1787,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<int>("HeightPx")
                         .HasColumnType("int")
                         .HasColumnName("height_px");
+
+                    b.Property<bool>("IsContentReady")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_content_ready");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -2057,6 +2096,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("RawMentionText")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("raw_mention_text");
+
+                    b.Property<Guid?>("ResolvedRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_revision_id");
+
                     b.Property<Guid>("ScriptLineId")
                         .HasColumnType("uuid")
                         .HasColumnName("script_line_id");
@@ -2073,6 +2120,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BibleEntryId")
                         .HasDatabaseName("ix_script_line_bible_links_bible_entry_id");
+
+                    b.HasIndex("ResolvedRevisionId")
+                        .HasDatabaseName("ix_script_line_bible_links_resolved_revision_id");
 
                     b.HasIndex("ScriptLineId", "BibleEntryId")
                         .IsUnique()
@@ -3349,6 +3399,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("entity_type");
 
+                    b.Property<bool>("HasScriptImpact")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_script_impact");
+
                     b.Property<string>("ImpactReviewReason")
                         .HasColumnType("text")
                         .HasColumnName("impact_review_reason");
@@ -3356,6 +3412,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ImpactReviewRequestedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("impact_review_requested_at");
+
+                    b.Property<Guid?>("ImpactedScriptLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("impacted_script_line_id");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -3821,6 +3881,16 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
+
+                    b.Property<bool>("HasScriptImpact")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_script_impact");
+
+                    b.Property<Guid?>("ImpactedScriptLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("impacted_script_line_id");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -4589,17 +4659,28 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptLineBibleLink", b =>
                 {
-                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", null)
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
                         .WithMany()
                         .HasForeignKey("BibleEntryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Content.ScriptLine", null)
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "ResolvedRevision")
                         .WithMany()
+                        .HasForeignKey("ResolvedRevisionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.ScriptLine", "ScriptLine")
+                        .WithMany("BibleLinks")
                         .HasForeignKey("ScriptLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("BibleEntry");
+
+                    b.Navigation("ResolvedRevision");
+
+                    b.Navigation("ScriptLine");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>
@@ -4952,6 +5033,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Panels");
 
                     b.Navigation("ScriptLines");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptLine", b =>
+                {
+                    b.Navigation("BibleLinks");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>

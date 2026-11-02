@@ -38,6 +38,34 @@ public sealed record UpdateScriptLineRequest(
 
 public sealed record DeleteScriptLineResult(long ChapterVersion, Guid RevisionId);
 
+/// <summary>V2.5 & Module A: DTO chuyển giao cho các @-mention trong dòng kịch bản.</summary>
+public sealed record ScriptMentionItemDto(
+    Guid? BibleEntryId,
+    string? RawText,
+    BibleEntryCategory? CategoryHint = BibleEntryCategory.Character,
+    Guid? ResolvedRevisionId = null
+);
+
+/// <summary>V2.5 & Module A: DTO chi tiết liên kết giữa ScriptLine và Series Bible.</summary>
+public sealed record ScriptLineBibleLinkDto(
+    Guid Id,
+    Guid ScriptLineId,
+    Guid BibleEntryId,
+    string? RawMentionText,
+    Guid? ResolvedRevisionId,
+    string EntryName,
+    BibleEntryCategory Category,
+    bool IsStub,
+    string? StageName,
+    string? ReferenceImageUrl,
+    bool IsCanonLocked,
+    DateTime CreatedAt
+);
+
+public sealed record LinkBibleEntriesRequest(
+    IReadOnlyList<ScriptMentionItemDto> Mentions
+);
+
 public sealed record ScriptRevisionLineDto(
     Guid LineId, int LineOrder, Guid? SpeakerCharacterId, string? DialogueText, string? StageDirection);
 

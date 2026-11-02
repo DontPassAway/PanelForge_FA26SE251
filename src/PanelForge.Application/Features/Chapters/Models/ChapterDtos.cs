@@ -19,7 +19,11 @@ public sealed record ChapterDto(
     string? Outline = null,
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
-    Guid? ScriptFrozenById = null
+    Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -55,7 +59,11 @@ public sealed record ChapterDetailDto(
     string? Outline = null,
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
-    Guid? ScriptFrozenById = null
+    Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null
 );
 
 public sealed record CreateChapterRequest(

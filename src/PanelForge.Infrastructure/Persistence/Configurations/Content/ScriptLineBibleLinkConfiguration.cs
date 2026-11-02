@@ -15,6 +15,8 @@ internal sealed class ScriptLineBibleLinkConfiguration : IEntityTypeConfiguratio
         builder.Property(k => k.Id).HasColumnName("id").HasColumnType("uuid").ValueGeneratedNever();
         builder.Property(k => k.ScriptLineId).HasColumnName("script_line_id").HasColumnType("uuid").IsRequired();
         builder.Property(k => k.BibleEntryId).HasColumnName("bible_entry_id").HasColumnType("uuid").IsRequired();
+        builder.Property(k => k.RawMentionText).HasColumnName("raw_mention_text").HasColumnType("varchar(100)");
+        builder.Property(k => k.ResolvedRevisionId).HasColumnName("resolved_revision_id").HasColumnType("uuid");
         builder.Property(k => k.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(k => k.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
 
@@ -23,10 +25,24 @@ internal sealed class ScriptLineBibleLinkConfiguration : IEntityTypeConfiguratio
                .IsUnique()
                .HasFilter("is_deleted = false")
                .HasDatabaseName("ux_script_line_bible_links_line_entry");
+
         // Truy ngược "những dòng nào nhắc tới mục Bible này" (kiểm tra nhất quán tăng dần)
         builder.HasIndex(k => k.BibleEntryId).HasDatabaseName("ix_script_line_bible_links_bible_entry_id");
+        builder.HasIndex(k => k.ResolvedRevisionId).HasDatabaseName("ix_script_line_bible_links_resolved_revision_id");
 
-        builder.HasOne<ScriptLine>().WithMany().HasForeignKey(k => k.ScriptLineId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<BibleEntry>().WithMany().HasForeignKey(k => k.BibleEntryId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(k => k.ScriptLine)
+               .WithMany(s => s.BibleLinks)
+               .HasForeignKey(k => k.ScriptLineId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(k => k.BibleEntry)
+               .WithMany()
+               .HasForeignKey(k => k.BibleEntryId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(k => k.ResolvedRevision)
+               .WithMany()
+               .HasForeignKey(k => k.ResolvedRevisionId)
+               .OnDelete(DeleteBehavior.SetNull);
     }
 }

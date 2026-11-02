@@ -105,7 +105,8 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 IsActive: entry.IsActive,
                 EffectiveRevision: revDto,
                 CreatedAt: entry.CreatedAt,
-                UpdatedAt: entry.UpdatedAt
+                UpdatedAt: entry.UpdatedAt,
+                IsStub: entry.IsStub
             ));
         }
 

@@ -13,6 +13,7 @@ using PanelForge.Application.Features.Pages.Queries.GetPageById;
 using PanelForge.Application.Features.Pages.Queries.GetPageHierarchy;
 using PanelForge.Application.Features.Pages.Queries.GetPagesByChapter;
 using PanelForge.Application.Features.Pages.Commands.ReorderPage;
+using PanelForge.Application.Features.Pages.Commands.TogglePageContentReady;
 using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
@@ -326,6 +327,38 @@ public sealed class PagesController : ControllerBase
             return BadRequest(new { error = "Phải gửi expectedPageVersion.", code = ResultErrorCodes.Validation });
         var result = await _mediator.Send(
             new RestorePageVersionCommand(pageId, version, expected, GetCurrentUserId()), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/pages/{pageId}/content-ready
+    /// V2.5 & Module C: Đánh dấu trang kịch bản đã sẵn sàng cho Artist vẽ song song.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/pages/{pageId:guid}/content-ready")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(PageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> MarkContentReady(
+        [FromRoute] Guid chapterId,
+        [FromRoute] Guid pageId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new MarkPageContentReadyCommand(chapterId, pageId, GetCurrentUserId()), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    /// <summary>
+    /// DELETE /api/chapters/{chapterId}/pages/{pageId}/content-ready
+    /// V2.5 & Module C: Hủy cờ Content-Ready của trang.
+    /// </summary>
+    [HttpDelete("api/chapters/{chapterId:guid}/pages/{pageId:guid}/content-ready")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(PageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UnmarkContentReady(
+        [FromRoute] Guid chapterId,
+        [FromRoute] Guid pageId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UnmarkPageContentReadyCommand(chapterId, pageId, GetCurrentUserId()), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
     }
 

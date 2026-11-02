@@ -50,6 +50,16 @@ internal sealed class StageProgressConfiguration : IEntityTypeConfiguration<Stag
                .HasColumnName("submitted_by_user_id")
                .HasColumnType("uuid");
 
+        builder.Property(s => s.HasScriptImpact)
+               .HasColumnName("has_script_impact")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(s => s.ImpactedScriptLineId)
+               .HasColumnName("impacted_script_line_id")
+               .HasColumnType("uuid");
+
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

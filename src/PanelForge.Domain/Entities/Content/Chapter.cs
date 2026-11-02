@@ -23,6 +23,12 @@ public class Chapter : BaseEntity
     public DateTime? ScriptFrozenAt { get; private set; }
     public Guid? ScriptFrozenById { get; private set; }
 
+    /// <summary>V2.5 & WF04: Quản lý trạng thái xin mở lại kịch bản đã đóng băng.</summary>
+    public ScriptReopenStatus ScriptReopenStatus { get; private set; } = ScriptReopenStatus.None;
+    public string? ScriptReopenReason { get; private set; }
+    public Guid? ScriptReopenRequestedById { get; private set; }
+    public DateTime? ScriptReopenRequestedAt { get; private set; }
+
     public Series Series { get; private set; } = default!;
     public ICollection<Scene> Scenes { get; private set; } = [];
     public ICollection<Page> Pages { get; private set; } = [];
@@ -68,10 +74,54 @@ public class Chapter : BaseEntity
         IsScriptFrozen = true;
         ScriptFrozenAt = DateTime.UtcNow;
         ScriptFrozenById = userId;
+        ScriptReopenStatus = ScriptReopenStatus.None;
+        ScriptReopenReason = null;
+        ScriptReopenRequestedById = null;
+        ScriptReopenRequestedAt = null;
         IncrementVersion();
     }
 
     /// <summary>V2.5: Mở lại kịch bản cho Writer sửa (sẽ đánh cờ Stage Impact Flag nếu đã có thumbnail/artwork).</summary>
+    /// <summary>V2.5 & WF04: Writer gửi yêu cầu mở lại kịch bản có lý do chính đáng.</summary>
+    public void RequestScriptReopen(Guid userId, string reason)
+    {
+        RequireStatus(ChapterStatus.InProduction, "yêu cầu mở lại kịch bản");
+        if (!IsScriptFrozen)
+            throw new InvalidOperationException("Kịch bản hiện tại chưa bị đóng băng, không cần yêu cầu mở lại.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        ScriptReopenStatus = ScriptReopenStatus.Requested;
+        ScriptReopenReason = reason.Trim();
+        ScriptReopenRequestedById = userId;
+        ScriptReopenRequestedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>V2.5 & WF04: Producer duyệt yêu cầu mở lại kịch bản.</summary>
+    public void ApproveScriptReopen(Guid producerUserId)
+    {
+        RequireStatus(ChapterStatus.InProduction, "chấp thuận mở lại kịch bản");
+        if (!IsScriptFrozen)
+            throw new InvalidOperationException("Kịch bản hiện tại chưa bị đóng băng.");
+        if (ScriptReopenStatus != ScriptReopenStatus.Requested)
+            throw new InvalidOperationException("Không có yêu cầu mở lại kịch bản nào đang chờ duyệt.");
+
+        IsScriptFrozen = false;
+        ScriptReopenStatus = ScriptReopenStatus.Approved;
+        ScriptFrozenAt = null;
+        ScriptFrozenById = null;
+        IncrementVersion();
+    }
+
+    /// <summary>V2.5 & WF04: Producer từ chối yêu cầu mở lại kịch bản.</summary>
+    public void RejectScriptReopen(Guid producerUserId)
+    {
+        RequireStatus(ChapterStatus.InProduction, "từ chối mở lại kịch bản");
+        if (ScriptReopenStatus != ScriptReopenStatus.Requested)
+            throw new InvalidOperationException("Không có yêu cầu mở lại kịch bản nào đang chờ duyệt.");
+
+        ScriptReopenStatus = ScriptReopenStatus.Rejected;
+    }
+
     public void UnfreezeScript(Guid userId)
     {
         RequireStatus(ChapterStatus.InProduction, "mở lại kịch bản");
