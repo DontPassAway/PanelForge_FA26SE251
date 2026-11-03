@@ -14,6 +14,8 @@ public class StageProgress : BaseEntity
     public StageProgressStatus Status { get; private set; }
     public DateTime? SubmittedAt { get; private set; }
     public Guid? SubmittedByUserId { get; private set; }
+    public bool HasScriptImpact { get; private set; } = false;
+    public Guid? ImpactedScriptLineId { get; private set; }
 
     private StageProgress() { }
 
@@ -49,6 +51,26 @@ public class StageProgress : BaseEntity
 
     /// <summary>CF5 bước 7: chương mở lại, phản hồi xem thử thành yêu cầu sửa → stage đã duyệt phải làm lại (Approved → ChangesRequested).</summary>
     public void ReopenForRework() => Move(StageProgressStatus.Approved, StageProgressStatus.ChangesRequested);
+
+    /// <summary>V2.5 & WF04: Đánh cờ tác động do kịch bản đổi và chuyển Approved về ChangesRequested.</summary>
+    public void FlagScriptImpact(Guid scriptLineId)
+    {
+        HasScriptImpact = true;
+        ImpactedScriptLineId = scriptLineId;
+        if (Status == StageProgressStatus.Approved || Status == StageProgressStatus.InReview || Status == StageProgressStatus.Submitted)
+        {
+            Status = StageProgressStatus.ChangesRequested;
+        }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>V2.5 & WF04: Gỡ cờ tác động kịch bản.</summary>
+    public void ClearScriptImpact()
+    {
+        HasScriptImpact = false;
+        ImpactedScriptLineId = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
 
     private void Move(StageProgressStatus from, StageProgressStatus to)
     {

@@ -85,6 +85,12 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasDefaultValue(true)
                .IsRequired();
 
+        builder.Property(e => e.IsStub)
+               .HasColumnName("is_stub")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
         builder.Property(e => e.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

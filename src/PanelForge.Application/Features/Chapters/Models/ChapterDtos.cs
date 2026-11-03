@@ -20,6 +20,10 @@ public sealed record ChapterDto(
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
     Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null
 );
@@ -58,6 +62,10 @@ public sealed record ChapterDetailDto(
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
     Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null
 );

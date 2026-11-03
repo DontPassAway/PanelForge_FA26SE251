@@ -19,6 +19,8 @@ public class BibleEntry : BaseEntity
     public BiblePriority Priority { get; private set; } = BiblePriority.Standard;
     public bool StrictCheck { get; private set; } = true;
     public bool IsActive { get; private set; } = true;
+    /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ cú pháp @-mention trong kịch bản (Write First, Bible Later).</summary>
+    public bool IsStub { get; private set; } = false;
 
     public SeriesBible SeriesBible { get; private set; } = default!;
     public ICollection<BibleEntryRevision> Revisions { get; private set; } = [];
@@ -59,6 +61,38 @@ public class BibleEntry : BaseEntity
         };
     }
 
+    /// <summary>
+    /// V2.5: Tạo nhanh thực thể tạm (Stub) khi Writer gõ @-mention trong kịch bản.
+    /// Cho phép Writer viết tự do (Write First, Bible Later).
+    /// </summary>
+    public static BibleEntry CreateStub(
+        Guid seriesBibleId,
+        BibleEntryCategory category,
+        string name,
+        string? description = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var trimmedName = name.Trim();
+        var code = "STUB_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+        return new BibleEntry
+        {
+            SeriesBibleId = seriesBibleId,
+            Category = category,
+            Code = code,
+            Name = trimmedName,
+            Description = description?.Trim() ?? $"Thực thể tạm thời từ kịch bản cho '@{trimmedName}'",
+            DetailsJson = "{}",
+            Priority = BiblePriority.Standard,
+            StrictCheck = false,
+            IsActive = true,
+            IsStub = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
+
     public void UpdateDetails(
         string name,
         string description,
@@ -78,6 +112,38 @@ public class BibleEntry : BaseEntity
         ReferenceImageUrl = referenceImageUrl?.Trim();
         Priority = priority;
         StrictCheck = strictCheck;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkAsStub(bool isStub = true)
+    {
+        IsStub = isStub;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void PromoteFromStub(
+        string code,
+        string name,
+        string description,
+        string? subtitle = null,
+        string? detailsJson = null,
+        string? referenceImageUrl = null,
+        BiblePriority priority = BiblePriority.Standard,
+        bool strictCheck = true)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+
+        Code = code.Trim().ToUpperInvariant();
+        Name = name.Trim();
+        Description = description.Trim();
+        Subtitle = subtitle?.Trim();
+        DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim();
+        ReferenceImageUrl = referenceImageUrl?.Trim();
+        Priority = priority;
+        StrictCheck = strictCheck;
+        IsStub = false;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -155,6 +155,16 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasColumnName("impact_review_requested_at")
                .HasColumnType("timestamptz");
 
+        builder.Property(a => a.HasScriptImpact)
+               .HasColumnName("has_script_impact")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(a => a.ImpactedScriptLineId)
+               .HasColumnName("impacted_script_line_id")
+               .HasColumnType("uuid");
+
         builder.Property(a => a.CancelReason)
                .HasColumnName("cancel_reason")
                .HasColumnType("text");

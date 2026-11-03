@@ -56,6 +56,10 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.IsScriptFrozen,
                 c.ScriptFrozenAt,
                 c.ScriptFrozenById,
+                c.ScriptReopenStatus,
+                c.ScriptReopenReason,
+                c.ScriptReopenRequestedById,
+                c.ScriptReopenRequestedAt,
                 SetChapterCoverCommandHandler.CoverUrl(c.Id, c.CoverImageSha256)
             ))
             .ToListAsync(cancellationToken);

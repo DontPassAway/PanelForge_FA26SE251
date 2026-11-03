@@ -40,12 +40,31 @@ public sealed class Page : AggregateRoot
     public int Dpi { get; private set; }
     public Guid? CurrentStageId { get; private set; }
 
+    /// <summary>V2.5: Đánh dấu kịch bản phân trang đã sẵn sàng cho Artist tiến hành vẽ Layout/Thumbnail song song.</summary>
+    public bool IsContentReady { get; private set; } = false;
+    public DateTime? ContentReadyAt { get; private set; }
+    public Guid? ContentReadyById { get; private set; }
+
     // ── EF Core Navigation Properties (cho relational queries) ───────────────
     public Chapter Chapter { get; private set; } = default!;
     public PipelineStage? CurrentStage { get; private set; }
     public ICollection<Panel> Panels { get; private set; } = [];
 
     public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
+
+    public void MarkContentReady(Guid userId)
+    {
+        IsContentReady = true;
+        ContentReadyAt = DateTime.UtcNow;
+        ContentReadyById = userId;
+    }
+
+    public void UnmarkContentReady()
+    {
+        IsContentReady = false;
+        ContentReadyAt = null;
+        ContentReadyById = null;
+    }
 
     // Constructor rỗng bắt buộc để Marten instantiate khi replay stream
     internal Page() { }

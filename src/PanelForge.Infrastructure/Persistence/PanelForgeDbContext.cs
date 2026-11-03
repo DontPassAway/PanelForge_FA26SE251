@@ -76,6 +76,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<AssetReference> AssetReferences => Set<AssetReference>();
     public DbSet<AssetAccessLog> AssetAccessLogs => Set<AssetAccessLog>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
+    public DbSet<ChapterScript> ChapterScripts => Set<ChapterScript>();
     public DbSet<ChapterReview> ChapterReviews => Set<ChapterReview>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
