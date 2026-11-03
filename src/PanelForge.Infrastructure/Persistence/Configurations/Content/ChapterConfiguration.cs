@@ -109,6 +109,11 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        builder.HasOne(c => c.Script)
+               .WithOne(s => s.Chapter)
+               .HasForeignKey<ChapterScript>(s => s.ChapterId)
+               .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(c => c.Scenes)
                .WithOne(s => s.Chapter)
                .HasForeignKey(s => s.ChapterId)

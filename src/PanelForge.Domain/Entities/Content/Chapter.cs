@@ -30,6 +30,7 @@ public class Chapter : BaseEntity
     public DateTime? ScriptReopenRequestedAt { get; private set; }
 
     public Series Series { get; private set; } = default!;
+    public ChapterScript? Script { get; private set; }
     public ICollection<Scene> Scenes { get; private set; } = [];
     public ICollection<Page> Pages { get; private set; } = [];
     public ICollection<ExternalPreviewLink> ExternalPreviewLinks { get; private set; } = [];
@@ -64,6 +65,12 @@ public class Chapter : BaseEntity
     public void SetOutline(string? outline) => Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
 
     public void IncrementVersion() => VersionVector++;
+
+    public void AttachScript(ChapterScript script)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+        Script = script;
+    }
 
     /// <summary>V2.5: Producer duyệt kịch bản và đóng băng (InProduction, kịch bản thành read-only với Writer).</summary>
     public void FreezeScript(Guid userId)
