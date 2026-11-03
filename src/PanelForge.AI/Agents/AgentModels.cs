@@ -60,8 +60,11 @@ public static class PromptText
     {
         var sb = new StringBuilder();
         foreach (var (key, b) in keys.Bible)
+        {
             sb.AppendLine($"[{key}] code={b.Code} | category={b.Category} | name={b.Name}")
               .AppendLine($"description: {Flat(b.Description)}");
+            if (!string.IsNullOrWhiteSpace(b.Details)) sb.AppendLine($"details: {Flat(b.Details)}");
+        }
         return sb.ToString().TrimEnd();
     }
 

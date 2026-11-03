@@ -69,6 +69,21 @@ internal static class AssignmentRules
     }
 
     /// <summary>
+    /// Giao việc trong Series = người nhận thành thành viên Series (role = role Workspace), để quyền theo Series
+    /// không chặn chính việc vừa giao. Từng bị gỡ thì thêm dòng mới (unique index chỉ áp cho dòng chưa xoá mềm);
+    /// không tự xoá khi việc kết thúc. Lưu cùng SaveChanges của handler.
+    /// </summary>
+    public static async Task EnsureSeriesMemberAsync(
+        IPanelForgeDbContext db, Guid seriesId, Guid userId, WorkspaceRole role, CancellationToken ct)
+    {
+        var existing = await db.SeriesMembers
+            .FirstOrDefaultAsync(m => m.SeriesId == seriesId && m.UserId == userId && !m.IsDeleted, ct);
+
+        if (existing is null) db.SeriesMembers.Add(SeriesMember.Create(seriesId, userId, role));
+        else if (existing.Role != role) existing.ChangeRole(role);
+    }
+
+    /// <summary>
     /// Một phần nội dung chỉ thuộc một việc ở mỗi stage. Việc cấp Page phủ các Panel của trang đó. Tạo thêm việc chồng phạm vi
     /// luôn bị chặn, kể cả chồng lên việc cả chương. Riêng nghiệp vụ chuyển giao (<paramref name="transfer"/> = true, stage
     /// Artist/Letterer) được TÁCH trang/khung khỏi việc cả chương (việc cả chương mất phần đó, xem

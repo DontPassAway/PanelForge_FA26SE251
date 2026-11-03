@@ -155,9 +155,13 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Thành viên Series được phân công chuyên môn cụ thể (chưa bị xóa mềm)
+        // Thành viên Series (chưa bị xóa mềm) VÀ còn là thành viên Active của Workspace: membership Series sót lại
+        // sau khi bị gỡ/khoá khỏi Workspace không còn mở được Chapter/Page/Panel/Assignment
         return await _dbContext.SeriesMembers
-            .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
+                   .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken)
+               && await _dbContext.WorkspaceMembers
+                   .AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId
+                                  && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
     }
 
     public async Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)
@@ -170,11 +174,16 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Thành viên Series được phân quyền chuyên môn cụ thể (chưa bị xóa mềm)
-        var member = await _dbContext.SeriesMembers
-            .FirstOrDefaultAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
+        // Phải là thành viên Series; quyền chuyên môn lấy theo role Workspace (một role duy nhất, không lệch với Series)
+        var isSeriesMember = await _dbContext.SeriesMembers
+            .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
+        if (!isSeriesMember) return false;
 
-        return member != null && allowedRoles.Contains(member.Role);
+        var workspaceRole = await _dbContext.WorkspaceMembers
+            .Where(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)
+            .Select(m => (WorkspaceRole?)m.Role)
+            .FirstOrDefaultAsync(cancellationToken);
+        return workspaceRole is { } r && allowedRoles.Contains(r);
     }
 
     public async Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)

@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Assignments.Models;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
@@ -53,8 +54,32 @@ public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAss
         assignment.MarkApproved();
         assignment.UpdatedBy = cmd.UserId.ToString();
         _db.Notifications.Add(AssignmentNotifications.Approved(assignment));
+        await NotifyReadyDependentsAsync(assignment, ct);
 
         await _db.SaveChangesAsync(ct);
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));
+    }
+
+    /// <summary>
+    /// Việc đang chờ (Assigned) phụ thuộc việc vừa duyệt: nếu mọi tiền đề của nó đã Approved thì báo người giữ "đến lượt bạn",
+    /// gộp 1 thông báo mỗi người. Cùng lần Save với việc duyệt.
+    /// </summary>
+    private async Task NotifyReadyDependentsAsync(Assignment approved, CancellationToken ct)
+    {
+        var idText = approved.Id.ToString();
+        var waiting = await _db.Assignments.AsNoTracking()
+            .Where(a => a.ChapterId == approved.ChapterId && a.CancelReason == null && a.Status == AssignmentStatus.Assigned
+                        && (a.DependsOnAssignmentId == approved.Id || a.DependsOnAssignmentIdsJson.Contains(idText)))
+            .ToListAsync(ct);
+        if (waiting.Count == 0) return;
+
+        var depIds = waiting.SelectMany(a => a.GetDependsOnAssignmentIds()).Distinct().Where(id => id != approved.Id).ToList();
+        var approvedIds = (await _db.Assignments.AsNoTracking()
+                .Where(a => depIds.Contains(a.Id) && a.Status == AssignmentStatus.Approved)
+                .Select(a => a.Id).ToListAsync(ct))
+            .Append(approved.Id).ToHashSet();
+
+        foreach (var mine in waiting.Where(a => a.GetDependsOnAssignmentIds().All(approvedIds.Contains)).GroupBy(a => a.AssigneeUserId))
+            _db.Notifications.Add(AssignmentNotifications.ReadyToStart(mine.OrderBy(a => a.CreatedAt).ToList()));
     }
 }

@@ -33,6 +33,8 @@ public class AiInfrastructureTests
 
     private static AiClient Client(HttpMessageHandler handler, string? key = "secret") =>
         new(new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:5055/") },
+            Moq.Mock.Of<IHttpClientFactory>(f => f.CreateClient(Moq.It.IsAny<string>())
+                == new HttpClient(handler, false) { BaseAddress = new Uri("http://127.0.0.1:5055/") }),
             new AiAgentSettings { ServiceKey = key }, NullLogger<AiClient>.Instance);
 
     private static readonly AiRunJob Job = new(Guid.NewGuid(), "Mock", "mock-fixture-v1", null, 2);

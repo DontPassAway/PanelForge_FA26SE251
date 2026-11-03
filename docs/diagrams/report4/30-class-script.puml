@@ -1,0 +1,49 @@
+@startuml class_script
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+class ScriptLinesController {
+  +Create(chapterId, dto)
+  +Update(chapterId, lineId, dto)
+}
+class UpdateScriptLineCommand <<record>> {
+  +UserId : Guid
+  +ChapterId : Guid
+  +LineId : Guid
+  +ExpectedChapterVersion : long
+}
+class UpdateScriptLineCommandHandler {
+  +Handle(cmd) : Result<ScriptLineDto>
+}
+class ScriptLineRules <<static>> {
+  +AuthorizeAsync(db, auth, userId, chapterId, expectedVersion)
+}
+class Chapter {
+  +IsScriptFrozen : bool
+  +VersionVector : long
+  +FreezeScript(userId)
+  +UnfreezeScript(userId)
+  +IncrementVersion()
+}
+class ScriptLine {
+  +PanelId : Guid?
+  +SpeakerCharacterId : Guid?
+  +NarrationMode : NarrationMode
+  +UpdateContent()
+  +AssignToPanel(panelId)
+}
+class ContentRevision {
+  +VersionNumber : int
+  +PreviousRevisionId : Guid?
+  +ContentHash : string
+}
+ScriptLinesController ..> UpdateScriptLineCommand : sends via MediatR
+UpdateScriptLineCommand ..> UpdateScriptLineCommandHandler : handled by
+UpdateScriptLineCommandHandler ..> ScriptLineRules
+UpdateScriptLineCommandHandler ..> Chapter
+UpdateScriptLineCommandHandler ..> ScriptLine
+UpdateScriptLineCommandHandler ..> ContentRevision : creates
+Chapter "1" *-- "*" ScriptLine : via Scene
+@enduml

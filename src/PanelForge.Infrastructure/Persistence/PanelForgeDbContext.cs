@@ -58,6 +58,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();
     public DbSet<BibleEntry> BibleEntries => Set<BibleEntry>();
     public DbSet<BibleEntryRevision> BibleEntryRevisions => Set<BibleEntryRevision>();
+    public DbSet<BibleRevisionEvent> BibleRevisionEvents => Set<BibleRevisionEvent>();
     public DbSet<PipelineDefinition> PipelineDefinitions => Set<PipelineDefinition>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
@@ -82,6 +83,9 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<Panel> Panels => Set<Panel>();
     public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();
     public DbSet<ScriptLineBibleLink> ScriptLineBibleLinks => Set<ScriptLineBibleLink>();
+
+    public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
+        Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken);
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

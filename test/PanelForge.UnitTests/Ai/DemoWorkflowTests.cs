@@ -95,7 +95,7 @@ public class DemoWorkflowTests
         supervisorSteps.Where(s => !s.ParametersJson.Contains("temperature"))
             .Should().OnlyContain(s => s.ParametersJson.Contains("single-allowed-action"));
         all.Should().OnlyContain(s => s.PromptTokens == null && s.CompletionTokens == null && s.Provider == "Mock");
-        all.Where(s => s.Agent == AiAgentType.Supervisor).Should().OnlyContain(s => s.PromptVersion == "supervisor@2");
+        all.Where(s => s.Agent == AiAgentType.Supervisor).Should().OnlyContain(s => s.PromptVersion == "supervisor@4");
         h.Usage.Verify(u => u.RecordAsync(It.IsAny<PanelForge.Application.Common.Interfaces.Services.AiUsageEntry>(), default), Times.Never);
 
         run.Status.Should().Be(AiRunStatus.Completed);

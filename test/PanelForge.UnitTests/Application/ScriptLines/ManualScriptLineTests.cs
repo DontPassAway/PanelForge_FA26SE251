@@ -418,4 +418,33 @@ public class ManualScriptLineTests
         (old.Value.IsCurrent, current.Value!.IsCurrent).Should().Be((false, true));
         wrongChapter.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
+
+    private void AssignScriptTo(Guid writer, string? cancel = null)
+    {
+        var a = Assignment.Create(_series.Id, _chapter.Id, WorkflowEntityType.Chapter, _chapter.Id, Guid.NewGuid(),
+            writer, WorkspaceRole.Writer, "Viết kịch bản");
+        if (cancel is not null) a.Cancel(cancel);
+        _db.Assignments.Add(a);
+        _db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Create_ByWriterNotAssigned_WhenScriptAssignedToOther_IsForbidden()
+    {
+        AssignScriptTo(Guid.NewGuid());
+
+        var result = await Create("Chen ngang");
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        _db.ScriptLines.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_ByAssignedWriter_Succeeds_AndCancelledAssignmentDoesNotLock()
+    {
+        AssignScriptTo(Guid.NewGuid(), cancel: "Đổi người");
+        AssignScriptTo(_writer);
+
+        (await Create("Dòng của tôi")).IsSuccess.Should().BeTrue();
+    }
 }

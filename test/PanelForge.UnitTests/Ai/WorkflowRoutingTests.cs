@@ -35,16 +35,15 @@ public class WorkflowRoutingTests
             AiWorkflowType.FullScene or AiWorkflowType.Script => ["Producer", "Writer"],
             AiWorkflowType.Storyboard => ["Producer", "Writer", "Artist"],
             AiWorkflowType.Artist => ["Artist"],
-            AiWorkflowType.Letterer => ["Letterer"],
             AiWorkflowType.Editor => ["Producer", "Editor"],
             _ => ["Producer"]
         };
-        foreach (var type in Enum.GetValues<AiWorkflowType>())
+        foreach (var type in Enum.GetValues<AiWorkflowType>().Where(t => t is not (AiWorkflowType.Copilot or AiWorkflowType.Thumbnail or AiWorkflowType.Letterer or AiWorkflowType.Producer)))
             foreach (var user in AllUsers)
             {
                 var allowedRole = RolesOf(type).Contains(user);
                 var expected = !allowedRole ? "Forbidden"
-                    : type is AiWorkflowType.FullScene or AiWorkflowType.Script or AiWorkflowType.Producer ? "Ok" : "Conflict";
+                    : type is AiWorkflowType.FullScene or AiWorkflowType.Script ? "Ok" : "Conflict";
                 yield return [type, user, expected];
             }
     }
@@ -97,24 +96,9 @@ public class WorkflowRoutingTests
         await h.Db.SaveChangesAsync();
         (await h.RunHandler().Handle(cmd with { SceneId = otherScene.Id }, default)).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
 
-        // Không có sceneId với workflow nội dung → 400; Producer không cần Scene
+        // Không có sceneId → 400
         (await h.RunHandler().Handle(cmd with { SceneId = null }, default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
         (await h.RunHandler().Handle(cmd with { WorkflowType = (AiWorkflowType)99 }, default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
-    }
-
-    [Fact]
-    public async Task Run_Producer_IsChapterScoped_NoScene_NoBibleNeeded_AndSnapshotHasProgress()
-    {
-        var h = await AiHarness.CreateAsync();
-        var runId = await h.StartAsync(AiWorkflowType.Producer);
-
-        var run = await h.RunAsync(runId);
-        run.WorkflowType.Should().Be(AiWorkflowType.Producer);
-        run.SceneId.Should().BeNull();
-        var snap = PanelForge.AI.Contracts.AiJson.Deserialize<RunSnapshot>(run.ContextSnapshotJson)!;
-        snap.Progress.Should().NotBeNull();
-        snap.Progress!.Facts.Should().NotBeEmpty();
-        snap.Progress.DataGaps.Should().Contain(g => g.Contains("assignment"), "Chapter chưa có assignment nào: phải nói rõ thiếu dữ liệu");
     }
 
     [Fact]
@@ -126,8 +110,6 @@ public class WorkflowRoutingTests
         var script = await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Script), default);
         script.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         script.ErrorMessage.Should().Contain("Locked");
-        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Producer), default)).IsSuccess
-            .Should().BeTrue("báo cáo tiến độ chỉ đọc nên không cần chương còn InProduction");
     }
 
     [Fact]
@@ -197,11 +179,9 @@ public class WorkflowRoutingTests
         (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Storyboard), default)).ErrorMessage.Should().Contain("script");
         (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Editor), default)).ErrorMessage.Should().Contain("script");
         (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Artist), default)).ErrorMessage.Should().Contain("layout");
-        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Letterer), default)).ErrorMessage.Should().Contain("thoại");
 
         await h.AcceptScriptAndLayoutAsync();
         (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Artist), default)).IsSuccess.Should().BeTrue();
-        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Letterer), default)).IsSuccess.Should().BeTrue();
         (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Editor), default)).IsSuccess.Should().BeTrue();
         // Scene đã có Page do layout đã Accept → Storyboard không còn áp dụng được
         var storyboard = await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Storyboard), default);
@@ -215,7 +195,7 @@ public class WorkflowRoutingTests
         var h = await AiHarness.CreateAsync();
         await h.AcceptScriptAndLayoutAsync();
 
-        foreach (var type in new[] { AiWorkflowType.Artist, AiWorkflowType.Letterer, AiWorkflowType.Editor })
+        foreach (var type in new[] { AiWorkflowType.Artist, AiWorkflowType.Editor })
         {
             var cmd = await h.CommandAsync(type);
             (await h.RunHandler().Handle(cmd with { ChapterVersion = cmd.ChapterVersion - 1 }, default)).ErrorCode
@@ -237,7 +217,7 @@ public class WorkflowRoutingTests
 
     // ── API availability: cùng bộ luật với RunWorkflow ───────────────────────
     private static Task<Result<AiWorkflowAvailabilityResponse>> Availability(AiHarness h, Guid user, Guid? scene = null, bool withScene = true) =>
-        new GetWorkflowAvailabilityQueryHandler(h.Db, h.Auth).Handle(
+        new GetWorkflowAvailabilityQueryHandler(h.Db, h.Auth, h.Settings).Handle(
             new GetWorkflowAvailabilityQuery(AiDemoSeeder.SeriesId, user, AiDemoSeeder.ChapterId,
                 withScene ? scene ?? AiDemoSeeder.SceneId : null), default);
 
@@ -248,9 +228,10 @@ public class WorkflowRoutingTests
         var res = (await Availability(h, AiHarness.Writer)).Value!;
 
         res.YourRole.Should().Be(WorkspaceRole.Writer);
-        res.Workflows.Select(w => w.WorkflowType).Should().BeEquivalentTo(Enum.GetValues<AiWorkflowType>());
+        res.Workflows.Select(w => w.WorkflowType).Should().BeEquivalentTo(new[] { AiWorkflowType.Script, AiWorkflowType.Storyboard,
+            AiWorkflowType.Artist, AiWorkflowType.Editor }, "FullScene chỉ hiện ở chế độ demo; Letterer → Copilot; Producer → số liệu tiến độ trực tiếp");
         res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Script).CanRun.Should().BeTrue();
-        res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.FullScene).Agents.Should().Equal("Writer", "Continuity", "Storyboard", "Editor");
+        res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Storyboard).Agents.Should().Equal("Continuity", "Storyboard", "Editor");
 
         var artist = res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Artist);
         artist.CanRun.Should().BeFalse();
@@ -262,7 +243,6 @@ public class WorkflowRoutingTests
         var storyboard = res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Storyboard);
         storyboard.Missing.Should().Contain(m => m.Code == "NO_SCRIPT");
         res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Editor).ResultKinds.Should().Equal("Report");
-        res.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Producer).ResultKinds.Should().Equal("Report");
     }
 
     [Fact]
@@ -271,14 +251,12 @@ public class WorkflowRoutingTests
         var h = await AiHarness.CreateAsync();
 
         (await Availability(h, AiHarness.Reader)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
-        (await new GetWorkflowAvailabilityQueryHandler(h.Db, h.Auth).Handle(
+        (await new GetWorkflowAvailabilityQueryHandler(h.Db, h.Auth, h.Settings).Handle(
             new GetWorkflowAvailabilityQuery(AiDemoSeeder.SeriesId, AiHarness.Writer, Guid.NewGuid(), null), default))
             .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
 
         var noScene = (await Availability(h, AiHarness.Writer, withScene: false)).Value!;
         noScene.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Script).Missing.Should().Contain(m => m.Code == "SCENE_REQUIRED");
-        (await Availability(h, AiHarness.Producer, withScene: false)).Value!
-            .Workflows.Single(w => w.WorkflowType == AiWorkflowType.Producer).CanRun.Should().BeTrue();
     }
 
     [Fact]
@@ -292,7 +270,6 @@ public class WorkflowRoutingTests
         await LockChapterAsync(h);
         (await Availability(h, AiHarness.Producer)).Value!.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Script)
             .Missing.Should().Contain(m => m.Code == "CHAPTER_LOCKED");
-        (await Availability(h, AiHarness.Producer)).Value!.Workflows.Single(w => w.WorkflowType == AiWorkflowType.Producer).CanRun.Should().BeTrue();
 
         (await h.Db.WorkspaceAiConfigs.SingleAsync()).UpdateSettings("Google Gemini", "ciphertext", false, 1_000_000, "[]");
         await h.Db.SaveChangesAsync();
@@ -341,5 +318,19 @@ public class WorkflowRoutingTests
         }
         h.Db.Assignments.Add(a);
         await h.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task RetiredLettererAndProducerWorkflows_AreRejected_AndFullSceneIsListedOnlyInDemoMode()
+    {
+        var h = await AiHarness.CreateAsync();
+        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Letterer), default)).ErrorCode
+            .Should().Be(ResultErrorCodes.Validation, "rút gọn thoại đã chuyển sang Copilot letterer.shorten");
+        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Producer), default)).ErrorCode
+            .Should().Be(ResultErrorCodes.Validation, "báo cáo tiến độ xem trực tiếp qua GET /series/{id}/progress");
+
+        h.Settings.ShowFullSceneWorkflow = true;
+        (await Availability(h, AiHarness.Writer)).Value!.Workflows.Should().Contain(w => w.WorkflowType == AiWorkflowType.FullScene);
+        (await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.FullScene), default)).IsSuccess.Should().BeTrue();
     }
 }

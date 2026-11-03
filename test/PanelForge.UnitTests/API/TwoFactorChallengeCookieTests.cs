@@ -44,7 +44,7 @@ public class TwoFactorChallengeCookieTests
 
         var header = Assert.Single(first.Response.Headers.SetCookie.ToArray())!;
         Assert.Contains("httponly", header, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("path=/api/auth", header, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/api;", header + ";", StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("user@example.com", header);
 
         Assert.Equal("user@example.com", TwoFactorChallengeCookie.Read(Context(ChallengeCookie(first))));

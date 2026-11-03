@@ -12,7 +12,10 @@ public static class AuthCookies
     public const string Refresh = "pf_refresh";
     public const string CsrfHeader = "X-Requested-With";
 
-    private const string RefreshPath = "/api/auth";
+    // Path cookie phân biệt hoa thường: "/api/auth" không khớp route thật "/api/Auth/refresh" → trình duyệt không gửi
+    // cookie, refresh luôn 401 và người dùng bị logout khi access token hết hạn. Dùng "/api" để không phụ thuộc cách viết.
+    private const string RefreshPath = "/api";
+    private const string LegacyRefreshPath = "/api/auth";
     private static readonly TimeSpan RefreshLifetime = TimeSpan.FromDays(30); // = thời hạn refresh token ở BE
 
     public static void Set(HttpRequest request, HttpResponse response, AuthResponse auth)
@@ -30,6 +33,7 @@ public static class AuthCookies
     {
         response.Cookies.Delete(Access, new CookieOptions { Path = "/api" });
         response.Cookies.Delete(Refresh, new CookieOptions { Path = RefreshPath });
+        response.Cookies.Delete(Refresh, new CookieOptions { Path = LegacyRefreshPath }); // cookie cũ trước bản sửa path
     }
 
     // Header tuỳ chỉnh (trang khác không tự gắn được), hoặc request cùng origin – vd. Swagger UI trên chính API

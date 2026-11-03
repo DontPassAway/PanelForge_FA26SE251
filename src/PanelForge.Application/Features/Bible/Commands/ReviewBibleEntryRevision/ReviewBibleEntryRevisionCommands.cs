@@ -30,7 +30,7 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
     public async Task<Result<BibleEntryRevisionDto>> Handle(EndorseBibleEntryRevisionCommand cmd, CancellationToken ct)
     {
         var entry = await _dbContext.BibleEntries
-            .Include(e => e.Revisions)
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .Include(e => e.SeriesBible)
             .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBible.SeriesId == cmd.SeriesId, ct);
 
@@ -49,27 +49,7 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
 
         await _dbContext.SaveChangesAsync(ct);
 
-        return Result<BibleEntryRevisionDto>.Success(new BibleEntryRevisionDto(
-            Id: revision.Id,
-            BibleEntryId: revision.BibleEntryId,
-            VersionNumber: revision.VersionNumber,
-            Summary: revision.Summary,
-            SnapshotJson: revision.SnapshotJson,
-            ContentHash: revision.ContentHash,
-            AuthorId: revision.AuthorId,
-            AssociatedChapterId: revision.AssociatedChapterId,
-            EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
-            IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt,
-            IsLocked: revision.IsLocked,
-            LockedAt: revision.LockedAt,
-            LockedById: revision.LockedById,
-            StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
-            ArtistUserId: revision.ArtistUserId,
-            ReviewStatus: revision.ReviewStatus,
-            ReworkFeedback: revision.ReworkFeedback
-        ));
+        return Result<BibleEntryRevisionDto>.Success(BibleEntryRevisionDto.From(revision));
     }
 }
 
@@ -99,7 +79,7 @@ public sealed class RequestReworkBibleEntryRevisionCommandHandler : IRequestHand
             return Result<BibleEntryRevisionDto>.Failure("Lý do yêu cầu vẽ lại không được để trống.", ResultErrorCodes.Validation);
 
         var entry = await _dbContext.BibleEntries
-            .Include(e => e.Revisions)
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .Include(e => e.SeriesBible)
             .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBible.SeriesId == cmd.SeriesId, ct);
 
@@ -118,26 +98,6 @@ public sealed class RequestReworkBibleEntryRevisionCommandHandler : IRequestHand
 
         await _dbContext.SaveChangesAsync(ct);
 
-        return Result<BibleEntryRevisionDto>.Success(new BibleEntryRevisionDto(
-            Id: revision.Id,
-            BibleEntryId: revision.BibleEntryId,
-            VersionNumber: revision.VersionNumber,
-            Summary: revision.Summary,
-            SnapshotJson: revision.SnapshotJson,
-            ContentHash: revision.ContentHash,
-            AuthorId: revision.AuthorId,
-            AssociatedChapterId: revision.AssociatedChapterId,
-            EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
-            IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt,
-            IsLocked: revision.IsLocked,
-            LockedAt: revision.LockedAt,
-            LockedById: revision.LockedById,
-            StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
-            ArtistUserId: revision.ArtistUserId,
-            ReviewStatus: revision.ReviewStatus,
-            ReworkFeedback: revision.ReworkFeedback
-        ));
+        return Result<BibleEntryRevisionDto>.Success(BibleEntryRevisionDto.From(revision));
     }
 }

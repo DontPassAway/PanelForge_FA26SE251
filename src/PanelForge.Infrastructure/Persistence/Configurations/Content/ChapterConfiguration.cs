@@ -55,6 +55,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("title")
                .HasColumnType("varchar(500)");
 
+        builder.Property(c => c.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(c => c.Outline)
                .HasColumnName("outline")
                .HasColumnType("text");

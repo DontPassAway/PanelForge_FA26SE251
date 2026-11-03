@@ -95,7 +95,18 @@ internal static class ScriptLineRules
 
         // V2.5: Producer và Writer trong Series có quyền tự do sáng tác tiền kỳ khi kịch bản chưa đóng băng,
         // KHÔNG yêu cầu phải có thẻ Assignment do Producer giao.
-        if (role != WorkspaceRole.Producer && role != WorkspaceRole.Writer)
+        // Nhưng khi chương đã giao kịch bản cho Writer cụ thể thì chỉ (các) Writer đó được sửa; chưa giao ai thì vẫn tự do.
+        if (role == WorkspaceRole.Writer)
+        {
+            var writerIds = await db.Assignments.AsNoTracking()
+                .Where(a => a.ChapterId == chapter.Id && a.AssignedRole == WorkspaceRole.Writer && a.CancelReason == null)
+                .Select(a => a.AssigneeUserId).ToListAsync(ct);
+            if (writerIds.Count > 0 && !writerIds.Contains(userId))
+                return Result<(Chapter, Guid)>.Failure(
+                    "Kịch bản chương này đã được giao cho Writer khác. Chỉ người được giao hoặc Producer mới sửa được.",
+                    ResultErrorCodes.Forbidden);
+        }
+        else if (role != WorkspaceRole.Producer)
         {
             var gate = await AiWorkflowFacts.EvaluateAssignmentAsync(db, userId, chapter, role.Value, ct);
             if (gate.BlockedReason is not null)

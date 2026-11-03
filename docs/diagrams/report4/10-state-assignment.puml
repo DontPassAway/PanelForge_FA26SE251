@@ -1,0 +1,19 @@
+@startuml state_assignment
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+[*] --> Assigned : CreateAssignment\n(Producer)
+Assigned --> InProgress : StartAssignment\n(assignee)
+ReworkRequired --> InProgress : StartAssignment
+Assigned --> Submitted : SubmitAssignment
+InProgress --> Submitted : SubmitAssignment
+Submitted --> UnderReview : OpenAssignmentReview\n(Editor)
+UnderReview --> Approved : ApproveAssignment\n(Editor, not own work)
+UnderReview --> ReworkRequired : RequestAssignmentChanges
+Approved --> ReworkRequired : ReturnWorkFromReview /\nimpact review
+InProgress --> Assigned : TransferAssignmentScope\n(new assignee)
+Approved --> [*]
+state Blocked #EEEEEE : declared, never set (gap G5)
+@enduml

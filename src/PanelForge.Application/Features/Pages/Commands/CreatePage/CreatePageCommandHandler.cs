@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Pages.Common;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -54,8 +55,16 @@ public sealed class CreatePageCommandHandler
             var isDuplicate = await _dbContext.Pages
                 .AnyAsync(p => p.ChapterId == command.ChapterId && p.PageNumber == pageNumber, cancellationToken);
 
+            // Chèn giữa: dời các trang từ vị trí này trở đi lùi một số (trang mới trống nên không đảo thứ tự Scene)
             if (isDuplicate)
-                return Result<PageDto>.Failure($"Trang số {pageNumber} đã tồn tại trong Chapter này.");
+            {
+                var shifted = await _dbContext.Pages.AsNoTracking()
+                    .Where(p => p.ChapterId == command.ChapterId && p.PageNumber >= pageNumber)
+                    .ToDictionaryAsync(p => p.Id, p => p.PageNumber + 1, cancellationToken);
+                if (await PageOrdering.ApplyAsync(_dbContext, _pageRepository, command.ChapterId, shifted,
+                        null, cancellationToken) is { } error)
+                    return Result<PageDto>.Failure(error);
+            }
         }
         else
         {

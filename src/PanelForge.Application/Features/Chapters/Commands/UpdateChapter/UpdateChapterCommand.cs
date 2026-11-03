@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
@@ -64,7 +65,8 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             Outline: chapter.Outline,
             IsScriptFrozen: chapter.IsScriptFrozen,
             ScriptFrozenAt: chapter.ScriptFrozenAt,
-            ScriptFrozenById: chapter.ScriptFrozenById
+            ScriptFrozenById: chapter.ScriptFrozenById,
+            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256)
         ));
     }
 }

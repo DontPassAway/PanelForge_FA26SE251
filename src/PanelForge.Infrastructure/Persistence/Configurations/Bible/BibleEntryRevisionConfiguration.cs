@@ -89,6 +89,10 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasDefaultValue(PanelForge.Domain.Enums.BibleRevisionStatus.Draft)
                .IsRequired();
 
+        builder.Property(r => r.ConceptImageUrl)
+               .HasColumnName("concept_image_url")
+               .HasColumnType("text");
+
         builder.Property(r => r.ReworkFeedback)
                .HasColumnName("rework_feedback")
                .HasColumnType("varchar(1000)");

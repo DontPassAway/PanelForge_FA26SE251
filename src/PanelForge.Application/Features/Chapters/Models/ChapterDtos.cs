@@ -19,7 +19,9 @@ public sealed record ChapterDto(
     string? Outline = null,
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
-    Guid? ScriptFrozenById = null
+    Guid? ScriptFrozenById = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -55,7 +57,9 @@ public sealed record ChapterDetailDto(
     string? Outline = null,
     bool IsScriptFrozen = false,
     DateTime? ScriptFrozenAt = null,
-    Guid? ScriptFrozenById = null
+    Guid? ScriptFrozenById = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null
 );
 
 public sealed record CreateChapterRequest(

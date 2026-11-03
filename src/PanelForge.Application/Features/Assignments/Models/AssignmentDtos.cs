@@ -79,6 +79,55 @@ public sealed record CreateAssignmentRequest(
     Guid? DependsOnAssignmentId = null,
     IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
 
+/// <summary>
+/// Giao hàng loạt theo AssignmentGranularity của stage. PageIds null/rỗng = mọi trang của chương (bỏ qua khi stage giao cả chương).
+/// DryRun = true: chỉ trả kế hoạch + xung đột, không lưu gì.
+/// </summary>
+public sealed record CreateBulkAssignmentRequest(
+    Guid PipelineStageId,
+    Guid AssigneeUserId,
+    string Brief,
+    IReadOnlyList<Guid>? PageIds = null,
+    string? ReferenceNotes = null,
+    DateTime? DueDate = null,
+    AssignmentPriority Priority = AssignmentPriority.Medium,
+    bool DryRun = false);
+
+/// <summary>
+/// Một việc trong đợt. PageNumber null với việc cả chương; ConflictReason khác null = đối tượng này không giao được.
+/// DependsOnAssignmentIds: việc ở stage đang bật ngay trước mà việc này tự phụ thuộc (cùng trang, hoặc việc cả chương).
+/// </summary>
+public sealed record BulkAssignmentItemDto(
+    WorkflowEntityType EntityType,
+    Guid TargetEntityId,
+    int? PageNumber,
+    string? ConflictReason,
+    Guid? AssignmentId,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
+
+/// <summary>
+/// Ứng viên nhận việc, đã xếp hạng (phần tử đầu = gợi ý tốt nhất). ActiveAssignmentCount: việc Assigned/InProgress/ReworkRequired/Blocked
+/// trong Workspace; StageExperienceCount: số việc người này từng nhận ở stage này của Series; Reasons: lý do ngắn để hiện trên UI.
+/// </summary>
+public sealed record AssigneeSuggestionDto(
+    Guid UserId,
+    string FullName,
+    string? AvatarUrl,
+    WorkspaceRole Role,
+    int ActiveAssignmentCount,
+    int OverdueCount,
+    int StageExperienceCount,
+    bool IsSeriesMember,
+    IReadOnlyList<string> Reasons);
+
+/// <summary>BatchId null khi DryRun. Items luôn đủ mọi đối tượng trong đợt, theo thứ tự trang.</summary>
+public sealed record BulkAssignmentResultDto(
+    Guid? BatchId,
+    bool DryRun,
+    WorkflowEntityType Granularity,
+    int CreatedCount,
+    IReadOnlyList<BulkAssignmentItemDto> Items);
+
 /// <summary>Một yêu cầu sửa cụ thể. RegionJson tuỳ chọn: <c>{ "x", "y", "w", "h" }</c> chuẩn hóa 0–1.</summary>
 /// <summary>AssetReferenceId: phiên bản artwork (của Chapter) mà RegionJson khoanh trên đó; PanelId: Panel của vùng (thuộc Chapter). Đều tuỳ chọn.</summary>
 public sealed record ChangeRequestItemRequest(
@@ -184,3 +233,48 @@ public sealed record UpdateAssignmentRequest(
     Guid AssigneeUserId,
     Guid? DependsOnAssignmentId,
     IReadOnlyList<Guid>? DependsOnAssignmentIds = null);
+
+/// <summary>Một dòng của kế hoạch giao: stage + người nhận. Brief/DueDate null = dùng giá trị chung của kế hoạch.</summary>
+public sealed record AssignmentPlanStageRequest(
+    Guid PipelineStageId,
+    Guid AssigneeUserId,
+    string? Brief = null,
+    IReadOnlyList<Guid>? PageIds = null,
+    DateTime? DueDate = null);
+
+/// <summary>Giao nhiều stage một lần. Stage theo trang khi chương chưa có trang thì bị bỏ qua (SkippedReason), không lỗi.</summary>
+public sealed record CreateAssignmentPlanRequest(
+    IReadOnlyList<AssignmentPlanStageRequest> Stages,
+    string Brief,
+    string? ReferenceNotes = null,
+    DateTime? DueDate = null,
+    AssignmentPriority Priority = AssignmentPriority.Medium,
+    bool DryRun = false);
+
+public sealed record AssignmentPlanStageResultDto(
+    Guid PipelineStageId,
+    string StageName,
+    Guid AssigneeUserId,
+    WorkflowEntityType? Granularity, // null khi stage bị bỏ qua
+    string? SkippedReason,
+    IReadOnlyList<BulkAssignmentItemDto> Items);
+
+public sealed record AssignmentPlanResultDto(
+    Guid? BatchId,
+    bool DryRun,
+    int CreatedCount,
+    IReadOnlyList<AssignmentPlanStageResultDto> Stages);
+
+/// <summary>Mẫu giao việc lấy từ chương gần nhất của Series đã có việc. SourceChapterId null = chưa có mẫu.</summary>
+public sealed record AssignmentPlanTemplateDto(
+    Guid? SourceChapterId,
+    decimal? SourceChapterNumber,
+    IReadOnlyList<AssignmentPlanTemplateStageDto> Stages);
+
+public sealed record AssignmentPlanTemplateStageDto(
+    Guid PipelineStageId,
+    string StageName,
+    int StageOrder,
+    Guid AssigneeUserId,
+    string AssigneeName,
+    string? Brief);

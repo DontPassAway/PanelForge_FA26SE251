@@ -1,0 +1,15 @@
+@startuml state_stageprogress
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+[*] --> InProgress : Begin (panel starts stage)
+InProgress --> Submitted : Submit
+Submitted --> InReview : OpenReview
+InReview --> Approved : Approve
+InReview --> ChangesRequested : RequestChanges
+ChangesRequested --> InProgress : Resume
+Approved --> ChangesRequested : ReopenForRework
+Approved --> [*] : next stage may begin (BR-19)
+@enduml

@@ -48,6 +48,7 @@ public partial class AssignmentTests
         public readonly List<Submission> Submissions = [];
         public readonly List<ChangeRequest> ChangeRequests = [];
         public readonly List<ContentRevision> Revisions = [];
+        public readonly List<SeriesMember> SeriesMembers = [];
         public readonly Guid Artist2Id = Guid.NewGuid();
         public readonly Guid PendingArtistId = Guid.NewGuid();
         public readonly Guid RejectedArtistId = Guid.NewGuid();
@@ -93,6 +94,7 @@ public partial class AssignmentTests
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(ChangeRequests));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.ContentRevisions).Returns(DbSetMockHelper.CreateDbSetMock(Revisions));
+            Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -178,6 +180,66 @@ public partial class AssignmentTests
         result.Value.Status.Should().Be(AssignmentStatus.Assigned);
         f.Assignments.Should().ContainSingle();
         f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_AddsAssigneeToSeriesTeam_WithWorkspaceRole()
+    {
+        var f = new Fixture();
+
+        (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
+        (await Create(f, f.CreateCmd(stageId: f.InkStage.Id))).IsSuccess.Should().BeTrue();
+
+        // Giao việc lần hai trong cùng Series không tạo thêm dòng thành viên
+        f.SeriesMembers.Should().ContainSingle(m =>
+            m.SeriesId == f.Series.Id && m.UserId == f.ArtistId && m.Role == WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public async Task Create_ExistingSeriesMember_IsReused()
+    {
+        var f = new Fixture();
+        var existing = SeriesMember.Create(f.Series.Id, f.ArtistId, WorkspaceRole.Artist);
+        f.SeriesMembers.Add(existing);
+
+        (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
+
+        f.SeriesMembers.Should().ContainSingle().Which.Should().BeSameAs(existing);
+    }
+
+    [Fact]
+    public async Task Create_RoleNotAllowedForStage_IsRejected_AndNoMembershipCreated()
+    {
+        var f = new Fixture();
+
+        var result = await Create(f, f.CreateCmd(assignee: f.WriterId)); // stage Pencil chỉ cho Artist
+
+        result.IsSuccess.Should().BeFalse();
+        f.SeriesMembers.Should().BeEmpty();
+        f.Assignments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_ConcurrentMembershipInsert_ReturnsConflict()
+    {
+        var f = new Fixture();
+        f.Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Microsoft.EntityFrameworkCore.DbUpdateException("ix_series_members_series_user"));
+
+        var result = await Create(f, f.CreateCmd());
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_RejectedAssignee_IsNotAddedToSeriesTeam()
+    {
+        var f = new Fixture();
+
+        (await Create(f, f.CreateCmd(assignee: f.PendingArtistId))).IsSuccess.Should().BeFalse();
+
+        f.SeriesMembers.Should().BeEmpty();
     }
 
     [Fact]

@@ -110,15 +110,10 @@ public static class DependencyInjection
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
         services.AddScoped<IAiUsageService, AiUsageService>();
-        services.AddHttpClient<IImageConsistencyService, ImageConsistencyService>();
+        services.AddScoped<IImageConsistencyService, ImageConsistencyService>();
 
-        // ── Tách panel/bong bóng từ ảnh cả trang: service Python PanelForge.PanelSplitter ──
-        services.AddHttpClient<IPanelSplitter, PanelSplitterClient>(client =>
-        {
-            var url = configuration["PanelSplitter:ServiceUrl"] ?? "http://127.0.0.1:5066";
-            client.BaseAddress = new Uri(url.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(30);
-        });
+        // ── Tách panel/bong bóng từ ảnh cả trang: OpenCV chạy trong tiến trình (thay service Python 5066) ──
+        services.AddSingleton<IPanelSplitter, OpenCvPanelSplitter>();
 
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();
@@ -139,6 +134,19 @@ public static class DependencyInjection
                 o.CircuitBreaker.FailureRatio = 0.5;
                 o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(20);
             });
+
+        // Copilot (sync): KHÔNG retry (mỗi lần gọi tốn token, không idempotent), timeout cứng theo CopilotTimeoutSeconds
+        services.AddHttpClient(AiClient.CopilotHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.CopilotTimeoutSeconds, 2, 60));
+        });
+        // Sinh ảnh (sync): KHÔNG retry (mỗi ảnh tốn quota), timeout dài hơn timeout phía AI service
+        services.AddHttpClient(AiClient.ImageHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.ImageTimeoutSeconds, 15, 200));
+        });
 
         // ── Audit trail: danh tính người gọi request (BR-18, UC-15) ─────────────
         services.AddHttpContextAccessor();

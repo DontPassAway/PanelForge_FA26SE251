@@ -1,0 +1,27 @@
+@startuml seq_chapter_release
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+actor Producer as P
+actor Publisher as U
+participant ChaptersController as C
+participant Handlers as H
+database PanelForgeDbContext as DB
+participant Notifications as N
+P -> C : POST chapters/{id}/approve
+C -> H : ApproveChapterCommand
+H -> DB : check every page and panel approved
+alt unfinished work
+  H --> P : 409 Conflict
+else ok
+  H -> DB : Chapter Approved,\nChapterReview ProducerApproved
+  H -> N : notify Publishers
+  H --> P : 200 OK
+end
+U -> C : POST chapters/{id}/publish (release date)
+C -> H : PublishChapterCommand
+H -> DB : Chapter Published, snapshot,\nChapterReview PublisherPublished
+H --> U : 200 OK
+@enduml

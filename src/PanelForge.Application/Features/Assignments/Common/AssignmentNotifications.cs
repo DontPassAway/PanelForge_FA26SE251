@@ -9,6 +9,37 @@ internal static class AssignmentNotifications
     public static Notification Assigned(Assignment a) => Notification.Create(
         a.AssigneeUserId, NotificationType.AssignmentAssigned, "Bạn được giao việc mới", Describe(a), a.Id, a.ChapterId);
 
+    /// <summary>BR-14 cho giao hàng loạt: một thông báo cho cả đợt, trỏ vào việc đầu tiên của đợt.</summary>
+    public static Notification AssignedBatch(IReadOnlyList<Assignment> batch, string stageName)
+    {
+        var first = batch[0];
+        var scope = batch.Count == 1 && first.EntityType == WorkflowEntityType.Chapter ? "cả chương" : $"{batch.Count} trang";
+        return Notification.Create(
+            first.AssigneeUserId, NotificationType.AssignmentAssigned, $"Bạn được giao {scope} – {stageName}", Describe(first), first.Id, first.ChapterId);
+    }
+
+    /// <summary>BR-14 cho giao theo kế hoạch: mỗi người nhận một thông báo gộp mọi stage của họ trong kế hoạch.</summary>
+    public static Notification AssignedPlan(IReadOnlyList<Assignment> mine, IReadOnlyDictionary<Guid, string> stageNames)
+    {
+        var first = mine[0];
+        var parts = mine.GroupBy(a => a.PipelineStageId).Select(g =>
+        {
+            var scope = g.Count() == 1 && g.First().EntityType == WorkflowEntityType.Chapter ? "cả chương" : $"{g.Count()} trang";
+            return $"{scope} – {stageNames.GetValueOrDefault(g.Key, "?")}";
+        });
+        return Notification.Create(
+            first.AssigneeUserId, NotificationType.AssignmentAssigned, $"Bạn được giao {string.Join("; ", parts)}",
+            Describe(first), first.Id, first.ChapterId);
+    }
+
+    /// <summary>Việc tiền đề đã duyệt hết: một thông báo cho mỗi người, trỏ vào việc đầu tiên vừa sẵn sàng.</summary>
+    public static Notification ReadyToStart(IReadOnlyList<Assignment> ready)
+    {
+        var first = ready[0];
+        var title = ready.Count == 1 ? "Đến lượt bạn: việc trước đã được duyệt" : $"Đến lượt bạn: {ready.Count} việc đã sẵn sàng";
+        return Notification.Create(first.AssigneeUserId, NotificationType.AssignmentReady, title, Describe(first), first.Id, first.ChapterId);
+    }
+
     public static Notification Unassigned(Assignment a, Guid previousAssigneeId) => Notification.Create(
         previousAssigneeId, NotificationType.AssignmentUnassigned, "Việc đã được giao cho người khác", Describe(a), a.Id, a.ChapterId);
 

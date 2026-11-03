@@ -1,0 +1,27 @@
+@startuml seq_ai_writer
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+actor Writer as W
+participant AiAgentsController as C
+participant RunWorkflowCommandHandler as H
+participant "PanelForge.AI service" as AI
+participant Gemini as G
+database PanelForgeDbContext as DB
+W -> C : POST run Writer / Continuity workflow
+C -> H : RunWorkflowCommand
+H -> DB : check workspace AI quota,\ncreate AiWorkflowRun
+alt AI off or over quota
+  H --> W : clear error, manual flow still works
+else ok
+  H -> AI : run workflow
+  AI -> G : prompt with Series Bible context
+  G --> AI : draft
+  AI -> DB : record AiAgentStep and AiSuggestion\n(internal API)
+  H --> W : suggestions
+  W -> C : accept / edit / reject suggestion
+  C -> DB : AiSuggestionDecision,\nContentRevision if accepted
+end
+@enduml

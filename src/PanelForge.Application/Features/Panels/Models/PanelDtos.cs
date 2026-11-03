@@ -33,6 +33,8 @@ public sealed record AssignPanelSceneRequest(Guid? SceneId);
 
 public sealed record AssignPanelScriptLinesRequest(IReadOnlyList<Guid> ScriptLineIds);
 
+public sealed record AutoAssignScriptLinesRequest(Guid SceneId, bool DryRun = false);
+
 public sealed record CreatePanelRequest(
     int? PanelNumber = null,
     int? ReadingOrder = null,

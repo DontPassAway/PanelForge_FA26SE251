@@ -9,7 +9,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
-using PanelForge.Application.Common.Models;
+using PanelForge.AI.Contracts;
+using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Application.Features.Consistency.Models;
@@ -19,34 +20,34 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Infrastructure.Services;
 
 /// <summary>
-/// Thực thi kiểm tra nhất quán hình ảnh AI (Bước A5, OpenAI-Compatible Vision với Gemini / OpenAI).
-/// Hỗ trợ fallback API key từ WorkspaceAiConfig sang AiVisionSettings (Task 3.1 & 3.2).
+/// Kiểm tra nhất quán hình ảnh (Bước A5): tải artwork + character sheet đã khoá, nhờ PanelForge.AI (VisionAgent) chấm điểm,
+/// ghi ConsistencyFinding mức Warning khi dưới ngưỡng. Đây là đường DUY NHẤT để kiểm ảnh (panel, trang, cả chương đều đi qua đây).
 /// </summary>
 public sealed class ImageConsistencyService : IImageConsistencyService
 {
-    private readonly HttpClient _httpClient;
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
     private readonly IAiKeyProtector _keyProtector;
     private readonly IAiUsageService _usageService;
-    private readonly AiVisionSettings _settings;
+    private readonly IAiClient _aiClient;
+    private readonly AiAgentSettings _aiSettings;
     private readonly ILogger<ImageConsistencyService> _logger;
 
     public ImageConsistencyService(
-        HttpClient httpClient,
         IPanelForgeDbContext db,
         IAssetStorage storage,
         IAiKeyProtector keyProtector,
         IAiUsageService usageService,
-        IOptions<AiVisionSettings> settings,
+        IAiClient aiClient,
+        AiAgentSettings aiSettings,
         ILogger<ImageConsistencyService> logger)
     {
-        _httpClient = httpClient;
         _db = db;
         _storage = storage;
         _keyProtector = keyProtector;
         _usageService = usageService;
-        _settings = settings.Value;
+        _aiClient = aiClient;
+        _aiSettings = aiSettings;
         _logger = logger;
     }
 
@@ -56,7 +57,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         decimal? threshold = null,
         CancellationToken cancellationToken = default)
     {
-        var targetThreshold = threshold ?? _settings.SimilarityThreshold;
+        var targetThreshold = threshold ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
 
         // 1. Tải thông tin Panel, Page, Chapter, Series, Workspace
         var panel = await _db.Panels.AsNoTracking()
@@ -108,12 +109,9 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             }
         }
 
-        // Nếu môi trường dev chưa có file thật trên disk, tạo placeholder ảnh mẫu hợp lệ
+        // Không có ảnh thật → không gọi AI (không so với ảnh giả, không tốn token, không tạo finding sai)
         if (artworkBytes is null || artworkBytes.Length == 0)
-        {
-            artworkBytes = CreateDummyPngBytes();
-            artworkMime = "image/png";
-        }
+            return Skipped(panel.Id, targetThreshold, "Panel chưa có ảnh artwork để kiểm.", revisionRef);
 
         // 3. Tìm nhân vật xuất hiện trong Panel qua ScriptLines
         var speakerIds = await _db.ScriptLines.AsNoTracking()
@@ -132,8 +130,11 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             .Where(e => bibleIds.Contains(e.SeriesBibleId) && e.Category == BibleEntryCategory.Character)
             .ToListAsync(cancellationToken);
 
-        var targetCharacter = characterEntries.FirstOrDefault(c => speakerIds.Contains(c.Id))
-            ?? characterEntries.FirstOrDefault();
+        // Chỉ nhân vật thật sự có mặt trong Panel; ưu tiên nhân vật đã có character sheet.
+        // ponytail: kiểm 1 nhân vật/panel; nhiều nhân vật thì lặp theo từng nhân vật khi cần.
+        var targetCharacter = characterEntries.Where(c => speakerIds.Contains(c.Id))
+            .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.ReferenceImageUrl))
+            .FirstOrDefault();
 
         if (targetCharacter is null)
         {
@@ -148,7 +149,8 @@ public sealed class ImageConsistencyService : IImageConsistencyService
                 Passed: true,
                 SummaryReason: "Chương / Panel chưa gắn nhân vật trong Series Bible.",
                 Deviations: Array.Empty<ImageConsistencyDeviationDto>(),
-                RevisionRef: revisionRef
+                RevisionRef: revisionRef,
+                Skipped: true
             );
         }
 
@@ -162,7 +164,6 @@ public sealed class ImageConsistencyService : IImageConsistencyService
 
         // Tải ảnh Character Sheet
         byte[]? sheetBytes = null;
-        string sheetMime = "image/png";
 
         if (!string.IsNullOrWhiteSpace(targetCharacter.ReferenceImageUrl))
         {
@@ -170,9 +171,8 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         }
 
         if (sheetBytes is null || sheetBytes.Length == 0)
-        {
-            sheetBytes = CreateDummyPngBytes();
-        }
+            return Skipped(panel.Id, targetThreshold,
+                $"Nhân vật '{targetCharacter.Name}' chưa có ảnh character sheet (ReferenceImageUrl) để đối chiếu.", revisionRef);
 
         var input = new ImageConsistencyInput(
             PanelId: panel.Id,
@@ -184,7 +184,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             CharacterId: targetCharacter.Id,
             CharacterVersion: characterVersion,
             CharacterSheetBytes: sheetBytes,
-            CharacterSheetMimeType: sheetMime,
+            CharacterSheetMimeType: SniffMime(sheetBytes),
             ArtworkBytes: artworkBytes,
             ArtworkMimeType: artworkMime,
             Threshold: targetThreshold
@@ -197,162 +197,48 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         ImageConsistencyInput input,
         CancellationToken cancellationToken = default)
     {
-        var threshold = input.Threshold ?? _settings.SimilarityThreshold;
-        var apiKey = await ResolveApiKeyAsync(input.WorkspaceId, cancellationToken);
+        const string feature = "Consistency.ImageConsistencyCheck";
+        var threshold = input.Threshold ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
 
-        var stopwatch = Stopwatch.StartNew();
-        var model = string.IsNullOrWhiteSpace(_settings.ModelName) ? "gemini-2.5-flash" : _settings.ModelName;
-        var endpoint = string.IsNullOrWhiteSpace(_settings.EndpointUrl)
-            ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            : _settings.EndpointUrl;
-
-        var systemPrompt = $"You are a manga continuity editor. Compare Image 1 (Locked Character Sheet) and Image 2 (Submitted Panel Artwork) for the character '{input.CharacterName}'. Evaluate visual consistency across hair style/color, facial features, outfit, and key accessories. Return strict JSON: {{ \"score\": <float 0.0 to 1.0>, \"deviations\": [ {{ \"aspect\": \"outfit|hair|face|accessory\", \"description\": \"...\", \"regionHint\": \"...\" }} ], \"summaryReason\": \"...\" }}";
-
-        var sheetBase64 = $"data:{input.CharacterSheetMimeType};base64,{Convert.ToBase64String(input.CharacterSheetBytes)}";
-        var artBase64 = $"data:{input.ArtworkMimeType};base64,{Convert.ToBase64String(input.ArtworkBytes)}";
-
-        var requestBody = new
+        // Cùng cổng với mọi tính năng AI: Workspace bật AI + còn quota (UC-02, E-29). Gọi qua PanelForge.AI như mọi agent khác:
+        // một nơi giữ key/gọi provider, cùng timeout/retry/giãn cách. Key chỉ lấy từ Workspace (không còn key dự phòng cấp hệ thống).
+        string provider, model;
+        string? apiKey = null;
+        if (_aiSettings.IsMock) (provider, model) = (AiProtocol.ProviderMock, "mock-fixture-v1");
+        else
         {
-            model = model,
-            messages = new object[]
-            {
-                new
-                {
-                    role = "system",
-                    content = systemPrompt
-                },
-                new
-                {
-                    role = "user",
-                    content = new object[]
-                    {
-                        new
-                        {
-                            type = "text",
-                            text = $"Compare Image 1 (Locked Character Sheet) and Image 2 (Submitted Panel Artwork) for character '{input.CharacterName}'."
-                        },
-                        new
-                        {
-                            type = "image_url",
-                            image_url = new { url = sheetBase64 }
-                        },
-                        new
-                        {
-                            type = "image_url",
-                            image_url = new { url = artBase64 }
-                        }
-                    }
-                }
-            },
-            response_format = new { type = "json_object" }
-        };
-
-        var jsonPayload = JsonSerializer.Serialize(requestBody);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        httpRequest.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-        HttpResponseMessage response;
-        string responseContent;
-        try
-        {
-            response = await _httpClient.SendAsync(httpRequest, cancellationToken);
-            responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            stopwatch.Stop();
-            _logger.LogError(ex, "Lỗi kết nối khi gọi AI Vision tới {Endpoint}", endpoint);
-
-            await _usageService.RecordAsync(new AiUsageEntry(
-                WorkspaceId: input.WorkspaceId,
-                Feature: "Consistency.ImageConsistencyCheck",
-                Status: AiUsageStatus.ProviderUnavailable,
-                Model: model,
-                ErrorMessage: ex.Message,
-                DurationMs: (int)stopwatch.ElapsedMilliseconds,
-                UserId: input.UserId
-            ), cancellationToken);
-
-            throw new InvalidOperationException($"Không thể gọi dịch vụ AI Vision: {ex.Message}", ex);
+            var availability = await _usageService.CheckAvailabilityAsync(input.WorkspaceId, cancellationToken);
+            if (!availability.IsAvailable)
+                throw new InvalidOperationException(availability.Message ?? "AI không khả dụng cho Workspace này.");
+            (provider, model) = (AiProtocol.ProviderGemini, _aiSettings.GeminiModel);
+            var config = await _db.WorkspaceAiConfigs.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.WorkspaceId == input.WorkspaceId, cancellationToken);
+            apiKey = string.IsNullOrWhiteSpace(config?.ApiKeyEncrypted) ? null : _keyProtector.Unprotect(config.ApiKeyEncrypted);
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new InvalidOperationException("Workspace chưa có API key Gemini hợp lệ (Admin cần nhập/nhập lại key).");
         }
 
-        stopwatch.Stop();
+        var response = await _aiClient.CompareImagesAsync(new VisionCompareRequest(provider, model, apiKey, input.CharacterName,
+            new ImageReference("character-sheet", input.CharacterSheetMimeType, Convert.ToBase64String(input.CharacterSheetBytes)),
+            new ImageReference("artwork", input.ArtworkMimeType, Convert.ToBase64String(input.ArtworkBytes))), cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("AI Vision trả lỗi HTTP {StatusCode}: {Content}", response.StatusCode, responseContent);
+        var durationMs = (int)(response.CompletedAtUtc - response.StartedAtUtc).TotalMilliseconds;
+        if (!_aiSettings.IsMock)
+            await _usageService.RecordAsync(new AiUsageEntry(input.WorkspaceId, feature,
+                response.Succeeded ? AiUsageStatus.Succeeded
+                    : response.ErrorCode is "AI_UNAVAILABLE" or "PROVIDER_UNAVAILABLE" ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
+                Model: model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
+                ErrorMessage: response.ErrorMessage, DurationMs: durationMs, UserId: input.UserId), cancellationToken);
 
-            await _usageService.RecordAsync(new AiUsageEntry(
-                WorkspaceId: input.WorkspaceId,
-                Feature: "Consistency.ImageConsistencyCheck",
-                Status: AiUsageStatus.Failed,
-                Model: model,
-                ErrorMessage: $"HTTP {(int)response.StatusCode}: {responseContent}",
-                DurationMs: (int)stopwatch.ElapsedMilliseconds,
-                UserId: input.UserId
-            ), cancellationToken);
+        // Không đoán điểm khi AI lỗi / trả kết quả không đọc được: báo lỗi thay vì "đạt" giả
+        if (!response.Succeeded || response.Score is not { } score)
+            throw new InvalidOperationException(response.ErrorMessage ?? "AI Vision không trả được kết quả, thử lại sau.");
 
-            throw new InvalidOperationException($"Dịch vụ AI Vision trả lỗi (HTTP {(int)response.StatusCode}): {responseContent}");
-        }
-
-        // Phân tích kết quả từ OpenAI Chat Completion Response
-        long promptTokens = 0;
-        long completionTokens = 0;
-        decimal score = 0.85m;
-        var deviations = new List<ImageConsistencyDeviationDto>();
-        string summaryReason = "Khớp với tạo hình nhân vật.";
-
-        try
-        {
-            using var doc = JsonDocument.Parse(responseContent);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("usage", out var usageElem))
-            {
-                if (usageElem.TryGetProperty("prompt_tokens", out var pt)) promptTokens = pt.GetInt64();
-                if (usageElem.TryGetProperty("completion_tokens", out var ct)) completionTokens = ct.GetInt64();
-            }
-
-            if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
-            {
-                var choice = choices[0];
-                if (choice.TryGetProperty("message", out var msgElem) &&
-                    msgElem.TryGetProperty("content", out var contentElem))
-                {
-                    var rawContent = contentElem.GetString() ?? string.Empty;
-                    var parsed = ParseAiVisionResponse(rawContent);
-                    score = parsed.Score;
-                    deviations = parsed.Deviations;
-                    summaryReason = parsed.SummaryReason ?? summaryReason;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Không thể parse JSON phản hồi từ AI Vision, dùng giá trị fallback.");
-        }
-
-        // Lưu bản ghi AI Provenance (BR-10)
-        await _usageService.RecordAsync(new AiUsageEntry(
-            WorkspaceId: input.WorkspaceId,
-            Feature: "Consistency.ImageConsistencyCheck",
-            Status: AiUsageStatus.Succeeded,
-            Model: model,
-            PromptTokens: promptTokens,
-            CompletionTokens: completionTokens,
-            DurationMs: (int)stopwatch.ElapsedMilliseconds,
-            UserId: input.UserId
-        ), cancellationToken);
-
+        var deviations = response.Deviations.Select(d => new ImageConsistencyDeviationDto(d.Aspect, d.Description, d.RegionHint)).ToList();
+        var summaryReason = string.IsNullOrWhiteSpace(response.SummaryReason) ? "Khớp với tạo hình nhân vật." : response.SummaryReason;
         var passed = score >= threshold;
-        Guid? findingId = null;
-
-        // Nếu điểm dưới ngưỡng (score < 0.75): Gắn cờ và tạo/cập nhật ConsistencyFinding (Task 3.1 + 3.2)
-        if (!passed)
-        {
-            findingId = await RecordConsistencyFindingAsync(input, score, threshold, deviations, summaryReason, cancellationToken);
-        }
+        Guid? findingId = passed ? null
+            : await RecordConsistencyFindingAsync(input, score, threshold, deviations, summaryReason, cancellationToken);
 
         return new ImageConsistencyResultDto(
             PanelId: input.PanelId,
@@ -381,9 +267,8 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         var panel = await _db.Panels.AsNoTracking().FirstOrDefaultAsync(p => p.Id == input.PanelId, cancellationToken);
         var page = panel != null ? await _db.Pages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == panel.PageId, cancellationToken) : null;
 
-        var severity = score < 0.55m
-            ? ConsistencyFindingSeverity.Blocking
-            : ConsistencyFindingSeverity.Warning;
+        // Vision chỉ cảnh báo, không chặn duyệt chương: kết luận của model có thể sai, người quyết định qua Review
+        var severity = ConsistencyFindingSeverity.Warning;
 
         var message = $"Ngoại hình nhân vật '{input.CharacterName}' trong Khung {panel?.PanelNumber ?? 1} (Trang {page?.PageNumber ?? 1}) có độ lệch hình ảnh ({score:P0} < {threshold:P0}) so với Character Sheet khóa v{input.CharacterVersion}: {summaryReason}";
 
@@ -453,35 +338,6 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
     }
 
-    private async Task<string> ResolveApiKeyAsync(Guid workspaceId, CancellationToken cancellationToken)
-    {
-        // 1. Ưu tiên lấy key từ WorkspaceAiConfig
-        var config = await _db.WorkspaceAiConfigs.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
-
-        if (config is not null && config.IsEnabled && !string.IsNullOrWhiteSpace(config.ApiKeyEncrypted))
-        {
-            try
-            {
-                var decrypted = _keyProtector.Unprotect(config.ApiKeyEncrypted);
-                if (!string.IsNullOrWhiteSpace(decrypted))
-                    return decrypted.Trim();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Không giải mã được ApiKey từ WorkspaceAiConfig, fallback về AiVisionSettings.");
-            }
-        }
-
-        // 2. Fallback về AiVisionSettings
-        if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            return _settings.ApiKey.Trim();
-        }
-
-        throw new InvalidOperationException("Chưa cấu hình API Key cho AI Vision (cả Workspace và AiVisionSettings trong appsettings đều chưa có key hợp lệ).");
-    }
-
     private async Task<byte[]?> ReadAssetBytesAsync(string storageKey, CancellationToken cancellationToken)
     {
         try
@@ -529,48 +385,14 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         return null;
     }
 
-    private static (decimal Score, List<ImageConsistencyDeviationDto> Deviations, string? SummaryReason)
-        ParseAiVisionResponse(string content)
+    private static string SniffMime(byte[] b) => b switch
     {
-        var json = content.Trim();
-        if (json.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) json = json[7..];
-        else if (json.StartsWith("```")) json = json[3..];
-        if (json.EndsWith("```")) json = json[..^3];
-        json = json.Trim();
+        [0xFF, 0xD8, ..] => "image/jpeg",
+        [0x52, 0x49, 0x46, 0x46, _, _, _, _, 0x57, 0x45, 0x42, 0x50, ..] => "image/webp",
+        _ => "image/png"
+    };
 
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-
-        decimal score = 0.8m;
-        if (root.TryGetProperty("score", out var scoreElem))
-        {
-            score = scoreElem.GetDecimal();
-        }
-
-        string? summaryReason = null;
-        if (root.TryGetProperty("summaryReason", out var reasonElem))
-        {
-            summaryReason = reasonElem.GetString();
-        }
-
-        var deviations = new List<ImageConsistencyDeviationDto>();
-        if (root.TryGetProperty("deviations", out var devArr) && devArr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in devArr.EnumerateArray())
-            {
-                var aspect = item.TryGetProperty("aspect", out var asp) ? asp.GetString() ?? "general" : "general";
-                var desc = item.TryGetProperty("description", out var ds) ? ds.GetString() ?? "" : "";
-                var hint = item.TryGetProperty("regionHint", out var rh) ? rh.GetString() : null;
-                deviations.Add(new ImageConsistencyDeviationDto(aspect, desc, hint));
-            }
-        }
-
-        return (score, deviations, summaryReason);
-    }
-
-    private static byte[] CreateDummyPngBytes()
-    {
-        // 1x1 transparent PNG data
-        return Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-    }
+    private static ImageConsistencyResultDto Skipped(Guid panelId, decimal threshold, string reason, string? revisionRef) =>
+        new(panelId, null, null, null, 0m, threshold, true, reason, Array.Empty<ImageConsistencyDeviationDto>(),
+            RevisionRef: revisionRef, Skipped: true);
 }

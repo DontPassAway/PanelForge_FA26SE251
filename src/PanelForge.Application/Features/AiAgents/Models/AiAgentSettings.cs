@@ -17,6 +17,21 @@ public sealed class AiAgentSettings
     /// <summary>Run Queued/Running không có hoạt động quá thời gian này sẽ bị đánh dấu Interrupted.</summary>
     public int RunStaleAfterSeconds { get; set; } = 300;
     public int ServiceTimeoutSeconds { get; set; } = 10;
+    /// <summary>Copilot sync: timeout một lần gọi và số lượt tối đa mỗi phút cho MỘT Series.</summary>
+    public int CopilotTimeoutSeconds { get; set; } = 15;
+    public int CopilotCallsPerMinutePerSeries { get; set; } = 10;
+
+    /// <summary>Sinh ảnh thumbnail: Gemini (dùng key Workspace, nhận ảnh tham chiếu) hoặc Cloudflare (Workers AI text-to-image, token ở AI service).</summary>
+    public string ImageProvider { get; set; } = "Gemini";
+    public string GeminiImageModel { get; set; } = "gemini-2.5-flash-image";
+    public string CloudflareImageModel { get; set; } = "@cf/black-forest-labs/flux-1-schnell";
+    public int ImageTimeoutSeconds { get; set; } = 100;
+    /// <summary>Số job sinh ảnh chạy đồng thời tối đa cho MỘT Series.</summary>
+    public int ImageJobsPerSeries { get; set; } = 2;
+
+    /// <summary>Chế độ demo: hiện workflow FullScene (Script → Storyboard → Editor trong một lần chạy) trong danh sách nhiệm vụ.
+    /// Tắt mặc định; FullScene vẫn chạy được qua API khi gọi trực tiếp.</summary>
+    public bool ShowFullSceneWorkflow { get; set; }
 
     public bool IsMock => string.Equals(Provider, "Mock", StringComparison.OrdinalIgnoreCase);
 }

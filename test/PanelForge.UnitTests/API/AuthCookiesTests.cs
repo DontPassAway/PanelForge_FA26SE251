@@ -32,7 +32,7 @@ public class AuthCookiesTests
             Assert.DoesNotContain("secure", h, StringComparison.OrdinalIgnoreCase); // http dev
         }
         Assert.Contains("path=/api;", access + ";");
-        Assert.Contains("path=/api/auth", refresh);
+        Assert.Contains("path=/api;", refresh + ";");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class AuthCookiesTests
         AuthCookies.Clear(ctx.Response);
         var headers = SetCookieHeaders(ctx);
         Assert.Contains(headers, h => h.StartsWith("pf_access=;") && h.Contains("expires=Thu, 01 Jan 1970"));
-        Assert.Contains(headers, h => h.StartsWith("pf_refresh=;") && h.Contains("path=/api/auth"));
+        Assert.Contains(headers, h => h.StartsWith("pf_refresh=;") && (h + ";").Contains("path=/api;"));
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Pages.Common;
 using PanelForge.Application.Features.Pages.Models;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -46,28 +47,24 @@ public sealed class ReorderPageCommandHandler : IRequestHandler<ReorderPageComma
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, page.ChapterId, cancellationToken) is { } readOnly)
             return Result<PageDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
-        // 2. Reorder domain command
-        try
-        {
-            page.Reorder(command.NewPageNumber);
-            page.UpdatedBy = command.UserId.ToString();
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            return Result<PageDto>.Failure(ex.Message);
-        }
+        // 2. Rút trang ra rồi chèn vào vị trí mới; các trang khác dời theo và được đánh số liền 1..N
+        var order = await _dbContext.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == page.ChapterId && p.Id != page.Id)
+            .OrderBy(p => p.PageNumber)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        order.Insert(Math.Min(command.NewPageNumber, order.Count + 1) - 1, page.Id);
+        var newNumbers = order.Select((id, i) => (id, n: i + 1)).ToDictionary(x => x.id, x => x.n);
 
-        // 3. Persist Event vào Marten
-        await _pageRepository.SaveAsync(page, cancellationToken);
+        // 3. Không cho đảo/cắt thứ tự Scene
+        if (await PageOrdering.SceneOrderViolationAsync(_dbContext, page.ChapterId, newNumbers, cancellationToken) is { } violation)
+            return Result<PageDto>.Failure(violation, ResultErrorCodes.Conflict);
 
-        // 4. Update Read model trong EF Core
-        var dbPage = await _dbContext.Pages.FirstOrDefaultAsync(p => p.Id == command.PageId, cancellationToken);
-        if (dbPage != null)
-        {
-            dbPage.Reorder(command.NewPageNumber);
-            dbPage.UpdatedBy = command.UserId.ToString();
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
+        // 4. Append event vào Marten + cập nhật read model cho mọi trang đổi số
+        if (await PageOrdering.ApplyAsync(_dbContext, _pageRepository, page.ChapterId, newNumbers,
+                command.UserId.ToString(), cancellationToken) is { } error)
+            return Result<PageDto>.Failure(error);
+        page = await _pageRepository.GetAsync(command.PageId, cancellationToken) ?? page;
 
         return Result<PageDto>.Success(new PageDto(
             Id: page.Id,

@@ -1,0 +1,38 @@
+@startuml wf01_setup
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+|Producer|
+start
+:Create Studio Workspace;
+:Invite members and assign roles;
+:Create Series with pipeline\nand release calendar;
+:Add Writer to the series\n[Planned v1.3: mark as creative lead];
+|Writer|
+:Import existing script\n(chapters, scenes, script lines);
+:Create Series Bible entries and revisions;
+|Artist|
+:Upload character concept;
+|Writer|
+if (Concept matches the story?) then (yes)
+  :Endorse revision;
+else (no)
+  :Request rework;
+  |Artist|
+  :Revise and resubmit concept;
+  |Writer|
+  :Endorse revision;
+endif
+|Producer|
+:Lock endorsed revision as Canon;
+|Writer|
+repeat
+  :Run consistency check;
+  backward :Fix script or Bible;
+repeat while (Findings?) is (yes) not (no)
+|Producer|
+:Series ready for production;
+stop
+@enduml

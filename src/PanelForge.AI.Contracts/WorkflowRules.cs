@@ -7,9 +7,9 @@ public sealed record StepFact(string Agent, int Round, bool Succeeded, bool HasB
 /// Dữ kiện đầu vào do CODE kiểm từ DB (không phải do LLM hay Frontend khai báo). Thiếu dữ kiện mà workflow cần →
 /// hành động hợp lệ duy nhất là StopForHuman (kèm lý do rõ ràng).
 /// </summary>
-public sealed record WorkflowInputs(bool HasScript, bool HasLayout, bool HasArtistPanels, bool HasLetteringLines, bool HasProgress)
+public sealed record WorkflowInputs(bool HasScript, bool HasLayout, bool HasArtistPanels)
 {
-    public static readonly WorkflowInputs All = new(true, true, true, true, true);
+    public static readonly WorkflowInputs All = new(true, true, true);
 }
 
 /// <summary>
@@ -22,8 +22,6 @@ public sealed record WorkflowInputs(bool HasScript, bool HasLayout, bool HasArti
 ///   Storyboard  Continuity → Storyboard → Editor → Finish          (script có sẵn; còn finding chặn → StopForHuman, không có Writer)
 ///   Editor      Continuity → Editor → Finish
 ///   Artist      Artist → Finish
-///   Letterer    Letterer → Finish
-///   Producer    Producer → Finish
 /// Script mới/sửa luôn qua Continuity trước khi dùng tiếp; Storyboard chỉ chạy khi Continuity gần nhất sạch.
 /// </summary>
 public static class WorkflowRules
@@ -68,8 +66,7 @@ public static class WorkflowRules
                 _ => [ActionStopForHuman]
             },
             AiProtocol.WorkflowArtist => last.Agent == AiProtocol.AgentArtist ? [ActionFinish] : [ActionStopForHuman],
-            AiProtocol.WorkflowLetterer => last.Agent == AiProtocol.AgentLetterer ? [ActionFinish] : [ActionStopForHuman],
-            _ => last.Agent == AiProtocol.AgentProducer ? [ActionFinish] : [ActionStopForHuman]
+            _ => [ActionStopForHuman]
         };
     }
 
@@ -81,8 +78,6 @@ public static class WorkflowRules
         AiProtocol.WorkflowStoryboard => [AiProtocol.AgentContinuity, AiProtocol.AgentStoryboard, AiProtocol.AgentEditor],
         AiProtocol.WorkflowEditor => [AiProtocol.AgentContinuity, AiProtocol.AgentEditor],
         AiProtocol.WorkflowArtist => [AiProtocol.AgentArtist],
-        AiProtocol.WorkflowLetterer => [AiProtocol.AgentLetterer],
-        AiProtocol.WorkflowProducer => [AiProtocol.AgentProducer],
         _ => []
     };
 
@@ -90,8 +85,6 @@ public static class WorkflowRules
     {
         AiProtocol.WorkflowStoryboard or AiProtocol.WorkflowEditor => AiProtocol.AgentContinuity,
         AiProtocol.WorkflowArtist => AiProtocol.AgentArtist,
-        AiProtocol.WorkflowLetterer => AiProtocol.AgentLetterer,
-        AiProtocol.WorkflowProducer => AiProtocol.AgentProducer,
         _ => AiProtocol.AgentWriter
     };
 
@@ -99,8 +92,6 @@ public static class WorkflowRules
     {
         AiProtocol.WorkflowStoryboard or AiProtocol.WorkflowEditor => i.HasScript,
         AiProtocol.WorkflowArtist => i.HasArtistPanels,
-        AiProtocol.WorkflowLetterer => i.HasLetteringLines,
-        AiProtocol.WorkflowProducer => i.HasProgress,
         _ => true
     };
 

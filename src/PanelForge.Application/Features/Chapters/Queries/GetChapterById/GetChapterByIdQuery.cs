@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Models;
@@ -67,7 +68,8 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
             Outline: chapter.Outline,
             IsScriptFrozen: chapter.IsScriptFrozen,
             ScriptFrozenAt: chapter.ScriptFrozenAt,
-            ScriptFrozenById: chapter.ScriptFrozenById
+            ScriptFrozenById: chapter.ScriptFrozenById,
+            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256)
         );
 
         return Result<ChapterDetailDto>.Success(detail);

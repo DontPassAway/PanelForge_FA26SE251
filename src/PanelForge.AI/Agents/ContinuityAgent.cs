@@ -30,7 +30,7 @@ public sealed class ContinuityAgent
             scriptLineIds = draft.Lines.Select(l => new { key = $"L{l.Order}", lineId = l.LineId })
         });
 
-        var bibleByRevision = ctx.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, $"{b.Name}\n{b.Description}"));
+        var bibleByRevision = ctx.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, b.EvidenceText));
         var lineKeys = KeyMaps.LineKeys(draft);
         var call = await _runner.RunAsync<ContinuityReport>(Prompt, sb.ToString(),
             text => Parse(text, ctx, keys, draft, lineKeys, bibleByRevision), ct);

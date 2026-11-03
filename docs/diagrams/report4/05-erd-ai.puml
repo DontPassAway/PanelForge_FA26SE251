@@ -1,0 +1,61 @@
+@startuml erd_ai
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+hide circle
+skinparam linetype ortho
+entity studio_workspaces {
+*id : uuid <<PK>>
+}
+entity workspace_ai_configs {
+*id : uuid <<PK>>
+--
+workspace_id : uuid <<FK>>
+}
+entity ai_workflow_runs {
+*id : uuid <<PK>>
+--
+workspace_id : uuid <<FK>>
+series_id : uuid <<FK>>
+chapter_id : uuid <<FK>>
+scene_id : uuid <<FK>>
+}
+entity ai_agent_steps {
+*id : uuid <<PK>>
+--
+run_id : uuid <<FK>>
+usage_record_id : uuid <<FK>>
+}
+entity ai_suggestions {
+*id : uuid <<PK>>
+--
+run_id : uuid <<FK>>
+step_id : uuid <<FK>>
+parent_suggestion_id : uuid <<FK>>
+}
+entity ai_suggestion_decisions {
+*id : uuid <<PK>>
+--
+suggestion_id : uuid <<FK>>
+result_revision_id : uuid <<FK>>
+}
+entity ai_usage_records {
+*id : uuid <<PK>>
+--
+workspace_id : uuid <<FK>>
+}
+entity content_revisions {
+*id : uuid <<PK>>
+}
+studio_workspaces ||--o| workspace_ai_configs
+studio_workspaces ||--o{ ai_workflow_runs
+ai_workflow_runs ||--o{ ai_agent_steps
+ai_workflow_runs ||--o{ ai_suggestions
+ai_agent_steps ||--o{ ai_suggestions
+ai_suggestions ||--o{ ai_suggestion_decisions
+ai_suggestion_decisions |o--o| content_revisions
+studio_workspaces ||--o{ ai_usage_records
+ai_usage_records ||--o{ ai_agent_steps
+@enduml

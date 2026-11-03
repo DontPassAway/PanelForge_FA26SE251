@@ -7,6 +7,9 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignment;
+using PanelForge.Application.Features.Assignments.Commands.CreateBulkAssignment;
+using PanelForge.Application.Features.Assignments.Commands.CreateAssignmentPlan;
+using PanelForge.Application.Features.Assignments.Queries.GetAssignmentPlanTemplate;
 using PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 using PanelForge.Application.Features.Assignments.Commands.OpenAssignmentReview;
 using PanelForge.Application.Features.Assignments.Commands.RejectChangeRequest;
@@ -19,6 +22,7 @@ using PanelForge.Application.Features.Assignments.Commands.SubmitAssignment;
 using PanelForge.Application.Features.Assignments.Commands.TransferAssignmentScope;
 using PanelForge.Application.Features.Assignments.Commands.UpdateAssignment;
 using PanelForge.Application.Features.Assignments.Commands.VerifyChangeRequest;
+using PanelForge.Application.Features.Assignments.Queries.GetAssigneeSuggestions;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissions;
 using PanelForge.Application.Features.Assignments.Queries.GetChangeRequestsByChapter;
 using PanelForge.Application.Features.Assignments.Models;
@@ -56,6 +60,58 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value)
             : Error(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/assignments/bulk — giao cả chương / dải trang theo granularity của stage; dryRun = xem trước.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/bulk")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(BulkAssignmentResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BulkAssignmentResultDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateBulk(
+        Guid chapterId, [FromBody] CreateBulkAssignmentRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateBulkAssignmentCommand(
+            chapterId, GetCurrentUserId(), body.PipelineStageId, body.AssigneeUserId, body.Brief, body.PageIds,
+            body.ReferenceNotes, body.DueDate, body.Priority, body.DryRun), ct);
+
+        if (!result.IsSuccess) return Error(result);
+        return body.DryRun
+            ? Ok(result.Value)
+            : CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/assignments/plan — giao nhiều stage một lần (all-or-nothing); dryRun = xem trước.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/plan")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentPlanResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AssignmentPlanResultDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreatePlan(Guid chapterId, [FromBody] CreateAssignmentPlanRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateAssignmentPlanCommand(chapterId, GetCurrentUserId(), body), ct);
+        if (!result.IsSuccess) return Error(result);
+        return body.DryRun
+            ? Ok(result.Value)
+            : CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value);
+    }
+
+    /// <summary>GET /api/chapters/{chapterId}/assignments/plan-template — đội đã giao ở chương gần nhất trước đó của Series.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/assignments/plan-template")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentPlanTemplateDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PlanTemplate(Guid chapterId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetAssignmentPlanTemplateQuery(chapterId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/chapters/{chapterId}/assignments/assignee-suggestions?pipelineStageId= — ứng viên đã xếp hạng cho stage.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/assignments/assignee-suggestions")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<AssigneeSuggestionDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AssigneeSuggestions(Guid chapterId, [FromQuery] Guid pipelineStageId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetAssigneeSuggestionsQuery(chapterId, pipelineStageId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>GET /api/chapters/{chapterId}/assignments?assigneeUserId=&amp;status= — mọi thành viên Workspace.</summary>

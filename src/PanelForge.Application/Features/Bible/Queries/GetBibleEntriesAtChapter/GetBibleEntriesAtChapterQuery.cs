@@ -87,7 +87,8 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 EffectiveToChapterNumber: effectiveRev.EffectiveToChapterNumber,
                 ArtistUserId: effectiveRev.ArtistUserId,
                 ReviewStatus: effectiveRev.ReviewStatus,
-                ReworkFeedback: effectiveRev.ReworkFeedback
+                ReworkFeedback: effectiveRev.ReworkFeedback,
+                        ConceptImageUrl: effectiveRev.ConceptImageUrl
             );
 
             results.Add(new BibleEntryDto(

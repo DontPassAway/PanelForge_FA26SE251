@@ -1,3 +1,4 @@
+using PanelForge.AI.Contracts;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Common;
@@ -6,7 +7,7 @@ namespace PanelForge.Application.Features.AiAgents.Common;
 /// Chính sách phân quyền theo loại workflow/loại đề xuất — MỘT nguồn sự thật cho RunWorkflow, ReviewSuggestion và API availability.
 /// Quyền luôn do Backend xác định từ user + membership; không bao giờ lấy role hay danh sách agent từ client.
 ///
-/// Producer không mặc nhiên có mọi quyền nội dung: Producer chỉ được chạy workflow của chính mình (báo cáo tiến độ), workflow Script/Storyboard
+/// Producer không mặc nhiên có mọi quyền nội dung: Producer chỉ được chạy workflow Script/Storyboard
 /// (giữ đúng chính sách của demo hiện có: Producer điều phối Series) và báo cáo Editor (chỉ đọc). Artist/Letterer là việc riêng của vai trò đó.
 /// Quyết định Accept/Reject vẫn thuộc Producer (nghiệm thu) + vai trò sở hữu nội dung + Editor (xem docs/roles/role-workflows.md).
 /// </summary>
@@ -17,9 +18,8 @@ internal static class AiWorkflowPolicy
         AiWorkflowType.FullScene or AiWorkflowType.Script => [WorkspaceRole.Producer, WorkspaceRole.Writer],
         AiWorkflowType.Storyboard => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist],
         AiWorkflowType.Artist => [WorkspaceRole.Artist],
-        AiWorkflowType.Letterer => [WorkspaceRole.Letterer],
         AiWorkflowType.Editor => [WorkspaceRole.Producer, WorkspaceRole.Editor],
-        _ => [WorkspaceRole.Producer]
+        _ => []
     };
 
     public static WorkspaceRole[] ReviewRoles(AiSuggestionKind kind) => kind switch
@@ -27,7 +27,10 @@ internal static class AiWorkflowPolicy
         AiSuggestionKind.Script => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor],
         AiSuggestionKind.Layout => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist, WorkspaceRole.Editor],
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Editor],
-        AiSuggestionKind.Lettering => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Letterer, WorkspaceRole.Editor],
+        AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
+        AiSuggestionKind.Thumbnail => [WorkspaceRole.Producer, WorkspaceRole.Artist],
+        AiSuggestionKind.Lettering or AiSuggestionKind.LineRewrite =>
+            [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Letterer, WorkspaceRole.Editor],
         _ => []
     };
 
@@ -40,8 +43,27 @@ internal static class AiWorkflowPolicy
         AiWorkflowType.Script => ["Script"],
         AiWorkflowType.Storyboard => ["Layout"],
         AiWorkflowType.Artist => ["ImagePrompt"],
-        AiWorkflowType.Letterer => ["Lettering"],
         _ => ["Report"]
+    };
+
+    /// <summary>Vai trò được gọi từng task Copilot (Backend tự xác định, không lấy từ client).</summary>
+    public static WorkspaceRole[] CopilotRoles(string task) => task switch
+    {
+        CopilotTasks.WriterRewrite => [WorkspaceRole.Producer, WorkspaceRole.Writer],
+        CopilotTasks.LettererShorten => [WorkspaceRole.Letterer],
+        CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
+        _ => []
+    };
+
+    /// <summary>
+    /// Nhiệm vụ hiện trong danh sách cho người dùng chọn. Không hiện: Copilot/Thumbnail (gọi sync từ màn làm việc), Letterer (đã thay bằng
+    /// Copilot letterer.shorten) và Producer (số liệu tiến độ xem thẳng qua GET /series/{id}/progress + lock-gate); enum giữ để đọc run cũ; FullScene (= Script → Storyboard → Editor gộp lại; chỉ hiện khi bật chế độ demo).
+    /// </summary>
+    public static bool IsListed(AiWorkflowType type, bool showFullScene) => type switch
+    {
+        AiWorkflowType.Copilot or AiWorkflowType.Thumbnail or AiWorkflowType.Letterer or AiWorkflowType.Producer => false,
+        AiWorkflowType.FullScene => showFullScene,
+        _ => true
     };
 
     public static bool NeedsScene(AiWorkflowType type) => type != AiWorkflowType.Producer;
@@ -52,9 +74,8 @@ internal static class AiWorkflowPolicy
         AiWorkflowType.Script => "Viết script",
         AiWorkflowType.Storyboard => "Storyboard từ script có sẵn",
         AiWorkflowType.Artist => "Prompt ảnh cho panel",
-        AiWorkflowType.Letterer => "Rút gọn thoại cho bubble",
         AiWorkflowType.Editor => "Review biên tập",
-        _ => "Báo cáo tiến độ"
+        _ => type.ToString()
     };
 
     public static string Description(AiWorkflowType type) => type switch
@@ -63,8 +84,7 @@ internal static class AiWorkflowPolicy
         AiWorkflowType.Script => "Writer viết/sửa script, Continuity kiểm tra với Bible; kết thúc khi script sạch hoặc dừng chờ người nếu còn finding chặn.",
         AiWorkflowType.Storyboard => "Continuity kiểm tra script hiện có rồi Storyboard chia Page/Panel và Editor review. Chỉ áp dụng được vào Scene chưa có Page.",
         AiWorkflowType.Artist => "Artist soạn prompt ảnh cho từng panel của layout đã duyệt, dùng Bible hiệu lực tại chương và style rules. Không sinh ảnh.",
-        AiWorkflowType.Letterer => "Letterer đề xuất rút gọn thoại giữ ý nghĩa và giọng nhân vật theo giới hạn chữ ước lượng của hệ thống. Người duyệt mới áp dụng.",
         AiWorkflowType.Editor => "Continuity kiểm tra script có sẵn và Editor tổng hợp báo cáo review (kèm layout đã duyệt nếu có). Báo cáo tham khảo, không có Accept.",
-        _ => "Producer viết báo cáo tiến độ, rủi ro và đề xuất xử lý từ số liệu assignment/deadline do Backend tính. Báo cáo tham khảo, không tự giao việc hay chuyển stage."
+        _ => "Nhiệm vụ đã ngừng hỗ trợ."
     };
 }

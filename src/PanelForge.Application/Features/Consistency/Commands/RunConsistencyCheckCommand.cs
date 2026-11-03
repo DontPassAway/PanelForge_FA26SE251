@@ -111,7 +111,7 @@ public sealed class RunConsistencyCheckCommandHandler
 
         var detectedSet = detected.Select(d => d.Fingerprint).ToHashSet();
         var cleared = 0;
-        foreach (var f in existing.Where(f => !detectedSet.Contains(f.Fingerprint)))
+        foreach (var f in existing.Where(f => !ConsistencyChecker.IsAiOrVisualFinding(f.RuleCode) && !detectedSet.Contains(f.Fingerprint)))
         {
             var wasOpen = f.IsOpen;
             f.NoLongerDetected(now);

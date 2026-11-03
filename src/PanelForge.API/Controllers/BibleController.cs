@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using MediatR;
+using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
@@ -295,7 +296,8 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/concept
-    /// V2.5: Artist tải lên bản vẽ thiết kế / Model Sheet (CAS SHA-256) cho mục Bible (-> ConceptSubmitted, lưu ArtistUserId).
+    /// V2.5: Artist tải lên bản vẽ thiết kế / Model Sheet cho phiên bản hiện hành (-> ConceptSubmitted). Chỉ ảnh = thêm sự kiện,
+    /// không tăng version; kèm sửa nội dung = phiên bản mới; phiên bản đã khoá = 409 (dùng /supersede).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/concept")]
     [RequireWorkspaceRole(WorkspaceRole.Artist)]
@@ -309,25 +311,8 @@ public sealed class BibleController : ControllerBase
         [FromBody] SubmitConceptArtRequest body,
         CancellationToken cancellationToken)
     {
-        var command = new AddBibleEntryRevisionCommand(
-            SeriesId: seriesId,
-            BibleEntryId: entryId,
-            UserId: GetCurrentUserId(),
-            Summary: body.EffectiveSummary,
-            Name: body.Name,
-            Description: body.Description,
-            Subtitle: body.Subtitle,
-            DetailsJson: body.DetailsJson,
-            ReferenceImageUrl: body.EffectiveImageUrl,
-            StageName: body.StageName,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber ?? 1,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
-            ExpectedVersionNumber: body.ExpectedVersionNumber,
-            ArtistUserId: GetCurrentUserId(),
-            ReviewStatus: BibleRevisionStatus.ConceptSubmitted
-        );
-
-        var result = await _mediator.Send(command, cancellationToken);
+        var result = await _mediator.Send(
+            new SubmitBibleConceptCommand(seriesId, entryId, GetCurrentUserId(), body), cancellationToken);
         if (!result.IsSuccess)
         {
             return result.ErrorCode switch

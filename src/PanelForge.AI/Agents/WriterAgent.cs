@@ -61,7 +61,7 @@ public sealed class WriterAgent
         if (model is null) return (null, [error!]);
         if (model.Lines is null or { Count: 0 }) return (null, ["Thiếu mảng lines."]);
 
-        var errors = new List<string>();
+        var unknownSpeakers = new Dictionary<string, List<int>>();
         var lines = new List<ScriptDraftLine>();
         for (var i = 0; i < model.Lines.Count; i++)
         {
@@ -69,15 +69,26 @@ public sealed class WriterAgent
             Guid? speaker = null;
             if (!string.IsNullOrWhiteSpace(l.Speaker) && !l.Speaker.Equals("null", StringComparison.OrdinalIgnoreCase))
             {
-                if (keys.CharactersByCode.TryGetValue(l.Speaker.Trim().ToUpperInvariant(), out var c)) speaker = c.EntryId;
-                else errors.Add($"Dòng {i + 1}: speaker '{l.Speaker}' không phải code nhân vật trong Bible.");
+                var code = l.Speaker.Trim().ToUpperInvariant();
+                if (keys.CharactersByCode.TryGetValue(code, out var c)) speaker = c.EntryId;
+                else if (unknownSpeakers.TryGetValue(code, out var at)) at.Add(i + 1);
+                else unknownSpeakers[code] = [i + 1];
             }
             // LineId do ứng dụng cấp, không phải model
             lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker,
                 string.IsNullOrWhiteSpace(l.Dialogue) ? null : l.Dialogue.Trim(),
                 string.IsNullOrWhiteSpace(l.StageDirection) ? null : l.StageDirection.Trim()));
         }
-        if (errors.Count > 0) return (null, errors);
+        if (unknownSpeakers.Count > 0)
+        {
+            // Lỗi này cũng được gửi lại cho model ở lượt sửa, nên kèm danh sách code hợp lệ.
+            var allowed = keys.CharactersByCode.Count == 0
+                ? "chưa có nhân vật nào được khoá hồ sơ"
+                : "chỉ được dùng " + string.Join(", ", keys.CharactersByCode.Values.Select(c => c.Code));
+            return (null, unknownSpeakers.Select(kv =>
+                $"Speaker '{kv.Key}' (dòng {string.Join(", ", kv.Value)}) không nằm trong danh sách nhân vật AI được dùng ({allowed}). " +
+                "Nhân vật phải có hồ sơ đã được Producer khoá thì AI mới dùng được.").ToList());
+        }
 
         var draft = new ScriptDraft(AiProtocol.SchemaVersion, ctx.RunId, ctx.SceneId, round, lines,
             ctx.BibleRevisionIds, model.RevisionNotes);

@@ -146,6 +146,26 @@ public class ContentRulesTests
     }
 
     [Fact]
+    public void BibleEntryContext_IncludesDetailsInPromptBlock_AndEvidenceText()
+    {
+        var entry = new BibleEntryContext(Guid.NewGuid(), "CHIA_KHOA", "Prop", "Chìa khóa bạc",
+            "Đạo cụ mở tủ đồng hồ.", Guid.NewGuid(), 1, 1, """{"availableFromChapter": 5}""");
+        var ctx = new AgentContext(RunId, Guid.NewGuid(), Guid.NewGuid(), 3, SceneId, "H", null, "b", "RightToLeft",
+            0, "Mock", "m", 2, [entry], [entry.RevisionId], []);
+        var maps = new PanelForge.AI.Agents.KeyMaps(ctx);
+
+        var block = PanelForge.AI.Agents.PromptText.BibleBlock(ctx, maps);
+        block.Should().Contain("details: {\"availableFromChapter\": 5}");
+        entry.EvidenceText.Should().Contain("availableFromChapter");
+
+        var bible = new Dictionary<Guid, (Guid, string)> { [entry.RevisionId] = (entry.EntryId, entry.EvidenceText) };
+        var report = new ContinuityReport(1, RunId, 0,
+            [new ContinuityFinding("F1", "Blocking", "ItemTimeline", "dùng trước chương 5", [L1],
+                [new BibleEvidence(entry.EntryId, entry.RevisionId, "\"availableFromChapter\": 5")], null)], "");
+        ContentRules.ValidateContinuity(report, RunId, Script(), bible).Should().BeEmpty();
+    }
+
+    [Fact]
     public void OutputParser_ToleratesCodeFences_RejectsGarbage_AndDetectsForbiddenProperty()
     {
         OutputParser.Parse<PanelForge.AI.Agents.WriterOutput>("```json\n{\"lines\":[{\"speaker\":null,\"dialogue\":\"hi\"}]}\n```", out var e1)

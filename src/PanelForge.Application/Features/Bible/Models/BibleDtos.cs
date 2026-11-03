@@ -1,3 +1,4 @@
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Models;
@@ -23,8 +24,33 @@ public sealed record BibleEntryRevisionDto(
     // V2.5: Provenance & 2-tier review
     Guid? ArtistUserId = null,
     BibleRevisionStatus ReviewStatus = BibleRevisionStatus.Draft,
-    string? ReworkFeedback = null
-);
+    string? ReworkFeedback = null,
+    // Ảnh Concept hiện hành của phiên bản (nộp Concept không tạo phiên bản mới) và dòng thời gian duyệt, cũ → mới
+    string? ConceptImageUrl = null,
+    IReadOnlyList<BibleRevisionEventDto>? Events = null
+)
+{
+    /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
+    public static BibleEntryRevisionDto From(BibleEntryRevision r) => new(
+        r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
+        r.EffectiveFromChapterNumber, r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
+        r.EffectiveToChapterNumber, r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
+        r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList());
+}
+
+/// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Endorsed/Locked/Superseded.</summary>
+public sealed record BibleRevisionEventDto(
+    Guid Id,
+    BibleRevisionEventType Type,
+    Guid? ActorId,
+    string? Comment,
+    string? ImageUrl,
+    string EventHash,
+    DateTime CreatedAt)
+{
+    public static BibleRevisionEventDto From(BibleRevisionEvent e) =>
+        new(e.Id, e.Type, e.ActorId, e.Comment, e.ImageUrl, e.EventHash, e.CreatedAt);
+}
 
 public sealed record BibleEntryDto(
     Guid Id,

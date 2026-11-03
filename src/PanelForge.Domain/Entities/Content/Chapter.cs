@@ -12,6 +12,9 @@ public class Chapter : BaseEntity
     public DateOnly? TargetReleaseDate { get; private set; }
     /// <summary>V1.2: outline của chương (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
     public string? Outline { get; private set; }
+
+    /// <summary>SHA-256 ảnh bìa chương hiện tại (null = chưa có bìa); file lưu theo hash nên không ghi đè bìa cũ.</summary>
+    public string? CoverImageSha256 { get; private set; }
     public long VersionVector { get; private set; } = 0;
 
     /// <summary>E-02: chuyển trạng thái do CF5 đảm nhiệm; mặc định InProduction.</summary>
@@ -58,6 +61,8 @@ public class Chapter : BaseEntity
     public void SetOutline(string? outline) => Outline = string.IsNullOrWhiteSpace(outline) ? null : outline.Trim();
 
     public void IncrementVersion() => VersionVector++;
+
+    public void SetCover(string? sha256) => CoverImageSha256 = sha256;
 
     /// <summary>V2.5: Producer duyệt kịch bản và đóng băng (InProduction, kịch bản thành read-only với Writer).</summary>
     public void FreezeScript(Guid userId)

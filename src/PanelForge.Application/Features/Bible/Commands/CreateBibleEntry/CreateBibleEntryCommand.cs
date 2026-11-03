@@ -117,24 +117,7 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var revisionDto = new BibleEntryRevisionDto(
-            Id: revision.Id,
-            BibleEntryId: revision.BibleEntryId,
-            VersionNumber: revision.VersionNumber,
-            Summary: revision.Summary,
-            SnapshotJson: revision.SnapshotJson,
-            ContentHash: revision.ContentHash,
-            AuthorId: revision.AuthorId,
-            AssociatedChapterId: revision.AssociatedChapterId,
-            EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
-            IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt,
-            StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
-            ArtistUserId: revision.ArtistUserId,
-            ReviewStatus: revision.ReviewStatus,
-            ReworkFeedback: revision.ReworkFeedback
-        );
+        var revisionDto = BibleEntryRevisionDto.From(revision);
 
         return Result<BibleEntryDto>.Success(new BibleEntryDto(
             Id: entry.Id,
