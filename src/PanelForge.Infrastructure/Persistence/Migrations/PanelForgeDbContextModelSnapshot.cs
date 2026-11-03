@@ -1424,6 +1424,78 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("chapter_reviews", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScript", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_locked");
+
+                    b.Property<DateTime?>("LockedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("locked_at");
+
+                    b.Property<Guid?>("LockedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("locked_by_id");
+
+                    b.Property<string>("RawText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("raw_text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_chapter_scripts_chapter_id");
+
+                    b.ToTable("chapter_scripts", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1826,6 +1898,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
 
+                    b.Property<Guid?>("ChapterScriptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_script_id");
+
                     b.Property<DateTime?>("ContentReadyAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("content_ready_at");
@@ -1896,6 +1972,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("width_px");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChapterScriptId");
 
                     b.HasIndex("CurrentStageId");
 
@@ -2000,6 +2078,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
 
+                    b.Property<Guid?>("ChapterScriptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_script_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -2055,6 +2137,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("version");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChapterScriptId");
 
                     b.HasIndex("ChapterId", "SceneNumber")
                         .IsUnique()
@@ -4639,6 +4723,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Series");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScript", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
+                        .WithOne("Script")
+                        .HasForeignKey("PanelForge.Domain.Entities.Content.ChapterScript", "ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
@@ -4691,6 +4786,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PanelForge.Domain.Entities.Content.ChapterScript", null)
+                        .WithMany("Pages")
+                        .HasForeignKey("ChapterScriptId");
+
                     b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", "CurrentStage")
                         .WithMany()
                         .HasForeignKey("CurrentStageId")
@@ -4733,6 +4832,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ChapterId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.ChapterScript", null)
+                        .WithMany("Scenes")
+                        .HasForeignKey("ChapterScriptId");
 
                     b.Navigation("Chapter");
                 });
@@ -5122,6 +5225,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("ExternalPreviewLinks");
 
+                    b.Navigation("Pages");
+
+                    b.Navigation("Scenes");
+
+                    b.Navigation("Script");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScript", b =>
+                {
                     b.Navigation("Pages");
 
                     b.Navigation("Scenes");
