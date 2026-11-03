@@ -25,6 +25,8 @@ public class Chapter : BaseEntity
     public bool IsScriptFrozen { get; private set; } = false;
     public DateTime? ScriptFrozenAt { get; private set; }
     public Guid? ScriptFrozenById { get; private set; }
+    // SHA-256 của toàn bộ script-lines lúc đóng băng; null khi chưa đóng băng
+    public string? ScriptContentHash { get; private set; }
 
     /// <summary>V2.5 & WF04: Quản lý trạng thái xin mở lại kịch bản đã đóng băng.</summary>
     public ScriptReopenStatus ScriptReopenStatus { get; private set; } = ScriptReopenStatus.None;
@@ -78,7 +80,7 @@ public class Chapter : BaseEntity
     }
 
     /// <summary>V2.5: Producer duyệt kịch bản và đóng băng (InProduction, kịch bản thành read-only với Writer).</summary>
-    public void FreezeScript(Guid userId)
+    public void FreezeScript(Guid userId, string? scriptContentHash = null)
     {
         RequireStatus(ChapterStatus.InProduction, "đóng băng kịch bản");
         if (IsScriptFrozen)
@@ -86,6 +88,7 @@ public class Chapter : BaseEntity
         IsScriptFrozen = true;
         ScriptFrozenAt = DateTime.UtcNow;
         ScriptFrozenById = userId;
+        ScriptContentHash = scriptContentHash;
         ScriptReopenStatus = ScriptReopenStatus.None;
         ScriptReopenReason = null;
         ScriptReopenRequestedById = null;
@@ -121,6 +124,7 @@ public class Chapter : BaseEntity
         ScriptReopenStatus = ScriptReopenStatus.Approved;
         ScriptFrozenAt = null;
         ScriptFrozenById = null;
+        ScriptContentHash = null;
         IncrementVersion();
     }
 
@@ -142,6 +146,7 @@ public class Chapter : BaseEntity
         IsScriptFrozen = false;
         ScriptFrozenAt = null;
         ScriptFrozenById = null;
+        ScriptContentHash = null;
         IncrementVersion();
     }
 

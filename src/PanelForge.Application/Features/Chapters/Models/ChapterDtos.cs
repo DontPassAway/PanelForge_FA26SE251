@@ -25,7 +25,8 @@ public sealed record ChapterDto(
     Guid? ScriptReopenRequestedById = null,
     DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
-    string? CoverUrl = null
+    string? CoverUrl = null,
+    string? ScriptContentHash = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -67,7 +68,8 @@ public sealed record ChapterDetailDto(
     Guid? ScriptReopenRequestedById = null,
     DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
-    string? CoverUrl = null
+    string? CoverUrl = null,
+    string? ScriptContentHash = null
 );
 
 public sealed record CreateChapterRequest(

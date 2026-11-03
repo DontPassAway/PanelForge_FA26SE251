@@ -101,7 +101,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
             if (entry.State is EntityState.Detached or EntityState.Unchanged)
                 continue;
 
-            if (entry.Entity is not (AuditLog or AiUsageRecord) && !IsSessionHeartbeat(entry))
+            // RefreshToken: đăng nhập / đăng xuất / thu hồi phiên được ghi bằng sự kiện LOGIN, LOGOUT, SESSIONS_REVOKED
+            // ở tầng Application; không audit từng lần xoay vòng token.
+            if (entry.Entity is not (AuditLog or AiUsageRecord or AssetAccessLog or Domain.Entities.Preview.PreviewLinkAccessLog
+                    or Notification or RefreshToken)
+                && !IsTechnicalOnlyUpdate(entry) && !IsAiUsageCounter(entry))
             {
                 var action = entry.State switch
                 {
@@ -175,10 +179,19 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
         return await base.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Phiên chỉ cập nhật LastActiveAt (mỗi request, xem AccessTokenGuard) là nhịp hoạt động, không phải thao tác nghiệp vụ: không ghi audit.</summary>
-    private static bool IsSessionHeartbeat(EntityEntry entry)
-        => entry is { Entity: RefreshToken, State: EntityState.Modified }
-           && entry.Properties.Where(p => p.IsModified).All(p => p.Metadata.Name == nameof(RefreshToken.LastActiveAt));
+    // Cột kỹ thuật: đổi riêng chúng (chạm UpdatedAt, tăng Version concurrency) không phải thao tác nghiệp vụ.
+    private static readonly HashSet<string> TechnicalColumns = ["UpdatedAt", "UpdatedBy", "Version"];
+
+    private static bool OnlyModified(EntityEntry entry, Func<string, bool> allowed)
+        => entry.State == EntityState.Modified
+           && entry.Properties.Where(p => p.IsModified).All(p => allowed(p.Metadata.Name));
+
+    private static bool IsTechnicalOnlyUpdate(EntityEntry entry) => OnlyModified(entry, TechnicalColumns.Contains);
+
+    // Bộ đếm token AI tăng sau mỗi lần gọi (đã có AiUsageRecord); đổi cấu hình AI thật vẫn được audit.
+    private static bool IsAiUsageCounter(EntityEntry entry)
+        => entry.Entity is WorkspaceAiConfig
+           && OnlyModified(entry, n => n == nameof(WorkspaceAiConfig.UsedTokensCurrentMonth) || TechnicalColumns.Contains(n));
 
     /// <summary>WorkspaceId của bản ghi audit: cột WorkspaceId, chính Workspace, hoặc suy ra qua SeriesId.</summary>
     private static Guid? ResolveWorkspaceId(EntityEntry entry, IReadOnlyDictionary<Guid, Guid> workspaceBySeries)

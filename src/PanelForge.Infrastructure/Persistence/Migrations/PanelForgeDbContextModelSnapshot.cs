@@ -853,6 +853,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("EntityName", "EntityId")
                         .HasDatabaseName("ix_audit_logs_entity_name_entity_id");
 
+                    b.HasIndex("WorkspaceId", "TimestampUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_audit_logs_workspace_id_timestamp_utc");
+
                     b.ToTable("audit_logs", (string)null);
                 });
 
@@ -1279,6 +1283,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("published_at");
+
+                    b.Property<string>("ScriptContentHash")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("script_content_hash");
 
                     b.Property<DateTime?>("ScriptFrozenAt")
                         .HasColumnType("timestamptz")

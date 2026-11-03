@@ -39,11 +39,13 @@ public class AuthCommandHandlerTests
     private readonly List<UserRememberedDevice> _rememberedDevices = new();
 
     private readonly List<RefreshToken> _refreshTokens = new();
+    private readonly List<PanelForge.Domain.Entities.Audit.AuditLog> _auditLogs = new();
 
     public AuthCommandHandlerTests()
     {
         SetupRememberedDevices(_rememberedDevices);
         _dbContextMock.Setup(db => db.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(_refreshTokens));
+        _dbContextMock.Setup(db => db.AuditLogs).Returns(DbSetMockHelper.CreateDbSetMock(_auditLogs));
         // Session policy (V1.2): user chưa thuộc Workspace nào → không bị giới hạn thêm
         _dbContextMock.Setup(db => db.WorkspaceMembers)
             .Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workspaces.WorkspaceMember>()));
@@ -177,6 +179,7 @@ public class AuthCommandHandlerTests
 
         result.Value!.Token.Should().Be("valid_jwt_token");
         result.Value.User!.Email.Should().Be("tam@example.com");
+        _auditLogs.Should().ContainSingle(a => a.Action == "LOGIN" && a.UserId == user.Id && a.UserEmail == "tam@example.com");
     }
 
     [Fact]
@@ -504,6 +507,7 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
         other.IsRevoked.Should().BeTrue();
+        _auditLogs.Should().ContainSingle(a => a.Action == "SESSIONS_REVOKED" && a.UserId == user.Id);
     }
 
     [Fact]

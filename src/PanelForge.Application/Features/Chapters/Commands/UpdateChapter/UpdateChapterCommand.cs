@@ -66,7 +66,8 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             IsScriptFrozen: chapter.IsScriptFrozen,
             ScriptFrozenAt: chapter.ScriptFrozenAt,
             ScriptFrozenById: chapter.ScriptFrozenById,
-            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256)
+            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
+            ScriptContentHash: chapter.ScriptContentHash
         ));
     }
 }

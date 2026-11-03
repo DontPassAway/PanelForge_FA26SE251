@@ -52,6 +52,12 @@ internal static class AssignmentRules
         if (assigneeUserId == Guid.Empty)
             return Result<WorkspaceRole>.Failure("Assignment phải có người nhận.", ResultErrorCodes.Validation);
 
+        // Công đoạn kết thúc (vd "Approved") chỉ là trạng thái đã xong, không phải việc để giao; duyệt nằm ở approval gate.
+        if (stage.IsTerminal)
+            return Result<WorkspaceRole>.Failure(
+                $"Công đoạn '{stage.Name}' là công đoạn kết thúc, không giao việc được. Hãy giao ở công đoạn duyệt trước đó.",
+                ResultErrorCodes.Validation);
+
         var member = await db.WorkspaceMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == assigneeUserId, ct);
         if (member is null)

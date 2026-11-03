@@ -271,6 +271,23 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task Create_ForTerminalStage_IsRejected()
+    {
+        var f = new Fixture();
+        var approved = PipelineStage.Create(f.ReviewStage.PipelineDefinitionId, "Approved", "approved", 4,
+            allowedRole: WorkspaceRole.Editor, isTerminal: true);
+        f.Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<PipelineStage> { f.ArtistStage, f.InkStage, f.ReviewStage, approved }));
+
+        var result = await Create(f, f.CreateCmd(stageId: approved.Id, assignee: f.EditorId, type: WorkflowEntityType.Chapter)
+            with { TargetEntityId = null });
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        result.ErrorMessage.Should().Contain("kết thúc");
+        f.Assignments.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_AssigneeRoleNotAllowedForStage_IsRejected()
     {
         var f = new Fixture();
