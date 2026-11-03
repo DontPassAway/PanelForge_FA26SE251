@@ -167,3 +167,4 @@ Trình soạn thảo Screenplay Flow được thiết kế riêng biệt cho vi�
 3. Sử dụng thanh công cụ bên phải hoặc gõ trực tiếp markdown để tạo cấu trúc Trang và Khung ảnh.
 4. Hệ thống tự động lưu bản nháp theo cơ chế Debounce.
 5. Khi hoàn tất và được Producer phê duyệt, kịch bản sẽ được chuyển sang trạng thái **Đóng băng (Frozen)** để bảo toàn nội dung, ngăn chặn việc sửa đổi kịch bản trong lúc họa sĩ đang vẽ Storyboard.
+
