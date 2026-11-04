@@ -170,7 +170,7 @@ public sealed class ScenesController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteScene(
+    public IActionResult DeleteScene(
         [FromRoute] Guid sceneId,
         CancellationToken cancellationToken)
     {

@@ -79,8 +79,8 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
 
         builder.Property(a => a.ReferenceAssetUrlsJson)
                .HasColumnName("reference_asset_urls_json")
-               .HasColumnType("text")
-               .HasDefaultValue("[]")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
                .IsRequired();
 
         builder.Property(a => a.DueDate)
@@ -131,8 +131,8 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
 
         builder.Property(a => a.DependsOnAssignmentIdsJson)
                .HasColumnName("depends_on_assignment_ids_json")
-               .HasColumnType("text")
-               .HasDefaultValue("[]")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
                .IsRequired();
 
         builder.Property(a => a.StartedAt)

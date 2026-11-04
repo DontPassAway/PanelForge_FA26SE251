@@ -13,6 +13,7 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
         builder.HasKey(t => t.Id);
         builder.Property(t => t.Id).HasColumnName("id").HasColumnType("uuid").ValueGeneratedNever();
         builder.Property(t => t.UserId).HasColumnName("user_id").HasColumnType("uuid").IsRequired();
+        builder.HasIndex(t => t.UserId).HasDatabaseName("ix_refresh_tokens_user_id");
         builder.Property(t => t.TokenHash).HasColumnName("token_hash").HasColumnType("varchar(64)").IsRequired();
         builder.HasIndex(t => t.TokenHash).IsUnique().HasDatabaseName("ix_refresh_tokens_token_hash");
         builder.Property(t => t.ExpiresAt).HasColumnName("expires_at").HasColumnType("timestamptz").IsRequired();

@@ -65,7 +65,8 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
 
         builder.Property(c => c.AllowedModelsJson)
                .HasColumnName("allowed_models_json")
-               .HasColumnType("text")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
                .IsRequired();
 
         builder.Property(c => c.LastResetAt)

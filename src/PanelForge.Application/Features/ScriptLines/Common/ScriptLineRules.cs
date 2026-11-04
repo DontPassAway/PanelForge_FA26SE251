@@ -195,7 +195,8 @@ internal static class ScriptLineRules
         var revision = ContentRevision.Create(chapter.Id, sceneId, ContentRevisionKind.Script, next, summary,
             payload, hash, previousId, null, mappingJson);
         db.ContentRevisions.Add(revision);
-        chapter.IncrementVersion();
+        // Quy chu?n: Khi Writer luu k?ch b?n trong phin th KHNG tang VersionVector.
+        // Ch? khi k?ch b?n du?c g?i cho Editor duy?t v Editor yu c?u tr? l?i vi?t l?i th m?i tang.
         return revision;
     }
 

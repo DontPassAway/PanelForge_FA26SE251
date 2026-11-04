@@ -19,8 +19,6 @@ public class ChapterScript : BaseEntity
     public Guid? LockedById { get; private set; }
 
     public Chapter Chapter { get; private set; } = default!;
-    public ICollection<Scene> Scenes { get; private set; } = [];
-    public ICollection<Page> Pages { get; private set; } = [];
 
     private ChapterScript() { }
 

@@ -34,6 +34,8 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
         builder.Property(c => c.AssetReferenceId)
                .HasColumnName("asset_reference_id")
                .HasColumnType("uuid");
+        builder.HasIndex(c => c.AssetReferenceId)
+               .HasDatabaseName("ix_change_requests_asset_reference_id");
 
         builder.Property(c => c.PanelId)
                .HasColumnName("panel_id")
@@ -42,6 +44,8 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
         builder.Property(c => c.SubmissionId)
                .HasColumnName("submission_id")
                .HasColumnType("uuid");
+        builder.HasIndex(c => c.SubmissionId)
+               .HasDatabaseName("ix_change_requests_submission_id");
 
         builder.Property(c => c.ResponsibleUserId)
                .HasColumnName("responsible_user_id")
@@ -60,7 +64,7 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
 
         builder.Property(c => c.RegionJson)
                .HasColumnName("region_json")
-               .HasColumnType("text");
+               .HasColumnType("jsonb");
 
         builder.Property(c => c.DueDate)
                .HasColumnName("due_date")

@@ -39,7 +39,7 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
         if (string.IsNullOrWhiteSpace(cmd.Description))
             return Fail("Phải mô tả cần sửa gì (BR-06).", ResultErrorCodes.Validation);
 
-        var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
+        var chapter = await _db.Chapters.FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail("Chương không tồn tại.", ResultErrorCodes.NotFound);
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked) return Fail(locked, ResultErrorCodes.Conflict);
 
@@ -71,6 +71,12 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
                 return Fail(error, ResultErrorCodes.Conflict);
             target.RequestRework(description);
             target.UpdatedBy = cmd.UserId.ToString();
+
+            // Nếu trả lại công việc của Writer -> Tăng version của Chapter
+            if (target.AssignedRole == WorkspaceRole.Writer)
+            {
+                chapter.IncrementVersion();
+            }
 
             await StageProgressRules.FlagImpactedWorkAsync(_db, target, description, ct);
         }

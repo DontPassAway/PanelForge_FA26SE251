@@ -32,7 +32,6 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<StudioWorkspace> StudioWorkspaces => Set<StudioWorkspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
-    public DbSet<ExternalPreviewLink> ExternalPreviewLinks => Set<ExternalPreviewLink>();
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();

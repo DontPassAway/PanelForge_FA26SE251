@@ -131,10 +131,5 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .WithOne(p => p.Chapter)
                .HasForeignKey(p => p.ChapterId)
                .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasMany(c => c.ExternalPreviewLinks)
-               .WithOne()
-               .HasForeignKey(l => l.ChapterId)
-               .OnDelete(DeleteBehavior.Cascade);
     }
 }

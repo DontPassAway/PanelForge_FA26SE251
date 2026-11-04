@@ -80,6 +80,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.EmailVerificationToken)
                .HasColumnName("email_verification_token")
                .HasColumnType("varchar(255)");
+        builder.HasIndex(u => u.EmailVerificationToken)
+               .HasDatabaseName("ix_users_email_verification_token");
 
         builder.Property(u => u.EmailVerificationTokenExpiresAt)
                .HasColumnName("email_verification_token_expires_at")
@@ -88,6 +90,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.PasswordResetToken)
                .HasColumnName("password_reset_token")
                .HasColumnType("varchar(255)");
+        builder.HasIndex(u => u.PasswordResetToken)
+               .HasDatabaseName("ix_users_password_reset_token");
 
         builder.Property(u => u.PasswordResetTokenExpiresAt)
                .HasColumnName("password_reset_token_expires_at")
@@ -122,11 +126,6 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .WithOne(m => m.User)
                .HasForeignKey(m => m.UserId)
                .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasMany(u => u.CreatedPreviewLinks)
-               .WithOne(l => l.CreatedByUser)
-               .HasForeignKey(l => l.CreatedByUserId)
-               .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(u => u.AssignedTasks)
                .WithOne(a => a.Assignee)

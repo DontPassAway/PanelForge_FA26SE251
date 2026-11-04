@@ -45,6 +45,8 @@ internal sealed class ScriptLineConfiguration : IEntityTypeConfiguration<ScriptL
         builder.Property(l => l.SpeakerCharacterId)
                .HasColumnName("speaker_character_id")
                .HasColumnType("uuid");
+        builder.HasIndex(l => l.SpeakerCharacterId)
+               .HasDatabaseName("ix_script_lines_speaker_character_id");
 
         builder.Property(l => l.DialogueText)
                .HasColumnName("dialogue_text")

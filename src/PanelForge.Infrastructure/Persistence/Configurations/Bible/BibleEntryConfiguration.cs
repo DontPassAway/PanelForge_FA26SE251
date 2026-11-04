@@ -58,7 +58,8 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
 
         builder.Property(e => e.DetailsJson)
                .HasColumnName("details_json")
-               .HasColumnType("text")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'{}'::jsonb")
                .IsRequired();
 
         builder.Property(e => e.ReferenceImageUrl)

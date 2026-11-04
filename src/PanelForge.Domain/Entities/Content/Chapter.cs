@@ -1,5 +1,4 @@
 using PanelForge.Domain.Common;
-using PanelForge.Domain.Entities.Publishing;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
@@ -38,7 +37,6 @@ public class Chapter : BaseEntity
     public ChapterScript? Script { get; private set; }
     public ICollection<Scene> Scenes { get; private set; } = [];
     public ICollection<Page> Pages { get; private set; } = [];
-    public ICollection<ExternalPreviewLink> ExternalPreviewLinks { get; private set; } = [];
 
     private Chapter() { }
 

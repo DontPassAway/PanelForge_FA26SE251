@@ -68,6 +68,13 @@ public sealed class RequestAssignmentChangesCommandHandler : IRequestHandler<Req
         assignment.UpdatedBy = cmd.UserId.ToString();
         _db.Notifications.Add(AssignmentNotifications.ChangesRequested(assignment));
 
+        // Khi Editor trả lại việc cho Writer viết lại -> tăng version của Chapter
+        if (assignment.AssignedRole == WorkspaceRole.Writer)
+        {
+            var chapter = await _db.Chapters.FirstOrDefaultAsync(c => c.Id == assignment.ChapterId, ct);
+            chapter?.IncrementVersion();
+        }
+
         await _db.SaveChangesAsync(ct);
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));
     }

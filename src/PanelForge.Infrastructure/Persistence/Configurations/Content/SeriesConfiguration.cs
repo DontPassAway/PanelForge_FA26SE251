@@ -73,7 +73,7 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
 
         builder.Property(s => s.ReleaseScheduleJson)
                .HasColumnName("release_schedule_json")
-               .HasColumnType("text");
+               .HasColumnType("jsonb");
 
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")
