@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
+using PanelForge.Application.Features.ScriptLines.Commands.BatchSaveScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptRevision;
@@ -40,6 +41,18 @@ public sealed class ScriptLinesController : ControllerBase
             chapterId, sceneId, GetCurrentUserId(), body.DialogueText, body.StageDirection,
             body.SpeakerCharacterId, body.LineOrder, body.ExpectedChapterVersion, body.BibleEntryIds, body.ClientLineId, body.NarrationMode), ct);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/scenes/{sceneId}/script-lines/batch — Lưu đồng bộ hàng loạt các dòng kịch bản trong 1 giao dịch duy nhất.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-lines/batch")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(BatchSaveScriptLinesResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> BatchSave(
+        Guid chapterId, Guid sceneId, [FromBody] BatchSaveScriptLinesRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new BatchSaveScriptLinesCommand(
+            chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion, body.Summary), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>PUT /api/chapters/{chapterId}/script-lines/{lineId} — sửa dòng (thay toàn bộ nội dung).</summary>

@@ -38,6 +38,29 @@ public sealed record UpdateScriptLineRequest(
 
 public sealed record DeleteScriptLineResult(long ChapterVersion, Guid RevisionId);
 
+public sealed record BatchScriptLineItem(
+    Guid? Id,
+    int LineOrder,
+    string? DialogueText,
+    string? StageDirection,
+    Guid? SpeakerCharacterId,
+    IReadOnlyList<Guid>? BibleEntryIds = null,
+    NarrationMode? NarrationMode = null,
+    Guid? ClientLineId = null
+);
+
+public sealed record BatchSaveScriptLinesRequest(
+    IReadOnlyList<BatchScriptLineItem> Lines,
+    long? ExpectedChapterVersion = null,
+    string? Summary = null
+);
+
+public sealed record BatchSaveScriptLinesResult(
+    long ChapterVersion,
+    Guid RevisionId,
+    IReadOnlyList<ScriptLineDto> Lines
+);
+
 /// <summary>V2.5 & Module A: DTO chuyển giao cho các @-mention trong dòng kịch bản.</summary>
 public sealed record ScriptMentionItemDto(
     Guid? BibleEntryId,
