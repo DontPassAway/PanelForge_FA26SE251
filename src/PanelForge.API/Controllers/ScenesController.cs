@@ -174,12 +174,6 @@ public sealed class ScenesController : ControllerBase
         [FromRoute] Guid sceneId,
         CancellationToken cancellationToken)
     {
-        var command = new DeleteSceneCommand(sceneId, GetCurrentUserId());
-        var result = await _mediator.Send(command, cancellationToken);
-
-        if (!result.IsSuccess)
-            return this.ConflictOrNull(result) ?? NotFound(new { error = result.ErrorMessage });
-
-        return Ok(new { message = $"Phân cảnh {sceneId} đã được xóa thành công." });
+        return BadRequest(new { error = "Không cho phép xóa phân cảnh. Bạn chỉ có thể chỉnh sửa tiêu đề phân cảnh." });
     }
 }
