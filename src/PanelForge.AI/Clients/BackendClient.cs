@@ -48,5 +48,18 @@ public sealed class BackendClient
         return await response.Content.ReadFromJsonAsync<AgentStepAck>(AiJson.Options, ct);
     }
 
+    /// <summary>Bắn delta token thời gian thực sang Backend; chạy fire-and-forget, không làm gián đoạn luồng chính nếu lỗi mạng.</summary>
+    public async Task StreamTokenAsync(Guid runId, StreamTokenPayload payload, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await _http.PostAsJsonAsync($"internal/ai/runs/{runId}/stream-token", payload, AiJson.Options, ct);
+        }
+        catch
+        {
+            // Best effort streaming
+        }
+    }
+
     private static string Truncate(string s) => s.Length <= 400 ? s : s[..400] + "…";
 }

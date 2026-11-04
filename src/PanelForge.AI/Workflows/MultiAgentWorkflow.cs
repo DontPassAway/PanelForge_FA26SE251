@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using PanelForge.AI.Agents;
+using PanelForge.AI.Caching;
 using PanelForge.AI.Clients;
 using PanelForge.AI.Contracts;
 using PanelForge.AI.Gateway;
@@ -24,15 +25,18 @@ public sealed class MultiAgentWorkflow
     private readonly ChatClientFactory _factory;
     private readonly Microsoft.Extensions.Options.IOptions<ProviderOptions> _options;
     private readonly ILogger<MultiAgentWorkflow> _logger;
+    private readonly IContextMemoryCache? _cache;
 
     public MultiAgentWorkflow(
         BackendClient backend, ChatClientFactory factory,
-        Microsoft.Extensions.Options.IOptions<ProviderOptions> options, ILogger<MultiAgentWorkflow> logger)
+        Microsoft.Extensions.Options.IOptions<ProviderOptions> options, ILogger<MultiAgentWorkflow> logger,
+        IContextMemoryCache? cache = null)
     {
         _backend = backend;
         _factory = factory;
         _options = options;
         _logger = logger;
+        _cache = cache;
     }
 
     public Task RunAsync(AiRunJob job, CancellationToken ct) => RunAsync(job, _factory.Create(job), ct);
@@ -58,7 +62,7 @@ public sealed class MultiAgentWorkflow
 
         var supervisor = new SupervisorAgent(runner);
         var writer = new WriterAgent(runner);
-        var continuity = new ContinuityAgent(runner);
+        var continuity = new ContinuityAgent(runner, _cache);
         var storyboard = new StoryboardAgent(runner);
         var editor = new EditorAgent(runner);
         var artist = new ArtistAgent(runner);

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using PanelForge.AI.Caching;
 using PanelForge.AI.Clients;
 using PanelForge.AI.Contracts;
 using PanelForge.AI.Gateway;
@@ -15,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<ProviderOptions>(builder.Configuration.GetSection(ProviderOptions.SectionName));
 builder.Services.Configure<WorkflowOptions>(builder.Configuration.GetSection(WorkflowOptions.SectionName));
 builder.Services.Configure<BackendOptions>(builder.Configuration.GetSection(BackendOptions.SectionName));
+
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IContextMemoryCache, ContextMemoryCache>();
 
 builder.Services.AddSingleton<LlmResilience>();
 builder.Services.AddSingleton<RunQueue>();
