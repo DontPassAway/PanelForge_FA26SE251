@@ -5,13 +5,14 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Application.Features.Consistency.Models;
-using PanelForge.Application.Features.Consistency.Commands;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Consistency.Queries;
 
 /// <summary>
-/// Lấy Báo cáo nhất quán hình ảnh chi tiết của Chapter cho Editor / Reviewer (CF3, V1.2).
+/// Lấy Báo cáo nhất quán hình ảnh của Chapter cho Editor / Reviewer (CF3, V1.2). CHỈ ĐỌC finding đã lưu (không tự chạy kiểm/gọi AI).
+/// TotalEvaluated/PassedCount chỉ chính xác ngay sau POST visual-consistency-check; ở GET chỉ biết các độ lệch đã ghi nhận.
 /// </summary>
 public sealed record GetVisualConsistencyReportQuery(
     Guid ChapterId,
@@ -22,13 +23,8 @@ public sealed class GetVisualConsistencyReportQueryHandler
     : IRequestHandler<GetVisualConsistencyReportQuery, Result<VisualConsistencyReportDto>>
 {
     private readonly IPanelForgeDbContext _db;
-    private readonly IMediator _mediator;
 
-    public GetVisualConsistencyReportQueryHandler(IPanelForgeDbContext db, IMediator mediator)
-    {
-        _db = db;
-        _mediator = mediator;
-    }
+    public GetVisualConsistencyReportQueryHandler(IPanelForgeDbContext db) => _db = db;
 
     public async Task<Result<VisualConsistencyReportDto>> Handle(
         GetVisualConsistencyReportQuery query,
@@ -41,21 +37,19 @@ public sealed class GetVisualConsistencyReportQueryHandler
                 $"Chapter {query.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var threshold = query.Threshold ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
+        return Result<VisualConsistencyReportDto>.Success(await BuildAsync(_db, chapter, threshold, null, null, ct));
+    }
 
-        // Lấy các finding hình ảnh đã lưu (VISUAL_CHARACTER_DEVIATION hoặc IMAGE_INCONSISTENCY)
-        var findings = await _db.ConsistencyFindings.AsNoTracking()
-            .Where(f => f.ChapterId == chapter.Id && (f.RuleCode == ConsistencyChecker.VisualCharacterDeviation || f.RuleCode == ConsistencyChecker.ImageInconsistency))
+    /// <summary>Dựng báo cáo từ finding IMAGE_INCONSISTENCY đã lưu. evaluated/passed = số liệu của lần chạy vừa xong (null ở GET).</summary>
+    internal static async Task<VisualConsistencyReportDto> BuildAsync(
+        IPanelForgeDbContext db, Chapter chapter, decimal threshold, int? evaluated, int? passed, CancellationToken ct)
+    {
+        var findings = await db.ConsistencyFindings.AsNoTracking()
+            .Where(f => f.ChapterId == chapter.Id && f.RuleCode == ConsistencyChecker.ImageInconsistency)
             .ToListAsync(ct);
 
-        // Nếu chưa từng chạy kiểm tra, tự động khởi tạo lần đầu
-        if (findings.Count == 0)
-        {
-            var runResult = await _mediator.Send(
-                new RunVisualConsistencyCheckCommand(chapter.Id, Guid.Empty, threshold), ct);
-            return runResult;
-        }
-
-        var users = await _db.Users.AsNoTracking()
+        var triagerIds = findings.Where(f => f.TriagedByUserId.HasValue).Select(f => f.TriagedByUserId!.Value).Distinct().ToList();
+        var users = await db.Users.AsNoTracking().Where(u => triagerIds.Contains(u.Id))
             .Select(u => new { u.Id, u.FullName, u.Email })
             .ToDictionaryAsync(u => u.Id, ct);
 
@@ -73,7 +67,7 @@ public sealed class GetVisualConsistencyReportQueryHandler
             int? panelNum = null;
             Guid? assetId = null;
             string? artUrl = null;
-            decimal simScore = 0.68m;
+            decimal simScore = 0m;
             var detailedDevs = new List<ImageConsistencyDeviationDto>();
             string? summaryReason = null;
             string? revisionRef = null;
@@ -150,20 +144,18 @@ public sealed class GetVisualConsistencyReportQueryHandler
             ));
         }
 
-        var report = new VisualConsistencyReportDto(
+        return new VisualConsistencyReportDto(
             ChapterId: chapter.Id,
             ChapterNumber: chapter.ChapterNumber,
             ChapterTitle: chapter.Title ?? $"Chương {chapter.ChapterNumber}",
-            CheckedAt: findings.Max(f => f.LastDetectedAt),
+            CheckedAt: evaluated is not null || findings.Count == 0 ? DateTime.UtcNow : findings.Max(f => f.LastDetectedAt),
             Threshold: threshold,
-            TotalEvaluated: deviations.Count + 5, // Tương quan số lượt kiểm tra
-            PassedCount: 5,
+            TotalEvaluated: evaluated ?? deviations.Count,
+            PassedCount: passed ?? 0,
             DeviationCount: deviations.Count,
             OpenDeviationCount: deviations.Count(d => d.Status == ConsistencyFindingStatus.Open || d.Status == ConsistencyFindingStatus.Confirmed),
             BlockingDeviationCount: deviations.Count(d => d.Severity == ConsistencyFindingSeverity.Blocking && (d.Status == ConsistencyFindingStatus.Open || d.Status == ConsistencyFindingStatus.Confirmed)),
             Deviations: deviations.OrderByDescending(d => d.Severity).ThenBy(d => d.SimilarityScore).ToList()
         );
-
-        return Result<VisualConsistencyReportDto>.Success(report);
     }
 }

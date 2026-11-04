@@ -4,7 +4,10 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Models;
+using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Series.Queries.GetSeriesCover;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Catalog;
@@ -23,7 +26,8 @@ public sealed record PublicChapterReadDto(
     decimal ChapterNumber,
     string? Title,
     DateTime? PublishedAt,
-    IReadOnlyList<PublicPageDto> Pages);
+    IReadOnlyList<PublicPageDto> Pages,
+    string? CoverUrl = null);
 
 // ─── Chapter + danh sách trang ────────────────────────────────────────────────
 
@@ -42,7 +46,7 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
             .Select(c => new
             {
                 c.Id, c.SeriesId, SeriesTitle = c.Series.Title, c.Series.ReadingDirection,
-                c.ChapterNumber, c.Title, c.PublishedAt
+                c.ChapterNumber, c.Title, c.PublishedAt, c.CoverImageSha256
             })
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
@@ -62,12 +66,55 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
             chapter.Title, chapter.PublishedAt,
             pages.Select(p => new PublicPageDto(
                 p.Id, p.PageNumber,
-                p.HasArtwork ? $"/api/catalog/chapters/{chapter.Id}/pages/{p.Id}/image" : null)).ToList());
+                p.HasArtwork ? $"/api/catalog/chapters/{chapter.Id}/pages/{p.Id}/image" : null)).ToList(),
+            GetPublicChapterCoverQueryHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256));
         return Result<PublicChapterReadDto>.Success(dto);
     }
 
     private static Result<PublicChapterReadDto> NotFound() =>
         Result<PublicChapterReadDto>.Failure("Không tìm thấy chương đã phát hành.", ResultErrorCodes.NotFound);
+}
+
+// ─── Ảnh bìa chương ───────────────────────────────────────────────────────────
+
+/// <summary>Bìa chương cho Reader: cùng điều kiện phát hành với nội dung chương, ngoài ra 404.</summary>
+public sealed record GetPublicChapterCoverQuery(Guid ChapterId) : IRequest<Result<SeriesCoverContent>>;
+
+public sealed class GetPublicChapterCoverQueryHandler : IRequestHandler<GetPublicChapterCoverQuery, Result<SeriesCoverContent>>
+{
+    private readonly IPanelForgeDbContext _db;
+    private readonly IAssetStorage _storage;
+
+    public GetPublicChapterCoverQueryHandler(IPanelForgeDbContext db, IAssetStorage storage)
+    {
+        _db = db;
+        _storage = storage;
+    }
+
+    /// <summary>URL công khai; <c>v</c> đổi theo nội dung để cache không giữ bìa cũ.</summary>
+    public static string? CoverUrl(Guid chapterId, string? sha256)
+        => sha256 is null ? null : $"/api/catalog/chapters/{chapterId}/cover?v={sha256[..12]}";
+
+    public async Task<Result<SeriesCoverContent>> Handle(GetPublicChapterCoverQuery q, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var sha = await _db.Chapters.AsNoTracking()
+            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Select(c => c.CoverImageSha256).FirstOrDefaultAsync(ct);
+        if (sha is null) return NotFound();
+
+        await using var stream = await _storage.OpenReadAsync(SetChapterCoverCommandHandler.StorageKey(q.ChapterId, sha), ct);
+        if (stream is null) return NotFound();
+
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        var content = buffer.ToArray();
+        return Result<SeriesCoverContent>.Success(
+            new SeriesCoverContent(content, AssetRules.DetectImageContentType(content) ?? "application/octet-stream"));
+    }
+
+    private static Result<SeriesCoverContent> NotFound() =>
+        Result<SeriesCoverContent>.Failure("Không tìm thấy bìa chương đã phát hành.", ResultErrorCodes.NotFound);
 }
 
 // ─── Ảnh một trang ────────────────────────────────────────────────────────────

@@ -162,7 +162,12 @@ public static class ConsistencyChecker
     public const string ReadingOrderWrong = "READING_ORDER_WRONG";
     public const string VisualCharacterDeviation = "VISUAL_CHARACTER_DEVIATION";
     public const string ImageInconsistency = "IMAGE_INCONSISTENCY";
+    public const string AiContinuityPrefix = "AI_CONTINUITY";
     public const decimal DefaultVisualSimilarityThreshold = 0.75m;
+
+    public static bool IsAiOrVisualFinding(string ruleCode) =>
+        ruleCode == VisualCharacterDeviation || ruleCode == ImageInconsistency ||
+        ruleCode.StartsWith(AiContinuityPrefix, StringComparison.Ordinal);
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
 

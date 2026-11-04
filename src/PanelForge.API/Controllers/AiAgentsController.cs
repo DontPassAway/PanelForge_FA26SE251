@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
+using PanelForge.Application.Features.AiAgents.Commands.RunCopilot;
+using PanelForge.Application.Features.AiAgents.Commands.RunPublisherMetadata;
+using PanelForge.Application.Features.AiAgents.Commands.RunThumbnail;
 using PanelForge.Application.Features.AiAgents.Commands.RunWorkflow;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Application.Features.AiAgents.Queries.CompareRevisions;
@@ -48,10 +51,62 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new RunWorkflowCommand(
             seriesId, CurrentUserId, body.ChapterId, body.SceneId, body.Brief, body.ReadingDirection,
-            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType), ct);
+            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds), ct);
         return result.IsSuccess
             ? Accepted($"/api/series/{seriesId}/ai/runs/{result.Value!.RunId}", result.Value)
             : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/ai/copilot — Copilot sync trên MỘT dòng thoại (task: writer.rewrite | letterer.shorten).
+    /// 200 + AiSuggestionDto (kind LineRewrite, Pending) để người dùng Accept/Reject như mọi đề xuất AI. Không ghi gì khi lỗi/timeout.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/copilot")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> RunCopilot([FromRoute] Guid seriesId, [FromBody] RunCopilotRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunCopilotCommand(
+            seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/ai/copilot/publisher-metadata — Publisher/Producer xin gợi ý logline, synopsis, thể loại, teaser, age rating
+    /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis + genre vào Series.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/copilot/publisher-metadata")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> RunPublisherMetadata(
+        [FromRoute] Guid seriesId, [FromBody] RunPublisherMetadataRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunPublisherMetadataCommand(seriesId, body.ChapterId, CurrentUserId, body.Instruction), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/ai/thumbnail — Artist sinh MỘT ảnh thumbnail cho panel từ prompt ảnh đã Accept (sync, 10–60 giây).
+    /// 200 + AiSuggestionDto (kind Thumbnail, Pending); Accept tạo artwork phiên bản mới cho panel, ảnh cũ giữ nguyên.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/thumbnail")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> RunThumbnail([FromRoute] Guid seriesId, [FromBody] RunThumbnailRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunThumbnailCommand(seriesId, body.PanelId, CurrentUserId, body.Instruction), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>GET /api/series/{seriesId}/ai/workflows/availability?chapterId=&amp;sceneId= — nhiệm vụ nào chạy được và còn thiếu điều kiện gì.</summary>

@@ -35,20 +35,16 @@ public static class AiProtocol
     public const string AgentStoryboard = "Storyboard";
     public const string AgentEditor = "Editor";
     public const string AgentArtist = "Artist";
-    public const string AgentLetterer = "Letterer";
-    public const string AgentProducer = "Producer";
 
     /// <summary>Loại workflow = nhiệm vụ. Run cũ (trước khi có loại) được đọc như <see cref="WorkflowFullScene"/>.</summary>
     public const string WorkflowFullScene = "FullScene";   // Writer → Continuity (vòng sửa) → Storyboard → Editor
     public const string WorkflowScript = "Script";         // Writer → Continuity (vòng sửa)
     public const string WorkflowStoryboard = "Storyboard"; // Continuity (script có sẵn) → Storyboard → Editor
     public const string WorkflowArtist = "Artist";         // Artist soạn prompt ảnh cho panel của layout đã duyệt
-    public const string WorkflowLetterer = "Letterer";     // Letterer đề xuất rút gọn thoại
     public const string WorkflowEditor = "Editor";         // Continuity (script có sẵn) → Editor
-    public const string WorkflowProducer = "Producer";     // Producer báo cáo tiến độ từ snapshot do Backend tính
 
     public static readonly string[] AllWorkflows =
-        [WorkflowFullScene, WorkflowScript, WorkflowStoryboard, WorkflowArtist, WorkflowLetterer, WorkflowEditor, WorkflowProducer];
+        [WorkflowFullScene, WorkflowScript, WorkflowStoryboard, WorkflowArtist, WorkflowEditor];
 
     public const string SeverityBlocking = "Blocking";
     public const string SeverityWarning = "Warning";

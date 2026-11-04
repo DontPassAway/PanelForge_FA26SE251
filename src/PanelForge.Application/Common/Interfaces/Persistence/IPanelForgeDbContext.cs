@@ -43,6 +43,7 @@ public interface IPanelForgeDbContext
     DbSet<SeriesBible> SeriesBibles { get; }
     DbSet<BibleEntry> BibleEntries { get; }
     DbSet<BibleEntryRevision> BibleEntryRevisions { get; }
+    DbSet<BibleRevisionEvent> BibleRevisionEvents { get; }
     DbSet<PipelineDefinition> PipelineDefinitions { get; }
     DbSet<PipelineStage> PipelineStages { get; }
     DbSet<StageTransition> StageTransitions { get; }
@@ -68,6 +69,9 @@ public interface IPanelForgeDbContext
     DbSet<Panel> Panels { get; }
     DbSet<FrameTemplate> FrameTemplates { get; }
     DbSet<ScriptLineBibleLink> ScriptLineBibleLinks { get; }
+
+    /// <summary>SELECT ... FOR UPDATE dòng Chapter; chỉ có tác dụng bên trong IUnitOfWork.ExecuteInTransactionAsync.</summary>
+    Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -11,7 +11,7 @@ namespace PanelForge.API.Authentication;
 public static class TwoFactorChallengeCookie
 {
     public const string Name = "pf_2fa";
-    private const string Path = "/api/auth";
+    private const string Path = "/api"; // path cookie phân biệt hoa thường; route thật là /api/Auth/...
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
 
     public static void Set(HttpContext context, string email)

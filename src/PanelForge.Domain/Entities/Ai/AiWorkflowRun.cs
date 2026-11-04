@@ -47,7 +47,8 @@ public class AiWorkflowRun : BaseEntity
         long baseChapterVersion, Guid? baseScriptRevisionId, string contextSnapshotJson, string bibleRevisionIdsJson,
         AiWorkflowType workflowType = AiWorkflowType.FullScene)
     {
-        if (sceneId is null && workflowType != AiWorkflowType.Producer)
+        // Báo cáo Producer và Copilot cấp Series (publisher.metadata) không gắn Scene
+        if (sceneId is null && workflowType is not (AiWorkflowType.Producer or AiWorkflowType.Copilot or AiWorkflowType.Thumbnail))
             throw new ArgumentException("Workflow nội dung bắt buộc có Scene.", nameof(sceneId));
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);

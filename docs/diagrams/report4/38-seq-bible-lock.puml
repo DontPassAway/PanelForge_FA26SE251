@@ -1,0 +1,30 @@
+@startuml seq_bible_lock
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+actor Writer as W
+actor Artist as A
+actor Producer as P
+participant BibleController as C
+participant Handlers as H
+database PanelForgeDbContext as DB
+W -> C : POST bible entry revision
+C -> H : AddBibleEntryRevisionCommand
+H -> DB : revision Draft
+A -> C : POST concept image
+C -> H : UploadBibleReferenceImage
+H -> DB : revision ConceptSubmitted
+W -> C : POST review (endorse)
+C -> H : ReviewBibleEntryRevisionCommand
+H -> DB : revision WriterEndorsed
+P -> C : POST lock
+C -> H : LockBibleEntryRevisionCommand
+alt revision ReworkRequired
+  H --> P : 409 Conflict
+else ok
+  H -> DB : revision CanonLocked
+  H --> P : 200 OK
+end
+@enduml

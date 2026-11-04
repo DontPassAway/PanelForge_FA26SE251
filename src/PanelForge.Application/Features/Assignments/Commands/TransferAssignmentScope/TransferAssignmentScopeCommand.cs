@@ -105,6 +105,7 @@ public sealed class TransferAssignmentScopeCommandHandler
             scopes.Add((id, panels));
         }
 
+        await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, cmd.NewAssigneeUserId, role.Value, ct);
         var reason = cmd.Reason.Trim();
         var created = new List<Assignment>();
         foreach (var (target, panels) in scopes)

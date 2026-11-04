@@ -1,6 +1,7 @@
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Identity;
 
 namespace PanelForge.Application.Features.Auth.Common;
@@ -45,6 +46,14 @@ internal static class AuthResponseFactory
             lastActiveAt: now);
         await policy.EnforceMaxSessionsAsync(dbContext, user.Id, session.SessionId, now, cancellationToken);
         dbContext.RefreshTokens.Add(session);
+        dbContext.AuditLogs.Add(AuditLog.Create(
+            action: "LOGIN",
+            entityName: "Session",
+            entityId: session.SessionId.ToString(),
+            userId: user.Id,
+            userEmail: user.Email,
+            ipAddress: ipAddress,
+            details: $"Đăng nhập ({deviceName ?? "Thiết bị không xác định"})."));
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken, session.SessionId);

@@ -20,6 +20,9 @@ public class PipelineStage : BaseEntity
     public bool IsEnabled { get; private set; } = true;
     public int? EstimatedDurationDays { get; private set; }
 
+    /// <summary>Giao việc hàng loạt: Chapter = 1 việc cả chương (Script/Review), Page = mỗi trang 1 việc (Pencil/Ink/Color/Letter).</summary>
+    public WorkflowEntityType AssignmentGranularity { get; private set; } = WorkflowEntityType.Chapter;
+
     public PipelineDefinition PipelineDefinition { get; private set; } = default!;
     public ICollection<StageTransition> OutgoingTransitions { get; private set; } = [];
     public ICollection<StageTransition> IncomingTransitions { get; private set; } = [];
@@ -55,7 +58,9 @@ public class PipelineStage : BaseEntity
             IsApprovalGate = isApprovalGate,
             IsInitial = isInitial,
             IsTerminal = isTerminal,
-            EstimatedDurationDays = estimatedDurationDays
+            EstimatedDurationDays = estimatedDurationDays,
+            AssignmentGranularity = allowedRole is WorkspaceRole.Artist or WorkspaceRole.Letterer
+                ? WorkflowEntityType.Page : WorkflowEntityType.Chapter
         };
     }
 

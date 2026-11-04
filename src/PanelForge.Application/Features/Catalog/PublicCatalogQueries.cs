@@ -22,7 +22,8 @@ public sealed record PublicSeriesDto(
     int PublishedChapterCount,
     DateTime? LatestPublishedAt);
 
-public sealed record PublicChapterDto(Guid Id, decimal ChapterNumber, string? Title, DateTime? PublishedAt);
+/// <param name="CoverUrl">Ảnh bìa chương công khai (không cần đăng nhập); null = chương chưa có bìa.</param>
+public sealed record PublicChapterDto(Guid Id, decimal ChapterNumber, string? Title, DateTime? PublishedAt, string? CoverUrl = null);
 
 public sealed record PublicSeriesDetailDto(
     Guid Id,
@@ -119,7 +120,8 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 Chapters = s.Chapters
                     .Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now)
                     .OrderBy(c => c.ChapterNumber)
-                    .Select(c => new PublicChapterDto(c.Id, c.ChapterNumber, c.Title, c.PublishedAt))
+                    .Select(c => new PublicChapterDto(c.Id, c.ChapterNumber, c.Title, c.PublishedAt,
+                        GetPublicChapterCoverQueryHandler.CoverUrl(c.Id, c.CoverImageSha256)))
                     .ToList()
             })
             .FirstOrDefaultAsync(ct);

@@ -75,7 +75,7 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
         var keepHash = string.IsNullOrWhiteSpace(command.KeepRefreshToken)
             ? null
             : AuthSecrets.HashToken(command.KeepRefreshToken.Trim());
-        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken, keepHash);
+        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken, keepHash, "đổi mật khẩu");
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<bool>.Success(true);

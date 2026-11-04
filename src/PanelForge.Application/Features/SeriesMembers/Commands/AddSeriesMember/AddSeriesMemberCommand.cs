@@ -48,20 +48,20 @@ public sealed class AddSeriesMemberCommandHandler
                 "Chỉ Chủ sở hữu (Owner) hoặc Quản lý sản xuất (Producer) mới có quyền chỉ định nhân sự vào dự án.",
                 ResultErrorCodes.Forbidden);
 
-        if (!Enum.IsDefined(command.Role))
-            return Result<SeriesMemberDto>.Failure(
-                $"Vai trò không hợp lệ. Các vai trò hợp lệ: {string.Join(", ", Enum.GetNames<WorkspaceRole>())}.");
-
-        // Xác thực người được thêm bắt buộc phải là thành viên Active hoặc Owner của Studio Workspace
-        var isWorkspaceMember = await _dbContext.WorkspaceMembers
-            .AnyAsync(wm => wm.WorkspaceId == series.WorkspaceId &&
-                            wm.UserId == command.TargetUserId &&
-                            wm.Status == WorkspaceMemberStatus.Active, cancellationToken);
+        // Xác thực người được thêm bắt buộc phải là thành viên Active hoặc Owner của Studio Workspace.
+        // Role trong Series luôn = role Workspace (command.Role chỉ giữ cho tương thích request cũ, bị bỏ qua).
+        var workspaceRole = await _dbContext.WorkspaceMembers
+            .Where(wm => wm.WorkspaceId == series.WorkspaceId &&
+                         wm.UserId == command.TargetUserId &&
+                         wm.Status == WorkspaceMemberStatus.Active)
+            .Select(wm => (WorkspaceRole?)wm.Role)
+            .FirstOrDefaultAsync(cancellationToken);
 
         var isWorkspaceOwner = await _dbContext.StudioWorkspaces
             .AnyAsync(w => w.Id == series.WorkspaceId && w.OwnerId == command.TargetUserId, cancellationToken);
+        var role = workspaceRole ?? WorkspaceRole.Producer; // Owner không có dòng member → coi như Producer
 
-        if (!isWorkspaceMember && !isWorkspaceOwner)
+        if (workspaceRole is null && !isWorkspaceOwner)
         {
             return Result<SeriesMemberDto>.Failure(
                 "Người dùng này chưa phải là thành viên hợp lệ trong Studio Workspace. Vui lòng mời vào Studio trước.",
@@ -88,12 +88,12 @@ public sealed class AddSeriesMemberCommandHandler
             existingMember.IsDeleted = false;
             existingMember.DeletedAt = null;
             existingMember.DeletedBy = null;
-            existingMember.ChangeRole(command.Role);
+            existingMember.ChangeRole(role);
             memberToSave = existingMember;
         }
         else
         {
-            memberToSave = SeriesMember.Create(command.SeriesId, command.TargetUserId, command.Role);
+            memberToSave = SeriesMember.Create(command.SeriesId, command.TargetUserId, role);
             _dbContext.SeriesMembers.Add(memberToSave);
         }
 

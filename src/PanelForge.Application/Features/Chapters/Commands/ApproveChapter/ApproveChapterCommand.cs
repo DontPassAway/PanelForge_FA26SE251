@@ -36,26 +36,10 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 
         var (chapter, workspaceId) = loaded.Value;
 
-        if (!await _db.Pages.AnyAsync(p => p.ChapterId == chapter.Id, ct))
-            return Result<ChapterReviewDto>.Failure("Chapter chưa có Page nào, chưa thể duyệt.", ResultErrorCodes.Conflict);
-
-        var unfinished = await _db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && a.Status != AssignmentStatus.Approved, ct);
-        if (unfinished > 0)
-            return Result<ChapterReviewDto>.Failure($"Còn {unfinished} việc chưa được duyệt, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
-
-        var openRequests = await _db.ChangeRequests.CountAsync(c => c.ChapterId == chapter.Id &&
-            (c.Status == ChangeRequestStatus.Open || c.Status == ChangeRequestStatus.Resolved), ct);
-        if (openRequests > 0)
-            return Result<ChapterReviewDto>.Failure($"Còn {openRequests} yêu cầu sửa chưa đóng, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
-
-        // CF3 "Cổng Consistency trước khi khóa chương": lỗi nhất quán mức Blocking còn mở (chưa Rejected/Ignored/Resolved) thì chặn
-        var blockingFindings = await _db.ConsistencyFindings.CountAsync(f => f.ChapterId == chapter.Id &&
-            f.Severity == ConsistencyFindingSeverity.Blocking &&
-            (f.Status == ConsistencyFindingStatus.Open || f.Status == ConsistencyFindingStatus.Confirmed ||
-             f.Status == ConsistencyFindingStatus.NeedsClarification), ct);
-        if (blockingFindings > 0)
-            return Result<ChapterReviewDto>.Failure(
-                $"Còn {blockingFindings} lỗi nhất quán mức Blocking chưa xử lý, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
+        // Cùng bộ luật với GET /api/chapters/{id}/lock-gate (ChapterLockGate): chặn ở điều kiện Blocking đầu tiên
+        var blocker = (await ChapterLockGate.EvaluateAsync(_db, chapter, ct)).FirstOrDefault(i => i.Blocking);
+        if (blocker is not null)
+            return Result<ChapterReviewDto>.Failure(blocker.Message, ResultErrorCodes.Conflict);
 
         chapter.Approve();
         chapter.UpdatedBy = cmd.UserId.ToString();

@@ -55,6 +55,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("title")
                .HasColumnType("varchar(500)");
 
+        builder.Property(c => c.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(c => c.Outline)
                .HasColumnName("outline")
                .HasColumnType("text");
@@ -72,6 +76,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
         builder.Property(c => c.ScriptFrozenById)
                .HasColumnName("script_frozen_by_id")
                .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptContentHash)
+               .HasColumnName("script_content_hash")
+               .HasColumnType("varchar(64)");
 
         builder.Property(c => c.ScriptReopenStatus)
                .HasColumnName("script_reopen_status")

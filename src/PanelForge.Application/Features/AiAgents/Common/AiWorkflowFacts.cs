@@ -162,8 +162,7 @@ internal sealed record AiWorkflowFacts(
         if (AiWorkflowPolicy.ProducesApplicableSuggestions(type) && ChapterStatus != ChapterStatus.InProduction)
             Add("CHAPTER_LOCKED", "State", $"Chapter đang ở trạng thái {ChapterStatus} (chỉ đọc), không thể tạo đề xuất áp dụng được.");
 
-        var needsBible = type is not AiWorkflowType.Producer and not AiWorkflowType.Letterer;
-        if (needsBible && !HasBible) Add("NO_BIBLE", "Context", "Series chưa có Series Bible.");
+        if (!HasBible) Add("NO_BIBLE", "Context", "Series chưa có Series Bible.");
 
         switch (type)
         {
@@ -176,11 +175,6 @@ internal sealed record AiWorkflowFacts(
                 break;
             case AiWorkflowType.Artist:
                 if (LatestLayoutRevisionId is null) Add("NO_LAYOUT", "Context", "Scene chưa có layout đã Accept. Chạy Storyboard và Accept layout trước.");
-                else if (LayoutPanelsAlive == 0) Add("NO_PANELS", "Context", "Các Panel của layout đã Accept không còn tồn tại.");
-                break;
-            case AiWorkflowType.Letterer:
-                if (DialogueLineCount == 0) Add("NO_DIALOGUE", "Context", "Scene chưa có dòng thoại nào.");
-                if (LatestLayoutRevisionId is null) Add("NO_LAYOUT", "Context", "Scene chưa có layout đã Accept để biết thoại nằm ở panel nào.");
                 else if (LayoutPanelsAlive == 0) Add("NO_PANELS", "Context", "Các Panel của layout đã Accept không còn tồn tại.");
                 break;
         }

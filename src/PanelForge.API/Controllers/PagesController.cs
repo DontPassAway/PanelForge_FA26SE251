@@ -19,7 +19,9 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Features.Pages.Commands.RestorePageVersion;
 using PanelForge.Application.Features.Pages.Queries.ComparePageVersions;
+using PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 using PanelForge.Application.Features.Pages.Queries.GetPageHistory;
+using PanelForge.Application.Features.Consistency.Commands.CheckPageVisualContinuity;
 
 namespace PanelForge.API.Controllers;
 
@@ -243,11 +245,10 @@ public sealed class PagesController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = MaxSplitImageBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(PanelSplitResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SplitArtwork(
         [FromRoute] Guid pageId,
         [FromForm] SplitArtworkForm form,
-        [FromServices] IPanelSplitter splitter,
         CancellationToken cancellationToken)
     {
         if (form.File is null || form.File.Length == 0)
@@ -257,16 +258,14 @@ public sealed class PagesController : ControllerBase
         if (form.File.ContentType is not ("image/png" or "image/jpeg" or "image/webp"))
             return BadRequest(new { error = "Chỉ hỗ trợ PNG, JPEG, WEBP." });
 
-        try
-        {
-            await using var stream = form.File.OpenReadStream();
-            var result = await splitter.SplitAsync(stream, form.File.FileName, form.RightToLeft, cancellationToken);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message, code = "PANEL_SPLITTER_UNAVAILABLE" });
-        }
+        await using var stream = form.File.OpenReadStream();
+        var result = await _mediator.Send(
+            new SplitArtworkQuery(pageId, stream, form.File.FileName, form.RightToLeft), cancellationToken);
+
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode == ResultErrorCodes.NotFound
+            ? NotFound(new { error = result.ErrorMessage })
+            : BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode });
     }
 
     // ── CF4 4.3: lịch sử, xem lại, so sánh và khôi phục canvas ────────────────
@@ -328,6 +327,28 @@ public sealed class PagesController : ControllerBase
         var result = await _mediator.Send(
             new RestorePageVersionCommand(pageId, version, expected, GetCurrentUserId()), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : HistoryError(result);
+    }
+
+    /// <summary>
+    /// POST /api/pages/{pageId}/visual-continuity — Editor/Producer so ảnh từng panel của trang với character sheet đã khoá.
+    /// Chỉ cảnh báo (finding Warning), không chặn duyệt chương. 503 AI_UNAVAILABLE khi không panel nào kiểm được vì lỗi AI.
+    /// </summary>
+    [HttpPost("api/pages/{pageId:guid}/visual-continuity")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(PageVisualContinuityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> CheckPageVisualContinuity(Guid pageId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CheckPageVisualContinuityCommand(pageId, GetCurrentUserId()), cancellationToken);
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.AiUnavailable => StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+        };
     }
 
     /// <summary>

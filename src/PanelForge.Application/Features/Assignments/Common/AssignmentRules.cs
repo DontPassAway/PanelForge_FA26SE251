@@ -52,6 +52,12 @@ internal static class AssignmentRules
         if (assigneeUserId == Guid.Empty)
             return Result<WorkspaceRole>.Failure("Assignment phải có người nhận.", ResultErrorCodes.Validation);
 
+        // Công đoạn kết thúc (vd "Approved") chỉ là trạng thái đã xong, không phải việc để giao; duyệt nằm ở approval gate.
+        if (stage.IsTerminal)
+            return Result<WorkspaceRole>.Failure(
+                $"Công đoạn '{stage.Name}' là công đoạn kết thúc, không giao việc được. Hãy giao ở công đoạn duyệt trước đó.",
+                ResultErrorCodes.Validation);
+
         var member = await db.WorkspaceMembers.AsNoTracking()
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == assigneeUserId, ct);
         if (member is null)
@@ -66,6 +72,21 @@ internal static class AssignmentRules
                 $"Stage '{stage.Name}' dành cho vai trò {allowed}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
 
         return Result<WorkspaceRole>.Success(member.Role);
+    }
+
+    /// <summary>
+    /// Giao việc trong Series = người nhận thành thành viên Series (role = role Workspace), để quyền theo Series
+    /// không chặn chính việc vừa giao. Từng bị gỡ thì thêm dòng mới (unique index chỉ áp cho dòng chưa xoá mềm);
+    /// không tự xoá khi việc kết thúc. Lưu cùng SaveChanges của handler.
+    /// </summary>
+    public static async Task EnsureSeriesMemberAsync(
+        IPanelForgeDbContext db, Guid seriesId, Guid userId, WorkspaceRole role, CancellationToken ct)
+    {
+        var existing = await db.SeriesMembers
+            .FirstOrDefaultAsync(m => m.SeriesId == seriesId && m.UserId == userId && !m.IsDeleted, ct);
+
+        if (existing is null) db.SeriesMembers.Add(SeriesMember.Create(seriesId, userId, role));
+        else if (existing.Role != role) existing.ChangeRole(role);
     }
 
     /// <summary>

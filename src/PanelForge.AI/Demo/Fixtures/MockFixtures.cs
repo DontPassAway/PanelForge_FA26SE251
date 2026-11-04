@@ -26,8 +26,8 @@ public static class MockFixtures
             "storyboard" => Storyboard(userMessage),
             "editor" => Editor(userMessage),
             "artist" => Artist(userMessage),
-            "letterer" => Letterer(userMessage),
-            "producer" => Producer(userMessage),
+            "copilot" => Copilot(userMessage),
+            "vision" => Json(new { score = 0.9, deviations = Array.Empty<object>(), summaryReason = "Khớp character sheet (Mock)." }),
             _ => throw new InvalidOperationException("Mock: không nhận ra agent trong prompt.")
         };
     }
@@ -63,10 +63,6 @@ public static class MockFixtures
                 "Nêu rõ nhịp thoại và các điểm người biên tập cần chú ý khi quyết định."),
             "Artist" => ("Layout đã duyệt có panel: gọi Artist soạn prompt ảnh cho từng panel.",
                 "Giữ nhất quán ngoại hình nhân vật theo Bible; luôn tham chiếu nhân vật có trong panel."),
-            "Letterer" => ("Thoại đã gắn với panel: gọi Letterer đề xuất rút gọn cho vừa bubble.",
-                "Giữ ý và giọng nhân vật; chỉ rút gọn phần cần thiết."),
-            "Producer" => ("Có snapshot tiến độ do Backend tính: gọi Producer viết báo cáo.",
-                "Chỉ dùng số liệu trong fact; nêu rõ dữ liệu còn thiếu."),
             "StopForHuman" when workflow == "Storyboard" => ("Continuity báo finding chặn trên script có sẵn; workflow này không có Writer để sửa: dừng để con người quyết định.", null),
             "StopForHuman" when allowed.Length == 1 => ("Đã hết lượt sửa mà còn finding chặn: dừng để con người quyết định.", null),
             "StopForHuman" => ("Mâu thuẫn có vẻ nằm ở chính brief nên Writer sửa tiếp khó hiệu quả: leo thang sang con người.", null),
@@ -74,8 +70,6 @@ public static class MockFixtures
             {
                 "Script" => "Script đã qua Continuity sạch: kết thúc, đề xuất script chờ con người Accept hoặc Reject.",
                 "Artist" => "Đã có prompt cho mọi panel: kết thúc, prompt ảnh chờ người duyệt.",
-                "Letterer" => "Đã xem xét mọi dòng thoại: kết thúc, đề xuất rút gọn (nếu có) chờ người duyệt.",
-                "Producer" => "Báo cáo tiến độ đã xong: kết thúc, báo cáo chỉ để tham khảo.",
                 "Editor" => "Báo cáo review đã xong: kết thúc, báo cáo chỉ để tham khảo.",
                 _ => "Editor đã review xong: kết thúc workflow, các đề xuất chờ con người Accept hoặc Reject."
             }, null)
@@ -230,78 +224,33 @@ public static class MockFixtures
 
     // ── Letterer ─────────────────────────────────────────────────────────────
     // Rút gọn các dòng thoại dài (≥ 40 ký tự): cắt ở ranh giới từ rồi thêm "…" — chỉ là fixture, không phải xử lý ngữ nghĩa thật.
-    private static string Letterer(string msg)
+    // ── Copilot: rút gọn = cắt theo maxChars ở ranh giới từ; viết lại = thêm thán từ đầu câu (đủ để demo luồng Accept/Reject) ──
+    private static string Copilot(string msg)
     {
-        var suggestions = new List<object>();
-        foreach (Match m in Regex.Matches(msg,
-                     @"\[(L\d+)\] speaker=(\S+) \| page=\S+ panel=\S+ \| bubble=.*? \| limit=(\d+) \(.*?\) \| length=(\d+)[^|]*\| dialogue=""(.*)""\s*$",
-                     RegexOptions.Multiline))
+        if (msg.Contains($"[[task:{CopilotTasks.PublisherMetadata}]]"))
         {
-            var (limit, length, text) = (int.Parse(m.Groups[3].Value), int.Parse(m.Groups[4].Value), m.Groups[5].Value);
-            if (length < 40) continue;
-            var target = Math.Min(limit, (int)(length * 0.7)) - 1;
-            var cut = text[..Math.Min(text.Length, Math.Max(1, target))];
-            var space = cut.LastIndexOf(' ');
-            if (space > 8) cut = cut[..space];
-            var suggested = cut.TrimEnd(',', ' ', '.') + "…";
-            suggestions.Add(new
+            var title = Regex.Match(msg, @"^title=""(.*?)""", RegexOptions.Multiline).Groups[1].Value;
+            return Json(new
             {
-                lineKey = m.Groups[1].Value,
-                suggestedText = suggested,
-                reason = length > limit
-                    ? "Thoại vượt giới hạn ước lượng: lược phần cuối câu, giữ ý chính và giọng nhân vật (Mock)."
-                    : "Làm gọn phần cuối câu cho thoáng bubble, vẫn giữ ý chính và giọng nhân vật (Mock)."
+                logline = $"{title}: một bí mật cũ trỗi dậy giữa thành phố mưa (Mock).",
+                synopsis = $"{title} theo chân nhân vật chính lần theo những manh mối bị lãng quên (Mock).",
+                genre = "Mystery, Drama",
+                teaser = "Chương mới: chiếc chìa khóa cuối cùng đã xuất hiện (Mock).",
+                ageRating = "13+",
+                reason = "Có yếu tố căng thẳng nhẹ, không có nội dung người lớn (Mock)."
             });
         }
-        return Json(new
+        var text = Regex.Match(msg, @"^dialogue=""(.*)""\s*$", RegexOptions.Multiline).Groups[1].Value.Trim();
+        if (msg.Contains($"[[task:{CopilotTasks.LettererShorten}]]"))
         {
-            suggestions,
-            summary = suggestions.Count == 0 ? "Không dòng thoại nào cần rút gọn." : $"Đề xuất rút gọn {suggestions.Count} dòng thoại (Mock)."
-        });
-    }
-
-    // ── Producer ─────────────────────────────────────────────────────────────
-    // Chỉ diễn giải fact do code cung cấp: rủi ro = fact quá hạn / bị chặn / cần sửa; luôn trích khoá fact; không tự tính số.
-    private static string Producer(string msg)
-    {
-        var facts = Regex.Matches(msg, @"^\[(F\d+)\] (.+)$", RegexOptions.Multiline)
-            .Select(m => (Key: m.Groups[1].Value, Text: m.Groups[2].Value.Trim())).ToList();
-        var gaps = int.Parse(Regex.Match(msg, @"\[\[gaps:(\d+)\]\]").Groups[1].Value);
-
-        var risks = new List<object>();
-        var recs = new List<object>();
-        foreach (var f in facts)
-        {
-            if (f.Text.Contains("đã quá", StringComparison.OrdinalIgnoreCase) && f.Text.StartsWith("Assignment", StringComparison.Ordinal))
-            {
-                risks.Add(new { severity = "Warning", description = $"Có assignment đã quá hạn ({f.Text})", sourceFactKeys = new[] { f.Key } });
-                recs.Add(new { action = "Làm việc với người phụ trách để xác nhận lại deadline hoặc gỡ vướng mắc.", rationale = "Assignment đã quá hạn theo số liệu hệ thống.", sourceFactKeys = new[] { f.Key }, suggestedOwnerRole = "Producer" });
-            }
-            else if (f.Text.Contains("ReworkRequired") && f.Text.StartsWith("Assignment ", StringComparison.Ordinal)
-                     || f.Text.Contains("Blocked") && f.Text.StartsWith("Assignment ", StringComparison.Ordinal))
-            {
-                risks.Add(new { severity = "Warning", description = $"Có assignment đang bị chặn hoặc cần làm lại ({f.Text})", sourceFactKeys = new[] { f.Key } });
-            }
-            else if (f.Text.Contains("sắp đến hạn", StringComparison.OrdinalIgnoreCase))
-            {
-                risks.Add(new { severity = "Info", description = $"Có assignment sắp đến hạn ({f.Text})", sourceFactKeys = new[] { f.Key } });
-            }
+            var max = int.Parse(Regex.Match(msg, @"maxChars=(\d+)").Groups[1].Value);
+            var target = Math.Max(1, Math.Min(max, text.Length - 1) - 1);
+            var cut = text[..target];
+            var space = cut.LastIndexOf(' ');
+            if (space > 4) cut = cut[..space];
+            return Json(new { text = cut.TrimEnd(',', ' ', '.') + "…", reason = "Lược phần cuối câu cho vừa khung, giữ ý chính (Mock)." });
         }
-        if (recs.Count == 0 && facts.Count > 0)
-            recs.Add(new { action = gaps > 0 ? "Bổ sung dữ liệu còn thiếu (assignment, deadline, ngày phát hành) để lần báo cáo sau đánh giá được đầy đủ." : "Tiếp tục theo dõi tiến độ theo các fact hiện có.",
-                           rationale = "Dựa trên snapshot tiến độ hiện tại.", sourceFactKeys = new[] { facts[0].Key }, suggestedOwnerRole = "Producer" });
-
-        var completion = facts.FirstOrDefault(f => f.Text.StartsWith("Hoàn thành assignment", StringComparison.Ordinal)).Text;
-        var summary = (completion is null ? "Chưa có số liệu hoàn thành assignment." : completion)
-                      + (gaps > 0 ? " Một số phần chưa đánh giá được vì thiếu dữ liệu (xem mục dữ liệu còn thiếu)." : "")
-                      + $" {risks.Count} rủi ro có căn cứ từ fact.";
-        return Json(new
-        {
-            headline = risks.Count > 0 ? "Có rủi ro tiến độ cần xử lý" : gaps > 0 ? "Chưa đủ dữ liệu để đánh giá đầy đủ" : "Tiến độ chưa thấy rủi ro đáng kể",
-            summary,
-            risks,
-            recommendations = recs
-        });
+        return Json(new { text = "Này, " + text, reason = "Thêm thán từ cho giọng thân mật hơn (Mock)." });
     }
 
     // ── Editor ───────────────────────────────────────────────────────────────

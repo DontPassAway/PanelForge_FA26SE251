@@ -30,6 +30,9 @@ public class Assignment : BaseEntity
     /// <summary>CF2: việc phải được Approved trước khi việc này bắt đầu (cùng Chapter, tối đa một; không được tạo chu trình).</summary>
     public Guid? DependsOnAssignmentId { get; private set; }
 
+    /// <summary>Đợt giao hàng loạt tạo ra việc này (null = giao lẻ). Cùng BatchId → 1 thông báo gộp (BR-14).</summary>
+    public Guid? BatchId { get; private set; }
+
     /// <summary>Đồ thị phụ thuộc đa nhiệm (DAG): danh sách các công việc tiền đề phải được Approved trước khi việc này bắt đầu.</summary>
     public string DependsOnAssignmentIdsJson { get; private set; } = "[]";
 
@@ -72,7 +75,8 @@ public class Assignment : BaseEntity
         DateTime? dueDate = null,
         AssignmentPriority priority = AssignmentPriority.Medium,
         Guid? dependsOnAssignmentId = null,
-        IEnumerable<Guid>? dependsOnAssignmentIds = null)
+        IEnumerable<Guid>? dependsOnAssignmentIds = null,
+        Guid? batchId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(brief);
 
@@ -102,6 +106,7 @@ public class Assignment : BaseEntity
             Priority = priority,
             DependsOnAssignmentId = depList.Count > 0 ? depList[0] : null,
             DependsOnAssignmentIdsJson = depList.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(depList) : "[]",
+            BatchId = batchId,
             Status = AssignmentStatus.Assigned,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow

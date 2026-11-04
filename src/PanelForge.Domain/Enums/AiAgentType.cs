@@ -14,7 +14,9 @@ public enum AiAgentType
     /// <summary>Đề xuất rút gọn thoại cho vừa bubble/text element.</summary>
     Letterer = 7,
     /// <summary>Viết báo cáo tiến độ từ snapshot do Backend tính.</summary>
-    Producer = 8
+    Producer = 8,
+    /// <summary>Copilot gợi ý metadata phát hành (logline, synopsis, thể loại, teaser, age rating).</summary>
+    Publisher = 9
 }
 
 /// <summary>Loại nhiệm vụ của một run; quyết định chuỗi agent hợp lệ (xem WorkflowRules). Run cũ đọc như FullScene.</summary>
@@ -26,5 +28,9 @@ public enum AiWorkflowType
     Artist = 4,
     Letterer = 5,
     Editor = 6,
-    Producer = 7
+    Producer = 7,
+    /// <summary>Copilot sync (một bước, một dòng thoại). Không nằm trong danh sách workflow batch.</summary>
+    Copilot = 8,
+    /// <summary>Sinh MỘT ảnh thumbnail cho panel từ prompt ảnh đã duyệt (sync, không nằm trong workflow batch).</summary>
+    Thumbnail = 9
 }

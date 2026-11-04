@@ -45,7 +45,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         if (stored.IsRevoked)
         {
-            await RefreshTokenRevocation.RevokeAllAsync(_dbContext, stored.UserId, cancellationToken);
+            await RefreshTokenRevocation.RevokeAllAsync(_dbContext, stored.UserId, cancellationToken, reason: "phát hiện refresh token bị dùng lại");
             await _dbContext.SaveChangesAsync(cancellationToken);
             return Unauthorized();
         }

@@ -19,7 +19,6 @@ using PanelForge.API.Common;
 using PanelForge.Application.Common.Models;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.Configure<AiVisionSettings>(builder.Configuration.GetSection(AiVisionSettings.SectionName));
 
 // ── Công cụ: chép ảnh từ đĩa lên R2 rồi thoát (không khởi động web, không chạm DB) ──
 //   dotnet run -- migrate-assets-to-r2 [--dry-run] [--source <thư mục>]

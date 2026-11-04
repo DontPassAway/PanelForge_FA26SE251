@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Auth.Common;
+using PanelForge.Domain.Entities.Audit;
 
 namespace PanelForge.Application.Features.Auth.Commands.Logout;
 
@@ -26,6 +27,11 @@ public sealed class LogoutCommandHandler : IRequestHandler<LogoutCommand, Result
         if (stored is not null)
         {
             stored.Revoke();
+            var email = await _dbContext.Users
+                .Where(u => u.Id == command.UserId).Select(u => u.Email).FirstOrDefaultAsync(cancellationToken);
+            _dbContext.AuditLogs.Add(AuditLog.Create(
+                action: "LOGOUT", entityName: "Session", entityId: stored.SessionId.ToString(),
+                userId: command.UserId, userEmail: email, details: "Đăng xuất."));
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         return Result<bool>.Success(true);

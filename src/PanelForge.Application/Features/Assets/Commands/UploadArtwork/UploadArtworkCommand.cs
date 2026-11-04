@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
@@ -34,16 +33,11 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
-    private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory? _scopeFactory;
 
-    public UploadArtworkCommandHandler(
-        IPanelForgeDbContext db,
-        IAssetStorage storage,
-        Microsoft.Extensions.DependencyInjection.IServiceScopeFactory? scopeFactory = null)
+    public UploadArtworkCommandHandler(IPanelForgeDbContext db, IAssetStorage storage)
     {
         _db = db;
         _storage = storage;
-        _scopeFactory = scopeFactory;
     }
 
     public async Task<Result<AssetReferenceDto>> Handle(UploadArtworkCommand cmd, CancellationToken ct)
@@ -154,29 +148,8 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 
         _db.AssetReferences.Add(reference);
         await _db.SaveChangesAsync(ct);
-
-        // Bước A5: Chạy kiểm tra nhất quán hình ảnh bất đồng bộ (Background Job) để không chặn Artist upload
-        if (cmd.PanelId.HasValue && _scopeFactory != null)
-        {
-            var pId = cmd.PanelId.Value;
-            var revRef = reference.Id.ToString();
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var consistencyService = scope.ServiceProvider.GetService<IImageConsistencyService>();
-                    if (consistencyService != null)
-                    {
-                        await consistencyService.CheckPanelConsistencyAsync(pId, revRef, cancellationToken: CancellationToken.None);
-                    }
-                }
-                catch
-                {
-                    // Lỗi background không làm gián đoạn request của người dùng
-                }
-            });
-        }
+        // Kiểm nhất quán ảnh KHÔNG chạy ngầm sau upload (tốn quota AI mỗi lần tải, lỗi bị nuốt):
+        // Editor/Producer chủ động kiểm theo panel, trang hoặc cả chương (cùng một IImageConsistencyService).
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
     }

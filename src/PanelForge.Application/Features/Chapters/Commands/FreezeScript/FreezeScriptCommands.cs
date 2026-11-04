@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -108,8 +109,17 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
             }
         }
 
-        // 3. Đóng băng kịch bản
-        chapter.FreezeScript(cmd.UserId);
+        // 3. Đóng băng kịch bản kèm SHA-256 nội dung để chứng minh kịch bản không đổi sau khi freeze
+        var sceneNumbers = chapter.Scenes.ToDictionary(s => s.Id, s => s.SceneNumber);
+        var lines = await _dbContext.ScriptLines
+            .AsNoTracking()
+            .Where(l => sceneIds.Contains(l.SceneId))
+            .Select(l => new { l.SceneId, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection, l.NarrationMode })
+            .ToListAsync(ct);
+        var canonical = string.Join('\n', lines
+            .OrderBy(l => sceneNumbers[l.SceneId]).ThenBy(l => l.LineOrder)
+            .Select(l => $"{sceneNumbers[l.SceneId]}|{l.LineOrder}|{l.SpeakerCharacterId}|{l.NarrationMode}|{l.DialogueText}|{l.StageDirection}"));
+        chapter.FreezeScript(cmd.UserId, AiContentValidator.Sha256(canonical));
         chapter.UpdatedBy = cmd.UserId.ToString();
 
         await _dbContext.SaveChangesAsync(ct);
@@ -301,7 +311,8 @@ internal static class ChapterDetailDtoFactory
             ScriptReopenStatus: chapter.ScriptReopenStatus,
             ScriptReopenReason: chapter.ScriptReopenReason,
             ScriptReopenRequestedById: chapter.ScriptReopenRequestedById,
-            ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt
+            ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt,
+            ScriptContentHash: chapter.ScriptContentHash
         );
     }
 }

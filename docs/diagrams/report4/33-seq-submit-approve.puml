@@ -1,0 +1,32 @@
+@startuml seq_submit_approve
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+actor Artist as A
+actor Editor as E
+participant AssignmentsController as C
+participant Handlers as H
+participant StageProgressRules as SR
+participant ReviewRules as RR
+database PanelForgeDbContext as DB
+A -> C : POST assignments/{id}/submit
+C -> H : SubmitAssignmentCommand
+H -> SR : PriorStageBlockReasonAsync
+alt prior stage not approved
+  SR --> A : 409 blocked by previous stage
+else ok
+  H -> DB : Submission attempt n Pending,\nprevious Superseded, StageProgress Submitted
+  H --> A : 200 OK
+end
+E -> C : POST assignments/{id}/approve
+C -> H : ApproveAssignmentCommand
+H -> RR : reviewer is not assignee or submitter
+alt own work
+  RR --> E : 403 Forbidden
+else ok
+  H -> DB : Submission Approved, StageProgress Approved,\nAssignment Approved
+  H --> E : 200 OK
+end
+@enduml

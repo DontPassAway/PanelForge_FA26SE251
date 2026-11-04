@@ -206,6 +206,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         approveResult.IsSuccess.Should().BeTrue();
         approveResult.Value.IsScriptFrozen.Should().BeFalse();
+        approveResult.Value.ScriptContentHash.Should().BeNull();
         approveResult.Value.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Approved);
 
         // 3. Giả lập Writer sửa thoại dòng 2 (gắn trên Panel 2)
@@ -224,6 +225,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         freezeResult.IsSuccess.Should().BeTrue();
         freezeResult.Value.IsScriptFrozen.Should().BeTrue();
+        freezeResult.Value.ScriptContentHash.Should().MatchRegex("^[0-9a-f]{64}$");
 
         // 5. Kiểm tra Targeted Impact Scope:
         // Panel 2 bị đổi thoại => Chuyển sang ReworkRequired và bật has_script_impact = true

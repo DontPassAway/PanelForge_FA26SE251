@@ -7,7 +7,7 @@ using PanelForge.AI.Gateway;
 namespace PanelForge.AI.Workflows;
 
 /// <summary>
-/// Gemini làm đầu não: <see cref="SupervisorAgent"/> điều phối 7 agent chuyên môn (Writer, Continuity, Storyboard, Artist, Letterer, Editor, Producer)
+/// Gemini làm đầu não: <see cref="SupervisorAgent"/> điều phối 5 agent chuyên môn (Writer, Continuity, Storyboard, Artist, Editor)
 /// theo LOẠI workflow của run (<see cref="AgentContext.WorkflowType"/>) — không workflow nào chạy đủ cả 7.
 /// Mỗi bước Supervisor chọn hành động kế tiếp (kèm lý do + chỉ đạo) trong danh sách do CODE tính
 /// (<see cref="WorkflowRules"/>: chuỗi hợp lệ + điều kiện Finish riêng từng workflow, tối đa MaxRevisionRounds lượt sửa Writer, script luôn qua Continuity...).
@@ -62,8 +62,6 @@ public sealed class MultiAgentWorkflow
         var storyboard = new StoryboardAgent(runner);
         var editor = new EditorAgent(runner);
         var artist = new ArtistAgent(runner);
-        var letterer = new LettererAgent(runner);
-        var producer = new ProducerAgent(runner);
 
         var inputs = ctx.Inputs;
         var facts = new List<StepFact>();
@@ -175,24 +173,6 @@ public sealed class MultiAgentWorkflow
                     if (ack is null || !call.Succeeded) return;
                     facts.Add(new StepFact(AiProtocol.AgentArtist, 0, true, false));
                     history.Add($"#{steps.LastIndex} Artist: {call.Payload!.Panels.Count} prompt ảnh cho panel.");
-                    break;
-                }
-                case AiProtocol.AgentLetterer:
-                {
-                    var (call, input) = await letterer.RunAsync(ctx, keys, ct);
-                    var ack = await steps.ReportAsync(AiProtocol.AgentLetterer, 0, null, call, input, LettererAgent.Prompt, ct);
-                    if (ack is null || !call.Succeeded) return;
-                    facts.Add(new StepFact(AiProtocol.AgentLetterer, 0, true, false));
-                    history.Add($"#{steps.LastIndex} Letterer: {call.Payload!.Suggestions.Count} đề xuất rút gọn thoại.");
-                    break;
-                }
-                case AiProtocol.AgentProducer:
-                {
-                    var (call, input) = await producer.RunAsync(ctx, ct);
-                    var ack = await steps.ReportAsync(AiProtocol.AgentProducer, 0, null, call, input, ProducerAgent.Prompt, ct);
-                    if (ack is null || !call.Succeeded) return;
-                    facts.Add(new StepFact(AiProtocol.AgentProducer, 0, true, false));
-                    history.Add($"#{steps.LastIndex} Producer: báo cáo tiến độ ({call.Payload!.Risks.Count} rủi ro, {call.Payload.Recommendations.Count} đề xuất).");
                     break;
                 }
                 default:

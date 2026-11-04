@@ -6,6 +6,7 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Panels.Commands.AssignPanelScene;
 using PanelForge.Application.Features.Panels.Commands.AssignPanelScriptLines;
+using PanelForge.Application.Features.Panels.Commands.AutoAssignScriptLines;
 using PanelForge.Application.Features.Panels.Commands.CreatePanel;
 using PanelForge.Application.Features.Panels.Commands.DeletePanel;
 using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
@@ -152,6 +153,30 @@ public sealed class PanelsController : ControllerBase
     {
         var result = await _mediator.Send(
             new AssignPanelSceneCommand(panelId, body.SceneId, GetCurrentUserId()), cancellationToken);
+        if (!result.IsSuccess)
+            return result.ErrorMessage?.Contains("không tồn tại") == true
+                ? NotFound(new { error = result.ErrorMessage })
+                : this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/pages/{pageId}/script-lines/auto-assign — gom dòng của Scene thành cụm (chỉ dẫn + thoại theo sau)
+    /// và gán lần lượt vào Panel của Page theo thứ tự đọc; dryRun = chỉ xem gợi ý.
+    /// </summary>
+    [HttpPost("api/pages/{pageId:guid}/script-lines/auto-assign")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(AutoAssignScriptLinesResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AutoAssignScriptLines(
+        [FromRoute] Guid pageId,
+        [FromBody] AutoAssignScriptLinesRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new AutoAssignScriptLinesCommand(pageId, body.SceneId, body.DryRun, GetCurrentUserId()), cancellationToken);
         if (!result.IsSuccess)
             return result.ErrorMessage?.Contains("không tồn tại") == true
                 ? NotFound(new { error = result.ErrorMessage })

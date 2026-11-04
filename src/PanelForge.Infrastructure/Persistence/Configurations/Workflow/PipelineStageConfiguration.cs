@@ -57,6 +57,15 @@ internal sealed class PipelineStageConfiguration : IEntityTypeConfiguration<Pipe
                .HasColumnName("color_code")
                .HasColumnType("varchar(20)");
 
+        builder.Property(s => s.AssignmentGranularity)
+               .HasColumnName("assignment_granularity")
+               .HasColumnType("varchar(20)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<WorkflowEntityType>(v))
+               .HasDefaultValue(WorkflowEntityType.Chapter)
+               .IsRequired();
+
         builder.Property(s => s.AllowedRole)
                .HasColumnName("allowed_role")
                .HasColumnType("varchar(30)")

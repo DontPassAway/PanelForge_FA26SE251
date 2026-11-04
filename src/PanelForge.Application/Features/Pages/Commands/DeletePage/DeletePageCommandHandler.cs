@@ -5,6 +5,7 @@ using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.Pages.Common;
 
 namespace PanelForge.Application.Features.Pages.Commands.DeletePage;
 
@@ -72,6 +73,18 @@ public sealed class DeletePageCommandHandler
             _dbContext.Pages.Remove(efPage);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        // 3. Đánh số lại các trang còn lại thành 1..N (xoá trang 1 thì trang 2, 3 thành 1, 2)
+        var chapterId = efPage?.ChapterId ?? streamPage!.ChapterId;
+        var remaining = await _dbContext.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == chapterId && p.Id != command.PageId)
+            .OrderBy(p => p.PageNumber)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        if (await PageOrdering.ApplyAsync(_dbContext, _pageRepository, chapterId,
+                remaining.Select((id, i) => (id, n: i + 1)).ToDictionary(x => x.id, x => x.n),
+                _currentUser.UserId?.ToString(), cancellationToken) is { } renumberError)
+            return Result<bool>.Failure(renumberError);
 
         return Result<bool>.Success(true);
     }

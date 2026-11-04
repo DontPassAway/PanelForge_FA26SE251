@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Queries.GetRun;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Content;
@@ -12,7 +13,7 @@ using Xunit;
 namespace PanelForge.UnitTests.Ai;
 
 /// <summary>
-/// Accept/Reject/RequestChanges cho prompt ảnh (Artist) và rút gọn thoại (Letterer): quyền theo LOẠI đề xuất, append-only + provenance,
+/// Accept/Reject/RequestChanges cho prompt ảnh (Artist): quyền theo LOẠI đề xuất, append-only + provenance,
 /// và Accept bị chặn khi stale version/revision, chương bị khoá, hoặc liên kết (panel/dòng thoại/script) không còn đúng.
 /// Sau AcceptScriptAndLayoutAsync: Script revision v1, Layout revision v1, chapter version = 2.
 /// </summary>
@@ -26,14 +27,6 @@ public class ReviewNewKindsTests
         await h.AcceptScriptAndLayoutAsync();
         var runId = await h.RunMockAsync(AiWorkflowType.Artist);
         return (h, await h.SuggestionAsync(runId, AiSuggestionKind.ImagePrompt));
-    }
-
-    private static async Task<(AiHarness H, AiSuggestion S)> LetteringSuggestionAsync()
-    {
-        var h = await AiHarness.CreateAsync();
-        await h.AcceptScriptAndLayoutAsync();
-        var runId = await h.RunMockAsync(AiWorkflowType.Letterer);
-        return (h, await h.SuggestionAsync(runId, AiSuggestionKind.Lettering));
     }
 
     private static async Task LockAsync(AiHarness h)
@@ -69,6 +62,48 @@ public class ReviewNewKindsTests
         h.Db.Panels.Count().Should().Be(panelsBefore);
         h.Db.BibleEntryRevisions.Count().Should().Be(bibleBefore);
         (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.InProduction, "Accept không Approve chapter hay chuyển stage");
+    }
+
+    [Fact]
+    public async Task ImagePrompt_ForOnePanel_OnlyRewritesThatPanel_AndKeepsOtherApprovedPrompts()
+    {
+        var (h, full) = await ArtistSuggestionAsync();
+        (await h.ReviewAsync(full.Id, AiSuggestionStatus.Accepted, AiHarness.Artist, ReadyVersion)).IsSuccess.Should().BeTrue();
+        var before = AiJson.Deserialize<ArtistPromptSet>(full.PayloadJson)!;
+        before.Panels.Should().HaveCountGreaterThan(1);
+        var target = before.Panels[0].PanelId;
+
+        var cmd = (await h.CommandAsync(AiWorkflowType.Artist)) with { PanelIds = [target] };
+        var start = await h.RunHandler().Handle(cmd, default);
+        start.IsSuccess.Should().BeTrue(start.ErrorMessage);
+        await h.ExecuteWorkflowAsync(start.Value!.RunId);
+        var partial = await h.SuggestionAsync(start.Value.RunId, AiSuggestionKind.ImagePrompt);
+        AiJson.Deserialize<ArtistPromptSet>(partial.PayloadJson)!.Panels.Select(p => p.PanelId).Should().Equal(target);
+
+        var result = await h.ReviewAsync(partial.Id, AiSuggestionStatus.Accepted, AiHarness.Artist, ReadyVersion + 1);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        var latest = await h.Db.ContentRevisions.Where(r => r.Kind == ContentRevisionKind.ImagePrompt)
+            .OrderByDescending(r => r.VersionNumber).FirstAsync();
+        latest.VersionNumber.Should().Be(2);
+        var merged = AiJson.Deserialize<ArtistPromptSet>(latest.PayloadJson)!;
+        merged.Panels.Select(p => p.PanelId).Should().BeEquivalentTo(before.Panels.Select(p => p.PanelId));
+        merged.Panels.Skip(1).Select(p => p.Prompt).Should().Equal(before.Panels.Skip(1).Select(p => p.Prompt));
+        latest.ContentHash.Should().Be(AiContentValidator.Sha256(latest.PayloadJson));
+    }
+
+    [Fact]
+    public async Task RunWorkflow_PanelIds_RejectedOutsideArtist_OrWhenPanelNotInLayout()
+    {
+        var h = await AiHarness.CreateAsync();
+        await h.AcceptScriptAndLayoutAsync();
+
+        var notArtist = (await h.CommandAsync(AiWorkflowType.Storyboard)) with { PanelIds = [Guid.NewGuid()] };
+        (await h.RunHandler().Handle(notArtist, default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+
+        var unknown = (await h.CommandAsync(AiWorkflowType.Artist)) with { PanelIds = [Guid.NewGuid()] };
+        (await h.RunHandler().Handle(unknown, default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        h.Db.AiWorkflowRuns.Count(r => r.WorkflowType == AiWorkflowType.Artist).Should().Be(0);
     }
 
     [Theory]
@@ -187,109 +222,6 @@ public class ReviewNewKindsTests
         h.Db.ContentRevisions.Count(r => r.Kind == ContentRevisionKind.ImagePrompt).Should().Be(0);
     }
 
-    // ── Rút gọn thoại ────────────────────────────────────────────────────────
-    [Fact]
-    public async Task AcceptLettering_CreatesANewScriptRevision_KeepsTheOriginalInTheOldOne_AndRecordsProvenance()
-    {
-        var (h, s) = await LetteringSuggestionAsync();
-        var set = AiJson.Deserialize<LetteringSuggestionSet>(s.PayloadJson)!;
-        var previous = await h.Db.ContentRevisions.SingleAsync(r => r.Kind == ContentRevisionKind.Script);
-
-        var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion);
-
-        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.Value!.ChapterVersion.Should().Be(ReadyVersion + 1);
-        var lines = await h.Db.ScriptLines.ToListAsync();
-        foreach (var sug in set.Suggestions)
-            lines.Single(l => l.Id == sug.SourceScriptLineId).DialogueText.Should().Be(sug.SuggestedText);
-
-        var revisions = await h.Db.ContentRevisions.Where(r => r.Kind == ContentRevisionKind.Script).OrderBy(r => r.VersionNumber).ToListAsync();
-        revisions.Should().HaveCount(2, "append-only: revision cũ giữ nguyên, revision mới nối sau");
-        var created = revisions[1];
-        (created.VersionNumber, created.PreviousRevisionId, created.SourceSuggestionId).Should().Be((2, (Guid?)previous.Id, (Guid?)s.Id));
-        created.MappingJson.Should().Contain("Lettering");
-        foreach (var sug in set.Suggestions)
-        {
-            revisions[0].PayloadJson.Should().Contain(sug.OriginalText, "thoại gốc còn nguyên trong revision cũ — không bị ghi đè âm thầm");
-            created.PayloadJson.Should().Contain(sug.SuggestedText);
-        }
-        (await h.Db.AiSuggestionDecisions.SingleAsync(d => d.SuggestionId == s.Id)).ResultRevisionId.Should().Be(created.Id);
-    }
-
-    [Theory]
-    [InlineData("Letterer", true)]
-    [InlineData("Writer", true)]
-    [InlineData("Editor", true)]
-    [InlineData("Artist", false)]
-    [InlineData("Reader", false)]
-    public async Task Lettering_DecisionRoles_FollowTheKind(string user, bool allowed)
-    {
-        var (h, s) = await LetteringSuggestionAsync();
-        var id = user switch
-        {
-            "Writer" => AiHarness.Writer, "Letterer" => AiHarness.Letterer, "Reader" => AiHarness.Reader,
-            "Artist" => AiHarness.Artist, _ => AiHarness.Editor
-        };
-
-        var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, id, ReadyVersion);
-
-        result.IsSuccess.Should().Be(allowed, result.ErrorMessage);
-        if (!allowed) result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
-    }
-
-    [Fact]
-    public async Task Lettering_Accept_WhenScriptHasANewerRevision_Conflicts_AndKeepsLines()
-    {
-        var (h, s) = await LetteringSuggestionAsync();
-        var current = await h.Db.ContentRevisions.SingleAsync(r => r.Kind == ContentRevisionKind.Script);
-        h.Db.ContentRevisions.Add(ContentRevision.Create(current.ChapterId, current.SceneId, ContentRevisionKind.Script, 2, "Sửa tay",
-            current.PayloadJson, "hash-manual", current.Id, null));
-        await h.Db.SaveChangesAsync();
-        var before = (await h.Db.ScriptLines.ToListAsync()).Select(l => l.DialogueText).ToList();
-
-        var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("revision mới hơn");
-        (await h.Db.ScriptLines.ToListAsync()).Select(l => l.DialogueText).Should().Equal(before);
-    }
-
-    [Fact]
-    public async Task Lettering_Accept_WhenALineWasEditedSinceTheSuggestion_Conflicts_WrongLink()
-    {
-        var (h, s) = await LetteringSuggestionAsync();
-        var set = AiJson.Deserialize<LetteringSuggestionSet>(s.PayloadJson)!;
-        var line = await h.Db.ScriptLines.SingleAsync(l => l.Id == set.Suggestions[0].SourceScriptLineId);
-        line.UpdateContent("Thoại đã bị người khác sửa tay", line.StageDirection, line.SpeakerCharacterId);
-        await h.Db.SaveChangesAsync();
-
-        var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("liên kết sai");
-        (await h.Db.ScriptLines.SingleAsync(l => l.Id == line.Id)).DialogueText.Should().Be("Thoại đã bị người khác sửa tay");
-        h.Db.ContentRevisions.Count(r => r.Kind == ContentRevisionKind.Script).Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Lettering_Accept_WhenLayoutChanged_OrChapterLocked_OrVersionStale_IsBlocked()
-    {
-        var (h, s) = await LetteringSuggestionAsync();
-        (await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion - 1)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-
-        var layout = await h.Db.ContentRevisions.SingleAsync(r => r.Kind == ContentRevisionKind.Layout);
-        h.Db.ContentRevisions.Add(ContentRevision.Create(layout.ChapterId, layout.SceneId, ContentRevisionKind.Layout, 2, "Layout mới",
-            layout.PayloadJson, "hash2", layout.Id, null, layout.MappingJson));
-        await h.Db.SaveChangesAsync();
-        var changed = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion);
-        changed.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        changed.ErrorMessage.Should().Contain("Layout");
-
-        await LockAsync(h);
-        (await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, ReadyVersion)).ErrorMessage.Should().Contain("Locked");
-        h.Db.ContentRevisions.Count(r => r.Kind == ContentRevisionKind.Script).Should().Be(1);
-    }
-
     // ── Layout từ workflow Storyboard (không có Script cha) ──────────────────
     [Fact]
     public async Task StoryboardLayout_Accept_WhenTheScriptChangedAfterTheRun_Conflicts()
@@ -340,9 +272,8 @@ public class ReviewNewKindsTests
         var h = await AiHarness.CreateAsync();
         await h.AcceptScriptAndLayoutAsync();
         var editor = await h.RunMockAsync(AiWorkflowType.Editor);
-        var producer = await h.RunMockAsync(AiWorkflowType.Producer);
 
-        foreach (var runId in new[] { editor, producer })
+        foreach (var runId in new[] { editor })
         {
             var dto = (await new GetRunQueryHandler(h.Db, h.Auth).Handle(new GetRunQuery(AiDemoSeeder.SeriesId, runId, AiHarness.Producer), default)).Value!;
             dto.Status.Should().Be(AiRunStatus.Completed);

@@ -1,0 +1,24 @@
+@startuml wf03_review
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+|Editor|
+start
+:Open pending submission;
+:Compare versions side by side;
+if (Defect found?) then (yes)
+  :Mark region and raise change request;
+  repeat
+    |Artist / Letterer|
+    :Fix artwork and resolve change request;
+    :Resubmit (new attempt,\nprevious becomes Superseded);
+    |Editor|
+    backward :Reopen change request;
+  repeat while (Fix acceptable?) is (no) not (yes)
+  :Verify change request;
+endif
+:Approve stage;
+stop
+@enduml

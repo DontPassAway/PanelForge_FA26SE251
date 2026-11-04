@@ -7,11 +7,15 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
+using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using PanelForge.Application.Features.Chapters.Commands.SetChapterOutline;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterCover;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
@@ -121,6 +125,62 @@ public sealed class ChaptersController : ControllerBase
     }
 
     /// <summary>
+    /// PUT /api/chapters/{chapterId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa chương (PNG/JPEG/WebP, ≤ 5 MB).
+    /// Trả <c>value</c> = coverUrl mới (cũng có trong ChapterDto.coverUrl).
+    /// </summary>
+    [HttpPut("api/chapters/{chapterId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SetChapterCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SetChapterCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetCover([FromRoute] Guid chapterId, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh bìa." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return CoverResult(await _mediator.Send(new SetChapterCoverCommand(chapterId, GetCurrentUserId(), buffer.ToArray()), cancellationToken));
+    }
+
+    /// <summary>DELETE /api/chapters/{chapterId}/cover — Producer xoá ảnh bìa chương (FE quay về badge số tập).</summary>
+    [HttpDelete("api/chapters/{chapterId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearCover([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+        => CoverResult(await _mediator.Send(new SetChapterCoverCommand(chapterId, GetCurrentUserId(), null), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/cover — ảnh bìa hiện tại, mọi thành viên Workspace. Cần Bearer: FE tải bằng fetch rồi
+    /// hiển thị qua blob URL. Dùng đúng <c>coverUrl</c> trong DTO (có <c>?v=</c> theo nội dung) để không dính cache bìa cũ.
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/cover")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCover([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetChapterCoverQuery(chapterId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    private IActionResult CoverResult(Result<string?> result)
+        => result.IsSuccess
+            ? Ok(new TextValueResponse(result.Value))
+            : result.ErrorCode == ResultErrorCodes.NotFound
+                ? NotFound(new { error = result.ErrorMessage })
+                : BadRequest(new { error = result.ErrorMessage });
+
+    /// <summary>
     /// PUT /api/chapters/{chapterId}
     /// Cập nhật tên, ngày phát hành mục tiêu hoặc duyệt tăng Version của chương (Release Calendar).
     /// </summary>
@@ -213,6 +273,16 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId,
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new UnfreezeChapterScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/lock-gate — Producer xem MỌI điều kiện chưa đạt trước khi duyệt chương (tất định, không LLM).
+    /// Item blocking = POST /approve sẽ trả 409 với đúng message đó.
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/lock-gate")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChapterLockGateDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChapterLockGate([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterLockGateQuery(chapterId), cancellationToken));
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/approve

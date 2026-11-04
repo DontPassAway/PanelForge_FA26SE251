@@ -28,7 +28,9 @@ public sealed record ImageConsistencyResultDto(
     string? RevisionRef = null,
     Guid? AssetReferenceId = null,
     string? ArtworkUrl = null,
-    string? CharacterSheetUrl = null
+    string? CharacterSheetUrl = null,
+    /// <summary>true = KHÔNG gọi AI (panel chưa có ảnh, không gắn nhân vật, hoặc nhân vật chưa có character sheet); xem SummaryReason.</summary>
+    bool Skipped = false
 );
 
 /// <summary>

@@ -115,7 +115,7 @@ public sealed class AgentRunner
         }
 
         return Failure<T>("INVALID_OUTPUT",
-            "Output không hợp lệ sau khi đã sửa " + MaxRepairAttempts + " lần: " + string.Join(" | ", errors.Take(6)),
+            "AI trả kết quả không hợp lệ (đã thử sửa " + MaxRepairAttempts + " lần):\n• " + string.Join("\n• ", errors.Take(6)),
             inTokens, outTokens, MaxRepairAttempts, started, parameters);
     }
 

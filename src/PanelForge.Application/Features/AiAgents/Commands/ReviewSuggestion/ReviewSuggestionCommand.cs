@@ -5,9 +5,11 @@ using PanelForge.AI.Contracts;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.AiAgents.Commands.RunThumbnail;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -83,7 +85,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
         suggestion.Decide(cmd.Decision);
         var decision = AiSuggestionDecision.Create(
-            suggestion.Id, cmd.UserId, cmd.Decision, cmd.Reason, versionSeen, revisionId);
+            suggestion.Id, cmd.UserId, cmd.Decision, cmd.Reason, versionSeen, revisionId,
+            appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail);
         _db.AiSuggestionDecisions.Add(decision);
 
         try
@@ -109,6 +112,11 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
     private async Task<Applied> ApplyAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
     {
+        // Metadata cấp Series: không phụ thuộc trạng thái/version của Chapter, không tăng versionVector
+        if (s.Kind == AiSuggestionKind.SeriesMetadata) return await ApplySeriesMetadataAsync(s, ct);
+        // Ảnh panel: không phải nội dung có version (giống UploadArtwork), Accept nhiều thumbnail không làm stale lẫn nhau
+        if (s.Kind == AiSuggestionKind.Thumbnail) return await ApplyThumbnailAsync(cmd, s, chapter, ct);
+
         // BR-12: chương Approved/Locked/Published chỉ đọc
         if (chapter.Status != ChapterStatus.InProduction)
             return Applied.Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc), không áp dụng được đề xuất.", ResultErrorCodes.Conflict);
@@ -156,7 +164,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             AiSuggestionKind.Script => await ApplyScriptAsync(cmd, s, run, snapshot, scene, latestScript, ct),
             AiSuggestionKind.Layout => await ApplyLayoutAsync(cmd, s, run, snapshot, scene, chapter, latestScript, ct),
             AiSuggestionKind.ImagePrompt => await ApplyImagePromptAsync(s, run, snapshot, ct),
-            AiSuggestionKind.Lettering => await ApplyLetteringAsync(s, run, snapshot, latestScript, ct),
+            AiSuggestionKind.LineRewrite => await ApplyLineRewriteAsync(s, latestScript, ct),
             _ => Applied.Fail($"Loại đề xuất {s.Kind} không áp dụng được.", ResultErrorCodes.Validation)
         };
 
@@ -233,9 +241,26 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         var latest = await _db.ContentRevisions
             .Where(r => r.SceneId == s.SceneId && r.Kind == ContentRevisionKind.ImagePrompt)
             .OrderByDescending(r => r.VersionNumber).FirstOrDefaultAsync(ct);
+
+        // Run chỉ soạn vài panel (panelIds): giữ mô tả đã duyệt của các panel còn lại trên cùng layout,
+        // vì Thumbnail đọc revision ImagePrompt mới nhất của Scene
+        var (payload, hash) = (s.PayloadJson, s.PayloadHash);
+        var previous = latest is null ? null : AiContentValidator.TryParse<ArtistPromptSet>(latest.PayloadJson, out _);
+        if (previous?.LayoutRevisionId == set.LayoutRevisionId)
+        {
+            var updated = set.Panels.Select(p => p.PanelId).ToHashSet();
+            var kept = previous.Panels.Where(p => !updated.Contains(p.PanelId)).ToList();
+            if (kept.Count > 0)
+            {
+                set = set with { Panels = kept.Concat(set.Panels).OrderBy(p => p.PageNumber).ThenBy(p => p.PanelNumber).ToList() };
+                payload = AiJson.Serialize(set);
+                hash = AiContentValidator.Sha256(payload);
+            }
+        }
+
         var revision = ContentRevision.Create(
             s.ChapterId, s.SceneId, ContentRevisionKind.ImagePrompt, (latest?.VersionNumber ?? 0) + 1,
-            $"Prompt ảnh từ đề xuất AI {s.Id} (run {s.RunId})", s.PayloadJson, s.PayloadHash, latest?.Id, s.Id,
+            $"Prompt ảnh từ đề xuất AI {s.Id} (run {s.RunId})", payload, hash, latest?.Id, s.Id,
             AiJson.Serialize(new
             {
                 layoutRevisionId = set.LayoutRevisionId,
@@ -246,50 +271,97 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     }
 
     /// <summary>
-    /// Áp dụng rút gọn thoại = tạo revision Script MỚI (append-only) với các dòng được cập nhật; nội dung gốc còn nguyên trong revision/baseline cũ.
-    /// Chặn khi script/layout đã đổi, dòng thoại không còn khớp văn bản gốc mà AI đã đọc (liên kết sai). Không sửa bubble trên canvas.
+    /// Publisher Copilot: ghi synopsis + genre vào Series. 409 nếu Series đã bị sửa sau lúc AI chạy (BR-11: không ghi đè thay đổi của người khác).
+    /// Logline/teaser/ageRating không có cột lưu, chỉ nằm trong payload để Publisher dùng.
     /// </summary>
-    private async Task<Applied> ApplyLetteringAsync(
-        AiSuggestion s, AiWorkflowRun run, RunSnapshot snapshot, ContentRevision? latestScript, CancellationToken ct)
+    private async Task<Applied> ApplySeriesMetadataAsync(AiSuggestion s, CancellationToken ct)
     {
-        var set = AiContentValidator.TryParse<LetteringSuggestionSet>(s.PayloadJson, out var pe);
-        if (set is null) return Applied.Fail($"Payload thoại không hợp lệ: {pe}", ResultErrorCodes.Validation);
-        var errors = AiContentValidator.ValidateLettering(run, snapshot, set);
-        if (errors.Count > 0) return Applied.Fail(AiContentValidator.Join(errors), ResultErrorCodes.Validation);
+        var sug = AiContentValidator.TryParse<SeriesMetadataSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload metadata không hợp lệ: {pe}", ResultErrorCodes.Validation);
+        if (CopilotRules.ValidateMetadata(sug.Metadata) is { Count: > 0 } errors)
+            return Applied.Fail(string.Join(" ", errors), ResultErrorCodes.Validation);
 
+        var series = await _db.Series.FirstOrDefaultAsync(x => x.Id == s.SeriesId, ct);
+        if (series is null) return Applied.Fail("Series của đề xuất không còn tồn tại.", ResultErrorCodes.NotFound);
+        if ((series.Synopsis ?? "").Trim() != (sug.OriginalSynopsis ?? "").Trim() || series.Genre != sug.OriginalGenre)
+            return Applied.Fail("Synopsis/thể loại của Series đã được sửa sau khi AI đề xuất. Tải lại rồi chạy lại gợi ý.", ResultErrorCodes.Conflict);
+
+        series.UpdateDetails(series.Title, sug.Metadata.Synopsis, series.ReadingDirection, sug.Metadata.Genre);
+        return new Applied(null, null, null);
+    }
+
+    /// <summary>
+    /// Thumbnail AI: tạo AssetReference phiên bản MỚI cho (Page, Panel, Stage); artwork cũ giữ nguyên (BR-01). Chặn khi Chapter chỉ đọc (BR-12),
+    /// panel không còn, prompt ảnh đã có revision mới hơn lúc sinh, hoặc Artist duyệt không còn giữ việc ở stage đó.
+    /// </summary>
+    private async Task<Applied> ApplyThumbnailAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
+    {
+        if (chapter.Status != ChapterStatus.InProduction)
+            return Applied.Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc), không áp dụng được đề xuất.", ResultErrorCodes.Conflict);
+        var sug = AiContentValidator.TryParse<ThumbnailSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload thumbnail không hợp lệ: {pe}", ResultErrorCodes.Validation);
+
+        var panel = await _db.Panels.AsNoTracking().FirstOrDefaultAsync(p => p.Id == sug.PanelId && p.PageId == sug.PageId, ct);
+        if (panel is null || !await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == sug.PageId && p.ChapterId == chapter.Id, ct))
+            return Applied.Fail("Panel của thumbnail không còn tồn tại trong Chapter.", ResultErrorCodes.Conflict);
+        var latestPrompt = await _db.ContentRevisions.AsNoTracking()
+            .Where(r => r.SceneId == panel.SceneId && r.Kind == ContentRevisionKind.ImagePrompt)
+            .OrderByDescending(r => r.VersionNumber).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+        if (latestPrompt != sug.ImagePromptRevisionId)
+            return Applied.Fail("Prompt ảnh của panel đã đổi sau khi sinh thumbnail. Sinh lại ảnh.", ResultErrorCodes.Conflict);
+        var asset = await _db.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.Id == sug.AssetId && a.WorkspaceId == s.WorkspaceId, ct);
+        if (asset is null || asset.Sha256 != sug.Sha256)
+            return Applied.Fail("Ảnh của đề xuất không còn trong kho.", ResultErrorCodes.Conflict);
+
+        // Producer nghiệm thu được; Artist phải đang giữ việc InProgress ở đúng stage của ảnh (cùng luật với tải artwork)
+        if (!await _auth.HasWorkspaceRoleAsync(cmd.UserId, s.WorkspaceId, [WorkspaceRole.Producer], ct)
+            && await ThumbnailRules.HeldStageAsync(_db, cmd.UserId, chapter.Id, sug.PageId, sug.PanelId, sug.StageId, ct) is null)
+            return Applied.Fail("Bạn không còn giữ việc (InProgress) cho panel này ở stage của ảnh.", ResultErrorCodes.Forbidden);
+
+        var versions = await _db.AssetReferences.AsNoTracking()
+            .Where(r => r.PageId == sug.PageId && r.PanelId == sug.PanelId && r.PipelineStageId == sug.StageId)
+            .Select(r => r.VersionNumber).ToListAsync(ct);
+        var reference = AssetReference.Create(asset.Id, s.WorkspaceId, chapter.Id, sug.PageId, sug.StageId,
+            versions.Count == 0 ? 1 : versions.Max() + 1, null, $"ai-thumbnail-{s.Id:N}", cmd.UserId, sug.PanelId);
+        reference.CreatedBy = cmd.UserId.ToString();
+        _db.AssetReferences.Add(reference);
+        return new Applied(null, null, null);
+    }
+
+    /// <summary>
+    /// Copilot (một dòng): revision Script MỚI (append-only). Chặn khi script đã có revision mới hơn hoặc dòng không còn khớp văn bản gốc;
+    /// kiểm lại output bằng <see cref="CopilotRules"/> (ví dụ rút gọn vẫn phải ≤ maxChars).
+    /// </summary>
+    private async Task<Applied> ApplyLineRewriteAsync(AiSuggestion s, ContentRevision? latestScript, CancellationToken ct)
+    {
+        var sug = AiContentValidator.TryParse<LineRewriteSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload Copilot không hợp lệ: {pe}", ResultErrorCodes.Validation);
+        if (CopilotRules.Validate(sug.Task, sug.OriginalText, sug.SuggestedText, sug.MaxChars) is { Count: > 0 } errors)
+            return Applied.Fail(string.Join(" ", errors), ResultErrorCodes.Validation);
         if (latestScript?.Id != s.BaseScriptRevisionId)
             return Applied.Fail("Script của Scene đã có revision mới hơn lúc AI chạy.", ResultErrorCodes.Conflict);
-        var latestLayout = await AiWorkflowFacts.LatestLayoutAsync(_db, s.SceneId, ct);
-        if (latestLayout?.Id != snapshot.Lettering!.LayoutRevisionId)
-            return Applied.Fail("Layout của Scene đã đổi sau khi AI đề xuất (panel/giới hạn chữ có thể không còn đúng).", ResultErrorCodes.Conflict);
 
         var existing = await _db.ScriptLines.Where(l => l.SceneId == s.SceneId).OrderBy(l => l.LineOrder).ToListAsync(ct);
-        foreach (var sug in set.Suggestions)
-        {
-            var line = existing.FirstOrDefault(l => l.Id == sug.SourceScriptLineId);
-            if (line is null || line.DialogueText?.Trim() != sug.OriginalText)
-                return Applied.Fail($"Dòng thoại {sug.SourceScriptLineId} không còn khớp văn bản gốc AI đã đọc (liên kết sai).", ResultErrorCodes.Conflict);
-        }
+        var line = existing.FirstOrDefault(l => l.Id == sug.SourceScriptLineId);
+        if (line is null || line.DialogueText?.Trim() != sug.OriginalText)
+            return Applied.Fail("Dòng thoại đã bị sửa hoặc xoá sau khi AI đề xuất.", ResultErrorCodes.Conflict);
 
         var (previousId, nextVersion) = CaptureBaseline(s, latestScript, existing);
-        foreach (var sug in set.Suggestions)
-        {
-            var line = existing.First(l => l.Id == sug.SourceScriptLineId);
-            line.UpdateContent(sug.SuggestedText, line.StageDirection, line.SpeakerCharacterId);
-        }
+        line.UpdateContent(sug.SuggestedText, line.StageDirection, line.SpeakerCharacterId);
 
         var payload = AiJson.Serialize(new ScriptDraft(
-            AiProtocol.SchemaVersion, run.Id, s.SceneId, 0,
+            AiProtocol.SchemaVersion, s.RunId, s.SceneId, 0,
             existing.Select(l => new ScriptDraftLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection)).ToList(),
-            snapshot.Bible.Select(b => b.RevisionId).ToList(), $"Rút gọn {set.Suggestions.Count} dòng thoại theo đề xuất Letterer."));
+            AiRunHelpers.ReadGuidList(s.BibleRevisionIdsJson), $"Copilot {sug.Task}: sửa 1 dòng thoại."));
         var revision = ContentRevision.Create(
             s.ChapterId, s.SceneId, ContentRevisionKind.Script, nextVersion,
-            $"Rút gọn thoại từ đề xuất AI {s.Id} (run {s.RunId})", payload, AiContentValidator.Sha256(payload), previousId, s.Id,
+            $"Copilot {sug.Task} từ đề xuất AI {s.Id}", payload, AiContentValidator.Sha256(payload), previousId, s.Id,
             AiJson.Serialize(new
             {
-                source = "Lettering",
+                source = "Copilot",
+                task = sug.Task,
                 lineIds = existing.Select(l => l.Id),
-                changes = set.Suggestions.Select(x => new { x.SourceScriptLineId, x.TargetElementId, x.PanelId, x.OriginalText, x.SuggestedText })
+                changes = new[] { new { sug.SourceScriptLineId, sug.OriginalText, sug.SuggestedText, sug.MaxChars } }
             }));
         _db.ContentRevisions.Add(revision);
         return Applied.Ok(revision.Id);

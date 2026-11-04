@@ -25,7 +25,8 @@ public sealed record RunWorkflowCommand(
     ReadingDirection ReadingDirection,
     long ChapterVersion,
     Guid? BaseScriptRevisionId,
-    AiWorkflowType WorkflowType = AiWorkflowType.FullScene) : IRequest<Result<RunWorkflowResponse>>;
+    AiWorkflowType WorkflowType = AiWorkflowType.FullScene,
+    IReadOnlyList<Guid>? PanelIds = null) : IRequest<Result<RunWorkflowResponse>>;
 
 public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowCommand, Result<RunWorkflowResponse>>
 {
@@ -57,8 +58,12 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         if (string.IsNullOrWhiteSpace(cmd.Brief) || cmd.Brief.Length > MaxBriefLength)
             return AiRunHelpers.Fail<RunWorkflowResponse>(
                 $"Brief là bắt buộc và tối đa {MaxBriefLength} ký tự.", ResultErrorCodes.Validation);
-        if (!Enum.IsDefined(cmd.WorkflowType))
+        // Copilot đi qua POST /ai/copilot (sync), không phải workflow batch
+        if (!Enum.IsDefined(cmd.WorkflowType) || cmd.WorkflowType is AiWorkflowType.Copilot or AiWorkflowType.Thumbnail or AiWorkflowType.Letterer or AiWorkflowType.Producer)
             return AiRunHelpers.Fail<RunWorkflowResponse>("workflowType không hợp lệ.", ResultErrorCodes.Validation);
+        var panelFilter = cmd.PanelIds is { Count: > 0 } ? cmd.PanelIds.ToHashSet() : null;
+        if (panelFilter is not null && cmd.WorkflowType != AiWorkflowType.Artist)
+            return AiRunHelpers.Fail<RunWorkflowResponse>("panelIds chỉ dùng cho workflow Artist.", ResultErrorCodes.Validation);
         if (cmd.ReadingDirection is not (ReadingDirection.LeftToRight or ReadingDirection.RightToLeft))
             return AiRunHelpers.Fail<RunWorkflowResponse>(
                 "Chỉ hỗ trợ readingDirection LeftToRight hoặc RightToLeft.", ResultErrorCodes.Validation);
@@ -146,9 +151,12 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
                     ResultErrorCodes.Validation);
         }
 
-        var snapshot = await AiSnapshotBuilder.BuildAsync(_db, _pages, chapter, scene, type, DateTime.UtcNow, ct);
+        var snapshot = await AiSnapshotBuilder.BuildAsync(_db, _pages, chapter, scene, type, DateTime.UtcNow, ct, panelFilter);
         if (snapshot is null)
             return AiRunHelpers.Fail<RunWorkflowResponse>("Series chưa có Series Bible.", ResultErrorCodes.NotFound);
+        if (panelFilter is not null && snapshot.Artist?.Panels.Count != panelFilter.Count)
+            return AiRunHelpers.Fail<RunWorkflowResponse>(
+                "Có khung được chọn không thuộc layout đã duyệt của phân cảnh này.", ResultErrorCodes.Validation);
         if (!WorkflowRules.HasRequiredInput(type.ToString(), snapshot.Inputs))
             return AiRunHelpers.Fail<RunWorkflowResponse>(MissingInputMessage(type), ResultErrorCodes.Conflict);
 
@@ -179,9 +187,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
 
     private static string MissingInputMessage(AiWorkflowType type) => type switch
     {
-        AiWorkflowType.Letterer => "Không có dòng thoại nào gắn được với panel của layout đã Accept.",
         AiWorkflowType.Artist => "Layout đã Accept không có panel nào còn tồn tại.",
-        AiWorkflowType.Producer => "Không dựng được snapshot tiến độ.",
         _ => "Scene chưa có script để chạy nhiệm vụ này."
     };
 

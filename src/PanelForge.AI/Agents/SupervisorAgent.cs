@@ -58,8 +58,6 @@ public sealed class SupervisorAgent
         {
             AiProtocol.WorkflowStoryboard or AiProtocol.WorkflowEditor => "Scene chưa có script để kiểm tra/chia panel/review.",
             AiProtocol.WorkflowArtist => "Chưa có layout đã duyệt với panel còn tồn tại để soạn prompt ảnh.",
-            AiProtocol.WorkflowLetterer => "Chưa có dòng thoại nào gắn với panel của layout đã duyệt.",
-            AiProtocol.WorkflowProducer => "Không có snapshot tiến độ do Backend tính.",
             _ => "Thiếu dữ liệu đầu vào cho workflow."
         };
         var decision = new SupervisorDecision(AiProtocol.SchemaVersion, ctx.RunId, 0, WorkflowRules.ActionStopForHuman,

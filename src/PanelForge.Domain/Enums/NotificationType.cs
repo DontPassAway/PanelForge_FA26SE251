@@ -36,5 +36,7 @@ public enum NotificationType
     /// <summary>Gửi người yêu cầu khi bản xuất chương hoàn tất. UC-14, CF5 bước 9.</summary>
     ExportCompleted = 16,
     /// <summary>Gửi người yêu cầu khi bản xuất chương lỗi. UC-14, CF5 bước 9.</summary>
-    ExportFailed = 17
+    ExportFailed = 17,
+    /// <summary>Gửi người nhận khi mọi việc tiền đề của việc họ giữ đã được duyệt: đến lượt bắt đầu.</summary>
+    AssignmentReady = 18
 }

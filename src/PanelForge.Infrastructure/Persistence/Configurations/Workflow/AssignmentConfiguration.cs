@@ -117,6 +117,18 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasForeignKey(a => a.DependsOnAssignmentId)
                .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Property(a => a.BatchId)
+               .HasColumnName("batch_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(a => a.BatchId)
+               .HasDatabaseName("ix_assignments_batch_id");
+
+        // Lớp chặn cuối ở DB: một đối tượng chỉ có một việc đang hiệu lực mỗi stage (việc huỷ = xoá mềm, không tính)
+        builder.HasIndex(a => new { a.PipelineStageId, a.TargetEntityId, a.EntityType })
+               .IsUnique()
+               .HasFilter("is_deleted = false")
+               .HasDatabaseName("uq_active_assignment");
+
         builder.Property(a => a.DependsOnAssignmentIdsJson)
                .HasColumnName("depends_on_assignment_ids_json")
                .HasColumnType("text")

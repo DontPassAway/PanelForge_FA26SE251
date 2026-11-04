@@ -59,7 +59,8 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
                         EffectiveToChapterNumber: latestRev.EffectiveToChapterNumber,
                         ArtistUserId: latestRev.ArtistUserId,
                         ReviewStatus: latestRev.ReviewStatus,
-                        ReworkFeedback: latestRev.ReworkFeedback
+                        ReworkFeedback: latestRev.ReworkFeedback,
+                        ConceptImageUrl: latestRev.ConceptImageUrl
                     );
                 }
 

@@ -1,0 +1,14 @@
+@startuml state_changerequest
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+[*] --> Open : Editor marks a region
+Open --> Resolved : ResolveChangeRequest (assignee)
+Resolved --> Verified : VerifyChangeRequest (Editor)
+Resolved --> Open : ReopenChangeRequest (Editor)
+Open --> Rejected : RejectChangeRequest (reason)
+Verified --> [*]
+Rejected --> [*]
+@enduml

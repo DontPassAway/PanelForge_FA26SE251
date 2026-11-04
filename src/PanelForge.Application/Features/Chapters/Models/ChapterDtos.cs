@@ -23,7 +23,10 @@ public sealed record ChapterDto(
     ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
     string? ScriptReopenReason = null,
     Guid? ScriptReopenRequestedById = null,
-    DateTime? ScriptReopenRequestedAt = null
+    DateTime? ScriptReopenRequestedAt = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null,
+    string? ScriptContentHash = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -63,7 +66,10 @@ public sealed record ChapterDetailDto(
     ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
     string? ScriptReopenReason = null,
     Guid? ScriptReopenRequestedById = null,
-    DateTime? ScriptReopenRequestedAt = null
+    DateTime? ScriptReopenRequestedAt = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null,
+    string? ScriptContentHash = null
 );
 
 public sealed record CreateChapterRequest(

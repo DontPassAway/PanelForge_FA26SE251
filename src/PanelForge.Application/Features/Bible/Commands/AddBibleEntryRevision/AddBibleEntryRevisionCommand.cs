@@ -57,7 +57,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         var entry = bibleId == null
             ? null
             : await _dbContext.BibleEntries
-                .Include(e => e.Revisions)
+                .Include(e => e.Revisions).ThenInclude(r => r.Events)
                 .FirstOrDefaultAsync(e => e.Id == command.BibleEntryId && e.SeriesBibleId == bibleId.Value, cancellationToken);
 
         if (entry == null)
@@ -156,10 +156,17 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             stageName: stageName,
             effectiveToChapterNumber: effectiveTo,
             artistUserId: command.ArtistUserId,
-            reviewStatus: command.ReviewStatus ?? (command.ArtistUserId.HasValue ? BibleRevisionStatus.ConceptSubmitted : BibleRevisionStatus.Draft)
+            reviewStatus: command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value
         );
+        // Artist nộp Concept kèm sửa nội dung: phiên bản mới bắt đầu Draft rồi ghi sự kiện nộp Concept như mọi lần nộp khác
+        if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
+            revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
         // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
-        if (command.SupersedesRevisionId is not null) revision.Lock(command.UserId);
+        if (command.SupersedesRevisionId is { } oldId)
+        {
+            revision.Lock(command.UserId);
+            entry.Revisions.First(r => r.Id == oldId).MarkSuperseded(command.UserId, revision.VersionNumber, command.SupersedeReason!.Trim());
+        }
 
         // Chỉ cập nhật current state khi revision mới là bản có hiệu lực ở chương mới nhất.
         // Bản sửa hồi tố (effective từ chương cũ hơn) chỉ được lưu thành version, current state giữ nguyên.
@@ -190,27 +197,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ResultErrorCodes.Conflict);
         }
 
-        return Result<BibleEntryRevisionDto>.Success(new BibleEntryRevisionDto(
-            Id: revision.Id,
-            BibleEntryId: revision.BibleEntryId,
-            VersionNumber: revision.VersionNumber,
-            Summary: revision.Summary,
-            SnapshotJson: revision.SnapshotJson,
-            ContentHash: revision.ContentHash,
-            AuthorId: revision.AuthorId,
-            AssociatedChapterId: revision.AssociatedChapterId,
-            EffectiveFromChapterNumber: revision.EffectiveFromChapterNumber,
-            IsInitialVersion: revision.IsInitialVersion,
-            CreatedAt: revision.CreatedAt,
-            IsLocked: revision.IsLocked,
-            LockedAt: revision.LockedAt,
-            LockedById: revision.LockedById,
-            StageName: revision.StageName,
-            EffectiveToChapterNumber: revision.EffectiveToChapterNumber,
-            ArtistUserId: revision.ArtistUserId,
-            ReviewStatus: revision.ReviewStatus,
-            ReworkFeedback: revision.ReworkFeedback
-        ));
+        return Result<BibleEntryRevisionDto>.Success(BibleEntryRevisionDto.From(revision));
     }
 
     // Summary là varchar(500): chừa chỗ cho tiền tố "Thay thế bản khoá vN: "

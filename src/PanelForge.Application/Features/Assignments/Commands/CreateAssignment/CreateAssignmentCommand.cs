@@ -80,9 +80,19 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         assignment.CreatedBy = cmd.UserId.ToString();
 
         _db.Assignments.Add(assignment);
+        await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, cmd.AssigneeUserId, role.Value, ct);
         // BR-14: thông báo ghi cùng lần Save với Assignment, không bao giờ có việc thiếu thông báo
         _db.Notifications.Add(AssignmentNotifications.Assigned(assignment));
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Hai lần giao việc đồng thời cùng thêm người này vào Series → unique index (series_id, user_id) chặn một bên;
+            // cả Assignment lẫn Membership của lần đó không được lưu (cùng một SaveChanges)
+            return Fail("Người nhận vừa được thêm vào Series bởi một thao tác khác. Vui lòng giao việc lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));
     }

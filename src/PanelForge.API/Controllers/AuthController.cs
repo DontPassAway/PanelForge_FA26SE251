@@ -124,10 +124,21 @@ public class AuthController : ControllerBase
 
         // BR-22: CanCreateStudio đọc từ DB (có thể đã được Admin cấp/thu hồi sau khi token phát hành)
         var canCreateStudio = false;
+        string? avatarUrl = null;
         if (Guid.TryParse(userId, out var parsedUserId))
         {
             var context = await _mediator.Send(new GetLandingContextQuery(parsedUserId), cancellationToken);
             canCreateStudio = context.IsSuccess && context.Value!.CanCreateStudio;
+
+            var profile = await _mediator.Send(new PanelForge.Application.Features.Users.Queries.GetUserProfile.GetUserProfileQuery(parsedUserId, null), cancellationToken);
+            if (profile is not null)
+            {
+                avatarUrl = profile.Avatar;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = profile.Username;
+                }
+            }
         }
 
         return Ok(new
@@ -136,7 +147,9 @@ public class AuthController : ControllerBase
             Email = email,
             FullName = name,
             Role = role,
-            CanCreateStudio = canCreateStudio
+            CanCreateStudio = canCreateStudio,
+            Avatar = avatarUrl,
+            AvatarUrl = avatarUrl
         });
     }
 

@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
@@ -58,7 +59,9 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.ScriptReopenStatus,
                 c.ScriptReopenReason,
                 c.ScriptReopenRequestedById,
-                c.ScriptReopenRequestedAt
+                c.ScriptReopenRequestedAt,
+                SetChapterCoverCommandHandler.CoverUrl(c.Id, c.CoverImageSha256),
+                c.ScriptContentHash
             ))
             .ToListAsync(cancellationToken);
 

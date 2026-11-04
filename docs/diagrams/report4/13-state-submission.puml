@@ -1,0 +1,15 @@
+@startuml state_submission
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+[*] --> Pending : SubmitAssignment (attempt n)
+Pending --> Approved : reviewer approves
+Pending --> Rejected : reviewer requests changes
+Pending --> Superseded : newer attempt submitted
+Approved --> Superseded : rework, newer attempt
+Approved --> [*]
+Rejected --> [*]
+Superseded --> [*]
+@enduml

@@ -1,5 +1,5 @@
 using FluentAssertions;
-using MediatR;
+using PanelForge.Application.Common.Interfaces.Services;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Consistency.Commands;
@@ -67,18 +67,34 @@ public class VisualConsistencyTests
             Db.SaveChanges();
         }
 
+        /// <summary>Vision giả lập: điểm 0.8; dưới ngưỡng thì ghi finding IMAGE_INCONSISTENCY như ImageConsistencyService thật.</summary>
+        public readonly Mock<IImageConsistencyService> Vision = new();
+
         public Task<Result<VisualConsistencyReportDto>> RunCheck(decimal? threshold = null)
         {
-            var handler = new RunVisualConsistencyCheckCommandHandler(Db);
+            Vision.Setup(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), null, It.IsAny<decimal?>(), It.IsAny<CancellationToken>()))
+                .Returns(async (Guid panelId, string? _, decimal? t, CancellationToken ct) =>
+                {
+                    var limit = t ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
+                    Guid? findingId = null;
+                    if (0.8m < limit)
+                    {
+                        var finding = ConsistencyFinding.Create(Chapter.Id, ConsistencyChecker.ImageInconsistency,
+                            ConsistencyFindingSeverity.Warning, "Lệch tóc", $"fp-{panelId}",
+                            $"{{\"panelId\":\"{panelId}\",\"similarityScore\":0.8,\"characterName\":\"Akira\"}}", bibleEntryId: Akira.Id);
+                        Db.ConsistencyFindings.Add(finding);
+                        await Db.SaveChangesAsync(ct);
+                        findingId = finding.Id;
+                    }
+                    return new ImageConsistencyResultDto(panelId, Akira.Id, "Akira", 1, 0.8m, limit, 0.8m >= limit, "ok",
+                        Array.Empty<ImageConsistencyDeviationDto>(), findingId);
+                });
+            var handler = new RunVisualConsistencyCheckCommandHandler(Db, Vision.Object);
             return handler.Handle(new RunVisualConsistencyCheckCommand(Chapter.Id, UserId, threshold), default);
         }
 
-        public Task<Result<VisualConsistencyReportDto>> GetReport(decimal? threshold = null)
-        {
-            var mediatorMock = new Mock<IMediator>();
-            var handler = new GetVisualConsistencyReportQueryHandler(Db, mediatorMock.Object);
-            return handler.Handle(new GetVisualConsistencyReportQuery(Chapter.Id, threshold), default);
-        }
+        public Task<Result<VisualConsistencyReportDto>> GetReport(decimal? threshold = null) =>
+            new GetVisualConsistencyReportQueryHandler(Db).Handle(new GetVisualConsistencyReportQuery(Chapter.Id, threshold), default);
 
         public Task<Result<ConsistencyFindingDto>> Triage(Guid findingId, ConsistencyFindingStatus decision, string? note)
         {
@@ -88,7 +104,7 @@ public class VisualConsistencyTests
     }
 
     [Fact]
-    public async Task RunVisualConsistencyCheck_GeneratesReport_WithCalculatedScores()
+    public async Task RunVisualConsistencyCheck_CallsVisionPerPanel_AndReportsRealCounts()
     {
         var f = new VisualFixture();
 
@@ -98,8 +114,26 @@ public class VisualConsistencyTests
         var report = result.Value!;
         report.ChapterId.Should().Be(f.Chapter.Id);
         report.Threshold.Should().Be(ConsistencyChecker.DefaultVisualSimilarityThreshold);
-        report.TotalEvaluated.Should().BeGreaterThan(0);
-        report.Deviations.Should().NotBeNull();
+        report.TotalEvaluated.Should().Be(1);
+        report.PassedCount.Should().Be(1);
+        report.DeviationCount.Should().Be(0);
+        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(f.Panel.Id, null, It.IsAny<decimal?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunVisualConsistencyCheck_RetiresLegacyHashFindings_AndGetReportDoesNotRunAi()
+    {
+        var f = new VisualFixture();
+        var legacy = ConsistencyFinding.Create(f.Chapter.Id, ConsistencyChecker.VisualCharacterDeviation,
+            ConsistencyFindingSeverity.Blocking, "Điểm giả", "fp-legacy", "{}");
+        f.Db.ConsistencyFindings.Add(legacy);
+        f.Db.SaveChanges();
+
+        (await f.GetReport()).Value!.DeviationCount.Should().Be(0, "GET chỉ đọc finding thật, không tự chạy kiểm");
+        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<decimal?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        (await f.RunCheck()).IsSuccess.Should().BeTrue();
+        legacy.Status.Should().NotBe(ConsistencyFindingStatus.Open);
     }
 
     [Fact]
@@ -113,7 +147,7 @@ public class VisualConsistencyTests
         result.IsSuccess.Should().BeTrue();
         var report = result.Value!;
         report.DeviationCount.Should().BeGreaterThan(0);
-        report.Deviations.Should().Contain(d => d.RuleCode() == ConsistencyChecker.VisualCharacterDeviation || d.IsDeviation);
+        report.Deviations.Should().Contain(d => d.IsDeviation && d.SimilarityScore == 0.8m);
         report.Deviations.First().Threshold.Should().Be(0.99m);
     }
 
@@ -159,9 +193,4 @@ public class VisualConsistencyTests
         successResult.IsSuccess.Should().BeTrue();
         successResult.Value!.Status.Should().Be(ConsistencyFindingStatus.Ignored);
     }
-}
-
-internal static class DeviationExtensions
-{
-    public static string RuleCode(this VisualDeviationDto d) => ConsistencyChecker.VisualCharacterDeviation;
 }

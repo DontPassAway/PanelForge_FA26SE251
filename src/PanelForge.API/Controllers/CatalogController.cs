@@ -53,6 +53,21 @@ public class CatalogController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.ErrorMessage });
     }
 
+    /// <summary>GET /api/catalog/chapters/{chapterId}/cover — ảnh bìa chương đã phát hành (404 nếu chưa có bìa hoặc chưa phát hành).</summary>
+    [HttpGet("chapters/{chapterId:guid}/cover")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChapterCover([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPublicChapterCoverQuery(chapterId), cancellationToken);
+        if (!result.IsSuccess) return NotFound(new { error = result.ErrorMessage });
+
+        // URL có ?v= theo nội dung nên cache dài được
+        Response.Headers.CacheControl = "public, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
     /// <summary>GET /api/catalog/chapters/{chapterId}/pages/{pageId}/image — ảnh trang (artwork ở stage cuối, bản mới nhất).</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]

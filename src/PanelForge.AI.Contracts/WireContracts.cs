@@ -43,14 +43,12 @@ public sealed record AgentContext(
     string WorkflowType = AiProtocol.WorkflowFullScene,
     StoryboardLayout? ExistingLayout = null,
     ArtistContext? Artist = null,
-    LetteringContext? Lettering = null,
-    ProgressContext? Progress = null,
     string? SeriesStoryArc = null,
     string? ChapterOutline = null)
 {
     /// <summary>Dữ kiện đầu vào code đã kiểm: cơ sở để <see cref="WorkflowRules"/> quyết định hành động hợp lệ.</summary>
     public WorkflowInputs Inputs => new(
-        BaselineScript.Count > 0, ExistingLayout is not null, Artist?.Panels.Count > 0, Lettering?.Lines.Count > 0, Progress is not null);
+        BaselineScript.Count > 0, ExistingLayout is not null, Artist?.Panels.Count > 0);
 }
 
 public sealed record BibleEntryContext(
@@ -61,7 +59,12 @@ public sealed record BibleEntryContext(
     string Description,
     Guid RevisionId,
     int RevisionVersion,
-    int EffectiveFromChapter);
+    int EffectiveFromChapter,
+    string? Details = null)
+{
+    /// <summary>Văn bản Bible dùng làm căn cứ trích dẫn (tên + mô tả + sự thật có cấu trúc). AI service và Backend dùng chung.</summary>
+    public string EvidenceText => string.IsNullOrWhiteSpace(Details) ? $"{Name}\n{Description}" : $"{Name}\n{Description}\n{Details}";
+}
 
 public sealed record BaselineScriptLine(Guid LineId, int Order, Guid? SpeakerId, string? Dialogue, string? StageDirection);
 
@@ -106,29 +109,3 @@ public sealed record ArtistContext(
     Guid LayoutRevisionId,
     IReadOnlyList<ArtistPanelContext> Panels,
     IReadOnlyList<StyleRuleContext> StyleRules);
-
-/// <summary>Một dòng thoại + panel + bubble (nếu code ghép được) + giới hạn chữ ƯỚC LƯỢNG bởi code (<see cref="LetteringLimits"/>).</summary>
-public sealed record LetteringLineContext(
-    Guid LineId,
-    int Order,
-    Guid? SpeakerId,
-    string Dialogue,
-    Guid? PanelId,
-    int? PageNumber,
-    int? PanelNumber,
-    Guid? ElementId,
-    string? ElementType,
-    int MaxChars,
-    string LimitSource);
-
-public sealed record LetteringContext(Guid? LayoutRevisionId, IReadOnlyList<LetteringLineContext> Lines);
-
-/// <summary>Sự kiện tiến độ do Backend tính (Key F1..Fn). Model chỉ được trích dẫn Key, không tự tính số liệu.</summary>
-public sealed record ProgressFact(string Key, string Text);
-
-public sealed record ProgressContext(
-    string ScopeLabel,
-    DateTime AsOfUtc,
-    IReadOnlyList<ProgressFact> Facts,
-    IReadOnlyList<string> DataGaps,
-    IReadOnlyList<string> AllowedPercentages);

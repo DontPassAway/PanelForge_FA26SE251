@@ -7,7 +7,9 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Commands.RecordAgentStep;
@@ -95,6 +97,10 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
             {
                 run.MarkFailed(r.ErrorCode!, r.ErrorMessage);
             }
+            else if (agent == AiAgentType.Continuity && !HasWriter(run.WorkflowType))
+            {
+                await SyncContinuityFindingsAsync(run, ReadContinuity(step)!, ct);
+            }
             else if (agent == AiAgentType.Supervisor)
             {
                 // Kết thúc workflow chỉ xảy ra qua quyết định của Supervisor (đã được hàng rào WorkflowRules cho phép ở Validate).
@@ -139,7 +145,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
 
     /// <summary>
     /// Điều kiện Finish phụ thuộc loại workflow: đề xuất áp dụng được (Script/Layout/ImagePrompt/Lettering) hoặc không có đề xuất nào
-    /// (báo cáo Editor/Producer chỉ nằm trong output của step để tham khảo, không ép thành content revision).
+    /// (báo cáo Editor chỉ nằm trong output của step để tham khảo, không ép thành content revision).
     /// </summary>
     private void AddFinishSuggestions(AiWorkflowRun run, List<AiAgentStep> steps)
     {
@@ -171,17 +177,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
                 _db.AiSuggestions.Add(Suggestion(run, LastSucceeded(steps, AiAgentType.Artist)!, AiSuggestionKind.ImagePrompt,
                     "Prompt ảnh cho các panel của layout đã duyệt (chưa sinh ảnh).", null));
                 break;
-            case AiWorkflowType.Letterer:
-            {
-                var letterer = LastSucceeded(steps, AiAgentType.Letterer)!;
-                var set = AiContentValidator.TryParse<LetteringSuggestionSet>(letterer.OutputJson, out _);
-                // Không có dòng nào cần rút gọn → không có gì để áp dụng: run vẫn Completed, không tạo đề xuất rỗng
-                if (set is { Suggestions.Count: > 0 })
-                    _db.AiSuggestions.Add(Suggestion(run, letterer, AiSuggestionKind.Lettering,
-                        $"Rút gọn {set.Suggestions.Count} dòng thoại cho vừa bubble (ước lượng của hệ thống).", null));
-                break;
-            }
-            // Editor, Producer: báo cáo tham khảo nằm trong step output; không có gì để Accept/Reject
+            // Editor: báo cáo tham khảo nằm trong step output; không có gì để Accept/Reject
         }
     }
 
@@ -266,7 +262,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
             return $"Agent {agent} không thuộc workflow {type}.";
 
         // Writer ← Continuity(có finding chặn) | Continuity ← Writer (hoặc đầu workflow không có Writer) | Storyboard ← Continuity(sạch)
-        // | Editor ← Storyboard hoặc Continuity | Artist, Letterer, Producer là agent duy nhất của workflow
+        // | Editor ← Storyboard hoặc Continuity | Artist là agent duy nhất của workflow
         switch (agent)
         {
             case AiAgentType.Writer when r.Round == 0:
@@ -298,7 +294,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
                 if (last is null || parent?.Id != last.Id || last.Agent is not (AiAgentType.Storyboard or AiAgentType.Continuity))
                     return "Editor phải nối sau Storyboard (hoặc Continuity trong workflow review).";
                 break;
-            default:   // Artist, Letterer, Producer
+            default:   // Artist
                 if (last is not null || parent is not null || r.Round != 0)
                     return $"{agent} phải là step đầu tiên và duy nhất của workflow.";
                 break;
@@ -361,24 +357,54 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
                 errors = AiContentValidator.ValidateArtist(run, snap, set);
                 break;
             }
-            case AiAgentType.Letterer:
-            {
-                var set = AiContentValidator.TryParse<LetteringSuggestionSet>(r.OutputJson, out var e);
-                if (set is null) return e;
-                errors = AiContentValidator.ValidateLettering(run, snap, set);
-                break;
-            }
-            default:   // Producer
-            {
-                var report = AiContentValidator.TryParse<ProductionReport>(r.OutputJson, out var e);
-                if (report is null) return e;
-                errors = AiContentValidator.ValidateProduction(run, snap, report);
-                break;
-            }
+            default:
+                return $"Agent {r.Agent} không còn được hỗ trợ.";
         }
         return errors.Count == 0 ? null : AiContentValidator.Join(errors);
     }
 
     private static ContinuityReport? ReadContinuity(AiAgentStep step) =>
         AiContentValidator.TryParse<ContinuityReport>(step.OutputJson, out _);
+
+    private async Task SyncContinuityFindingsAsync(AiWorkflowRun run, ContinuityReport report, CancellationToken ct)
+    {
+        if (run.SceneId is not { } sceneId) return;
+        var existing = await _db.ConsistencyFindings
+            .Where(f => f.ChapterId == run.ChapterId && f.SceneId == sceneId
+                && f.RuleCode.StartsWith(ConsistencyChecker.AiContinuityPrefix))
+            .ToListAsync(ct);
+        var byFp = existing.ToDictionary(f => f.Fingerprint);
+        var now = DateTime.UtcNow;
+        var active = new HashSet<string>();
+
+        foreach (var f in report.Findings)
+        {
+            var sev = f.Severity switch
+            {
+                AiProtocol.SeverityBlocking => ConsistencyFindingSeverity.Blocking,
+                "Warning" => ConsistencyFindingSeverity.Warning,
+                _ => ConsistencyFindingSeverity.Info
+            };
+            var ruleCode = $"{ConsistencyChecker.AiContinuityPrefix}_{f.Category.ToUpperInvariant()}";
+            var lineId = f.ScriptLineIds.FirstOrDefault() is var lid && lid != Guid.Empty ? (Guid?)lid : null;
+            var bibleId = f.Evidence.FirstOrDefault()?.BibleEntryId;
+            var ev = string.Join(" | ", f.Evidence.Select(e => e.Quote));
+            var msg = string.IsNullOrWhiteSpace(f.SuggestedFix) ? f.Description : $"{f.Description} (Gợi ý: {f.SuggestedFix})";
+            var fp = new DetectedFinding(ruleCode, sev, msg, ev, sceneId, lineId, bibleId, null).Fingerprint;
+            if (!active.Add(fp)) continue;
+
+            if (byFp.TryGetValue(fp, out var old)) old.Redetected(now);
+            else
+            {
+                var created = ConsistencyFinding.Create(run.ChapterId, ruleCode, sev, msg, fp, ev, sceneId, lineId, bibleId);
+                created.CreatedBy = run.RequestedByUserId.ToString();
+                _db.ConsistencyFindings.Add(created);
+                existing.Add(created);
+                byFp[fp] = created;
+            }
+        }
+
+        foreach (var f in existing.Where(x => !active.Contains(x.Fingerprint)))
+            f.NoLongerDetected(now);
+    }
 }

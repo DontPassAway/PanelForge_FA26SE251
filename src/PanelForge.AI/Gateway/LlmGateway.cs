@@ -14,27 +14,58 @@ public sealed class LlmResilience
     public ResiliencePipeline Pipeline { get; }
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _sync = new();
     private readonly TimeSpan _minInterval;
+    private readonly TimeSpan _cooldownBase, _cooldownMax;
     private DateTime _lastCallUtc = DateTime.MinValue;
+    private DateTime _cooldownUntilUtc = DateTime.MinValue;
+    private int _rateLimitStreak;
 
-    /// <summary>Chờ đủ giãn cách tối thiểu kể từ lần gọi model trước (dùng chung mọi run) để không vượt rate limit của provider.</summary>
+    /// <summary>
+    /// Giãn cách THÍCH ỨNG (dùng chung mọi run): bình thường không chờ (trừ MinCallIntervalMs nếu cấu hình), chỉ khi provider đã trả 429
+    /// thì mọi lần gọi sau chờ hết thời gian nghỉ (Retry-After hoặc lùi luỹ thừa), rồi trở lại tốc độ bình thường khi gọi thành công.
+    /// </summary>
     public async Task ThrottleAsync(CancellationToken ct)
     {
-        if (_minInterval <= TimeSpan.Zero) return;
         await _gate.WaitAsync(ct);
         try
         {
-            var wait = _lastCallUtc + _minInterval - DateTime.UtcNow;
+            var notBefore = _lastCallUtc + _minInterval;
+            if (_cooldownUntilUtc > notBefore) notBefore = _cooldownUntilUtc;
+            var wait = notBefore - DateTime.UtcNow;
             if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
             _lastCallUtc = DateTime.UtcNow;
         }
         finally { _gate.Release(); }
     }
 
+    /// <summary>Provider trả 429: nghỉ theo Retry-After nếu có, không thì base × 2^(lần liên tiếp - 1), tối đa cooldownMax.</summary>
+    public void RegisterRateLimited(TimeSpan? retryAfter)
+    {
+        lock (_sync)
+        {
+            _rateLimitStreak++;
+            var backoff = retryAfter ?? TimeSpan.FromTicks(_cooldownBase.Ticks * (1L << Math.Min(_rateLimitStreak - 1, 6)));
+            if (backoff > _cooldownMax) backoff = _cooldownMax;
+            var until = DateTime.UtcNow + backoff;
+            if (until > _cooldownUntilUtc) _cooldownUntilUtc = until;
+        }
+    }
+
+    public void RegisterSuccess()
+    {
+        lock (_sync) _rateLimitStreak = 0;
+    }
+
+    /// <summary>Thời gian nghỉ còn lại (cho test/health).</summary>
+    public TimeSpan CooldownRemaining => _cooldownUntilUtc > DateTime.UtcNow ? _cooldownUntilUtc - DateTime.UtcNow : TimeSpan.Zero;
+
     public LlmResilience(IOptions<ProviderOptions> options)
     {
         var o = options.Value;
         _minInterval = TimeSpan.FromMilliseconds(Math.Max(0, o.MinCallIntervalMs));
+        _cooldownBase = TimeSpan.FromSeconds(Math.Max(1, o.RateLimitCooldownSeconds));
+        _cooldownMax = TimeSpan.FromSeconds(Math.Max(o.RateLimitCooldownSeconds, o.RateLimitCooldownMaxSeconds));
         var transient = new PredicateBuilder()
             .Handle<HttpRequestException>()
             .Handle<TimeoutRejectedException>()
@@ -85,10 +116,27 @@ public sealed class LlmGateway : DelegatingChatClient
         var list = messages as IList<ChatMessage> ?? messages.ToList();
         return await _pipeline.ExecuteAsync(async ct =>
         {
-            // Mỗi lần thử (kể cả retry) đều chờ giãn cách tối thiểu: retry sau 429 không dồn dập thêm
+            // Mỗi lần thử (kể cả retry) đều qua cổng giãn cách: sau 429 mọi run cùng nghỉ, không dồn dập thêm
             await _resilience.ThrottleAsync(ct);
-            return await base.GetResponseAsync(list, options, ct);
+            try
+            {
+                var response = await base.GetResponseAsync(list, options, ct);
+                _resilience.RegisterSuccess();
+                return response;
+            }
+            catch (ClientResultException e) when (e.Status == 429)
+            {
+                _resilience.RegisterRateLimited(RetryAfter(e));
+                throw;
+            }
         }, cancellationToken);
+    }
+
+    private static TimeSpan? RetryAfter(ClientResultException e)
+    {
+        var raw = e.GetRawResponse();
+        if (raw is null || !raw.Headers.TryGetValue("Retry-After", out var value)) return null;
+        return int.TryParse(value, out var seconds) && seconds > 0 ? TimeSpan.FromSeconds(Math.Min(seconds, 120)) : null;
     }
 
     /// <summary>Mã lỗi ổn định (ghi vào step) + thông điệp không chứa nội dung phản hồi/khoá của provider.</summary>

@@ -83,6 +83,7 @@ public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssig
             if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode);
 
             assignment.Reassign(cmd.AssigneeUserId, role.Value);
+            await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, cmd.AssigneeUserId, role.Value, ct);
             // Đổi người khi bị trả sửa: yêu cầu sửa còn mở đi theo người mới (người cũ không còn sửa được phần này)
             await ChangeRequestRules.TransferOpenAsync(_db, assignment, assignment, null, ct);
         }

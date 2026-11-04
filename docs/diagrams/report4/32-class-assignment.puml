@@ -1,0 +1,60 @@
+@startuml class_assignment
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam BackgroundColor white
+class AssignmentsController
+class CreateAssignmentCommandHandler
+class SubmitAssignmentCommandHandler
+class ApproveAssignmentCommandHandler
+class AssignmentRules <<static>> {
+  +ResolveAssigneeRoleAsync()
+  +ChapterNotEditableReason()
+}
+class StageProgressRules <<static>> {
+  +ResolvePanelsAsync(assignment)
+  +CarvedOutAsync()
+  +PriorStageBlockReasonAsync()
+}
+class ReviewRules <<static>> {
+  +reject self approval
+}
+class Assignment {
+  +EntityType : WorkflowEntityType
+  +TargetEntityId : Guid
+  +PipelineStageId : Guid
+  +AssigneeUserId : Guid
+  +Status : AssignmentStatus
+  +StartWork()
+  +SubmitForReview()
+  +OpenReview()
+  +RequestRework(comment)
+  +MarkApproved()
+  +Reassign(user, role)
+  +FlagImpactReview(reason)
+}
+class Submission {
+  +AttemptNumber : int
+  +Status : SubmissionStatus
+  +ChapterVersion : long
+  +ScriptRevisionIds : List<Guid>
+  +Approve()
+  +Reject()
+  +Supersede()
+}
+class StageProgress {
+  +Status : StageProgressStatus
+  +Submit()
+  +Approve()
+  +RequestChanges()
+}
+AssignmentsController ..> CreateAssignmentCommandHandler
+AssignmentsController ..> SubmitAssignmentCommandHandler
+AssignmentsController ..> ApproveAssignmentCommandHandler
+CreateAssignmentCommandHandler ..> AssignmentRules
+SubmitAssignmentCommandHandler ..> StageProgressRules
+ApproveAssignmentCommandHandler ..> ReviewRules
+Assignment "1" *-- "*" Submission
+StageProgressRules ..> StageProgress
+@enduml

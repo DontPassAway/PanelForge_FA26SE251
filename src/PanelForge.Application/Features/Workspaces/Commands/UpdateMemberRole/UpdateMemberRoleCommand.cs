@@ -50,6 +50,15 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
             return Result<WorkspaceMemberDto>.Failure("Thành viên không tồn tại trong Workspace này.", ResultErrorCodes.NotFound);
 
         member.ChangeRole(command.NewRole);
+
+        // Role Workspace là nguồn duy nhất: đồng bộ role của mọi Series Membership trong Workspace, cùng một lần lưu
+        var seriesIds = await _dbContext.Series
+            .Where(s => s.WorkspaceId == command.WorkspaceId).Select(s => s.Id).ToListAsync(cancellationToken);
+        var seriesMembers = await _dbContext.SeriesMembers
+            .Where(sm => sm.UserId == command.TargetUserId && seriesIds.Contains(sm.SeriesId))
+            .ToListAsync(cancellationToken);
+        foreach (var sm in seriesMembers) sm.ChangeRole(command.NewRole);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<WorkspaceMemberDto>.Success(WorkspaceMapper.ToMemberDto(member, member.User, workspace.OwnerId));
