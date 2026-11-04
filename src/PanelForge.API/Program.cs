@@ -11,6 +11,9 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
+using PanelForge.API.Hubs;
+using PanelForge.API.Services;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -95,6 +98,14 @@ builder.Services.AddAuthentication(options =>
         OnMessageReceived = context =>
         {
             var request = context.HttpContext.Request;
+            var accessToken = request.Query["access_token"];
+            var path = request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+                return Task.CompletedTask;
+            }
+
             if (string.IsNullOrEmpty(context.Token)
                 && !request.Headers.ContainsKey("Authorization")
                 && request.Cookies.TryGetValue(AuthCookies.Access, out var cookieToken)
@@ -200,6 +211,9 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IAiStreamPublisher, AiStreamPublisher>();
+
 var app = builder.Build();
 
 // ── Migrate & Seed master data on startup ─────────────────────────────────────
@@ -238,5 +252,6 @@ app.UseAuthorization();
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
+app.MapHub<AiStreamHub>("/hubs/ai-stream");
 
 app.Run();

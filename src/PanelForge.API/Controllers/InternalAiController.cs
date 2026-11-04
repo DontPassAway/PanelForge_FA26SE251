@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.AI.Contracts;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Commands.RecordAgentStep;
 using PanelForge.Application.Features.AiAgents.Queries.GetAgentContext;
 
@@ -37,6 +38,15 @@ public sealed class InternalAiController : ControllerBase
     {
         var result = await _mediator.Send(new RecordAgentStepCommand(runId, report), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpPost("stream-token")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> StreamToken(
+        [FromRoute] Guid runId, [FromBody] StreamTokenPayload payload, [FromServices] IAiStreamPublisher publisher, CancellationToken ct)
+    {
+        await publisher.PublishTokenChunkAsync(runId, payload, ct);
+        return Ok();
     }
 
     private IActionResult ToError<T>(Result<T> result)

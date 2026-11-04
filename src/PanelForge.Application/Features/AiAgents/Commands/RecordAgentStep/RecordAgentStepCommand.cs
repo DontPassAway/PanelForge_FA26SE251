@@ -26,11 +26,13 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IAiUsageService _usage;
+    private readonly IAiStreamPublisher? _streamPublisher;
 
-    public RecordAgentStepCommandHandler(IPanelForgeDbContext db, IAiUsageService usage)
+    public RecordAgentStepCommandHandler(IPanelForgeDbContext db, IAiUsageService usage, IAiStreamPublisher? streamPublisher = null)
     {
         _db = db;
         _usage = usage;
+        _streamPublisher = streamPublisher;
     }
 
     public async Task<Result<AgentStepAck>> Handle(RecordAgentStepCommand cmd, CancellationToken ct)
@@ -140,6 +142,12 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
         }
 
         await RecordUsageAsync(run, step, ct);
+        if (_streamPublisher is not null)
+        {
+            await _streamPublisher.PublishStepRecordedAsync(run.Id, r, run.Status.ToString(), ct);
+            if (!run.IsActive)
+                await _streamPublisher.PublishRunStatusChangedAsync(run.Id, run.Status.ToString(), run.ErrorCode, run.ErrorMessage, ct);
+        }
         return Result<AgentStepAck>.Success(Ack(step, run, duplicate: false));
     }
 
