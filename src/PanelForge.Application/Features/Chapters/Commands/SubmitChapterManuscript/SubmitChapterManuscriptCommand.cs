@@ -11,10 +11,10 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 
 /// <summary>
-/// Nộp bản thảo toàn bộ chương trực tiếp từ Bàn vẽ Artist mà không yêu cầu phụ thuộc vào cấu hình Assign trước đó.
-/// Tự động gắn/tạo tiến trình và gửi thông báo thẩm định sang Editor/Producer.
+/// Nộp bản thảo toàn bộ chương hoặc theo từng giai đoạn (Stage) trực tiếp từ Bàn vẽ Artist.
+/// Tự động duyệt và kích hoạt bàn giao (Internal Handoff Pencil ➔ Ink, Ink ➔ Lettering) khi stage không bắt buộc Editor phê duyệt.
 /// </summary>
-public sealed record SubmitChapterManuscriptCommand(Guid ChapterId, Guid UserId)
+public sealed record SubmitChapterManuscriptCommand(Guid ChapterId, Guid UserId, Guid? StageId = null)
     : IRequest<Result<AssignmentDto>>;
 
 public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<SubmitChapterManuscriptCommand, Result<AssignmentDto>>
@@ -55,8 +55,40 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
         if (!hasPages)
             return Fail("Chương chưa có trang nào để nộp bản thảo.", ResultErrorCodes.Conflict);
 
-        // 1. Tìm assignment cấp Chapter hoặc việc của user
+        // Xác định Stage đang nộp
+        PipelineStage? targetStage = null;
+        if (cmd.StageId.HasValue)
+        {
+            targetStage = await _db.PipelineStages.FirstOrDefaultAsync(s => s.Id == cmd.StageId.Value, ct);
+        }
+
+        if (targetStage is null)
+        {
+            var pipeline = await _db.PipelineDefinitions.AsNoTracking().FirstOrDefaultAsync(p => p.SeriesId == chapter.SeriesId, ct);
+            if (pipeline != null)
+            {
+                targetStage = await _db.PipelineStages
+                    .Where(s => s.PipelineDefinitionId == pipeline.Id && s.IsEnabled != false && s.AllowedRole == WorkspaceRole.Artist)
+                    .OrderBy(s => s.StageOrder)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            targetStage ??= await _db.PipelineStages
+                .Where(s => s.IsEnabled != false)
+                .OrderBy(s => s.StageOrder)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var stageId = targetStage?.Id ?? Guid.NewGuid();
+        var isAutoApproveStage = targetStage != null && !targetStage.IsApprovalGate;
+
+        // 1. Tìm assignment tương ứng hoặc tạo mới
         var existingAssignment = await _db.Assignments
+            .FirstOrDefaultAsync(a => a.ChapterId == cmd.ChapterId &&
+                a.PipelineStageId == stageId &&
+                (a.AssigneeUserId == cmd.UserId || a.EntityType == WorkflowEntityType.Chapter), ct);
+
+        existingAssignment ??= await _db.Assignments
             .FirstOrDefaultAsync(a => a.ChapterId == cmd.ChapterId &&
                 (a.AssigneeUserId == cmd.UserId || a.EntityType == WorkflowEntityType.Chapter), ct);
 
@@ -71,25 +103,6 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
         }
         else
         {
-            // Tự động tìm stage vẽ đầu tiên trong pipeline
-            var pipeline = await _db.PipelineDefinitions.AsNoTracking().FirstOrDefaultAsync(p => p.SeriesId == chapter.SeriesId, ct);
-            var stage = pipeline != null
-                ? await _db.PipelineStages.AsNoTracking()
-                    .Where(s => s.PipelineDefinitionId == pipeline.Id && s.IsEnabled != false)
-                    .OrderBy(s => s.StageOrder)
-                    .FirstOrDefaultAsync(ct)
-                : null;
-
-            if (stage == null)
-            {
-                stage = await _db.PipelineStages.AsNoTracking()
-                    .Where(s => s.IsEnabled != false)
-                    .OrderBy(s => s.StageOrder)
-                    .FirstOrDefaultAsync(ct);
-            }
-
-            var stageId = stage?.Id ?? Guid.NewGuid();
-
             assignment = Assignment.Create(
                 chapter.SeriesId,
                 chapter.Id,
@@ -97,8 +110,8 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
                 chapter.Id,
                 stageId,
                 cmd.UserId,
-                WorkspaceRole.Artist,
-                $"Bản thảo Chương {chapter.ChapterNumber}",
+                targetStage?.AllowedRole ?? WorkspaceRole.Artist,
+                $"Bản thảo {targetStage?.Name ?? "Vẽ"} Chương {chapter.ChapterNumber}",
                 "Bản thảo nộp trực tiếp từ Bàn vẽ Artist",
                 null,
                 null,
@@ -108,12 +121,13 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
             _db.Assignments.Add(assignment);
         }
 
-        // Đánh dấu Submit
+        // Đánh dấu Submit / Auto-Approve
         try
         {
-            if (assignment.Status != AssignmentStatus.Submitted && assignment.Status != AssignmentStatus.UnderReview)
+            assignment.SubmitForReview();
+            if (isAutoApproveStage)
             {
-                assignment.SubmitForReview();
+                assignment.MarkApproved();
             }
         }
         catch (InvalidOperationException ex)
@@ -121,16 +135,26 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
             return Fail(ex.Message, ResultErrorCodes.Conflict);
         }
 
-        // Báo người duyệt (Editor / Producer)
-        foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, series.WorkspaceId, cmd.UserId, ct))
+        // Cập nhật StageProgress cho các trang và khung tranh
+        var pages = await _db.Pages.Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
+        var pageIds = pages.Select(p => p.Id).ToList();
+        var pagePanels = await _db.Panels.Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
+
+        if (targetStage is not null && pagePanels.Count > 0)
         {
-            _db.Notifications.Add(AssignmentNotifications.Submitted(assignment, reviewerId));
+            await StageProgressRules.ApplyAsync(_db, targetStage, pagePanels, cmd.UserId, submit: true, ct, autoApprove: isAutoApproveStage);
+        }
+
+        if (!isAutoApproveStage)
+        {
+            // Báo người duyệt (Editor / Producer) khi stage có ApprovalGate
+            foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, series.WorkspaceId, cmd.UserId, ct))
+            {
+                _db.Notifications.Add(AssignmentNotifications.Submitted(assignment, reviewerId));
+            }
         }
 
         // Ghi lại submission
-        var pages = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
-        var pageIds = pages.Select(p => p.Id).ToList();
-        var pagePanels = await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
         var artworkIds = await ChangeRequestRules.LatestArtworkIdsAsync(
             _db, assignment.PipelineStageId, pageIds, pagePanels.Select(p => p.Id), ct);
 
@@ -151,8 +175,187 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
             _db, assignment.Id, chapter.Id, cmd.UserId, ct, artworkIds, chapter.VersionVector,
             SubmissionPanelDto.Serialize(pagePanels), JsonSerializer.Serialize(canvasVersions), scriptRevisionIds);
 
+        if (isAutoApproveStage)
+        {
+            var pendingSub = await ChangeRequestRules.LatestPendingSubmissionAsync(_db, assignment.Id, ct);
+            pendingSub?.Approve(cmd.UserId);
+            _db.Notifications.Add(AssignmentNotifications.Approved(assignment));
+
+            // Internal Handoff (Bàn giao tự động Pencil ➔ Ink, Ink ➔ Lettering)
+            if (targetStage != null)
+            {
+                await HandleAutoHandoffAsync(_db, chapter, targetStage, assignment, ct);
+            }
+        }
+
         assignment.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));
+    }
+
+    private static async Task HandleAutoHandoffAsync(
+        IPanelForgeDbContext db,
+        Domain.Entities.Content.Chapter chapter,
+        PipelineStage currentStage,
+        Assignment completedAssignment,
+        CancellationToken ct)
+    {
+        var nextStage = await db.PipelineStages
+            .Where(s => s.PipelineDefinitionId == currentStage.PipelineDefinitionId 
+                     && s.StageOrder > currentStage.StageOrder 
+                     && s.IsEnabled)
+            .OrderBy(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
+
+        if (nextStage is null) return;
+
+        var currentSlug = currentStage.Slug?.ToLowerInvariant() ?? "";
+        var nextSlug = nextStage.Slug?.ToLowerInvariant() ?? "";
+
+        // 1. Internal Handoff (Bàn giao tự động Pencil ➔ Ink):
+        // Không bắt Editor duyệt nét chì. Khi Pencil nộp bài, hệ thống tự động gán mở việc cho Ink.
+        // Nghệ sĩ có thể tự hoàn thiện liên tục mà không bị gián đoạn.
+        if (currentSlug.Contains("pencil") || (nextSlug.Contains("ink") && currentStage.AllowedRole == WorkspaceRole.Artist))
+        {
+            var nextAssignment = await db.Assignments
+                .FirstOrDefaultAsync(a => a.ChapterId == chapter.Id 
+                                       && a.PipelineStageId == nextStage.Id 
+                                       && (a.TargetEntityId == completedAssignment.TargetEntityId || a.EntityType == WorkflowEntityType.Chapter), ct);
+
+            if (nextAssignment is not null)
+            {
+                if (nextAssignment.Status == AssignmentStatus.Assigned)
+                {
+                    try { nextAssignment.StartWork(); } catch { }
+                }
+                db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                    nextAssignment.AssigneeUserId,
+                    NotificationType.AssignmentAssigned,
+                    "Bàn giao tự động Pencil ➔ Ink",
+                    $"Công đoạn nét chì (Pencil) của Chương {chapter.ChapterNumber} đã hoàn thành. Hệ thống đã tự động mở việc Ink để bạn tiếp tục hoàn thiện liên tục.",
+                    nextAssignment.Id,
+                    chapter.Id));
+            }
+            else
+            {
+                var autoInk = Assignment.Create(
+                    chapter.SeriesId,
+                    chapter.Id,
+                    completedAssignment.EntityType,
+                    completedAssignment.TargetEntityId,
+                    nextStage.Id,
+                    completedAssignment.AssigneeUserId,
+                    WorkspaceRole.Artist,
+                    $"Đi nét (Ink) - {completedAssignment.Brief}",
+                    "Bàn giao tự động từ hoàn thành công đoạn Pencil",
+                    null,
+                    DateTime.UtcNow.AddDays(nextStage.EstimatedDurationDays ?? 3),
+                    AssignmentPriority.Medium,
+                    completedAssignment.Id
+                );
+                try { autoInk.StartWork(); } catch { }
+                db.Assignments.Add(autoInk);
+
+                db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                    completedAssignment.AssigneeUserId,
+                    NotificationType.AssignmentAssigned,
+                    "Bàn giao tự động Pencil ➔ Ink",
+                    $"Công đoạn nét chì (Pencil) của Chương {chapter.ChapterNumber} đã hoàn tất. Hệ thống đã tự động gán mở việc Ink cho bạn.",
+                    autoInk.Id,
+                    chapter.Id));
+            }
+        }
+        // 2. Chuyển giao sang Lettering (Ink ➔ Lettering):
+        // Ngay khi bản vẽ Ink hoàn thành, hệ thống tự động mở task cho Letterer ráp bóng thoại và hiệu ứng âm thanh (SFX) dựa trên kịch bản đã khóa.
+        else if (currentSlug.Contains("ink") || nextSlug.Contains("letter") || nextStage.AllowedRole == WorkspaceRole.Letterer)
+        {
+            var lettererStage = nextSlug.Contains("letter") ? nextStage : await db.PipelineStages
+                .Where(s => s.PipelineDefinitionId == currentStage.PipelineDefinitionId && (s.Slug.Contains("letter") || s.AllowedRole == WorkspaceRole.Letterer) && s.IsEnabled)
+                .OrderBy(s => s.StageOrder).FirstOrDefaultAsync(ct);
+
+            if (lettererStage != null)
+            {
+                var letterAssignment = await db.Assignments
+                    .FirstOrDefaultAsync(a => a.ChapterId == chapter.Id && a.PipelineStageId == lettererStage.Id, ct);
+
+                if (letterAssignment is not null)
+                {
+                    db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                        letterAssignment.AssigneeUserId,
+                        NotificationType.AssignmentAssigned,
+                        "Chuyển giao sang Lettering (Ink ➔ Lettering)",
+                        $"Bản vẽ Ink của Chương {chapter.ChapterNumber} đã hoàn thành. Nhiệm vụ ráp bóng thoại và hiệu ứng âm thanh (SFX) đã sẵn sàng dựa trên kịch bản đã khóa.",
+                        letterAssignment.Id,
+                        chapter.Id));
+                }
+                else
+                {
+                    var series = await db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+                    Guid? lettererUserId = null;
+                    if (series != null)
+                    {
+                        lettererUserId = await db.SeriesMembers.AsNoTracking()
+                            .Where(sm => sm.SeriesId == series.Id && sm.Role == WorkspaceRole.Letterer)
+                            .Select(sm => (Guid?)sm.UserId).FirstOrDefaultAsync(ct);
+
+                        if (!lettererUserId.HasValue)
+                        {
+                            lettererUserId = await db.WorkspaceMembers.AsNoTracking()
+                                .Where(wm => wm.WorkspaceId == series.WorkspaceId && wm.Role == WorkspaceRole.Letterer && wm.Status == WorkspaceMemberStatus.Active)
+                                .Select(wm => (Guid?)wm.UserId).FirstOrDefaultAsync(ct);
+                        }
+                    }
+
+                    if (lettererUserId.HasValue)
+                    {
+                        var autoLetter = Assignment.Create(
+                            chapter.SeriesId,
+                            chapter.Id,
+                            WorkflowEntityType.Chapter,
+                            chapter.Id,
+                            lettererStage.Id,
+                            lettererUserId.Value,
+                            WorkspaceRole.Letterer,
+                            $"Ráp bóng thoại và SFX Chương {chapter.ChapterNumber}",
+                            "Chuyển giao tự động từ hoàn tất bản vẽ Ink (kịch bản đã khóa)",
+                            null,
+                            DateTime.UtcNow.AddDays(lettererStage.EstimatedDurationDays ?? 2),
+                            AssignmentPriority.High,
+                            completedAssignment.Id
+                        );
+                        db.Assignments.Add(autoLetter);
+
+                        db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                            lettererUserId.Value,
+                            NotificationType.AssignmentAssigned,
+                            "Mở task Lettering (Ink ➔ Lettering)",
+                            $"Bản vẽ Ink của Chương {chapter.ChapterNumber} đã hoàn thành. Hệ thống đã mở nhiệm vụ ráp bóng thoại và SFX dựa trên kịch bản đã khóa.",
+                            autoLetter.Id,
+                            chapter.Id));
+                    }
+                }
+            }
+        }
+
+        // 3. Thông báo cho các việc phụ thuộc (DAG dependents)
+        var idText = completedAssignment.Id.ToString();
+        var waiting = await db.Assignments
+            .Where(a => a.ChapterId == chapter.Id && a.CancelReason == null && a.Status == AssignmentStatus.Assigned
+                        && (a.DependsOnAssignmentId == completedAssignment.Id || a.DependsOnAssignmentIdsJson.Contains(idText)))
+            .ToListAsync(ct);
+
+        if (waiting.Count > 0)
+        {
+            var depIds = waiting.SelectMany(a => a.GetDependsOnAssignmentIds()).Distinct().Where(id => id != completedAssignment.Id).ToList();
+            var approvedIds = (await db.Assignments.AsNoTracking()
+                    .Where(a => depIds.Contains(a.Id) && a.Status == AssignmentStatus.Approved)
+                    .Select(a => a.Id).ToListAsync(ct))
+                .Append(completedAssignment.Id).ToHashSet();
+
+            foreach (var mine in waiting.Where(a => a.GetDependsOnAssignmentIds().All(approvedIds.Contains)).GroupBy(a => a.AssigneeUserId))
+            {
+                db.Notifications.Add(AssignmentNotifications.ReadyToStart(mine.OrderBy(a => a.CreatedAt).ToList()));
+            }
+        }
     }
 }

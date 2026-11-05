@@ -335,8 +335,11 @@ public sealed class ChaptersController : ControllerBase
     [HttpPost("api/chapters/{chapterId:guid}/submit-manuscript")]
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(AssignmentDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SubmitManuscript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new SubmitChapterManuscriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+    public async Task<IActionResult> SubmitManuscript(
+        [FromRoute] Guid chapterId,
+        [FromQuery] Guid? stageId = null,
+        CancellationToken cancellationToken = default) =>
+        ToActionResult(await _mediator.Send(new SubmitChapterManuscriptCommand(chapterId, GetCurrentUserId(), stageId), cancellationToken));
 
     [HttpPost("api/chapters/{chapterId:guid}/approve")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]

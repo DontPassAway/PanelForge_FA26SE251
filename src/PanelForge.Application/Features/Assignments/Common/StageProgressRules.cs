@@ -383,7 +383,7 @@ internal static class StageProgressRules
     /// Trả thông báo lỗi nếu có Panel không ở trạng thái cho phép (chưa Save), null nếu ổn.
     /// </summary>
     public static async Task<string?> ApplyAsync(
-        IPanelForgeDbContext db, PipelineStage stage, IReadOnlyList<Panel> targetPanels, Guid userId, bool submit, CancellationToken ct)
+        IPanelForgeDbContext db, PipelineStage stage, IReadOnlyList<Panel> targetPanels, Guid userId, bool submit, CancellationToken ct, bool autoApprove = false)
     {
         if (targetPanels.Count == 0) return null;
 
@@ -403,12 +403,13 @@ internal static class StageProgressRules
                     db.StageProgresses.Add(row);
                     rows.Add(row);
                 }
-                else if (!submit)
+                else if (!submit && !autoApprove)
                 {
                     row.Resume();
                 }
 
-                if (submit) row.Submit(userId);
+                if (autoApprove) row.AutoApprove(userId);
+                else if (submit) row.Submit(userId);
             }
         }
         catch (InvalidOperationException ex)

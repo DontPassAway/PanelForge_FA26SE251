@@ -46,6 +46,16 @@ public class StageProgress : BaseEntity
     /// <summary>InReview → Approved. Việc người duyệt khác người nộp do handler kiểm tra.</summary>
     public void Approve() => Move(StageProgressStatus.InReview, StageProgressStatus.Approved);
 
+    /// <summary>Tự động duyệt cho stage không yêu cầu Editor duyệt (Internal Handoff Pencil ➔ Ink...).</summary>
+    public void AutoApprove(Guid userId)
+    {
+        if (Status == StageProgressStatus.Approved) return;
+        SubmittedAt = DateTime.UtcNow;
+        SubmittedByUserId = userId;
+        Status = StageProgressStatus.Approved;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>InReview → ChangesRequested (comment bắt buộc do handler kiểm tra).</summary>
     public void RequestChanges() => Move(StageProgressStatus.InReview, StageProgressStatus.ChangesRequested);
 
