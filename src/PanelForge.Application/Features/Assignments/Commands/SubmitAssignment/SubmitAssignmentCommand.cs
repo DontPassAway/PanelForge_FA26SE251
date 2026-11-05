@@ -98,9 +98,26 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
 
         if (!isAutoApproveStage)
         {
-            // Báo người duyệt (Editor/Producer) khi stage có ApprovalGate
+            // Báo người duyệt (Editor/Producer) khi stage có ApprovalGate (Gate 2: Quality & Composite Gate)
             foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, assignment.AssigneeUserId, ct))
-                _db.Notifications.Add(AssignmentNotifications.Submitted(assignment, reviewerId));
+            {
+                var stageSlug = stage.Slug?.ToLowerInvariant() ?? "";
+                var isGate2 = stageSlug.Contains("letter") || stageSlug.Contains("review") || stage.IsApprovalGate;
+                var notifTitle = isGate2
+                    ? "Gate 2 (Quality & Composite Gate): Chờ thẩm định"
+                    : "Có việc mới được nộp chờ duyệt";
+                var notifMsg = isGate2
+                    ? $"Bản thảo hoàn thiện Chương {chapter.ChapterNumber} (nét vẽ, bóng thoại & SFX) đã được nộp để Editor kiểm tra tổng thể độ dễ đọc, ngắt dòng tiếng Việt và tính nhất quán."
+                    : AssignmentNotifications.Describe(assignment);
+
+                _db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                    reviewerId,
+                    NotificationType.AssignmentSubmitted,
+                    notifTitle,
+                    notifMsg,
+                    assignment.Id,
+                    chapter.Id));
+            }
         }
 
         // Gắn lần nộp với đúng bản được nộp (CF3: mọi phê duyệt gắn với một revision cụ thể)
@@ -279,6 +296,80 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
                             "Mở task Lettering (Ink ➔ Lettering)",
                             $"Bản vẽ Ink của Chương {chapter.ChapterNumber} đã hoàn thành. Hệ thống đã mở nhiệm vụ ráp bóng thoại và SFX dựa trên kịch bản đã khóa.",
                             autoLetter.Id,
+                            chapter.Id));
+                    }
+                }
+            }
+        }
+        // 3. Gate 2 (Quality & Composite Gate: Lettering ➔ Editor Review):
+        // Editor kiểm tra trang hoàn thiện tổng thể (bao gồm nét vẽ, vị trí bóng thoại, độ dễ đọc, ngắt dòng tiếng Việt).
+        // Bắt lỗi trực quan trong bối cảnh hoàn chỉnh thay vì xem xét các thành phần rời rạc.
+        else if (currentSlug.Contains("letter") || nextSlug.Contains("review") || nextStage.IsApprovalGate || nextStage.AllowedRole == WorkspaceRole.Editor)
+        {
+            var reviewStage = (nextSlug.Contains("review") || nextStage.IsApprovalGate || nextStage.AllowedRole == WorkspaceRole.Editor)
+                ? nextStage
+                : await db.PipelineStages
+                    .Where(s => s.PipelineDefinitionId == currentStage.PipelineDefinitionId && (s.Slug.Contains("review") || s.IsApprovalGate || s.AllowedRole == WorkspaceRole.Editor) && s.IsEnabled)
+                    .OrderBy(s => s.StageOrder).FirstOrDefaultAsync(ct);
+
+            if (reviewStage != null)
+            {
+                var reviewAssignment = await db.Assignments
+                    .FirstOrDefaultAsync(a => a.ChapterId == chapter.Id && a.PipelineStageId == reviewStage.Id, ct);
+
+                if (reviewAssignment is not null)
+                {
+                    db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                        reviewAssignment.AssigneeUserId,
+                        NotificationType.AssignmentSubmitted,
+                        "Gate 2 (Quality & Composite Gate): Sẵn sàng thẩm định",
+                        $"Bản thảo Chương {chapter.ChapterNumber} đã hoàn tất ráp bóng thoại & SFX. Editor có thể tiến hành kiểm tra trang hoàn thiện tổng thể (nét vẽ, vị trí bóng thoại, độ dễ đọc, ngắt dòng tiếng Việt).",
+                        reviewAssignment.Id,
+                        chapter.Id));
+                }
+                else
+                {
+                    var series = await db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+                    Guid? editorUserId = null;
+                    if (series != null)
+                    {
+                        editorUserId = await db.SeriesMembers.AsNoTracking()
+                            .Where(sm => sm.SeriesId == series.Id && sm.Role == WorkspaceRole.Editor)
+                            .Select(sm => (Guid?)sm.UserId).FirstOrDefaultAsync(ct);
+
+                        if (!editorUserId.HasValue)
+                        {
+                            editorUserId = await db.WorkspaceMembers.AsNoTracking()
+                                .Where(wm => wm.WorkspaceId == series.WorkspaceId && wm.Role == WorkspaceRole.Editor && wm.Status == WorkspaceMemberStatus.Active)
+                                .Select(wm => (Guid?)wm.UserId).FirstOrDefaultAsync(ct);
+                        }
+                    }
+
+                    if (editorUserId.HasValue)
+                    {
+                        var autoReview = Assignment.Create(
+                            chapter.SeriesId,
+                            chapter.Id,
+                            WorkflowEntityType.Chapter,
+                            chapter.Id,
+                            reviewStage.Id,
+                            editorUserId.Value,
+                            WorkspaceRole.Editor,
+                            $"Gate 2: Kiểm định tổng thể Chương {chapter.ChapterNumber}",
+                            "Thẩm định chất lượng trang hoàn thiện tổng thể (nét vẽ, vị trí bóng thoại, độ dễ đọc, ngắt dòng tiếng Việt)",
+                            null,
+                            DateTime.UtcNow.AddDays(reviewStage.EstimatedDurationDays ?? 2),
+                            AssignmentPriority.High,
+                            completedAssignment.Id
+                        );
+                        db.Assignments.Add(autoReview);
+
+                        db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                            editorUserId.Value,
+                            NotificationType.AssignmentSubmitted,
+                            "Gate 2 (Quality & Composite Gate): Sẵn sàng thẩm định",
+                            $"Bản thảo Chương {chapter.ChapterNumber} đã hoàn tất ráp bóng thoại & SFX. Hệ thống đã mở lượt kiểm định Gate 2 cho Editor kiểm tra trang hoàn thiện tổng thể.",
+                            autoReview.Id,
                             chapter.Id));
                     }
                 }

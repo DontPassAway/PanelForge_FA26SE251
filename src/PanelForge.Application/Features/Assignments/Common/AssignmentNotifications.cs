@@ -75,7 +75,7 @@ internal static class AssignmentNotifications
     public static Notification ChangeRequestOverdue(ChangeRequest cr) => Notification.Create(
         cr.ResponsibleUserId, NotificationType.ChangeRequestOverdue, "Yêu cầu sửa đã quá hạn", DescribeChangeRequest(cr), cr.AssignmentId, cr.ChapterId);
 
-    private static string Describe(Assignment a)
+    public static string Describe(Assignment a)
     {
         var brief = a.Brief.Length > 200 ? a.Brief[..200] + "…" : a.Brief;
         return a.DueDate is { } due ? $"{brief} (hạn {due:yyyy-MM-dd HH:mm} UTC)" : brief;
