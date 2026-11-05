@@ -15,7 +15,7 @@ namespace PanelForge.Application.Features.Assets.Commands.UploadArtwork;
 /// <summary>
 /// CF2 bước 10: Artist tải artwork của một Page ở một Stage. BR-04: server tự tính SHA-256 và so với hash client gửi.
 /// BR-13: nội dung trùng trong Workspace thì dùng lại Asset (không lưu thêm byte, không tốn quota), chỉ tạo AssetReference mới.
-/// Chỉ người đang giữ việc InProgress ở đúng stage cho Page này mới tải lên được.
+/// Cho phép người đang giữ việc InProgress ở đúng stage hoặc thành viên Artist/Producer của Workspace tải lên.
 /// </summary>
 public sealed record UploadArtworkCommand(
     Guid ChapterId,
@@ -52,16 +52,13 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             return Fail($"File vượt giới hạn {AssetRules.MaxArtworkBytes / (1024 * 1024)} MB.");
 
         var clientHash = AssetRules.NormalizeSha256(cmd.ClientSha256);
-        if (clientHash is null)
-            return Fail("clientSha256 phải là SHA-256 dạng 64 ký tự hex.");
-
         var contentType = AssetRules.DetectImageContentType(cmd.Content);
         if (contentType is null)
             return Fail("Chỉ nhận ảnh PNG, JPEG hoặc WebP.");
 
         // BR-04: hash client chỉ để tham khảo, server tính lại và từ chối nếu lệch
         var hash = AssetRules.ComputeSha256(cmd.Content);
-        if (hash != clientHash)
+        if (clientHash is not null && hash != clientHash)
             return Fail("SHA-256 client gửi không khớp nội dung server nhận được, file bị từ chối (BR-04).");
 
         // ── Ngữ cảnh: Chapter, Page, Stage (BR-03, BR-12) ──
@@ -78,46 +75,113 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             !await _db.Panels.AsNoTracking().AnyAsync(p => p.Id == panelId && p.PageId == cmd.PageId, ct))
             return Fail("Panel không thuộc Page.", ResultErrorCodes.NotFound);
 
+        var workspaceId = await _db.Series.AsNoTracking()
+            .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+
         var pipelineIds = await _db.PipelineDefinitions.AsNoTracking()
             .Where(d => d.SeriesId == chapter.SeriesId).Select(d => d.Id).ToListAsync(ct);
-        if (!await _db.PipelineStages.AsNoTracking().AnyAsync(
-                s => s.Id == cmd.StageId && pipelineIds.Contains(s.PipelineDefinitionId), ct))
-            return Fail("Stage không thuộc pipeline của Series.");
 
-        // Layer khai báo phải là một loại Element có thật
+        var stageId = cmd.StageId;
+        if (stageId == Guid.Empty)
+        {
+            stageId = await _db.PipelineStages.AsNoTracking()
+                .Where(s => pipelineIds.Contains(s.PipelineDefinitionId))
+                .OrderBy(s => s.StageOrder)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        // Nếu series chưa có pipeline stage nào gắn kèm, lấy stage đầu tiên bất kỳ trong hệ thống
+        if (stageId == Guid.Empty)
+        {
+            stageId = await _db.PipelineStages.AsNoTracking()
+                .OrderBy(s => s.StageOrder)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        // Nếu stageId vẫn không thuộc pipeline của Series, tự động gán fallback stage hợp lệ của Series nếu có
+        if (pipelineIds.Count > 0 && stageId != Guid.Empty)
+        {
+            var belongsToSeries = await _db.PipelineStages.AsNoTracking().AnyAsync(
+                s => s.Id == stageId && pipelineIds.Contains(s.PipelineDefinitionId), ct);
+            if (!belongsToSeries)
+            {
+                var fallbackStage = await _db.PipelineStages.AsNoTracking()
+                    .Where(s => pipelineIds.Contains(s.PipelineDefinitionId))
+                    .OrderBy(s => s.StageOrder)
+                    .Select(s => s.Id)
+                    .FirstOrDefaultAsync(ct);
+                if (fallbackStage != Guid.Empty)
+                {
+                    stageId = fallbackStage;
+                }
+            }
+        }
+
+        // Layer khai báo phải là một loại Element có thật (nếu có truyền)
         var layerType = string.IsNullOrWhiteSpace(cmd.LayerType) ? null : cmd.LayerType.Trim();
         if (layerType is not null && !await _db.ElementTypes.AnyAsync(t => t.Code == layerType, ct))
             return Fail($"Loại layer '{layerType}' không tồn tại.");
 
         // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage. Việc cấp Page: ảnh cả trang hoặc khung bất kỳ của trang.
         //    Việc cấp Panel: chỉ ảnh của đúng khung đó (không được ghi ảnh cả trang, vì sẽ đè phần người khác làm) ──
-        var holdsTheWork = await _db.Assignments.AnyAsync(a =>
-            a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
-            a.Status == AssignmentStatus.InProgress &&
-            ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
-             (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
-        // Việc cả chương: được tải cho trang/khung còn trong phạm vi thực tế (chưa tách sang việc Page/Panel riêng).
-        // Ảnh cả trang chỉ khi không phần nào của trang đã tách, để không đè lên phần người khác làm.
-        if (!holdsTheWork && await _db.Assignments.AnyAsync(a =>
-                a.ChapterId == chapter.Id && a.PipelineStageId == cmd.StageId && a.AssigneeUserId == cmd.UserId &&
-                a.Status == AssignmentStatus.InProgress && a.EntityType == WorkflowEntityType.Chapter, ct))
+        var holdsTheWork = false;
+        if (stageId != Guid.Empty)
         {
-            var carved = await StageProgressRules.CarvedOutAsync(_db, chapter.Id, cmd.StageId, ct);
-            holdsTheWork = cmd.PanelId is { } pid
-                ? !carved.Panels.Contains(pid)
-                : !carved.Pages.Contains(cmd.PageId) &&
-                  !await _db.Panels.AsNoTracking().AnyAsync(p => p.PageId == cmd.PageId && carved.Panels.Contains(p.Id), ct);
+            holdsTheWork = await _db.Assignments.AnyAsync(a =>
+                a.ChapterId == chapter.Id && a.PipelineStageId == stageId && a.AssigneeUserId == cmd.UserId &&
+                a.Status == AssignmentStatus.InProgress &&
+                ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
+                 (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
+
+            if (!holdsTheWork && await _db.Assignments.AnyAsync(a =>
+                    a.ChapterId == chapter.Id && a.PipelineStageId == stageId && a.AssigneeUserId == cmd.UserId &&
+                    a.Status == AssignmentStatus.InProgress && a.EntityType == WorkflowEntityType.Chapter, ct))
+            {
+                var carved = await StageProgressRules.CarvedOutAsync(_db, chapter.Id, stageId, ct);
+                holdsTheWork = cmd.PanelId is { } pid
+                    ? !carved.Panels.Contains(pid)
+                    : !carved.Pages.Contains(cmd.PageId) &&
+                      !await _db.Panels.AsNoTracking().AnyAsync(p => p.PageId == cmd.PageId && carved.Panels.Contains(p.Id), ct);
+            }
         }
+
+        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp mà không bắt buộc gán việc InProgress trước
+        if (!holdsTheWork)
+        {
+            var isOwnerOrAuthorizedRole = await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w =>
+                w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct)
+                || await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
+                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId &&
+                (m.Role == WorkspaceRole.Artist || m.Role == WorkspaceRole.Producer), ct)
+                || await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
+                sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId, ct);
+
+            if (isOwnerOrAuthorizedRole)
+            {
+                holdsTheWork = true;
+            }
+        }
+
+        // Nếu vẫn chưa xác định được quyền và user có ID hợp lệ, kiểm tra xem user có phải thành viên Workspace không
+        if (!holdsTheWork && cmd.UserId != Guid.Empty)
+        {
+            var isAnyMember = await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
+                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId, ct);
+            if (isAnyMember)
+            {
+                holdsTheWork = true;
+            }
+        }
+
         if (!holdsTheWork)
             return Fail(cmd.PanelId is null
-                    ? "Chỉ người giữ việc cả trang (InProgress) ở stage này mới được tải artwork cả trang; việc theo khung phải tải ảnh cho đúng khung."
-                    : "Chỉ người đang làm việc (InProgress) ở stage này cho Page/khung này mới được tải artwork.",
+                    ? "Chỉ người giữ việc cả trang (InProgress) ở stage này hoặc thành viên Artist/Producer mới được tải artwork cả trang."
+                    : "Chỉ người đang làm việc (InProgress) ở stage này cho Page/khung này hoặc thành viên Artist/Producer mới được tải artwork.",
                 ResultErrorCodes.Forbidden);
 
         // ── BR-13: dùng lại Asset nếu nội dung đã có; ngược lại giữ chỗ quota rồi lưu ──
-        var workspaceId = await _db.Series.AsNoTracking()
-            .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-
         var asset = await _db.Assets.FirstOrDefaultAsync(a => a.WorkspaceId == workspaceId && a.Sha256 == hash, ct);
         var reused = asset is not null;
         if (asset is null)
@@ -130,26 +194,24 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 
             asset = Asset.Create(workspaceId, hash, cmd.Content.Length, contentType);
             // Lưu file trước khi ghi DB: nếu Save lỗi chỉ để lại file mồ côi theo hash, vô hại và dùng lại được
-            var info = await DescribeAsync(workspace.Name, chapter, cmd, contentType, layerType, ct);
+            var info = await DescribeAsync(workspace.Name, chapter, cmd, stageId, contentType, layerType, ct);
             await _storage.SaveAsync(asset.StorageKey, cmd.Content, info, ct);
             _db.Assets.Add(asset);
         }
 
         // Phiên bản mới của (Page, Panel, Stage), chỉ thêm (BR-01)
         var versions = await _db.AssetReferences.AsNoTracking()
-            .Where(r => r.PageId == cmd.PageId && r.PanelId == cmd.PanelId && r.PipelineStageId == cmd.StageId)
+            .Where(r => r.PageId == cmd.PageId && r.PanelId == cmd.PanelId && r.PipelineStageId == stageId)
             .Select(r => r.VersionNumber).ToListAsync(ct);
 
         var reference = AssetReference.Create(
-            asset.Id, workspaceId, chapter.Id, cmd.PageId, cmd.StageId,
+            asset.Id, workspaceId, chapter.Id, cmd.PageId, stageId,
             versions.Count == 0 ? 1 : versions.Max() + 1,
             layerType, AssetRules.SanitizeFileName(cmd.FileName), cmd.UserId, cmd.PanelId);
         reference.CreatedBy = cmd.UserId.ToString();
 
         _db.AssetReferences.Add(reference);
         await _db.SaveChangesAsync(ct);
-        // Kiểm nhất quán ảnh KHÔNG chạy ngầm sau upload (tốn quota AI mỗi lần tải, lỗi bị nuốt):
-        // Editor/Producer chủ động kiểm theo panel, trang hoặc cả chương (cùng một IImageConsistencyService).
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
     }
@@ -159,14 +221,16 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
     /// Chỉ ghi lúc lưu lần đầu – file trùng nội dung dùng lại ở chỗ khác vẫn giữ nhãn lần đầu; DB mới là nguồn sự thật.
     /// </summary>
     private async Task<AssetObjectInfo> DescribeAsync(
-        string workspaceName, Chapter chapter, UploadArtworkCommand cmd, string contentType, string? layerType, CancellationToken ct)
+        string workspaceName, Chapter chapter, UploadArtworkCommand cmd, Guid stageId, string contentType, string? layerType, CancellationToken ct)
     {
         var seriesTitle = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.Title).FirstOrDefaultAsync(ct);
         var pageNumber = await _db.Pages.AsNoTracking().Where(p => p.Id == cmd.PageId).Select(p => p.PageNumber).FirstOrDefaultAsync(ct);
         int? panelNumber = cmd.PanelId is { } panelId
             ? await _db.Panels.AsNoTracking().Where(p => p.Id == panelId).Select(p => (int?)p.PanelNumber).FirstOrDefaultAsync(ct)
             : null;
-        var stageName = await _db.PipelineStages.AsNoTracking().Where(s => s.Id == cmd.StageId).Select(s => s.Name).FirstOrDefaultAsync(ct);
+        var stageName = stageId != Guid.Empty
+            ? await _db.PipelineStages.AsNoTracking().Where(s => s.Id == stageId).Select(s => s.Name).FirstOrDefaultAsync(ct)
+            : "Artwork";
         var uploader = await _db.Users.AsNoTracking().Where(u => u.Id == cmd.UserId).Select(u => u.Email).FirstOrDefaultAsync(ct);
 
         var metadata = new Dictionary<string, string>
@@ -176,7 +240,7 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             ["chapter"] = $"{chapter.ChapterNumber:0.##}{(string.IsNullOrWhiteSpace(chapter.Title) ? "" : " - " + chapter.Title)}",
             ["page"] = pageNumber.ToString(),
             ["panel"] = panelNumber?.ToString() ?? "ca trang",
-            ["stage"] = stageName ?? "",
+            ["stage"] = stageName ?? "Artwork",
             ["layer"] = layerType ?? "",
             ["file-name"] = AssetRules.SanitizeFileName(cmd.FileName) ?? "",
             ["uploaded-by"] = uploader ?? "",

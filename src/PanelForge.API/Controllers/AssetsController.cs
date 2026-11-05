@@ -24,12 +24,18 @@ public sealed class AssetsController : ControllerBase
 
     public AssetsController(IMediator mediator) => _mediator = mediator;
 
-    private Guid GetCurrentUserId() =>
-        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : Guid.Empty;
+    private Guid GetCurrentUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("id")
+            ?? User.FindFirst("nameid")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId, clientSha256, layerType?, panelId?.
-    /// Server tính lại SHA-256 và từ chối nếu lệch (BR-04). Chỉ người đang giữ việc InProgress ở stage đó.
+    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId?, clientSha256?, layerType?, panelId?.
+    /// Server tính lại SHA-256 và từ chối nếu lệch (BR-04). Hỗ trợ Artist / Producer tải artwork trực tiếp hoặc theo assignment InProgress.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/pages/{pageId:guid}/artwork")]
     [RequireWorkspaceRole]
@@ -47,7 +53,7 @@ public sealed class AssetsController : ControllerBase
         await form.File.CopyToAsync(buffer, ct);
 
         var result = await _mediator.Send(new UploadArtworkCommand(
-            chapterId, pageId, form.StageId, GetCurrentUserId(), buffer.ToArray(),
+            chapterId, pageId, form.StageId ?? Guid.Empty, GetCurrentUserId(), buffer.ToArray(),
             form.File.FileName, form.ClientSha256, form.LayerType, form.PanelId), ct);
 
         return result.IsSuccess
@@ -109,7 +115,7 @@ public sealed class AssetsController : ControllerBase
 public sealed class UploadArtworkForm
 {
     public IFormFile? File { get; set; }
-    public Guid StageId { get; set; }
+    public Guid? StageId { get; set; }
     public string? ClientSha256 { get; set; }
     public string? LayerType { get; set; }
     /// <summary>Tuỳ chọn: ảnh cho một Panel của Page; bỏ trống = artwork cả trang.</summary>

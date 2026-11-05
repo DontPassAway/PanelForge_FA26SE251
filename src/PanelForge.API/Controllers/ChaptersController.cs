@@ -28,6 +28,8 @@ using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
+using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Enums;
 
@@ -324,6 +326,17 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId,
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new RejectScriptReopenCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/submit-manuscript
+    /// Nộp toàn bộ bản thảo chương trực tiếp sang hàng đợi thẩm định của Editor/Producer.
+    /// Không bắt buộc phải có phân công việc (Assign) trước đó.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/submit-manuscript")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AssignmentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SubmitManuscript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new SubmitChapterManuscriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
 
     [HttpPost("api/chapters/{chapterId:guid}/approve")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
