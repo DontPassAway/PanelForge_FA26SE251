@@ -16,7 +16,8 @@ public sealed record BatchSaveScriptLinesCommand(
     Guid UserId,
     IReadOnlyList<BatchScriptLineItem> Lines,
     long? ExpectedChapterVersion = null,
-    string? Summary = null
+    string? Summary = null,
+    string? RawText = null
 ) : IRequest<Result<BatchSaveScriptLinesResult>>;
 
 public sealed class BatchSaveScriptLinesCommandHandler
@@ -102,6 +103,10 @@ public sealed class BatchSaveScriptLinesCommandHandler
 
                 line.UpdateContent(text, direction, item.SpeakerCharacterId, mode);
                 line.Reorder(item.LineOrder);
+                if (item.PanelId != line.PanelId)
+                {
+                    line.AssignToPanel(item.PanelId);
+                }
 
                 if (ScriptLineRules.LetteringText(line) != textBefore || line.SpeakerCharacterId != speakerBefore)
                 {
@@ -118,6 +123,10 @@ public sealed class BatchSaveScriptLinesCommandHandler
                     item.SpeakerCharacterId,
                     targetId,
                     mode);
+                if (item.PanelId.HasValue)
+                {
+                    line.AssignToPanel(item.PanelId.Value);
+                }
                 _db.ScriptLines.Add(line);
             }
 
@@ -159,6 +168,21 @@ public sealed class BatchSaveScriptLinesCommandHandler
 
         var revision = await ScriptLineRules.RecordRevisionAsync(
             _db, chapter, cmd.SceneId, summary, beforeSnapshot, afterSnapshot, ct);
+
+        // 8. Tự động đồng bộ và lưu toàn văn kịch bản hoàn chỉnh (ChapterScript.RawText)
+        if (!string.IsNullOrWhiteSpace(cmd.RawText))
+        {
+            var chapterScript = await _db.ChapterScripts.FirstOrDefaultAsync(s => s.ChapterId == chapter.Id, ct);
+            if (chapterScript == null)
+            {
+                chapterScript = ChapterScript.Create(chapter.Id, cmd.RawText);
+                _db.ChapterScripts.Add(chapterScript);
+            }
+            else if (!chapterScript.IsLocked)
+            {
+                chapterScript.UpdateRawText(cmd.RawText, cmd.UserId);
+            }
+        }
 
         await _db.SaveChangesAsync(ct);
 

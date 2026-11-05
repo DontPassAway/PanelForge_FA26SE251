@@ -46,13 +46,15 @@ public sealed record BatchScriptLineItem(
     Guid? SpeakerCharacterId,
     IReadOnlyList<Guid>? BibleEntryIds = null,
     NarrationMode? NarrationMode = null,
-    Guid? ClientLineId = null
+    Guid? ClientLineId = null,
+    Guid? PanelId = null
 );
 
 public sealed record BatchSaveScriptLinesRequest(
     IReadOnlyList<BatchScriptLineItem> Lines,
     long? ExpectedChapterVersion = null,
-    string? Summary = null
+    string? Summary = null,
+    string? RawText = null
 );
 
 public sealed record BatchSaveScriptLinesResult(

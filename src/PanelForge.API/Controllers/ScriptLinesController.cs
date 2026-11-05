@@ -51,7 +51,7 @@ public sealed class ScriptLinesController : ControllerBase
         Guid chapterId, Guid sceneId, [FromBody] BatchSaveScriptLinesRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new BatchSaveScriptLinesCommand(
-            chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion, body.Summary), ct);
+            chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion, body.Summary, body.RawText), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
