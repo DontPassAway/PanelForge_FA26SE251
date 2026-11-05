@@ -1,3 +1,5 @@
+using System.Text.Json;
+using PanelForge.Application.Features.Panels.Commands.AutoAssignScriptLines;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -122,9 +124,140 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         chapter.FreezeScript(cmd.UserId, AiContentValidator.Sha256(canonical));
         chapter.UpdatedBy = cmd.UserId.ToString();
 
+        // 4. Auto-scaffold: Sau khi kịch bản được duyệt (Freeze), nếu chương chưa có trang nào,
+        // tự động chia sẵn thumbnail theo Page và Panel để bên màn hình Artwork của Artist có sẵn bố cục.
+        var hasPages = await _dbContext.Pages.AnyAsync(p => p.ChapterId == chapter.Id, ct);
+        if (!hasPages)
+        {
+            await AutoScaffoldPagesAndPanelsAsync(chapter, sceneIds, cmd.UserId, ct);
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
+    }
+
+    private async Task AutoScaffoldPagesAndPanelsAsync(
+        Chapter chapter,
+        List<Guid> sceneIds,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var scriptLines = await _dbContext.ScriptLines
+            .Where(l => sceneIds.Contains(l.SceneId))
+            .OrderBy(l => l.LineOrder)
+            .ToListAsync(ct);
+
+        if (scriptLines.Count == 0) return;
+
+        var sceneMap = chapter.Scenes.OrderBy(s => s.SceneNumber).ToDictionary(s => s.Id);
+        var panelGroups = new List<(Guid SceneId, List<ScriptLine> Lines)>();
+
+        foreach (var sceneId in sceneMap.Keys)
+        {
+            var linesInScene = scriptLines.Where(l => l.SceneId == sceneId).ToList();
+            if (linesInScene.Count == 0) continue;
+
+            var grouped = AutoAssignScriptLinesCommandHandler.GroupLines(linesInScene);
+            foreach (var g in grouped)
+            {
+                panelGroups.Add((sceneId, g));
+            }
+        }
+
+        if (panelGroups.Count == 0) return;
+
+        const int panelsPerPage = 4;
+        var totalPages = (int)Math.Ceiling((double)panelGroups.Count / panelsPerPage);
+
+        var pages = new List<Page>();
+        var panels = new List<Panel>();
+
+        for (var pageIdx = 0; pageIdx < totalPages; pageIdx++)
+        {
+            var pageNumber = pageIdx + 1;
+            var page = Page.CreateNew(
+                chapter.Id,
+                pageNumber,
+                LayoutFormat.StandardPage,
+                1200,
+                1800,
+                300);
+
+            page.MarkContentReady(userId);
+            page.CreatedBy = userId.ToString();
+            pages.Add(page);
+
+            var pagePanelsSlice = panelGroups
+                .Skip(pageIdx * panelsPerPage)
+                .Take(panelsPerPage)
+                .ToList();
+
+            var countInPage = pagePanelsSlice.Count;
+
+            for (var pIdx = 0; pIdx < countInPage; pIdx++)
+            {
+                var (sceneId, linesForPanel) = pagePanelsSlice[pIdx];
+                var panelNumber = pIdx + 1;
+                var readingOrder = panelNumber;
+
+                var (normX, normY, normW, normH) = CalculatePanelRect(countInPage, pIdx);
+                var bbox = JsonSerializer.Serialize(new
+                {
+                    x = (int)Math.Round(normX * 1200),
+                    y = (int)Math.Round(normY * 1800),
+                    width = (int)Math.Round(normW * 1200),
+                    height = (int)Math.Round(normH * 1800),
+                    unit = "px",
+                    pageWidthPx = 1200,
+                    pageHeightPx = 1800,
+                    normalized = new { x = normX, y = normY, w = normW, h = normH, coordinateSpace = "page" }
+                });
+
+                var panel = Panel.Create(page.Id, panelNumber, readingOrder, bbox, sceneId);
+                panel.CreatedBy = userId.ToString();
+                panels.Add(panel);
+
+                foreach (var line in linesForPanel)
+                {
+                    line.AssignToPanel(panel.Id);
+                }
+            }
+        }
+
+        _dbContext.Pages.AddRange(pages);
+        _dbContext.Panels.AddRange(panels);
+    }
+
+    private static (double X, double Y, double W, double H) CalculatePanelRect(int totalPanelsInPage, int panelIndex)
+    {
+        const double margin = 0.05;
+        const double gutter = 0.02;
+        const double usableW = 1.0 - 2 * margin;
+        const double usableH = 1.0 - 2 * margin;
+
+        return totalPanelsInPage switch
+        {
+            1 => (margin, margin, usableW, usableH),
+            2 => (
+                margin,
+                margin + panelIndex * ((usableH - gutter) / 2 + gutter),
+                usableW,
+                (usableH - gutter) / 2
+            ),
+            3 => (
+                margin,
+                margin + panelIndex * ((usableH - 2 * gutter) / 3 + gutter),
+                usableW,
+                (usableH - 2 * gutter) / 3
+            ),
+            _ => (
+                margin + (panelIndex % 2) * ((usableW - gutter) / 2 + gutter),
+                margin + (panelIndex / 2) * ((usableH - gutter) / 2 + gutter),
+                (usableW - gutter) / 2,
+                (usableH - gutter) / 2
+            )
+        };
     }
 }
 

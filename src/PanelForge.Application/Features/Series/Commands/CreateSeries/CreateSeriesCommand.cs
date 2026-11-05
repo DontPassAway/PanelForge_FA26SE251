@@ -109,12 +109,12 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
 
         var pipelineName = template != null
             ? $"{series.Title} — {template.Name}"
-            : $"{series.Title} — 8-Stage Standard Pipeline";
+            : $"{series.Title} — 7-Stage Standard Pipeline";
 
         var pipeline = Domain.Entities.Workflow.PipelineDefinition.Create(
             workspaceId: command.WorkspaceId,
             name: pipelineName,
-            description: template != null ? $"Cloned from template: {template.Code}" : "Default 8-stage production pipeline",
+            description: template != null ? $"Cloned from template: {template.Code}" : "Default 7-stage production pipeline",
             seriesId: series.Id,
             isDefault: false
         );
@@ -138,15 +138,14 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         }
         else
         {
-            // Fallback: Tạo 8 công đoạn chuẩn
+            // Fallback: Tạo 7 công đoạn chuẩn (loại bỏ Thumbnail, chia sẵn thumbnail trực tiếp bên bàn vẽ Artist)
             pipeline.AddStage("Script", "script", 1, null, WorkspaceRole.Writer, false, isInitial: true, isTerminal: false);
-            pipeline.AddStage("Thumbnail", "thumbnail", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Pencil", "pencil", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Ink", "ink", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Color", "color", 5, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Letter", "letter", 6, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Review", "review", 7, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Approved", "approved", 8, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
+            pipeline.AddStage("Pencil", "pencil", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Ink", "ink", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Color", "color", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Letter", "letter", 5, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Review", "review", 6, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Approved", "approved", 7, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
         }
 
         // Sinh transition mặc định
