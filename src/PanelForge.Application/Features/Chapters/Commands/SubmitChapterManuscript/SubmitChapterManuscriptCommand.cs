@@ -88,9 +88,7 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
                 a.PipelineStageId == stageId &&
                 (a.AssigneeUserId == cmd.UserId || a.EntityType == WorkflowEntityType.Chapter), ct);
 
-        existingAssignment ??= await _db.Assignments
-            .FirstOrDefaultAsync(a => a.ChapterId == cmd.ChapterId &&
-                (a.AssigneeUserId == cmd.UserId || a.EntityType == WorkflowEntityType.Chapter), ct);
+        // (Fixed) Do not fallback to unrelated stage assignment to prevent false UnderReview locks
 
         Assignment assignment;
         if (existingAssignment is not null)
@@ -121,13 +119,28 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
             _db.Assignments.Add(assignment);
         }
 
-        // Đánh dấu Submit / Auto-Approve
+        // Đánh dấu Submit / Auto-Approve (Internal Handoff: Pencil ➔ Ink không bắt Editor duyệt)
         try
         {
-            assignment.SubmitForReview();
             if (isAutoApproveStage)
             {
-                assignment.MarkApproved();
+                // Công đoạn nội bộ tự động duyệt (ví dụ Pencil ➔ Ink):
+                // Bất kể đang InProgress, Assigned, Submitted hay UnderReview -> Chuyển thẳng sang Approved
+                if (assignment.Status != AssignmentStatus.Approved)
+                {
+                    assignment.MarkApproved();
+                }
+            }
+            else
+            {
+                // Công đoạn cần Editor duyệt (ví dụ Gate 2 Lettering ➔ Review):
+                if (assignment.Status == AssignmentStatus.Assigned || 
+                    assignment.Status == AssignmentStatus.InProgress || 
+                    assignment.Status == AssignmentStatus.ReworkRequired)
+                {
+                    assignment.SubmitForReview();
+                }
+                // Nếu đã là Submitted hoặc UnderReview rồi thì coi như đang trong hàng chờ duyệt
             }
         }
         catch (InvalidOperationException ex)

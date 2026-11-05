@@ -71,10 +71,21 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
 
         try
         {
-            assignment.SubmitForReview();
             if (isAutoApproveStage)
             {
-                assignment.MarkApproved();
+                if (assignment.Status != AssignmentStatus.Approved)
+                {
+                    assignment.MarkApproved();
+                }
+            }
+            else
+            {
+                if (assignment.Status == AssignmentStatus.Assigned || 
+                    assignment.Status == AssignmentStatus.InProgress || 
+                    assignment.Status == AssignmentStatus.ReworkRequired)
+                {
+                    assignment.SubmitForReview();
+                }
             }
         }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
