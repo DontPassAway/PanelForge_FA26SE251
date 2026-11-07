@@ -66,11 +66,13 @@ public sealed class ApproveAssignmentCommandHandler : IRequestHandler<ApproveAss
     /// </summary>
     private async Task NotifyReadyDependentsAsync(Assignment approved, CancellationToken ct)
     {
-        var idText = approved.Id.ToString();
-        var waiting = await _db.Assignments.AsNoTracking()
-            .Where(a => a.ChapterId == approved.ChapterId && a.CancelReason == null && a.Status == AssignmentStatus.Assigned
-                        && (a.DependsOnAssignmentId == approved.Id || a.DependsOnAssignmentIdsJson.Contains(idText)))
-            .ToListAsync(ct);
+        // DependsOnAssignmentIdsJson là cột jsonb: không dịch string.Contains sang SQL (LIKE trên jsonb lỗi 42883),
+        // nên lọc danh sách phụ thuộc trong bộ nhớ trên tập việc Assigned của một chương (nhỏ).
+        var waiting = (await _db.Assignments.AsNoTracking()
+                .Where(a => a.ChapterId == approved.ChapterId && a.CancelReason == null && a.Status == AssignmentStatus.Assigned)
+                .ToListAsync(ct))
+            .Where(a => a.DependsOnAssignmentId == approved.Id || a.GetDependsOnAssignmentIds().Contains(approved.Id))
+            .ToList();
         if (waiting.Count == 0) return;
 
         var depIds = waiting.SelectMany(a => a.GetDependsOnAssignmentIds()).Distinct().Where(id => id != approved.Id).ToList();

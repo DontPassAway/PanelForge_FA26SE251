@@ -2,6 +2,7 @@ using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignmentPlan;
+using PanelForge.Application.Features.Assignments.Commands.StartAssignment;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentPlanTemplate;
 using PanelForge.Domain.Entities.Content;
@@ -49,6 +50,38 @@ public partial class AssignmentTests
         review.GetDependsOnAssignmentIds().Should().BeEquivalentTo(ink.Select(i => i.Id));
 
         f.Notifications.Select(n => n.UserId).Should().BeEquivalentTo([f.ArtistId, f.Artist2Id, f.EditorId]);
+    }
+
+    [Fact]
+    public async Task Plan_SecondPageOfSameAssignee_CanStart_WithTheBatchNotification()
+    {
+        var f = new Fixture();
+        f.AddPage(2);
+        (await Plan(f, false, new AssignmentPlanStageRequest(f.ArtistStage.Id, f.ArtistId))).IsSuccess.Should().BeTrue();
+        var pencil = f.Assignments.Where(a => a.PipelineStageId == f.ArtistStage.Id).ToList();
+        pencil.Should().HaveCount(2);
+        var notifiedId = f.Notifications.Should().ContainSingle().Subject.AssignmentId;
+        var other = pencil.Single(a => a.Id != notifiedId);
+
+        var result = await new StartAssignmentCommandHandler(f.Db.Object)
+            .Handle(new StartAssignmentCommand(f.Chapter.Id, other.Id, f.ArtistId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        other.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
+    public async Task Start_WithoutAnyNotification_IsStillRejected_BR14()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        f.Notifications.Clear();
+
+        var result = await new StartAssignmentCommandHandler(f.Db.Object)
+            .Handle(new StartAssignmentCommand(f.Chapter.Id, a.Id, a.AssigneeUserId), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("BR-14");
     }
 
     [Fact]
