@@ -61,7 +61,7 @@ public class ManualScriptLineTests
 
         first.IsSuccess.Should().BeTrue();
         (first.Value!.LineOrder, second.Value!.LineOrder).Should().Be((1, 2));
-        (first.Value.ChapterVersion, second.Value.ChapterVersion).Should().Be((1, 2));
+        (first.Value.ChapterVersion, second.Value.ChapterVersion).Should().Be((0, 0));
         var revisions = _db.ContentRevisions.Where(r => r.SceneId == _scene.Id && r.Kind == ContentRevisionKind.Script)
             .OrderBy(r => r.VersionNumber).ToList();
         revisions.Select(r => r.VersionNumber).Should().Equal(1, 2);
@@ -116,6 +116,7 @@ public class ManualScriptLineTests
     public async Task Create_WithStaleExpectedVersion_ConflictsAndChangesNothing()
     {
         await Create("A");
+        _chapter.IncrementVersion();
 
         var r = await Create("B", expected: 0);
 
@@ -163,7 +164,7 @@ public class ManualScriptLineTests
 
         updated.IsSuccess.Should().BeTrue();
         updated.Value!.DialogueText.Should().Be("Bản sửa");
-        updated.Value.ChapterVersion.Should().Be(2);
+        updated.Value.ChapterVersion.Should().Be(0);
         _db.ContentRevisions.OrderBy(r => r.VersionNumber).First().PayloadJson.Should().Contain("Bản đầu");
         _db.ContentRevisions.OrderBy(r => r.VersionNumber).Last().PayloadJson.Should().Contain("Bản sửa").And.NotContain("Bản đầu");
     }
@@ -206,7 +207,7 @@ public class ManualScriptLineTests
             new DeleteScriptLineCommand(_chapter.Id, a.Value!.Id, _writer, null), default);
 
         r.IsSuccess.Should().BeTrue();
-        r.Value!.ChapterVersion.Should().Be(3);
+        r.Value!.ChapterVersion.Should().Be(0);
         _db.ScriptLines.Where(l => l.SceneId == _scene.Id).Select(l => l.Id).Should().Equal(b.Value!.Id);
         _db.ContentRevisions.OrderBy(r2 => r2.VersionNumber).Last().PayloadJson.Should().NotContain("\"A\"").And.Contain("\"B\"");
     }
@@ -330,7 +331,7 @@ public class ManualScriptLineTests
         var r = await Restore(ScriptRevisions()[1].Id);
 
         r.IsSuccess.Should().BeTrue(r.ErrorMessage);
-        (r.Value!.VersionNumber, r.Value.RestoredFromVersionNumber, r.Value.ChapterVersion).Should().Be((5, 2, 5L));
+        (r.Value!.VersionNumber, r.Value.RestoredFromVersionNumber, r.Value.ChapterVersion).Should().Be((5, 2, 0L));
         var lines = _db.ScriptLines.Where(l => l.SceneId == _scene.Id).OrderBy(l => l.LineOrder).ToList();
         lines.Select(l => l.DialogueText).Should().Equal("A", "B");
         lines.Select(l => l.Id).Should().Equal([a.Value.Id, b.Value.Id], "dòng đã xoá được bật lại đúng Id cũ");
@@ -361,6 +362,7 @@ public class ManualScriptLineTests
         var a = await Create("A");
         await EditLine(a.Value!.Id, "A sửa");
         var first = ScriptRevisions()[0].Id;
+        _chapter.IncrementVersion();
 
         (await Restore(first, expected: 0)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 

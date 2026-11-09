@@ -61,7 +61,7 @@ public partial class AssignmentTests
             Series = Series.Create(workspaceId, "Series", ReadingDirection.RightToLeft);
             Chapter = Chapter.Create(Series.Id, 1);
             var def = PipelineDefinition.Create(workspaceId, "Pipeline", seriesId: Series.Id);
-            ArtistStage = PipelineStage.Create(def.Id, "Pencil", "pencil", 1, allowedRole: WorkspaceRole.Artist, isInitial: true);
+            ArtistStage = PipelineStage.Create(def.Id, "Pencil", "pencil", 1, allowedRole: WorkspaceRole.Artist, isApprovalGate: true, isInitial: true);
             InkStage = PipelineStage.Create(def.Id, "Ink", "ink", 2, allowedRole: WorkspaceRole.Artist);
             ReviewStage = PipelineStage.Create(def.Id, "Review", "review", 3, allowedRole: WorkspaceRole.Editor);
             Page = Page.CreateNew(Chapter.Id, 1, default, 1200, 1800, 300);

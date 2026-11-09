@@ -98,7 +98,7 @@ public class SeriesCommandTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         var stages = pipelines.Single().GetOrderedStages();
-        stages.Should().HaveCount(8);
+        stages.Should().HaveCount(7);
         stages.Single(s => s.Slug == "review").AllowedRole.Should().Be(WorkspaceRole.Editor);
         stages.Single(s => s.Slug == "review").IsApprovalGate.Should().BeTrue();
         stages.Single(s => s.Slug == "approved").AllowedRole.Should().Be(WorkspaceRole.Editor);
