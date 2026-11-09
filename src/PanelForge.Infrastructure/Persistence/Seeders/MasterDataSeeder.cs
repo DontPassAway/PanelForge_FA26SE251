@@ -77,8 +77,8 @@ public static class MasterDataSeeder
         var template = PipelineTemplate.Create(
             code: "STANDARD_MANGA",
             name: "Standard Manga Pipeline",
-            description: "Canonical 8-stage manga production pipeline with guarded review gates. " +
-                         "Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved",
+            description: "Canonical 7-stage manga production pipeline with guarded review gates. " +
+                         "Script → Pencil → Ink → Color → Letter → Review → Approved",
             isDefault: true
         );
 
@@ -90,13 +90,12 @@ public static class MasterDataSeeder
         var stages = new[]
         {
             ("SCRIPT",    "Script",    1, WorkspaceRole.Writer,   (string?)null,       true,  """{"colorCode":"#6B7280","estimatedDays":3}"""),
-            ("THUMBNAIL", "Thumbnail", 2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#8B5CF6","estimatedDays":2}"""),
-            ("PENCIL",    "Pencil",    3, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
-            ("INK",       "Ink",       4, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
-            ("COLOR",     "Color",     5, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
-            ("LETTER",    "Letter",    6, WorkspaceRole.Letterer, null,                true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
-            ("REVIEW",    "Review",    7, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
-            ("APPROVED",  "Approved",  8, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
+            ("PENCIL",    "Pencil",    2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
+            ("INK",       "Ink",       3, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
+            ("COLOR",     "Color",     4, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
+            ("LETTER",    "Letter",    5, WorkspaceRole.Letterer, null,                true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
+            ("REVIEW",    "Review",    6, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
+            ("APPROVED",  "Approved",  7, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
         };
 
         foreach (var (code, name, order, role, gate, isRequired, cfg) in stages)

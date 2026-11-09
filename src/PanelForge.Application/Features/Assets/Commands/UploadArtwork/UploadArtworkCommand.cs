@@ -52,13 +52,16 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             return Fail($"File vượt giới hạn {AssetRules.MaxArtworkBytes / (1024 * 1024)} MB.");
 
         var clientHash = AssetRules.NormalizeSha256(cmd.ClientSha256);
+        if (clientHash is null)
+            return Fail("clientSha256 phải là SHA-256 dạng 64 ký tự hex.");
+
         var contentType = AssetRules.DetectImageContentType(cmd.Content);
         if (contentType is null)
             return Fail("Chỉ nhận ảnh PNG, JPEG hoặc WebP.");
 
         // BR-04: hash client chỉ để tham khảo, server tính lại và từ chối nếu lệch
         var hash = AssetRules.ComputeSha256(cmd.Content);
-        if (clientHash is not null && hash != clientHash)
+        if (hash != clientHash)
             return Fail("SHA-256 client gửi không khớp nội dung server nhận được, file bị từ chối (BR-04).");
 
         // ── Ngữ cảnh: Chapter, Page, Stage (BR-03, BR-12) ──
@@ -100,22 +103,14 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
                 .FirstOrDefaultAsync(ct);
         }
 
-        // Nếu stageId vẫn không thuộc pipeline của Series, tự động gán fallback stage hợp lệ của Series nếu có
-        if (pipelineIds.Count > 0 && stageId != Guid.Empty)
+        // Nếu người gọi chỉ định stageId cụ thể, bắt buộc phải thuộc quy trình của Series
+        if (cmd.StageId != Guid.Empty && pipelineIds.Count > 0)
         {
             var belongsToSeries = await _db.PipelineStages.AsNoTracking().AnyAsync(
-                s => s.Id == stageId && pipelineIds.Contains(s.PipelineDefinitionId), ct);
+                s => s.Id == cmd.StageId && pipelineIds.Contains(s.PipelineDefinitionId), ct);
             if (!belongsToSeries)
             {
-                var fallbackStage = await _db.PipelineStages.AsNoTracking()
-                    .Where(s => pipelineIds.Contains(s.PipelineDefinitionId))
-                    .OrderBy(s => s.StageOrder)
-                    .Select(s => s.Id)
-                    .FirstOrDefaultAsync(ct);
-                if (fallbackStage != Guid.Empty)
-                {
-                    stageId = fallbackStage;
-                }
+                return Fail($"Công đoạn {cmd.StageId} không thuộc quy trình sản xuất của Series.", ResultErrorCodes.Validation);
             }
         }
 
@@ -147,31 +142,29 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             }
         }
 
-        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp mà không bắt buộc gán việc InProgress trước
-        if (!holdsTheWork)
-        {
-            var isOwnerOrAuthorizedRole = await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w =>
-                w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct)
-                || await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
-                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId &&
-                (m.Role == WorkspaceRole.Artist || m.Role == WorkspaceRole.Producer), ct)
-                || await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
-                sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId, ct);
-
-            if (isOwnerOrAuthorizedRole)
-            {
-                holdsTheWork = true;
-            }
-        }
-
-        // Nếu vẫn chưa xác định được quyền và user có ID hợp lệ, kiểm tra xem user có phải thành viên Workspace không
+        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp khi không có assignment xung đột
         if (!holdsTheWork && cmd.UserId != Guid.Empty)
         {
-            var isAnyMember = await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
-                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId, ct);
-            if (isAnyMember)
+            var hasSpecificAssignment = await _db.Assignments.AnyAsync(a =>
+                a.ChapterId == chapter.Id && a.PipelineStageId == stageId &&
+                ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
+                 (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
+
+            if (!hasSpecificAssignment)
             {
-                holdsTheWork = true;
+                var isOwnerOrAuthorizedRole =
+                    (_db.StudioWorkspaces != null && await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w =>
+                        w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct))
+                    || (_db.WorkspaceMembers != null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
+                        m.WorkspaceId == workspaceId && m.UserId == cmd.UserId &&
+                        (m.Role == WorkspaceRole.Artist || m.Role == WorkspaceRole.Producer), ct))
+                    || (_db.SeriesMembers != null && await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
+                        sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId, ct));
+
+                if (isOwnerOrAuthorizedRole)
+                {
+                    holdsTheWork = true;
+                }
             }
         }
 
