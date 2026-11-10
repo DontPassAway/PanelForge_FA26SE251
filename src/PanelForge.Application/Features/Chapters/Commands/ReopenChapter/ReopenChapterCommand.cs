@@ -32,10 +32,11 @@ public sealed class ReopenChapterCommandHandler : IRequestHandler<ReopenChapterC
 
         var (chapter, workspaceId) = loaded.Value;
 
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == cmd.UserId, ct);
         var role = await _db.WorkspaceMembers.AsNoTracking()
             .Where(m => m.WorkspaceId == workspaceId && m.UserId == cmd.UserId)
             .Select(m => (WorkspaceRole?)m.Role).FirstOrDefaultAsync(ct);
-        var byPublisher = role == WorkspaceRole.Publisher;
+        var byPublisher = role == WorkspaceRole.Publisher || user?.Role == SystemRole.Publisher;
 
         chapter.Reopen();
         chapter.UpdatedBy = cmd.UserId.ToString();

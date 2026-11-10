@@ -51,7 +51,14 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
         var review = ChapterReview.Create(chapter.Id, ChapterReviewAction.ProducerApproved, cmd.UserId, chapter.VersionVector);
         _db.ChapterReviews.Add(review);
 
-        foreach (var publisherId in await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.UserId, ct))
+        var systemPublisherIds = await _db.Users.AsNoTracking()
+            .Where(u => u.Role == SystemRole.Publisher && u.IsActive && !u.IsDeleted && u.Id != cmd.UserId)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+        var workspacePublisherIds = await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.UserId, ct);
+        var allPublishers = systemPublisherIds.Union(workspacePublisherIds).Distinct();
+
+        foreach (var publisherId in allPublishers)
             _db.Notifications.Add(ChapterReviewRules.Notify(
                 publisherId, NotificationType.ChapterReadyForPublication, "Có chương chờ duyệt xuất bản", chapter));
 
