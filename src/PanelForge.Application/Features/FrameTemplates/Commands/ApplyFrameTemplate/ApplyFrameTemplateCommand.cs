@@ -44,8 +44,8 @@ public sealed class ApplyFrameTemplateCommandHandler
 
         if (page.Status != ChapterStatus.InProduction)
             return Fail("Chương không còn ở trạng thái sản xuất, không dựng lại bố cục được (BR-12).", ResultErrorCodes.Conflict);
-        if (template.LayoutFormat != page.LayoutFormat)
-            return Fail($"Template dành cho khổ {template.LayoutFormat}, Page đang là {page.LayoutFormat}.", ResultErrorCodes.Validation);
+        if (template.LayoutFormat == LayoutFormat.SpreadDouble && page.LayoutFormat != LayoutFormat.SpreadDouble)
+            return Fail($"Template dành cho trang đôi (SpreadDouble), không thể áp dụng cho trang đơn ({page.LayoutFormat}).", ResultErrorCodes.Validation);
         if (await _db.Panels.AnyAsync(p => p.PageId == cmd.PageId, ct))
             return Fail("Page đã có Panel; xoá các Panel hiện có trước khi áp dụng template.", ResultErrorCodes.Conflict);
 

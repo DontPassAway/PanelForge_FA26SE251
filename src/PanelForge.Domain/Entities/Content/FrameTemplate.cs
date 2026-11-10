@@ -122,22 +122,23 @@ public class FrameTemplate : BaseEntity
         // ── NHÓM 1: TỰ SỰ TIÊU CHUẨN (STANDARD & NARRATIVE) ─────────────────────────
         BuiltIn("f0000000-0000-0000-0000-00000000000c", "4-Koma Classic (Ki-shō-ten-ketsu)",
             [
-                new FrameSlot(Mx, My, 1 - 2 * Mx, 0.2285),
-                new FrameSlot(Mx, Math.Round(My + 0.2285 + 0.012, 4), 1 - 2 * Mx, 0.2285),
-                new FrameSlot(Mx, Math.Round(My + 2 * (0.2285 + 0.012), 4), 1 - 2 * Mx, 0.2285),
-                new FrameSlot(Mx, Math.Round(My + 3 * (0.2285 + 0.012), 4), 1 - 2 * Mx, 0.2285),
+                // Căn giữa trang với bề rộng 64% chuẩn tỉ lệ khung Manga 4:3
+                new FrameSlot(0.18, My, 0.64, 0.2285),
+                new FrameSlot(0.18, Math.Round(My + 0.2285 + 0.012, 4), 0.64, 0.2285),
+                new FrameSlot(0.18, Math.Round(My + 2 * (0.2285 + 0.012), 4), 0.64, 0.2285),
+                new FrameSlot(0.18, Math.Round(My + 3 * (0.2285 + 0.012), 4), 0.64, 0.2285),
             ],
             category: "narrative", code: "TPL-MANGA-01",
             description: "4 khung truyện thẳng hàng (Khởi - Thừa - Chuyển - Hợp) chuẩn hài hước & đời thường"),
 
         BuiltIn("f0000000-0000-0000-0000-000000000008", "3-Tier Balanced (5 Khung RTL)",
             [
-                // Tier 1: 2 khung (phải thiết lập cảnh, trái phản ứng)
+                // Tier 1: 2 khung (phải thiết lập cảnh trước, trái phản ứng sau - chuẩn RTL)
                 new FrameSlot(0.506, My, 0.469, 0.27),
                 new FrameSlot(Mx, My, 0.469, 0.27),
                 // Tier 2: 1 khung lớn bao ngang hội thoại
                 new FrameSlot(Mx, 0.31, 1 - 2 * Mx, 0.38),
-                // Tier 3: 2 khung chuyển trang
+                // Tier 3: 2 khung chuyển trang (phải trước, trái sau)
                 new FrameSlot(0.506, 0.705, 0.469, 0.27),
                 new FrameSlot(Mx, 0.705, 0.469, 0.27),
             ],
@@ -145,7 +146,17 @@ public class FrameTemplate : BaseEntity
             description: "Bố cục 3 tầng cổ điển: Tier 1 mở cảnh, Tier 2 trọng tâm kịch tính, Tier 3 chuyển tiếp trang"),
 
         BuiltIn("f0000000-0000-0000-0000-000000000006", "3-Tier Dense (6 Khung Lưới 3×2)",
-            Rows((1, 2), (1, 2), (1, 2)),
+            [
+                // Hàng 1 (phải trước, trái sau - chuẩn RTL)
+                new FrameSlot(0.506, 0.025, 0.469, 0.296),
+                new FrameSlot(0.025, 0.025, 0.469, 0.296),
+                // Hàng 2
+                new FrameSlot(0.506, 0.336, 0.469, 0.296),
+                new FrameSlot(0.025, 0.336, 0.469, 0.296),
+                // Hàng 3
+                new FrameSlot(0.506, 0.647, 0.469, 0.296),
+                new FrameSlot(0.025, 0.647, 0.469, 0.296),
+            ],
             category: "narrative", code: "TPL-MANGA-03",
             description: "Lưới 3 hàng × 2 cột cho các phân cảnh nhiều đối thoại, điều tra, tranh luận gay cấn"),
 
@@ -164,10 +175,17 @@ public class FrameTemplate : BaseEntity
             category: "narrative",
             description: "3 dải ngang bằng nhau cho phân cảnh diễn biến theo trình tự thời gian"),
 
-        BuiltIn("f0000000-0000-0000-0000-000000000005", "4 Khung (Lưới 2×2)",
-            Rows((1, 2), (1, 2)),
+        BuiltIn("f0000000-0000-0000-0000-000000000005", "4 Khung (Lưới 2×2 RTL)",
+            [
+                // Hàng 1 (phải trước, trái sau)
+                new FrameSlot(0.506, 0.025, 0.469, 0.4675),
+                new FrameSlot(0.025, 0.025, 0.469, 0.4675),
+                // Hàng 2
+                new FrameSlot(0.506, 0.5075, 0.469, 0.4675),
+                new FrameSlot(0.025, 0.5075, 0.469, 0.4675),
+            ],
             category: "narrative",
-            description: "4 ô vuông cân xứng cho nhịp kể phân đoạn"),
+            description: "4 ô vuông cân xứng theo hướng đọc Manga RTL"),
 
         // ── NHÓM 2: HÀNH ĐỘNG & KỊCH TÍNH (ACTION & HIGH-TENSION) ────────────────────
         BuiltIn("f0000000-0000-0000-0000-00000000000a", "Dynamic Shonen Slanted (4 Khung Cắt Chéo)",
@@ -189,10 +207,17 @@ public class FrameTemplate : BaseEntity
             category: "action", code: "TPL-MANGA-06",
             description: "1 khung toàn cảnh chiến trường làm nền lồng 2 khung cận cảnh biểu cảm và chi tiết vũ khí"),
 
-        BuiltIn("f0000000-0000-0000-0000-000000000009", "Shonen Action Dense (6 Khung)",
-            Rows((1, 1), (1, 2), (1.3, 1), (1, 2)),
+        BuiltIn("f0000000-0000-0000-0000-000000000009", "Shonen Action Dense (6 Khung RTL)",
+            [
+                new FrameSlot(Mx, 0.025, 1 - 2 * Mx, 0.205),
+                new FrameSlot(0.506, 0.245, 0.469, 0.205),
+                new FrameSlot(0.025, 0.245, 0.469, 0.205),
+                new FrameSlot(Mx, 0.465, 1 - 2 * Mx, 0.265),
+                new FrameSlot(0.506, 0.745, 0.469, 0.23),
+                new FrameSlot(0.025, 0.745, 0.469, 0.23),
+            ],
             category: "action",
-            description: "1 mở đầu + 2 dồn dập + 1 cao trào lớn + 2 dư chấn phản ứng"),
+            description: "1 mở đầu + 2 dồn dập + 1 cao trào lớn + 2 dư chấn phản ứng theo chuẩn RTL"),
 
         // ── NHÓM 3: ĐẠI CẢNH & ĐIỂM NHẤN (CINEMATIC & SPLASH) ─────────────────────────
         BuiltIn("f0000000-0000-0000-0000-000000000002", "Full Splash Bleed (1 Khung Tràn Lề)",
@@ -221,7 +246,11 @@ public class FrameTemplate : BaseEntity
             description: "3 thanh dài ngang tỉ lệ màn ảnh rộng cho cảnh thiên nhiên kéo dài hoặc du hành thời gian"),
 
         BuiltIn("f0000000-0000-0000-0000-000000000007", "1 Lớn + 2 Nhỏ (Phản Ứng Đối Xứng)",
-            Rows((2, 1), (1, 2)),
+            [
+                new FrameSlot(Mx, 0.025, 1 - 2 * Mx, 0.52),
+                new FrameSlot(0.506, 0.56, 0.469, 0.415),
+                new FrameSlot(0.025, 0.56, 0.469, 0.415),
+            ],
             category: "cinematic",
             description: "1 khung chính phía trên kết hợp 2 khung cận cảnh phân tích bên dưới"),
 
@@ -237,17 +266,17 @@ public class FrameTemplate : BaseEntity
                 new FrameSlot(0.04, 0.36, 0.92, 0.27),
                 new FrameSlot(0.04, 0.68, 0.92, 0.28),
             ],
-            LayoutFormat.WebtoonLongstrip,
+            LayoutFormat.StandardPage,
             category: "webtoon", code: "TPL-WEBTOON-01",
             description: "Bố cục cuộn dọc tiêu chuẩn smartphone 9:16 với khoảng lặng ngừng nghỉ (negative space)"),
 
         BuiltIn("f0000000-0000-0000-0000-000000000012", "Webtoon Split Comparison (Song Song)",
             [
                 new FrameSlot(0.04, 0.04, 0.92, 0.32),
-                new FrameSlot(0.04, 0.40, 0.445, 0.55),
                 new FrameSlot(0.515, 0.40, 0.445, 0.55),
+                new FrameSlot(0.04, 0.40, 0.445, 0.55),
             ],
-            LayoutFormat.WebtoonLongstrip,
+            LayoutFormat.StandardPage,
             category: "webtoon", code: "TPL-WEBTOON-02",
             description: "1 khung dẫn đề ở trên + 2 cột song song 50-50 để miêu tả 2 góc nhìn đối thoại đồng thời"),
 
@@ -256,7 +285,7 @@ public class FrameTemplate : BaseEntity
                 new FrameSlot(0, 0, 1, 0.45, Borderless: true),
                 new FrameSlot(0.08, 0.52, 0.84, 0.42, Borderless: true),
             ],
-            LayoutFormat.WebtoonLongstrip,
+            LayoutFormat.StandardPage,
             category: "webtoon", code: "TPL-WEBTOON-03",
             description: "Khung tranh không viền chìm dần vào trang cuộn, tạo cảm xúc bay bổng hoặc hồi tưởng"),
     ];
