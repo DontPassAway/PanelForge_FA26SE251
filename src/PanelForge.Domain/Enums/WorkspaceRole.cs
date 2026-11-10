@@ -1,3 +1,5 @@
+using System;
+
 namespace PanelForge.Domain.Enums;
 
 public enum WorkspaceRole
@@ -7,6 +9,9 @@ public enum WorkspaceRole
     Artist,
     Letterer,
     Editor,
-    /// <summary>Họp tuần 5: duyệt xuất bản và lên lịch phát hành chương đã được Producer duyệt. Lưu dạng chuỗi nên không cần migration.</summary>
+    /// <summary>
+    /// [Obsolete] Đã được chuyển lên SystemRole.Publisher (cổng xuất bản độc lập). Giữ lại để tương thích ngược dữ liệu DB cũ.
+    /// </summary>
+    [Obsolete("Use SystemRole.Publisher instead")]
     Publisher
 }

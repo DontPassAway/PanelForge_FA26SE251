@@ -138,6 +138,23 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
             return;
         }
 
+        bool isPublisher = user.IsInRole("Publisher") ||
+            user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && c.Value == "Publisher");
+        bool isAdmin = user.IsInRole("Admin") ||
+            user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && (c.Value == "Admin" || c.Value == "Administrator"));
+
+        if (isAdmin)
+        {
+            await next();
+            return;
+        }
+
+        if (isPublisher && (_allowedRoles.Length == 0 || _allowedRoles.Contains(WorkspaceRole.Publisher)))
+        {
+            await next();
+            return;
+        }
+
         bool hasPermission;
         if (resolvedSeriesId.HasValue)
         {
