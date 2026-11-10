@@ -64,24 +64,26 @@ public class FrameTemplate : BaseEntity
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    // ── Template có sẵn (tự soạn, không sao chép từ dự án bên ngoài) ─────────────────
-    private const double M = 0.05;   // lề trang
-    private const double G = 0.02;   // khoảng cách giữa khung (gutter)
+    // ── Template có sẵn (tự soạn, chuẩn in ấn Manga hiện đại lề 2.5% tối ưu không gian) ─────────────────
+    private const double Mx = 0.025;  // lề ngang 2.5% (khung chiếm 95% bề rộng trang)
+    private const double My = 0.025;  // lề dọc 2.5% (khung chiếm 95% bề cao trang)
+    private const double Gy = 0.015;  // khoảng cách giữa các hàng (gutter dọc) 1.5%
+    private const double Gx = 0.012;  // khoảng cách giữa các cột (gutter ngang) 1.2%
 
     /// <summary>Lưới theo hàng: rows[i] = (tỉ lệ chiều cao, số cột).</summary>
     private static List<FrameSlot> Rows(params (double Weight, int Cols)[] rows)
     {
         var slots = new List<FrameSlot>();
-        var usableH = 1 - 2 * M - G * (rows.Length - 1);
+        var usableH = 1 - 2 * My - Gy * (rows.Length - 1);
         var total = rows.Sum(r => r.Weight);
-        var y = M;
+        var y = My;
         foreach (var (weight, cols) in rows)
         {
             var h = usableH * weight / total;
-            var w = (1 - 2 * M - G * (cols - 1)) / cols;
+            var w = (1 - 2 * Mx - Gx * (cols - 1)) / cols;
             for (var c = 0; c < cols; c++)
-                slots.Add(new FrameSlot(Math.Round(M + c * (w + G), 4), Math.Round(y, 4), Math.Round(w, 4), Math.Round(h, 4)));
-            y += h + G;
+                slots.Add(new FrameSlot(Math.Round(Mx + c * (w + Gx), 4), Math.Round(y, 4), Math.Round(w, 4), Math.Round(h, 4)));
+            y += h + Gy;
         }
         return slots;
     }
@@ -103,8 +105,8 @@ public class FrameTemplate : BaseEntity
         BuiltIn("f0000000-0000-0000-0000-000000000009", "6 khung hành động (1 + 2 + 1 + 2)", Rows((1, 1), (1, 2), (1.3, 1), (1, 2))),
         BuiltIn("f0000000-0000-0000-0000-00000000000a", "Khung nghiêng (2 khung chéo)",
         [
-            new FrameSlot(M, M, 1 - 2 * M, 0.45, Corners: [new(0, 0), new(1, 0), new(1, 0.8), new(0, 1)]),
-            new FrameSlot(M, 0.42, 1 - 2 * M, 0.53, Corners: [new(0, 0.12), new(1, 0), new(1, 1), new(0, 1)]),
+            new FrameSlot(Mx, My, 1 - 2 * Mx, 0.47, Corners: [new(0, 0), new(1, 0), new(1, 0.85), new(0, 1)]),
+            new FrameSlot(Mx, 0.455, 1 - 2 * Mx, 0.52, Corners: [new(0, 0.12), new(1, 0), new(1, 1), new(0, 1)]),
         ]),
         BuiltIn("f0000000-0000-0000-0000-00000000000b", "Trang đôi: 1 khung toàn cảnh + 3 khung",
             Rows((2, 1), (1, 3)), LayoutFormat.SpreadDouble),
