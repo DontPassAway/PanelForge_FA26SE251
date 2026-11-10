@@ -18,6 +18,15 @@ public class FrameTemplate : BaseEntity
     public string Name { get; private set; } = default!;
     public LayoutFormat LayoutFormat { get; private set; }
 
+    /// <summary>Phân loại theo mục đích kể chuyện: narrative, action, cinematic, webtoon.</summary>
+    public string Category { get; private set; } = "narrative";
+
+    /// <summary>Mã chuẩn hoá của template (ví dụ TPL-MANGA-01, TPL-COMIC-01).</summary>
+    public string? Code { get; private set; }
+
+    /// <summary>Mô tả công năng và nhịp điệu của bố cục.</summary>
+    public string? Description { get; private set; }
+
     /// <summary>JSON mảng <see cref="FrameSlot"/>.</summary>
     public string SlotsJson { get; private set; } = "[]";
 
@@ -26,14 +35,21 @@ public class FrameTemplate : BaseEntity
     public IReadOnlyList<FrameSlot> Slots =>
         JsonSerializer.Deserialize<List<FrameSlot>>(SlotsJson, JsonOpts) ?? [];
 
-    public static FrameTemplate Create(Guid workspaceId, string name, LayoutFormat layoutFormat, IReadOnlyList<FrameSlot> slots)
+    public static FrameTemplate Create(Guid workspaceId, string name, LayoutFormat layoutFormat, IReadOnlyList<FrameSlot> slots, string category = "narrative", string? code = null, string? description = null)
     {
-        var t = Build(name, layoutFormat, slots);
+        var t = Build(name, layoutFormat, slots, category: category, code: code, description: description);
         t.WorkspaceId = workspaceId;
         return t;
     }
 
-    private static FrameTemplate Build(string name, LayoutFormat layoutFormat, IReadOnlyList<FrameSlot> slots, Guid? id = null)
+    private static FrameTemplate Build(
+        string name,
+        LayoutFormat layoutFormat,
+        IReadOnlyList<FrameSlot> slots,
+        Guid? id = null,
+        string category = "narrative",
+        string? code = null,
+        string? description = null)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 100)
             throw new ArgumentException("Tên template bắt buộc, tối đa 100 ký tự.", nameof(name));
@@ -42,7 +58,10 @@ public class FrameTemplate : BaseEntity
         {
             Name = name.Trim(),
             LayoutFormat = layoutFormat,
-            SlotsJson = JsonSerializer.Serialize(slots, JsonOpts)
+            SlotsJson = JsonSerializer.Serialize(slots, JsonOpts),
+            Category = string.IsNullOrWhiteSpace(category) ? "narrative" : category.Trim().ToLowerInvariant(),
+            Code = code?.Trim(),
+            Description = description?.Trim()
         };
         if (id is { } fixedId) t.Id = fixedId;
         return t;
@@ -88,28 +107,158 @@ public class FrameTemplate : BaseEntity
         return slots;
     }
 
-    private static FrameTemplate BuiltIn(string id, string name, List<FrameSlot> slots, LayoutFormat format = LayoutFormat.StandardPage)
-        => Build(name, format, slots, Guid.Parse(id));
+    private static FrameTemplate BuiltIn(
+        string id,
+        string name,
+        List<FrameSlot> slots,
+        LayoutFormat format = LayoutFormat.StandardPage,
+        string category = "narrative",
+        string? code = null,
+        string? description = null)
+        => Build(name, format, slots, Guid.Parse(id), category, code, description);
 
     public static readonly IReadOnlyList<FrameTemplate> BuiltIns =
     [
-        BuiltIn("f0000000-0000-0000-0000-000000000001", "Splash (1 khung)", Rows((1, 1))),
-        BuiltIn("f0000000-0000-0000-0000-000000000002", "Splash tràn lề (không viền)",
-            [new FrameSlot(0, 0, 1, 1, Borderless: true)]),
-        BuiltIn("f0000000-0000-0000-0000-000000000003", "2 tầng ngang", Rows((1, 1), (1, 1))),
-        BuiltIn("f0000000-0000-0000-0000-000000000004", "3 tầng ngang", Rows((1, 1), (1, 1), (1, 1))),
-        BuiltIn("f0000000-0000-0000-0000-000000000005", "4 khung (lưới 2×2)", Rows((1, 2), (1, 2))),
-        BuiltIn("f0000000-0000-0000-0000-000000000006", "6 khung (lưới 3 hàng × 2)", Rows((1, 2), (1, 2), (1, 2))),
-        BuiltIn("f0000000-0000-0000-0000-000000000007", "1 lớn + 2 nhỏ", Rows((2, 1), (1, 2))),
-        BuiltIn("f0000000-0000-0000-0000-000000000008", "5 khung (1 + 2 + 2)", Rows((1, 1), (1, 2), (1, 2))),
-        BuiltIn("f0000000-0000-0000-0000-000000000009", "6 khung hành động (1 + 2 + 1 + 2)", Rows((1, 1), (1, 2), (1.3, 1), (1, 2))),
-        BuiltIn("f0000000-0000-0000-0000-00000000000a", "Khung nghiêng (2 khung chéo)",
-        [
-            new FrameSlot(Mx, My, 1 - 2 * Mx, 0.47, Corners: [new(0, 0), new(1, 0), new(1, 0.85), new(0, 1)]),
-            new FrameSlot(Mx, 0.455, 1 - 2 * Mx, 0.52, Corners: [new(0, 0.12), new(1, 0), new(1, 1), new(0, 1)]),
-        ]),
-        BuiltIn("f0000000-0000-0000-0000-00000000000b", "Trang đôi: 1 khung toàn cảnh + 3 khung",
-            Rows((2, 1), (1, 3)), LayoutFormat.SpreadDouble),
+        // ── NHÓM 1: TỰ SỰ TIÊU CHUẨN (STANDARD & NARRATIVE) ─────────────────────────
+        BuiltIn("f0000000-0000-0000-0000-00000000000c", "4-Koma Classic (Ki-shō-ten-ketsu)",
+            [
+                new FrameSlot(Mx, My, 1 - 2 * Mx, 0.2285),
+                new FrameSlot(Mx, Math.Round(My + 0.2285 + 0.012, 4), 1 - 2 * Mx, 0.2285),
+                new FrameSlot(Mx, Math.Round(My + 2 * (0.2285 + 0.012), 4), 1 - 2 * Mx, 0.2285),
+                new FrameSlot(Mx, Math.Round(My + 3 * (0.2285 + 0.012), 4), 1 - 2 * Mx, 0.2285),
+            ],
+            category: "narrative", code: "TPL-MANGA-01",
+            description: "4 khung truyện thẳng hàng (Khởi - Thừa - Chuyển - Hợp) chuẩn hài hước & đời thường"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000008", "3-Tier Balanced (5 Khung RTL)",
+            [
+                // Tier 1: 2 khung (phải thiết lập cảnh, trái phản ứng)
+                new FrameSlot(0.506, My, 0.469, 0.27),
+                new FrameSlot(Mx, My, 0.469, 0.27),
+                // Tier 2: 1 khung lớn bao ngang hội thoại
+                new FrameSlot(Mx, 0.31, 1 - 2 * Mx, 0.38),
+                // Tier 3: 2 khung chuyển trang
+                new FrameSlot(0.506, 0.705, 0.469, 0.27),
+                new FrameSlot(Mx, 0.705, 0.469, 0.27),
+            ],
+            category: "narrative", code: "TPL-MANGA-02",
+            description: "Bố cục 3 tầng cổ điển: Tier 1 mở cảnh, Tier 2 trọng tâm kịch tính, Tier 3 chuyển tiếp trang"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000006", "3-Tier Dense (6 Khung Lưới 3×2)",
+            Rows((1, 2), (1, 2), (1, 2)),
+            category: "narrative", code: "TPL-MANGA-03",
+            description: "Lưới 3 hàng × 2 cột cho các phân cảnh nhiều đối thoại, điều tra, tranh luận gay cấn"),
+
+        BuiltIn("f0000000-0000-0000-0000-00000000000e", "Classic 9-Panel Grid (Watchmen Style)",
+            Rows((1, 3), (1, 3), (1, 3)),
+            category: "narrative", code: "TPL-COMIC-01",
+            description: "Lưới 3×3 phong cách Watchmen/DC Classic: nhịp kể đều đặn, phân tích tâm lý sâu sắc"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000003", "2 Tầng Ngang Cơ Bản",
+            Rows((1, 1), (1, 1)),
+            category: "narrative",
+            description: "Chia đôi trang theo chiều ngang, cân bằng nhịp kể"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000004", "3 Tầng Ngang Cơ Bản",
+            Rows((1, 1), (1, 1), (1, 1)),
+            category: "narrative",
+            description: "3 dải ngang bằng nhau cho phân cảnh diễn biến theo trình tự thời gian"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000005", "4 Khung (Lưới 2×2)",
+            Rows((1, 2), (1, 2)),
+            category: "narrative",
+            description: "4 ô vuông cân xứng cho nhịp kể phân đoạn"),
+
+        // ── NHÓM 2: HÀNH ĐỘNG & KỊCH TÍNH (ACTION & HIGH-TENSION) ────────────────────
+        BuiltIn("f0000000-0000-0000-0000-00000000000a", "Dynamic Shonen Slanted (4 Khung Cắt Chéo)",
+            [
+                new FrameSlot(Mx, My, 1 - 2 * Mx, 0.28, Corners: [new(0, 0), new(1, 0), new(1, 0.75), new(0, 1)]),
+                new FrameSlot(0.44, 0.26, 0.535, 0.38, Corners: [new(0, 0.22), new(1, 0), new(1, 1), new(0, 0.85)]),
+                new FrameSlot(Mx, 0.32, 0.40, 0.38, Corners: [new(0, 0), new(1, 0.15), new(1, 1), new(0, 0.85)]),
+                new FrameSlot(Mx, 0.685, 1 - 2 * Mx, 0.29, Corners: [new(0, 0.15), new(1, 0.05), new(1, 1), new(0, 1)]),
+            ],
+            category: "action", code: "TPL-MANGA-04",
+            description: "Rãnh cắt chéo góc 15°-25° tạo xung lực gia tốc cực mạnh cho phân cảnh combat, ra đòn chớp nhoáng"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000010", "Inset Panels (Khung Lồng Khung)",
+            [
+                new FrameSlot(Mx, My, 1 - 2 * Mx, 1 - 2 * My),
+                new FrameSlot(0.55, 0.08, 0.39, 0.26),
+                new FrameSlot(0.06, 0.62, 0.39, 0.26),
+            ],
+            category: "action", code: "TPL-MANGA-06",
+            description: "1 khung toàn cảnh chiến trường làm nền lồng 2 khung cận cảnh biểu cảm và chi tiết vũ khí"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000009", "Shonen Action Dense (6 Khung)",
+            Rows((1, 1), (1, 2), (1.3, 1), (1, 2)),
+            category: "action",
+            description: "1 mở đầu + 2 dồn dập + 1 cao trào lớn + 2 dư chấn phản ứng"),
+
+        // ── NHÓM 3: ĐẠI CẢNH & ĐIỂM NHẤN (CINEMATIC & SPLASH) ─────────────────────────
+        BuiltIn("f0000000-0000-0000-0000-000000000002", "Full Splash Bleed (1 Khung Tràn Lề)",
+            [new FrameSlot(0, 0, 1, 1, Borderless: true)],
+            category: "cinematic",
+            description: "1 panel tràn viền 100% đến hết vùng Bleed dành cho trang bìa hoặc đại cảnh kết liễu"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000001", "Splash 1 Khung (Có Viền)",
+            Rows((1, 1)),
+            category: "cinematic",
+            description: "1 khung viền đơn toàn trang chuẩn lề in ấn"),
+
+        BuiltIn("f0000000-0000-0000-0000-00000000000d", "Hero Splash 70/30 (Dominant Layout)",
+            [
+                new FrameSlot(Mx, My, 1 - 2 * Mx, 0.67),
+                new FrameSlot(0.665, 0.71, 0.31, 0.265),
+                new FrameSlot(0.345, 0.71, 0.308, 0.265),
+                new FrameSlot(Mx, 0.71, 0.308, 0.265),
+            ],
+            category: "cinematic", code: "TPL-MANGA-05",
+            description: "Khung chiếm 70% trang trên cho cảnh đại chiến bùng nổ, 3 khung hẹp 30% dưới cho phản hồi của đồng đội"),
+
+        BuiltIn("f0000000-0000-0000-0000-00000000000f", "Cinematic Widescreen (3 Bars)",
+            Rows((1, 1), (1, 1), (1.1, 1)),
+            category: "cinematic", code: "TPL-COMIC-02",
+            description: "3 thanh dài ngang tỉ lệ màn ảnh rộng cho cảnh thiên nhiên kéo dài hoặc du hành thời gian"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000007", "1 Lớn + 2 Nhỏ (Phản Ứng Đối Xứng)",
+            Rows((2, 1), (1, 2)),
+            category: "cinematic",
+            description: "1 khung chính phía trên kết hợp 2 khung cận cảnh phân tích bên dưới"),
+
+        BuiltIn("f0000000-0000-0000-0000-00000000000b", "Trang Đôi: 1 Khung Toàn Cảnh + 3 Khung",
+            Rows((2, 1), (1, 3)), LayoutFormat.SpreadDouble,
+            category: "cinematic",
+            description: "Bố cục trang đôi (Spread): Đại cảnh trải dài 2 trang kết hợp 3 khung nhịp điệu"),
+
+        // ── NHÓM 4: WEBTOON / MOBILE VERTICAL SCROLL ──────────────────────────────────
+        BuiltIn("f0000000-0000-0000-0000-000000000011", "Vertical Mobile Flow (3 Khung Cuộn)",
+            [
+                new FrameSlot(0.04, 0.04, 0.92, 0.27),
+                new FrameSlot(0.04, 0.36, 0.92, 0.27),
+                new FrameSlot(0.04, 0.68, 0.92, 0.28),
+            ],
+            LayoutFormat.WebtoonLongstrip,
+            category: "webtoon", code: "TPL-WEBTOON-01",
+            description: "Bố cục cuộn dọc tiêu chuẩn smartphone 9:16 với khoảng lặng ngừng nghỉ (negative space)"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000012", "Webtoon Split Comparison (Song Song)",
+            [
+                new FrameSlot(0.04, 0.04, 0.92, 0.32),
+                new FrameSlot(0.04, 0.40, 0.445, 0.55),
+                new FrameSlot(0.515, 0.40, 0.445, 0.55),
+            ],
+            LayoutFormat.WebtoonLongstrip,
+            category: "webtoon", code: "TPL-WEBTOON-02",
+            description: "1 khung dẫn đề ở trên + 2 cột song song 50-50 để miêu tả 2 góc nhìn đối thoại đồng thời"),
+
+        BuiltIn("f0000000-0000-0000-0000-000000000013", "Webtoon Borderless Floating Flow",
+            [
+                new FrameSlot(0, 0, 1, 0.45, Borderless: true),
+                new FrameSlot(0.08, 0.52, 0.84, 0.42, Borderless: true),
+            ],
+            LayoutFormat.WebtoonLongstrip,
+            category: "webtoon", code: "TPL-WEBTOON-03",
+            description: "Khung tranh không viền chìm dần vào trang cuộn, tạo cảm xúc bay bổng hoặc hồi tưởng"),
     ];
 }
 

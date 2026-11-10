@@ -25,5 +25,8 @@ internal sealed class FrameTemplateConfiguration : IEntityTypeConfiguration<Fram
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
 
         builder.Ignore(t => t.Slots);
+        builder.Ignore(t => t.Category);
+        builder.Ignore(t => t.Code);
+        builder.Ignore(t => t.Description);
     }
 }
