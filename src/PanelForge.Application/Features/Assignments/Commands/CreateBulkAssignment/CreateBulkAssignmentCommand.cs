@@ -60,7 +60,7 @@ public sealed class CreateBulkAssignmentCommandHandler : IRequestHandler<CreateB
         var resolved = await AssignmentBatchPlanner.ResolveAsync(
             _db, chapter, workspaceId, cmd.PipelineStageId, cmd.AssigneeUserId, cmd.PageIds, ct);
         if (!resolved.IsSuccess) return Fail(resolved.ErrorMessage!, resolved.ErrorCode);
-        var batch = resolved.Value;
+        var batch = resolved.Value!;
         var stage = batch.Stage;
 
         if (cmd.DryRun)

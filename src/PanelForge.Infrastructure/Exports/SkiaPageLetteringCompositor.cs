@@ -89,6 +89,7 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
     }
 
     /// <summary>Đường khung: đa giác theo corners (0–1 trong hộp) nếu có ≥ 3 góc, ngược lại hình chữ nhật (FE getPanelClipPoints).</summary>
+#pragma warning disable CS0618 // Type or member is obsolete (SKPath mutations migrating to SKPathBuilder in SkiaSharp 4)
     private static SKPath PanelPath(PagePanelLayer panel, SKRect bounds)
     {
         var path = new SKPath();
@@ -105,6 +106,7 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
         }
         return path;
     }
+#pragma warning restore CS0618
 
     private static void DrawPlaceholder(SKCanvas canvas, SKRect bounds)
     {
@@ -267,6 +269,7 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
 
     // ── Hình bóng (FE createSpeechBalloonPath / createThoughtBalloonPath / createShoutBalloonPath) ──
 
+#pragma warning disable CS0618 // Type or member is obsolete (SKPath mutations migrating to SKPathBuilder in SkiaSharp 4)
     public static SKPath? BalloonPath(string shape, double w, double h, double tailX, double tailY)
     {
         double cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2;
@@ -335,6 +338,7 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
                 return null;
         }
     }
+#pragma warning restore CS0618
 
     private static List<(float X, float Y, float R)> ThoughtTailDots(double w, double h, double tailX, double tailY)
     {

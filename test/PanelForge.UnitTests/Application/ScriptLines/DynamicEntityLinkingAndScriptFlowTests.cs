@@ -130,7 +130,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         // Assert
         createResult.IsSuccess.Should().BeTrue();
-        var formalEntryId = createResult.Value.Id;
+        var formalEntryId = createResult.Value!.Id;
 
         // Kiểm tra Stub Link đã được tự động chuyển hướng sang formal entry
         var updatedLink = await _db.ScriptLineBibleLinks.FirstAsync(l => l.ScriptLineId == _line1.Id);
@@ -153,8 +153,8 @@ public class DynamicEntityLinkingAndScriptFlowTests
             new MarkPageContentReadyCommand(_chapter.Id, _page.Id, _writer), default);
 
         markResult.IsSuccess.Should().BeTrue();
-        markResult.Value.IsContentReady.Should().BeTrue();
-        markResult.Value.ContentReadyById.Should().Be(_writer);
+        markResult.Value!.IsContentReady.Should().BeTrue();
+        markResult.Value!.ContentReadyById.Should().Be(_writer);
 
         var pageDb = await _db.Pages.FirstAsync(p => p.Id == _page.Id);
         pageDb.IsContentReady.Should().BeTrue();
@@ -165,7 +165,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
             new UnmarkPageContentReadyCommand(_chapter.Id, _page.Id, _writer), default);
 
         unmarkResult.IsSuccess.Should().BeTrue();
-        unmarkResult.Value.IsContentReady.Should().BeFalse();
+        unmarkResult.Value!.IsContentReady.Should().BeFalse();
 
         pageDb = await _db.Pages.FirstAsync(p => p.Id == _page.Id);
         pageDb.IsContentReady.Should().BeFalse();
@@ -196,8 +196,8 @@ public class DynamicEntityLinkingAndScriptFlowTests
             new RequestScriptReopenCommand(_chapter.Id, _writer, "Cần sửa thoại Panel 2 do đổi twist"), default);
 
         reqResult.IsSuccess.Should().BeTrue();
-        reqResult.Value.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Requested);
-        reqResult.Value.ScriptReopenReason.Should().Be("Cần sửa thoại Panel 2 do đổi twist");
+        reqResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Requested);
+        reqResult.Value!.ScriptReopenReason.Should().Be("Cần sửa thoại Panel 2 do đổi twist");
 
         // 2. Producer duyệt mở kịch bản
         var approveHandler = new ApproveScriptReopenCommandHandler(_db);
@@ -205,9 +205,9 @@ public class DynamicEntityLinkingAndScriptFlowTests
             new ApproveScriptReopenCommand(_chapter.Id, _producer), default);
 
         approveResult.IsSuccess.Should().BeTrue();
-        approveResult.Value.IsScriptFrozen.Should().BeFalse();
-        approveResult.Value.ScriptContentHash.Should().BeNull();
-        approveResult.Value.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Approved);
+        approveResult.Value!.IsScriptFrozen.Should().BeFalse();
+        approveResult.Value!.ScriptContentHash.Should().BeNull();
+        approveResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Approved);
 
         // 3. Giả lập Writer sửa thoại dòng 2 (gắn trên Panel 2)
         await Task.Delay(20);
@@ -216,7 +216,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         // 4. Producer đóng băng lại kịch bản (kích hoạt Targeted Impact Analysis)
         _mediator.Setup(m => m.Send(It.IsAny<PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate.CheckChapterBibleGateQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<ChapterBibleGateResultDto?>.Success(new ChapterBibleGateResultDto(
+            .ReturnsAsync(Result<ChapterBibleGateResultDto>.Success(new ChapterBibleGateResultDto(
                 IsPassed: true, TotalReferenced: 0, LockedCount: 0, PendingCount: 0, Items: [])));
 
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _mediator.Object);
@@ -224,8 +224,8 @@ public class DynamicEntityLinkingAndScriptFlowTests
             new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         freezeResult.IsSuccess.Should().BeTrue();
-        freezeResult.Value.IsScriptFrozen.Should().BeTrue();
-        freezeResult.Value.ScriptContentHash.Should().MatchRegex("^[0-9a-f]{64}$");
+        freezeResult.Value!.IsScriptFrozen.Should().BeTrue();
+        freezeResult.Value!.ScriptContentHash.Should().MatchRegex("^[0-9a-f]{64}$");
 
         // 5. Kiểm tra Targeted Impact Scope:
         // Panel 2 bị đổi thoại => Chuyển sang ReworkRequired và bật has_script_impact = true

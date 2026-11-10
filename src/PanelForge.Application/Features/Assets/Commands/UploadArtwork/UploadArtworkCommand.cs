@@ -179,7 +179,7 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         var reused = asset is not null;
         if (asset is null)
         {
-            var workspace = await _db.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, ct);
+            var workspace = await _db.StudioWorkspaces!.FirstOrDefaultAsync(w => w.Id == workspaceId, ct);
             if (workspace is null)
                 return Fail("Workspace không tồn tại.", ResultErrorCodes.NotFound);
             if (!workspace.TryReserveStorage(cmd.Content.Length))

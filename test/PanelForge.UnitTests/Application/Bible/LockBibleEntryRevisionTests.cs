@@ -106,7 +106,7 @@ public class LockBibleEntryRevisionTests
         result.IsSuccess.Should().BeTrue();
         _hero.Revisions.Should().HaveCount(2);
         _heroV1.IsLocked.Should().BeTrue();
-        result.Value.VersionNumber.Should().Be(2);
+        result.Value!.VersionNumber.Should().Be(2);
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

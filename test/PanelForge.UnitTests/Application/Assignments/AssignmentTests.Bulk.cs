@@ -142,7 +142,7 @@ public partial class AssignmentTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Select(s => s.UserId).Should().Equal(f.Artist2Id, f.ArtistId); // không có Pending/Rejected/Writer
-        result.Value[1].ActiveAssignmentCount.Should().Be(1);
-        result.Value[1].StageExperienceCount.Should().Be(1);
+        result.Value![1].ActiveAssignmentCount.Should().Be(1);
+        result.Value![1].StageExperienceCount.Should().Be(1);
     }
 }
