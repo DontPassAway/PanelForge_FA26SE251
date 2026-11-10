@@ -26,7 +26,7 @@ public class LockBibleEntryRevisionTests
     {
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
-        _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
         _location = bible.AddEntry(BibleEntryCategory.Location, "SHOP", "Tiệm", "Tiệm đồng hồ");
         _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true);
 
@@ -160,6 +160,18 @@ public class LockBibleEntryRevisionTests
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
         _hero.Revisions.Should().HaveCount(1);
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Lock_WhenNotWriterEndorsed_ReturnsConflict()
+    {
+        var unendorsed = _hero.AddRevision("v-draft", "{}", "hash-draft", effectiveFromChapterNumber: 2, reviewStatus: BibleRevisionStatus.Draft);
+        var result = await Lock(_hero, unendorsed);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("WriterEndorsed");
+        unendorsed.IsLocked.Should().BeFalse();
     }
 
     [Fact]
