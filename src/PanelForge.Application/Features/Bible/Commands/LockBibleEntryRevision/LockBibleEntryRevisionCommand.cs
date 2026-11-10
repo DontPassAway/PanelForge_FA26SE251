@@ -59,10 +59,11 @@ public sealed class LockBibleEntryRevisionCommandHandler
             return Result<BibleEntryRevisionDto>.Failure("Revision này đã được khoá trước đó.", ResultErrorCodes.Conflict);
         }
 
-        if (revision.ReviewStatus == BibleRevisionStatus.ReworkRequired)
+        // BR-25 / F-03: Chỉ phiên bản đã được Writer phê duyệt (WriterEndorsed) mới có thể khoá Canon.
+        if (revision.ReviewStatus != BibleRevisionStatus.WriterEndorsed)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                "Không thể khoá Canon phiên bản đang bị yêu cầu vẽ lại (ReworkRequired).", ResultErrorCodes.Conflict);
+                "Chỉ có thể khoá Canon phiên bản đã được Writer phê duyệt (WriterEndorsed).", ResultErrorCodes.Conflict);
         }
 
         revision.Lock(command.UserId);

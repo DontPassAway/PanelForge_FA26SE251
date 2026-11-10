@@ -138,11 +138,11 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         }
         else
         {
-            // Fallback: Tạo 7 công đoạn chuẩn (loại bỏ Thumbnail, chia sẵn thumbnail trực tiếp bên bàn vẽ Artist)
+            // Fallback: Tạo 7 công đoạn chuẩn manga trắng đen (F-02 & RF-11: không có Color mặc định)
             pipeline.AddStage("Script", "script", 1, null, WorkspaceRole.Writer, false, isInitial: true, isTerminal: false);
-            pipeline.AddStage("Pencil", "pencil", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Ink", "ink", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Color", "color", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Thumbnail", "thumbnail", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Pencil", "pencil", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Ink", "ink", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
             pipeline.AddStage("Letter", "letter", 5, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
             pipeline.AddStage("Review", "review", 6, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
             pipeline.AddStage("Approved", "approved", 7, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
