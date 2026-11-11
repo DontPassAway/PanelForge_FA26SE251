@@ -160,7 +160,9 @@ public sealed record SubmitConceptArtRequest(
     string? StageName = null,
     int? EffectiveFromChapterNumber = null,
     int? EffectiveToChapterNumber = null,
-    int? ExpectedVersionNumber = null
+    int? ExpectedVersionNumber = null,
+    // Phiên bản (giai đoạn) nhận Concept; bỏ trống = giai đoạn bắt đầu ở EffectiveFromChapterNumber, hoặc giai đoạn hiện hành.
+    Guid? RevisionId = null
 )
 {
     public string EffectiveSummary => (!string.IsNullOrWhiteSpace(Summary) ? Summary : (!string.IsNullOrWhiteSpace(Note) ? Note : "Nộp bản vẽ Concept Art")).Trim();
@@ -182,7 +184,8 @@ public sealed record BibleDesignQueueItemDto(
     string? ReworkFeedback,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    bool IsStub = false
+    bool IsStub = false,
+    Guid? RevisionId = null
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;

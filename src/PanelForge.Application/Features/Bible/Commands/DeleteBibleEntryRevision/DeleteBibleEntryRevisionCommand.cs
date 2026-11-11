@@ -27,7 +27,7 @@ public sealed class DeleteBibleEntryRevisionCommandHandler : IRequestHandler<Del
     public async Task<Result<bool>> Handle(DeleteBibleEntryRevisionCommand cmd, CancellationToken ct)
     {
         var entry = await _dbContext.BibleEntries
-            .Include(e => e.Revisions)
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .Include(e => e.SeriesBible)
             .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBible.SeriesId == cmd.SeriesId, ct);
 
@@ -43,6 +43,9 @@ public sealed class DeleteBibleEntryRevisionCommandHandler : IRequestHandler<Del
 
         if (revision.IsInitialVersion)
             return Result<bool>.Failure("Không thể xóa phiên bản gốc ban đầu (Initial Version).", ResultErrorCodes.Conflict);
+
+        if (revision.HasReviewHistory)
+            return Result<bool>.Failure("Không thể xóa phiên bản đã có lịch sử nộp Concept hoặc kiểm duyệt.", ResultErrorCodes.Conflict);
 
         entry.RemoveRevision(revision);
         _dbContext.BibleEntryRevisions.Remove(revision);

@@ -8,7 +8,8 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 
 /// <summary>
-/// V2.5: Writer hoặc Editor xác nhận duyệt thiết kế Model Sheet của Artist đã khớp với cốt truyện (Draft/ConceptSubmitted -> WriterEndorsed).
+/// V2.5: Writer hoặc Editor xác nhận duyệt thiết kế Model Sheet của Artist đã khớp với cốt truyện (ConceptSubmitted -> WriterEndorsed;
+/// mục chỉ có văn bản: Draft -> WriterEndorsed).
 /// </summary>
 public sealed record EndorseBibleEntryRevisionCommand(
     Guid SeriesId,
@@ -44,7 +45,14 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
         if (revision.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure("Revision đã được khóa Canon, không thể chỉnh sửa trạng thái kiểm duyệt.", ResultErrorCodes.Conflict);
 
-        revision.Endorse(cmd.UserId);
+        try
+        {
+            revision.Endorse(cmd.UserId, requiresConcept: entry.RequiresConceptArt);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Result<BibleEntryRevisionDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
+        }
         entry.UpdatedBy = cmd.UserId.ToString();
 
         await _dbContext.SaveChangesAsync(ct);
@@ -93,7 +101,14 @@ public sealed class RequestReworkBibleEntryRevisionCommandHandler : IRequestHand
         if (revision.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure("Revision đã được khóa Canon, không thể yêu cầu sửa trực tiếp; phải dùng /supersede.", ResultErrorCodes.Conflict);
 
-        revision.RequestRework(cmd.UserId, cmd.Reason);
+        try
+        {
+            revision.RequestRework(cmd.UserId, cmd.Reason);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Result<BibleEntryRevisionDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
+        }
         entry.UpdatedBy = cmd.UserId.ToString();
 
         await _dbContext.SaveChangesAsync(ct);

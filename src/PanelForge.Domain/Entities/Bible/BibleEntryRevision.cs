@@ -48,6 +48,9 @@ public class BibleEntryRevision : BaseEntity
     /// <summary>Dòng thời gian duyệt append-only của phiên bản này.</summary>
     public ICollection<BibleRevisionEvent> Events { get; private set; } = [];
 
+    /// <summary>Đã qua ít nhất một bước kiểm duyệt (ngoài sự kiện Created): xoá đi sẽ mất provenance.</summary>
+    public bool HasReviewHistory => Events.Any(e => e.Type != BibleRevisionEventType.Created);
+
     public bool CoversChapter(int chapterNumber)
         => EffectiveFromChapterNumber <= chapterNumber
            && (EffectiveToChapterNumber is null || chapterNumber <= EffectiveToChapterNumber);
@@ -90,9 +93,22 @@ public class BibleEntryRevision : BaseEntity
     public void MarkSuperseded(Guid userId, int byVersionNumber, string reason) =>
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.Superseded, userId, $"Bị thay bởi v{byVersionNumber}: {reason}"));
 
-    public void Endorse(Guid reviewerId)
+    /// <summary>
+    /// Writer/Editor xác nhận thiết kế. Mục có hình (<paramref name="requiresConcept"/>) chỉ duyệt được khi Artist đã nộp Concept;
+    /// mục chỉ có văn bản (thuật ngữ, quy tắc, sự kiện) duyệt thẳng từ bản nháp.
+    /// </summary>
+    public void Endorse(Guid reviewerId, bool requiresConcept = true)
     {
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
+        var allowed = ReviewStatus == BibleRevisionStatus.ConceptSubmitted
+            || (!requiresConcept && ReviewStatus == BibleRevisionStatus.Draft);
+        if (!allowed)
+            throw new InvalidOperationException(ReviewStatus switch
+            {
+                BibleRevisionStatus.WriterEndorsed => "Phiên bản này đã được duyệt.",
+                BibleRevisionStatus.ReworkRequired => "Đang chờ Artist vẽ lại; chỉ duyệt được sau khi Artist nộp lại Concept.",
+                _ => "Artist chưa nộp Concept cho phiên bản này."
+            });
         ReviewStatus = BibleRevisionStatus.WriterEndorsed;
         ReworkFeedback = null;
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.Endorsed, reviewerId, imageUrl: ConceptImageUrl));
@@ -102,6 +118,10 @@ public class BibleEntryRevision : BaseEntity
     {
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá, không thể yêu cầu sửa trực tiếp; phải dùng /supersede.");
         ArgumentException.ThrowIfNullOrWhiteSpace(feedback);
+        if (ReviewStatus is not (BibleRevisionStatus.ConceptSubmitted or BibleRevisionStatus.WriterEndorsed))
+            throw new InvalidOperationException(ReviewStatus == BibleRevisionStatus.ReworkRequired
+                ? "Phiên bản này đang chờ vẽ lại."
+                : "Chưa có Concept để yêu cầu vẽ lại; muốn sửa nội dung hãy tạo bản sửa mới.");
         ReviewStatus = BibleRevisionStatus.ReworkRequired;
         ReworkFeedback = feedback.Trim();
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.ReworkRequested, reviewerId, ReworkFeedback, ConceptImageUrl));
