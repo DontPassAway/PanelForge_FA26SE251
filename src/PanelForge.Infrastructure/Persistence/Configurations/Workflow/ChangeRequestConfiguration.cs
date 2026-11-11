@@ -41,6 +41,22 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
                .HasColumnName("panel_id")
                .HasColumnType("uuid");
 
+        // Không khóa ngoại tới scene/script_line: Writer có thể xoá dòng khi sửa, yêu cầu sửa vẫn phải giữ làm lịch sử
+        // (BR-01); quoted_text lưu nguyên văn tại lần nộp.
+        builder.Property(c => c.SceneId)
+               .HasColumnName("scene_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptLineId)
+               .HasColumnName("script_line_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(c => c.ScriptLineId)
+               .HasDatabaseName("ix_change_requests_script_line_id");
+
+        builder.Property(c => c.QuotedText)
+               .HasColumnName("quoted_text")
+               .HasColumnType("text");
+
         builder.Property(c => c.SubmissionId)
                .HasColumnName("submission_id")
                .HasColumnType("uuid");

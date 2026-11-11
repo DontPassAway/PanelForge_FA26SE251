@@ -53,6 +53,23 @@ public sealed class RequestAssignmentChangesCommandHandler : IRequestHandler<Req
                 return Result<AssignmentDto>.Failure("Panel của yêu cầu sửa không thuộc Chapter này.", ResultErrorCodes.Validation);
         }
 
+        // Neo kịch bản: phân cảnh thuộc Chapter này, dòng thuộc đúng phân cảnh đã nêu
+        var sceneIds = (cmd.Changes ?? []).Where(c => c.SceneId is not null).Select(c => c.SceneId!.Value).Distinct().ToList();
+        if (sceneIds.Count > 0 &&
+            await _db.Scenes.CountAsync(s => sceneIds.Contains(s.Id) && s.ChapterId == assignment.ChapterId, ct) != sceneIds.Count)
+            return Result<AssignmentDto>.Failure("Phân cảnh của yêu cầu sửa không thuộc Chapter này.", ResultErrorCodes.Validation);
+
+        var lineAnchors = (cmd.Changes ?? []).Where(c => c.ScriptLineId is not null)
+            .Select(c => new { LineId = c.ScriptLineId!.Value, SceneId = c.SceneId!.Value }).Distinct().ToList();
+        if (lineAnchors.Count > 0)
+        {
+            var lineIds = lineAnchors.Select(l => l.LineId).ToList();
+            var lineScenes = await _db.ScriptLines.Where(l => lineIds.Contains(l.Id))
+                .ToDictionaryAsync(l => l.Id, l => l.SceneId, ct);
+            if (lineAnchors.Any(a => !lineScenes.TryGetValue(a.LineId, out var s) || s != a.SceneId))
+                return Result<AssignmentDto>.Failure("Dòng kịch bản của yêu cầu sửa không thuộc phân cảnh đã nêu.", ResultErrorCodes.Validation);
+        }
+
         if (await ChangeRequestRules.SubmissionMismatchAsync(_db, assignment.Id, cmd.ExpectedSubmissionId, ct) is { } stale)
             return Result<AssignmentDto>.Failure(stale, ResultErrorCodes.Conflict);
 

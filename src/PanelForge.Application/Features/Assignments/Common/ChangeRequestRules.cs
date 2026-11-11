@@ -96,6 +96,8 @@ internal static class ChangeRequestRules
         {
             if (string.IsNullOrWhiteSpace(item.Description)) return "Mỗi yêu cầu sửa phải có mô tả.";
             if (ChangeRequest.ValidateRegion(item.RegionJson) is { } regionError) return regionError;
+            if (item.ScriptLineId is not null && item.SceneId is null)
+                return "Nhận xét dòng kịch bản phải kèm phân cảnh chứa dòng đó.";
         }
 
         return null;
@@ -114,7 +116,8 @@ internal static class ChangeRequestRules
         {
             db.ChangeRequests.Add(ChangeRequest.Create(
                 a.Id, a.ChapterId, submissionId, a.AssigneeUserId, reviewerUserId,
-                item.Description, item.RegionJson, item.DueDate, item.AssetReferenceId, item.PanelId));
+                item.Description, item.RegionJson, item.DueDate, item.AssetReferenceId, item.PanelId,
+                item.SceneId, item.ScriptLineId, item.QuotedText));
         }
     }
 

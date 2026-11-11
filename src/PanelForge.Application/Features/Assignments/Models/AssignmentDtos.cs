@@ -130,9 +130,10 @@ public sealed record BulkAssignmentResultDto(
 
 /// <summary>Một yêu cầu sửa cụ thể. RegionJson tuỳ chọn: <c>{ "x", "y", "w", "h" }</c> chuẩn hóa 0–1.</summary>
 /// <summary>AssetReferenceId: phiên bản artwork (của Chapter) mà RegionJson khoanh trên đó; PanelId: Panel của vùng (thuộc Chapter). Đều tuỳ chọn.</summary>
+/// <summary>SceneId/ScriptLineId/QuotedText: neo của nhận xét kịch bản (cổng Script); dòng phải thuộc phân cảnh, phân cảnh thuộc Chapter.</summary>
 public sealed record ChangeRequestItemRequest(
     string Description, string? RegionJson = null, DateTime? DueDate = null, Guid? AssetReferenceId = null,
-    Guid? PanelId = null);
+    Guid? PanelId = null, Guid? SceneId = null, Guid? ScriptLineId = null, string? QuotedText = null);
 
 /// <summary>
 /// Trả về bắt buộc có comment (BR-06). Changes bỏ trống = tạo một ChangeRequest từ chính comment.
@@ -216,12 +217,15 @@ public sealed record ChangeRequestDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     Guid? AssetReferenceId = null,  // phiên bản artwork mà vùng khoanh thuộc về
-    Guid? PanelId = null)           // Panel của vùng khoanh
+    Guid? PanelId = null,           // Panel của vùng khoanh
+    Guid? SceneId = null,           // phân cảnh kịch bản bị nhận xét
+    Guid? ScriptLineId = null,      // dòng kịch bản bị nhận xét
+    string? QuotedText = null)      // nguyên văn tại lần nộp
 {
     public static ChangeRequestDto From(ChangeRequest c) => new(
         c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,
         c.RegionJson, c.DueDate, c.Status, c.ResolutionNote, c.ResolvedAt, c.ReviewerComment, c.ClosedByUserId,
-        c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId);
+        c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId, c.SceneId, c.ScriptLineId, c.QuotedText);
 }
 
 /// <summary>PUT thay toàn bộ: DependsOnAssignmentId null = bỏ dependency; ReferenceNotes/DueDate null = xoá.</summary>
