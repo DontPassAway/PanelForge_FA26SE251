@@ -52,7 +52,7 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
         _db.ChapterReviews.Add(review);
 
         var systemPublisherIds = await _db.Users.AsNoTracking()
-            .Where(u => u.Role == SystemRole.Publisher && u.IsActive && !u.IsDeleted && u.Id != cmd.UserId)
+            .Where(u => u.Role == SystemRole.Publisher && u.IsActive && u.Id != cmd.UserId) // User không lưu IsDeleted (Ignore trong UserConfiguration)
             .Select(u => u.Id)
             .ToListAsync(ct);
         var workspacePublisherIds = await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.UserId, ct);

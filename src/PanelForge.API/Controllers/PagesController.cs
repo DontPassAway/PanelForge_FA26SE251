@@ -18,6 +18,7 @@ using PanelForge.Application.Features.Pages.Commands.UpdateCanvasSettings;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Features.Pages.Commands.RestorePageVersion;
+using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 using PanelForge.Application.Features.Pages.Queries.ComparePageVersions;
 using PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 using PanelForge.Application.Features.Pages.Queries.GetPageHistory;
@@ -83,6 +84,32 @@ public sealed class PagesController : ControllerBase
             result.Value
         );
     }
+
+    /// <summary>
+    /// PUT /api/chapters/{chapterId}/script-structure
+    /// Lưu khung Trang → Panel → dòng kịch bản từ trình soạn script trong một transaction. Không xoá Page/Panel.
+    /// </summary>
+    [HttpPut("api/chapters/{chapterId:guid}/script-structure")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(SyncScriptStructureResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SyncScriptStructure(
+        [FromRoute] Guid chapterId,
+        [FromBody] SyncScriptStructureRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SyncScriptStructureCommand(chapterId, GetCurrentUserId(), body.Pages ?? []), cancellationToken);
+
+        if (result.IsSuccess) return Ok(result.Value);
+        if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });
+        return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
+    }
+
+    public sealed record SyncScriptStructureRequest(IReadOnlyList<ScriptStructurePage>? Pages);
 
     /// <summary>
     /// GET /api/chapters/{chapterId}/pages
