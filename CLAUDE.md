@@ -9,7 +9,7 @@ dotnet build PanelForge.slnx
 dotnet test PanelForge.slnx
 ```
 
-Frontend ↔ Backend coordination happens through `../../HANDOFF.md` (see the workspace-level `CLAUDE.md`).
+Frontend ↔ Backend coordination follows `.agents/CODEBASE_MAP.md` and feature DTOs in `PanelForge.Application/Features/<Domain>/`. Expose clean Swagger schemas and maintain DTO parity with Frontend and Mobile.
 
 ## PanelForge Agent Rules
 
