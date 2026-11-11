@@ -3,6 +3,7 @@ using Moq;
 using PanelForge.Application.Features.Panels.Commands.CreatePanel;
 using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
@@ -36,7 +37,7 @@ public class PanelAndElementCommandTests
         _dbContextMock.Setup(db => db.Panels).Returns(panelsDbSet);
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        var handler = new CreatePanelCommandHandler(_dbContextMock.Object);
+        var handler = new CreatePanelCommandHandler(_dbContextMock.Object, Mock.Of<IWorkspaceAuthorizationService>());
         var command = new CreatePanelCommand(
             PageId: pageId,
             UserId: Guid.NewGuid(),

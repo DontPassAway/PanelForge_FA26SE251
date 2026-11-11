@@ -19,7 +19,7 @@ public class CreatePageCommandHandlerTests
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork());
+        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork(), Mock.Of<IWorkspaceAuthorizationService>());
     }
 
     [Fact]

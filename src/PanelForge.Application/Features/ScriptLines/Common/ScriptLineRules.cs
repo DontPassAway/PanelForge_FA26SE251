@@ -116,6 +116,23 @@ internal static class ScriptLineRules
         return Result<(Chapter, Guid)>.Success((chapter, workspaceId));
     }
 
+    /// <summary>
+    /// Writer tạo Page/Panel khi lưu kịch bản (khung xương Trang → Panel để neo dòng thoại) theo đúng luật sửa ScriptLine:
+    /// chương còn sản xuất, kịch bản chưa đóng băng, và nếu chương đã giao Writer thì chỉ người được giao.
+    /// Vai trò khác giữ luật cũ của endpoint (Producer / Artist + WorkScopeGuard). Trả (lý do, mã lỗi) hoặc null.
+    /// </summary>
+    public static async Task<(string Error, string? Code)?> WriterStructureBlockedReasonAsync(
+        IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, Guid userId, Guid chapterId, CancellationToken ct)
+    {
+        var seriesId = await db.Chapters.AsNoTracking().Where(c => c.Id == chapterId).Select(c => (Guid?)c.SeriesId).FirstOrDefaultAsync(ct);
+        if (seriesId is null) return null; // handler tự báo không tồn tại
+        var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == seriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
+        if (await auth.GetMemberRoleAsync(userId, workspaceId, ct) != WorkspaceRole.Writer) return null;
+
+        var authorized = await AuthorizeAsync(db, auth, userId, chapterId, expectedVersion: null, ct);
+        return authorized.IsSuccess ? null : (authorized.ErrorMessage!, authorized.ErrorCode);
+    }
+
     /// <summary>Speaker phải là mục Nhân vật trong Bible của đúng Series. Trả lỗi hoặc null.</summary>
     public static async Task<string?> ValidateSpeakerAsync(IPanelForgeDbContext db, Guid seriesId, Guid? speakerId, CancellationToken ct)
     {

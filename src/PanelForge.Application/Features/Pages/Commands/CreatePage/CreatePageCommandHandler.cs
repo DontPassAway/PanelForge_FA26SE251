@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Pages.Common;
 using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
@@ -17,15 +18,18 @@ public sealed class CreatePageCommandHandler
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IPageRepository _pageRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWorkspaceAuthorizationService _auth;
 
     public CreatePageCommandHandler(
         IPanelForgeDbContext dbContext,
         IPageRepository pageRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
         _pageRepository = pageRepository;
         _unitOfWork = unitOfWork;
+        _auth = auth;
     }
 
     // Marten (event) + EF Core (read model) ghi trong cùng một transaction
@@ -46,6 +50,9 @@ public sealed class CreatePageCommandHandler
             return Result<PageDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
             return Result<PageDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (command.UserId is { } userId &&
+            await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, userId, command.ChapterId, cancellationToken) is { } writerBlock)
+            return Result<PageDto>.Failure(writerBlock.Error, writerBlock.Code);
 
         // 2. Tính số trang tự động nếu không truyền vào
         int pageNumber;
