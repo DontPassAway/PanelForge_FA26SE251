@@ -289,9 +289,10 @@ public sealed record EditorReviewQueueItemDto(
     string SeriesTitle,
     Guid PipelineStageId,
     string StageName,
+    string StageSlug,
     int StageOrder,
     string? StageColorCode,
-    string Gate, // "Gate 1: Storyboard" | "Gate 2: Quality & Composite"
+    string Gate, // "gate1" | "gate2" (EditorReviewGates)
     AssignmentStatus Status,
     WorkflowEntityType EntityType,
     Guid TargetEntityId,

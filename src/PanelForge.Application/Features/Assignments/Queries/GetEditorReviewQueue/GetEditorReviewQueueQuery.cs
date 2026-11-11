@@ -48,7 +48,6 @@ public sealed class GetEditorReviewQueueQueryHandler
                             st.StageOrder,
                             st.ColorCode,
                             st.Slug,
-                            st.IsApprovalGate,
                             AssigneeName = u.FullName,
                             AssigneeAvatar = u.AvatarUrl
                         };
@@ -94,9 +93,10 @@ public sealed class GetEditorReviewQueueQueryHandler
             .Select(s => s.AssignmentId)
             .ToHashSet();
 
-        // 3. Đếm số lượng ChangeRequest chưa đóng (chưa Verified)
+        // 3. Đếm ChangeRequest chưa đóng theo đúng luật cổng duyệt (Open + Resolved chưa xác minh; Rejected đã đóng)
         var openChangeRequests = await _db.ChangeRequests.AsNoTracking()
-            .Where(cr => assignmentIds.Contains(cr.AssignmentId) && cr.Status != ChangeRequestStatus.Verified)
+            .Where(cr => assignmentIds.Contains(cr.AssignmentId) &&
+                         (cr.Status == ChangeRequestStatus.Open || cr.Status == ChangeRequestStatus.Resolved))
             .GroupBy(cr => cr.AssignmentId)
             .Select(g => new { AssignmentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.AssignmentId, x => x.Count, ct);
@@ -150,31 +150,17 @@ public sealed class GetEditorReviewQueueQueryHandler
             }
         }
 
-        string DetermineGate(string stageName, string? slug, int stageOrder)
-        {
-            var combined = $"{stageName} {slug}".ToLowerInvariant();
-            if (combined.Contains("storyboard") || combined.Contains("name") || combined.Contains("layout") || combined.Contains("thumbnail"))
-            {
-                return "Gate 1: Storyboard";
-            }
-            return "Gate 2: Quality & Composite";
-        }
 
         var results = new List<EditorReviewQueueItemDto>();
 
         foreach (var item in rawList)
         {
             var a = item.Assignment;
-            var gate = DetermineGate(item.StageName, item.Slug, item.StageOrder);
+            var gate = EditorReviewGates.FromStageSlug(item.Slug);
 
-            // Lọc theo cổng nếu có yêu cầu
-            if (!string.IsNullOrWhiteSpace(q.Gate) && q.Gate != "all")
-            {
-                if (q.Gate.Equals("gate1", StringComparison.OrdinalIgnoreCase) && !gate.StartsWith("Gate 1"))
-                    continue;
-                if (q.Gate.Equals("gate2", StringComparison.OrdinalIgnoreCase) && !gate.StartsWith("Gate 2"))
-                    continue;
-            }
+            if (!string.IsNullOrWhiteSpace(q.Gate) && !q.Gate.Equals("all", StringComparison.OrdinalIgnoreCase)
+                && !q.Gate.Equals(gate, StringComparison.OrdinalIgnoreCase))
+                continue;
 
             latestSubmissions.TryGetValue(a.Id, out var latestSub);
 
@@ -190,6 +176,7 @@ public sealed class GetEditorReviewQueueQueryHandler
                 SeriesTitle: item.SeriesTitle,
                 PipelineStageId: a.PipelineStageId,
                 StageName: item.StageName,
+                StageSlug: item.Slug,
                 StageOrder: item.StageOrder,
                 StageColorCode: item.ColorCode,
                 Gate: gate,
@@ -214,4 +201,22 @@ public sealed class GetEditorReviewQueueQueryHandler
 
         return Result<IReadOnlyList<EditorReviewQueueItemDto>>.Success(results);
     }
+}
+
+/// <summary>
+/// Phân cổng duyệt theo Slug công đoạn (định danh ổn định), không theo tên hiển thị.
+/// Gate 1 (tiền kỳ): kịch bản và bố cục phân cảnh, duyệt trước khi đổ công vẽ nét. Gate 2: nét, màu, chữ, bản gộp.
+/// </summary>
+public static class EditorReviewGates
+{
+    public const string Gate1 = "gate1";
+    public const string Gate2 = "gate2";
+
+    private static readonly HashSet<string> Gate1Slugs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "script", "thumbnail", "storyboard", "name", "layout"
+    };
+
+    public static string FromStageSlug(string? slug) =>
+        slug is not null && Gate1Slugs.Contains(slug.Trim()) ? Gate1 : Gate2;
 }
