@@ -38,6 +38,14 @@ public sealed class GetMyWorkspacesQueryHandler
             .Select(g => new { WorkspaceId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.WorkspaceId, x => x.Count, cancellationToken);
 
+        var pendingReviewsByWorkspace = await _dbContext.Assignments
+            .Where(a => !a.IsDeleted && (a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)
+                        && a.AssigneeUserId != userId
+                        && workspaceIds.Contains(a.Series.WorkspaceId))
+            .GroupBy(a => a.Series.WorkspaceId)
+            .Select(g => new { WorkspaceId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.WorkspaceId, x => x.Count, cancellationToken);
+
         IReadOnlyList<WorkspaceDto> result = workspaces
             .Select(w =>
             {
@@ -52,7 +60,8 @@ public sealed class GetMyWorkspacesQueryHandler
                     userId,
                     memberCount: w.Members.Count(m => !m.IsDeleted),
                     pendingTasks: pendingByWorkspace.GetValueOrDefault(w.Id),
-                    memberPreviews: previews);
+                    memberPreviews: previews,
+                    pendingEditorReviews: pendingReviewsByWorkspace.GetValueOrDefault(w.Id));
             })
             .ToList();
 

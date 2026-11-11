@@ -20,7 +20,8 @@ internal static class WorkspaceMapper
         Guid currentUserId,
         int memberCount,
         int pendingTasks = 0,
-        IReadOnlyList<WorkspaceMemberPreviewDto>? memberPreviews = null)
+        IReadOnlyList<WorkspaceMemberPreviewDto>? memberPreviews = null,
+        int pendingEditorReviews = 0)
         => new(
             Id: workspace.Id,
             Name: workspace.Name,
@@ -36,7 +37,8 @@ internal static class WorkspaceMapper
             PendingTasks: pendingTasks,
             CoverUrl: SetWorkspaceCoverCommandHandler.CoverUrl(workspace.Id, workspace.CoverImageSha256),
             Description: null,
-            MemberPreviews: memberPreviews);
+            MemberPreviews: memberPreviews,
+            PendingEditorReviews: pendingEditorReviews);
 
     public static WorkspaceMemberDto ToMemberDto(WorkspaceMember member, User user, Guid ownerId)
         => new(

@@ -17,5 +17,6 @@ public record WorkspaceDto(
     int PendingTasks = 0,
     string? CoverUrl = null,
     string? Description = null,
-    IReadOnlyList<WorkspaceMemberPreviewDto>? MemberPreviews = null
+    IReadOnlyList<WorkspaceMemberPreviewDto>? MemberPreviews = null,
+    int PendingEditorReviews = 0
 );
