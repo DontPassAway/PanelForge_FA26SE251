@@ -3666,6 +3666,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("panel_id");
 
+                    b.Property<string>("QuotedText")
+                        .HasColumnType("text")
+                        .HasColumnName("quoted_text");
+
                     b.Property<string>("RegionJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("region_json");
@@ -3685,6 +3689,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("ReviewerComment")
                         .HasColumnType("text")
                         .HasColumnName("reviewer_comment");
+
+                    b.Property<Guid?>("SceneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scene_id");
+
+                    b.Property<Guid?>("ScriptLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_line_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -3710,6 +3722,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AssignmentId")
                         .HasDatabaseName("ix_change_requests_assignment_id");
+
+                    b.HasIndex("ScriptLineId")
+                        .HasDatabaseName("ix_change_requests_script_line_id");
 
                     b.HasIndex("SubmissionId")
                         .HasDatabaseName("ix_change_requests_submission_id");
