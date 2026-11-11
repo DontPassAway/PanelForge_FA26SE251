@@ -26,7 +26,8 @@ public class LockBibleEntryRevisionTests
     {
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
-        _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+        _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        _heroV1.Endorse(Guid.NewGuid()); // chỉ revision đã được Writer xác nhận mới khoá được
         _location = bible.AddEntry(BibleEntryCategory.Location, "SHOP", "Tiệm", "Tiệm đồng hồ");
         _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true);
 
@@ -181,5 +182,29 @@ public class LockBibleEntryRevisionTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         _hero.Revisions.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Lock_RevisionNotEndorsed_ReturnsConflict_AndNotSaved()
+    {
+        var v2 = _hero.AddRevision("v2", "{}", "hash-3", effectiveFromChapterNumber: 3);
+        v2.SubmitConcept(Guid.NewGuid(), "https://img/v2.png", null);
+
+        var result = await Lock(_hero, v2);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        v2.IsLocked.Should().BeFalse();
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Lock_AfterConceptResubmitted_OldEndorsementDoesNotCount()
+    {
+        _heroV1.SubmitConcept(Guid.NewGuid(), "https://img/v1b.png", "vẽ lại");
+
+        var result = await Lock(_hero, _heroV1);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _heroV1.IsLocked.Should().BeFalse();
     }
 }

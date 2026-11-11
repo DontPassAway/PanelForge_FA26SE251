@@ -461,6 +461,27 @@ public partial class AssignmentTests
         notMine.Value!.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ChangeRequests_CarryPageAndStage_FromPanelOrReturnedAssignment()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var (a, _) = await Submitted(f);
+        await OpenReview(f, a, f.EditorId);
+        await new RequestAssignmentChangesCommandHandler(f.Db.Object).Handle(
+            new RequestAssignmentChangesCommand(f.Chapter.Id, a.Id, f.EditorId, "c",
+                [new ChangeRequestItemRequest("Cả trang"), new ChangeRequestItemRequest("Khung 1", PanelId: panel.Id)]),
+            CancellationToken.None);
+
+        var list = (await new GetChangeRequestsByChapterQueryHandler(f.Db.Object).Handle(
+            new GetChangeRequestsByChapterQuery(f.Chapter.Id), CancellationToken.None)).Value!;
+
+        list.Should().HaveCount(2);
+        // Không khoanh khung → trang của việc bị trả về (việc cấp Page); có khung → trang của khung
+        list.Should().OnlyContain(cr => cr.PageId == f.Page.Id && cr.PipelineStageId == a.PipelineStageId);
+        list.Single(cr => cr.Description == "Khung 1").PanelId.Should().Be(panel.Id);
+    }
+
     // ── Domain ──
 
     [Fact]

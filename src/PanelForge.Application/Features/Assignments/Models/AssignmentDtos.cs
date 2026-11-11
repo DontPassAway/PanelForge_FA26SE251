@@ -216,7 +216,9 @@ public sealed record ChangeRequestDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     Guid? AssetReferenceId = null,  // phiên bản artwork mà vùng khoanh thuộc về
-    Guid? PanelId = null)           // Panel của vùng khoanh
+    Guid? PanelId = null,           // Panel của vùng khoanh
+    Guid? PageId = null,            // Trang của yêu cầu (suy ra từ khung / việc bị trả về); chỉ có ở danh sách theo chương
+    Guid? PipelineStageId = null)   // Công đoạn của việc bị trả về; chỉ có ở danh sách theo chương
 {
     public static ChangeRequestDto From(ChangeRequest c) => new(
         c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,

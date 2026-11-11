@@ -44,6 +44,11 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
         if (revision.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure("Revision đã được khóa Canon, không thể chỉnh sửa trạng thái kiểm duyệt.", ResultErrorCodes.Conflict);
 
+        // Bản bị yêu cầu vẽ lại phải được Artist nộp lại trước khi xác nhận; bản đã xác nhận không xác nhận lại.
+        if (revision.ReviewStatus is not (BibleRevisionStatus.Draft or BibleRevisionStatus.ConceptSubmitted))
+            return Result<BibleEntryRevisionDto>.Failure(
+                $"Chỉ xác nhận được revision ở trạng thái Draft hoặc ConceptSubmitted, hiện là {revision.ReviewStatus}.", ResultErrorCodes.Conflict);
+
         revision.Endorse(cmd.UserId);
         entry.UpdatedBy = cmd.UserId.ToString();
 

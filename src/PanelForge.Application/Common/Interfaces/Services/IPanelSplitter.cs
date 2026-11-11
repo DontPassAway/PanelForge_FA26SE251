@@ -1,7 +1,10 @@
 namespace PanelForge.Application.Common.Interfaces.Services;
 
-/// <summary>Panel tìm được trên ảnh trang. Bbox = [x, y, width, height] theo pixel ảnh gốc; Order = thứ tự đọc (1-based).</summary>
-public sealed record SplitPanelDto(int Order, int[] Bbox);
+/// <summary>
+/// Panel tìm được trên ảnh trang. Bbox = [x, y, width, height] theo pixel ảnh gốc; Order = thứ tự đọc (1-based).
+/// Polygon = các đỉnh [x, y] (pixel ảnh gốc) của khung; 4 đỉnh vuông góc với khung chữ nhật, khác đi với khung cắt chéo.
+/// </summary>
+public sealed record SplitPanelDto(int Order, int[] Bbox, int[][]? Polygon = null);
 
 /// <summary>Bong bóng thoại tìm được. PanelOrder trỏ tới <see cref="SplitPanelDto.Order"/>; Polygon = các điểm [x, y].</summary>
 public sealed record SplitBubbleDto(int PanelOrder, int[] Bbox, int[][] Polygon);

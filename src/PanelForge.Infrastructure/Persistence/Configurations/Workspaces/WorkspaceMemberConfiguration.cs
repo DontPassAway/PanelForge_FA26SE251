@@ -46,7 +46,8 @@ internal sealed class WorkspaceMemberConfiguration : IEntityTypeConfiguration<Wo
                .HasConversion(
                    v => v.ToString(),
                    v => Enum.Parse<WorkspaceMemberStatus>(v))
-               .HasDefaultValue(WorkspaceMemberStatus.Active)
+               // Không đặt default ở DB: Pending = 0 là giá trị CLR mặc định nên EF sẽ bỏ qua nó và DB ghi Active
+               // (lời mời tự được chấp nhận). Giá trị luôn do domain gán (WorkspaceMember.Create mặc định Active).
                .IsRequired();
 
         builder.Property(m => m.JoinedAt)
