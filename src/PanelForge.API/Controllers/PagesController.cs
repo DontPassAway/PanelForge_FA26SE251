@@ -48,7 +48,7 @@ public sealed class PagesController : ControllerBase
     /// Khởi tạo Stream mới trên Marten Event Store và lưu Read Model vào EF Core.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/pages")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(PageDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -63,7 +63,8 @@ public sealed class PagesController : ControllerBase
             LayoutFormat: body.LayoutFormat ?? "StandardPage",
             WidthPx:      body.WidthPx > 0 ? body.WidthPx : 1200,
             HeightPx:     body.HeightPx > 0 ? body.HeightPx : 1800,
-            Dpi:          body.Dpi > 0 ? body.Dpi : 300
+            Dpi:          body.Dpi > 0 ? body.Dpi : 300,
+            UserId:       GetCurrentUserId()
         );
 
         var result = await _mediator.Send(command, cancellationToken);

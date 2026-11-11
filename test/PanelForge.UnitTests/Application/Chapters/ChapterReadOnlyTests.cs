@@ -90,7 +90,7 @@ public class ChapterReadOnlyTests
     [Fact]
     public async Task PanelAndPageCommands_OnApprovedChapter_AreConflict()
     {
-        ShouldBeReadOnly(await new CreatePanelCommandHandler(_db).Handle(new CreatePanelCommand(_page.Id, _userId), default));
+        ShouldBeReadOnly(await new CreatePanelCommandHandler(_db, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new CreatePanelCommand(_page.Id, _userId), default));
         ShouldBeReadOnly(await new UpdatePanelCoordinatesCommandHandler(_db).Handle(
             new UpdatePanelCoordinatesCommand(_panel.Id, _userId, "[]"), default));
         ShouldBeReadOnly(await new AssignPanelSceneCommandHandler(_db).Handle(new AssignPanelSceneCommand(_panel.Id, _scene.Id, _userId), default));
@@ -99,7 +99,7 @@ public class ChapterReadOnlyTests
         ShouldBeReadOnly(await new DeletePanelCommandHandler(_db).Handle(new DeletePanelCommand(_panel.Id, _userId), default));
 
         var uow = new PassThroughUnitOfWork();
-        ShouldBeReadOnly(await new CreatePageCommandHandler(_db, _pages.Object, uow).Handle(new CreatePageCommand(_chapter.Id), default));
+        ShouldBeReadOnly(await new CreatePageCommandHandler(_db, _pages.Object, uow, Mock.Of<IWorkspaceAuthorizationService>()).Handle(new CreatePageCommand(_chapter.Id), default));
         ShouldBeReadOnly(await new ReorderPageCommandHandler(_db, _pages.Object, uow).Handle(new ReorderPageCommand(_page.Id, 2, _userId), default));
         ShouldBeReadOnly(await new UpdateCanvasSettingsCommandHandler(_pages.Object, _db, uow).Handle(
             new UpdateCanvasSettingsCommand(_page.Id, 1000, 1500, 300, "StandardPage"), default));

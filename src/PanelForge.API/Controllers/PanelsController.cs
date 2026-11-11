@@ -39,7 +39,7 @@ public sealed class PanelsController : ControllerBase
     /// Tạo một Panel (khung tranh) trên trang với tọa độ Polygon/BoundingBox.
     /// </summary>
     [HttpPost("api/pages/{pageId:guid}/panels")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(PanelDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -6,6 +6,8 @@ using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using DomainPanel = PanelForge.Domain.Entities.Content.Panel;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.ScriptLines.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Application.Features.Panels.Commands.CreatePanel;
 
@@ -20,25 +22,31 @@ public sealed record CreatePanelCommand(
 public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelCommand, Result<PanelDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IWorkspaceAuthorizationService _auth;
 
-    public CreatePanelCommandHandler(IPanelForgeDbContext dbContext)
+    public CreatePanelCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<PanelDto>> Handle(CreatePanelCommand command, CancellationToken cancellationToken)
     {
         // 1. Kiểm tra Page có tồn tại không
-        var pageExists = await _dbContext.Pages
-            .AnyAsync(p => p.Id == command.PageId, cancellationToken);
+        var chapterId = await _dbContext.Pages
+            .Where(p => p.Id == command.PageId)
+            .Select(p => (Guid?)p.ChapterId)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (!pageExists)
+        if (chapterId is null)
             return Result<PanelDto>.Failure($"Page {command.PageId} không tồn tại.");
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, command.PageId, cancellationToken) is { } readOnly)
             return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
         // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
         if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, command.PageId, null, cancellationToken) is { } outOfScope)
             return Result<PanelDto>.Failure(outOfScope, ResultErrorCodes.Forbidden);
+        if (await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, command.UserId, chapterId.Value, cancellationToken) is { } writerBlock)
+            return Result<PanelDto>.Failure(writerBlock.Error, writerBlock.Code);
 
         // 2. Tính số Panel và ReadingOrder tự động nếu chưa truyền vào
         int panelNumber;
