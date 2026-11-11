@@ -278,3 +278,33 @@ public sealed record AssignmentPlanTemplateStageDto(
     Guid AssigneeUserId,
     string AssigneeName,
     string? Brief);
+
+/// <summary>DTO dành cho Hàng đợi thẩm định Biên tập viên (Editor Desk / Review Inbox) gom bài từ mọi Chapter.</summary>
+public sealed record EditorReviewQueueItemDto(
+    Guid AssignmentId,
+    Guid ChapterId,
+    decimal ChapterNumber,
+    string? ChapterTitle,
+    Guid SeriesId,
+    string SeriesTitle,
+    Guid PipelineStageId,
+    string StageName,
+    int StageOrder,
+    string? StageColorCode,
+    string Gate, // "Gate 1: Storyboard" | "Gate 2: Quality & Composite"
+    AssignmentStatus Status,
+    WorkflowEntityType EntityType,
+    Guid TargetEntityId,
+    string? ScopeLabel,
+    Guid AssigneeUserId,
+    string AssigneeName,
+    string? AssigneeAvatarUrl,
+    Guid? LatestSubmissionId,
+    int SubmissionAttempt,
+    DateTime? SubmittedAt,
+    bool IsSelfSubmission, // Tuân thủ BR-26 (4-Eyes Principle)
+    int OpenChangeRequestsCount,
+    DateTime? DueDate,
+    AssignmentPriority Priority,
+    DateTime CreatedAt,
+    IReadOnlyList<Guid>? ArtworkReferenceIds = null);

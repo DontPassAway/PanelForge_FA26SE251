@@ -27,6 +27,7 @@ using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissio
 using PanelForge.Application.Features.Assignments.Queries.GetChangeRequestsByChapter;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentsByChapter;
+using PanelForge.Application.Features.Assignments.Queries.GetEditorReviewQueue;
 using PanelForge.Application.Features.Assignments.Queries.GetMyWorkspaceAssignments;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
 using PanelForge.Application.Features.Progress.Queries.GetStageProgressByChapter;
@@ -134,6 +135,18 @@ public sealed class AssignmentsController : ControllerBase
     {
         var result = await _mediator.Send(new GetMyWorkspaceAssignmentsQuery(
             workspaceId, GetCurrentUserId(), status, seriesId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/editor/review-queue?gate=&amp;status= — Editor xem hàng đợi thẩm định toàn Series (Gate 1 &amp; Gate 2).</summary>
+    [HttpGet("api/series/{seriesId:guid}/editor/review-queue")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<EditorReviewQueueItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEditorReviewQueue(
+        Guid seriesId, [FromQuery] string? gate, [FromQuery] AssignmentStatus? status, CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new GetEditorReviewQueueQuery(seriesId, GetCurrentUserId(), gate, status), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
