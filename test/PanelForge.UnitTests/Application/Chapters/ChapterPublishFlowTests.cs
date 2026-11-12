@@ -106,6 +106,38 @@ public class ChapterPublishFlowTests
     }
 
     [Fact]
+    public async Task Approve_WhenApprovedWorkHasUnresolvedImpactFlag_ShouldConflict()
+    {
+        var work = Assignment.Create(
+            _series.Id, _chapter.Id, WorkflowEntityType.Page, _page.Id, Guid.NewGuid(),
+            Guid.NewGuid(), WorkspaceRole.Artist, "Vẽ trang 1");
+        work.StartWork();
+        work.SubmitForReview();
+        work.OpenReview();
+        work.MarkApproved();
+        work.FlagImpactReview("Kịch bản trang 1 đã đổi");
+        _db.Assignments.Add(work);
+        await _db.SaveChangesAsync();
+
+        var gate = await new PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate.GetChapterLockGateQueryHandler(_db)
+            .Handle(new(_chapter.Id), default);
+
+        gate.Value!.Items.Should().Contain(i => i.Code == "IMPACT_FLAGS" && i.Blocking && i.Count == 1);
+        (await Approve()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _chapter.Status.Should().Be(ChapterStatus.InProduction);
+    }
+
+    [Fact]
+    public async Task LockGate_PageWithoutProductionWork_IsWarningOnly()
+    {
+        var gate = await new PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate.GetChapterLockGateQueryHandler(_db)
+            .Handle(new(_chapter.Id), default);
+
+        gate.Value!.CanApprove.Should().BeTrue();
+        gate.Value.Items.Should().Contain(i => i.Code == "PAGES_WITHOUT_WORK" && !i.Blocking && i.Count == 1);
+    }
+
+    [Fact]
     public async Task Approve_WhenChangeRequestStillOpen_ShouldConflict()
     {
         _db.ChangeRequests.Add(ChangeRequest.Create(
