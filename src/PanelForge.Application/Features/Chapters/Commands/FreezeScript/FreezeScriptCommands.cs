@@ -7,6 +7,7 @@ using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -262,12 +263,13 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
 }
 
 /// <summary>
-/// V2.5: Mở lại kịch bản (Unfreeze Script) khi cần sửa đổi kịch bản trong quá trình sản xuất.
+/// V2.6 Module 4: Producer mở lại kịch bản (Unfreeze Script); lý do bắt buộc và được ghi Audit Log.
 /// </summary>
-public sealed record UnfreezeChapterScriptCommand(Guid ChapterId, Guid UserId, string? Reason = null) : IRequest<Result<ChapterDetailDto>>;
+public sealed record UnfreezeChapterScriptCommand(Guid ChapterId, Guid UserId, string? Reason) : IRequest<Result<ChapterDetailDto>>;
 
 public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<UnfreezeChapterScriptCommand, Result<ChapterDetailDto>>
 {
+    private const int MaxReasonLength = 500;
     private readonly IPanelForgeDbContext _dbContext;
 
     public UnfreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext)
@@ -282,6 +284,12 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
             .Include(c => c.Pages)
             .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
 
+        var reason = cmd.Reason?.Trim();
+        if (string.IsNullOrEmpty(reason))
+            return Result<ChapterDetailDto>.Failure("Phải nhập lý do mở lại kịch bản (ghi vào Audit Log).", ResultErrorCodes.Validation);
+        if (reason.Length > MaxReasonLength)
+            return Result<ChapterDetailDto>.Failure($"Lý do mở lại kịch bản tối đa {MaxReasonLength} ký tự.", ResultErrorCodes.Validation);
+
         if (chapter is null)
             return Result<ChapterDetailDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
@@ -293,6 +301,16 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
 
         chapter.UnfreezeScript(cmd.UserId);
         chapter.UpdatedBy = cmd.UserId.ToString();
+
+        // BR-18: lý do không có cột trên Chapter → ghi bản audit nghiệp vụ trong cùng SaveChanges với thay đổi trạng thái
+        var workspaceId = await _dbContext.Series.Where(s => s.Id == chapter.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(ct);
+        _dbContext.AuditLogs.Add(AuditLog.Create(
+            action: "UNFREEZE_SCRIPT",
+            entityName: nameof(Chapter),
+            entityId: chapter.Id.ToString(),
+            workspaceId: workspaceId,
+            userId: cmd.UserId,
+            details: $"Mở lại kịch bản Chương {chapter.ChapterNumber}. Lý do: {reason}"));
 
         await _dbContext.SaveChangesAsync(ct);
 

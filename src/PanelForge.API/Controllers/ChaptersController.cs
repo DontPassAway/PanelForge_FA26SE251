@@ -277,8 +277,9 @@ public sealed class ChaptersController : ControllerBase
     [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UnfreezeChapterScript(
         [FromRoute] Guid chapterId,
+        [FromBody] UnfreezeScriptRequest body,
         CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new UnfreezeChapterScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+        ToActionResult(await _mediator.Send(new UnfreezeChapterScriptCommand(chapterId, GetCurrentUserId(), body.Reason), cancellationToken));
 
     /// <summary>
     /// GET /api/chapters/{chapterId}/lock-gate — Producer xem MỌI điều kiện chưa đạt trước khi duyệt chương (tất định, không LLM).
@@ -466,6 +467,7 @@ public sealed class ChaptersController : ControllerBase
 }
 
 public sealed record RequestScriptReopenRequest(string Reason);
+public sealed record UnfreezeScriptRequest(string? Reason);
 
 public sealed record SetChapterOutlineRequest(string? Outline);
 
