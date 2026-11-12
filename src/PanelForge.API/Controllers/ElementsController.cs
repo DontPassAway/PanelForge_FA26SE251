@@ -126,7 +126,7 @@ public sealed class ElementsController : ControllerBase
     /// Body: { "content": "chữ mới (bỏ trống = nguyên văn dòng thoại)", "scriptLineId": "guid? (bỏ trống = giữ dòng hiện tại)" }
     /// </summary>
     [HttpPut("{elementId:guid}/text")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)] // BR-31: Artist mặc định có letter:write
     [ProducesResponseType(typeof(UpdateElementTextResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -144,7 +144,7 @@ public sealed class ElementsController : ControllerBase
 
     /// <summary>POST /api/pages/{pageId}/elements/{elementId}/overflow-ack — Body: { "reason": "..." } (bắt buộc, ≤ 500 ký tự)</summary>
     [HttpPost("{elementId:guid}/overflow-ack")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -156,11 +156,11 @@ public sealed class ElementsController : ControllerBase
         return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
-    // ── PUT — Ghi đè thứ tự đọc (Letterer) ───────────────────────────────────
+    // ── PUT — Ghi đè thứ tự đọc (Artist / Letterer) ──────────────────────────
 
     /// <summary>PUT /api/pages/{pageId}/elements/{elementId}/reading-order — Body: { "readingOrder": 3 } hoặc null để bỏ ghi đè</summary>
     [HttpPut("{elementId:guid}/reading-order")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -173,14 +173,14 @@ public sealed class ElementsController : ControllerBase
         return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
-    // ── PUT — Kiểu chữ (Letterer) ─────────────────────────────────────────────
+    // ── PUT — Kiểu chữ (Artist / Letterer) ────────────────────────────────────
 
     /// <summary>
     /// PUT /api/pages/{pageId}/elements/{elementId}/style — Body: { "style": { fontFamily, fontSize, bold, italic, align, color,
     /// strokeColor, strokeWidth, lineHeight, preset } | null, "expectedElementVersion": 3 }. null = về kiểu mặc định.
     /// </summary>
     [HttpPut("{elementId:guid}/style")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
