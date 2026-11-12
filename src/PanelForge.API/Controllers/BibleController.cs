@@ -228,10 +228,10 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/endorse
-    /// Editor duyệt thiết kế của Artist (-> WriterEndorsed), rồi chuyển Producer khoá Canon.
+    /// Writer hoặc Editor duyệt thiết kế của Artist (-> WriterEndorsed), rồi chuyển Producer khoá Canon.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/endorse")]
-    [RequireWorkspaceRole(WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Editor)] // Spec V2.6 §5.1: Writer và Editor xác nhận thiết kế
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -262,10 +262,10 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/request-rework
-    /// Editor (khi duyệt) hoặc Producer (thay vì khoá) yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
+    /// Writer/Editor (khi duyệt) hoặc Producer (thay vì khoá) yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/request-rework")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -59,11 +59,11 @@ public sealed class LockBibleEntryRevisionCommandHandler
             return Result<BibleEntryRevisionDto>.Failure("Revision này đã được khoá trước đó.", ResultErrorCodes.Conflict);
         }
 
-        // BR-25 / F-03: Chỉ phiên bản Editor đã duyệt (trạng thái WriterEndorsed) mới có thể khoá Canon.
+        // BR-25 / F-03: Chỉ phiên bản Writer/Editor đã duyệt (trạng thái WriterEndorsed) mới có thể khoá Canon.
         if (revision.ReviewStatus != BibleRevisionStatus.WriterEndorsed)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                "Chỉ có thể khoá Canon phiên bản đã được Editor duyệt.", ResultErrorCodes.Conflict);
+                "Chỉ có thể khoá Canon phiên bản đã được Writer/Editor duyệt.", ResultErrorCodes.Conflict);
         }
 
         // Người duyệt và người khoá phải khác nhau, kể cả khi một tài khoản giữ cả vai Editor lẫn Producer.

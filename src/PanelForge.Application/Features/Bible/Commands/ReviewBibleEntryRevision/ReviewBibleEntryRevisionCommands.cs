@@ -8,7 +8,7 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 
 /// <summary>
-/// Editor duyệt thiết kế của Artist (ConceptSubmitted -> WriterEndorsed; mục chỉ có văn bản: Draft -> WriterEndorsed),
+/// Writer hoặc Editor (spec V2.6 §5.1) duyệt thiết kế của Artist (ConceptSubmitted -> WriterEndorsed; mục chỉ có văn bản: Draft -> WriterEndorsed),
 /// sau đó Producer khoá Canon. Producer không tự duyệt để luôn có hai người kiểm.
 /// </summary>
 public sealed record EndorseBibleEntryRevisionCommand(
@@ -62,7 +62,7 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
 }
 
 /// <summary>
-/// Editor (khi duyệt) hoặc Producer (khi khoá) thấy thiết kế chưa đúng -> Yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
+/// Writer/Editor (khi duyệt) hoặc Producer (khi khoá) thấy thiết kế chưa đúng -> Yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
 /// </summary>
 public sealed record RequestReworkBibleEntryRevisionCommand(
     Guid SeriesId,
