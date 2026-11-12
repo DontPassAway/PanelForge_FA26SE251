@@ -92,7 +92,7 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
             var effectiveAny = entry.EffectiveRevisionAt(chapterNumber, canonOnly: false);
             var latestRev = entry.GetCurrentRevision();
 
-            bool isSatisfied = effectiveCanon != null && (entry.Category != BibleEntryCategory.Character || effectiveCanon.IsLocked);
+            bool isSatisfied = effectiveCanon != null && (!entry.IsVisualDesign || effectiveCanon.IsLocked);
 
             if (isSatisfied)
             {
@@ -103,11 +103,11 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
                     Name: entry.Name,
                     Category: entry.Category,
                     CurrentStatus: effectiveCanon!.ReviewStatus,
-                    IsLocked: entry.Category == BibleEntryCategory.Character ? effectiveCanon.IsLocked : true,
+                    IsLocked: entry.IsVisualDesign ? effectiveCanon.IsLocked : true,
                     EffectiveFromChapter: effectiveCanon.EffectiveFromChapterNumber,
                     EffectiveToChapter: effectiveCanon.EffectiveToChapterNumber,
                     WarningCode: "OK",
-                    Message: entry.Category == BibleEntryCategory.Character
+                    Message: entry.IsVisualDesign
                         ? $"Đã có phiên bản Canon khóa tại Chương {chapterNumber}."
                         : $"Đã có phiên bản hiệu lực tại Chương {chapterNumber}."
                 ));
@@ -131,7 +131,7 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
                 else
                 {
                     warnCode = "ENTRY_NOT_LOCKED";
-                    message = $"Mục '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa có phiên bản hợp lệ tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
+                    message = $"Mục '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa được Producer khóa Canon tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
                 }
 
                 items.Add(new ChapterBibleGateItemDto(

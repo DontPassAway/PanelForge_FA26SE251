@@ -48,10 +48,10 @@ public sealed class LockBibleEntryRevisionCommandHandler
                 $"Revision {command.RevisionId} của mục Bible {command.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
         }
 
-        if (entry.Category != BibleEntryCategory.Character)
+        if (!entry.IsVisualDesign)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                "Chỉ khoá được character sheet (mục thuộc nhóm Nhân vật).", ResultErrorCodes.Validation);
+                "Chỉ khoá được mục có thiết kế hình (Nhân vật, Địa điểm, Đạo cụ).", ResultErrorCodes.Validation);
         }
 
         if (revision.IsLocked)
@@ -59,11 +59,19 @@ public sealed class LockBibleEntryRevisionCommandHandler
             return Result<BibleEntryRevisionDto>.Failure("Revision này đã được khoá trước đó.", ResultErrorCodes.Conflict);
         }
 
-        // BR-25 / F-03: Chỉ phiên bản đã được Writer phê duyệt (WriterEndorsed) mới có thể khoá Canon.
+        // BR-25 / F-03: Chỉ phiên bản Editor đã duyệt (trạng thái WriterEndorsed) mới có thể khoá Canon.
         if (revision.ReviewStatus != BibleRevisionStatus.WriterEndorsed)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                "Chỉ có thể khoá Canon phiên bản đã được Writer phê duyệt (WriterEndorsed).", ResultErrorCodes.Conflict);
+                "Chỉ có thể khoá Canon phiên bản đã được Editor duyệt.", ResultErrorCodes.Conflict);
+        }
+
+        // Người duyệt và người khoá phải khác nhau, kể cả khi một tài khoản giữ cả vai Editor lẫn Producer.
+        var endorser = revision.Events.Where(e => e.Type == BibleRevisionEventType.Endorsed).MaxBy(e => e.CreatedAt)?.ActorId;
+        if (endorser == command.UserId)
+        {
+            return Result<BibleEntryRevisionDto>.Failure(
+                "Bạn đã duyệt phiên bản này; Canon phải do một Producer khác khoá.", ResultErrorCodes.Conflict);
         }
 
         revision.Lock(command.UserId);

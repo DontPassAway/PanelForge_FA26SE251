@@ -105,7 +105,7 @@ public class CheckChapterBibleGateTests
     }
 
     [Fact]
-    public async Task Gate_WhenLocationLinkedWithoutLock_PassesBecauseLocationCoversChapter()
+    public async Task Gate_WhenLocationLinkedWithoutLock_FailsLikeCharacter()
     {
         var location = _bible.AddEntry(BibleEntryCategory.Location, "RAIN_STATION", "Ga Mưa", "Bối cảnh ga xe lửa");
         var locRev = location.AddRevision("v1", "{}", "hash-loc", isInitialVersion: true, effectiveFromChapterNumber: 1);
@@ -125,9 +125,9 @@ public class CheckChapterBibleGateTests
         var result = await handler.Handle(query, default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.IsPassed.Should().BeTrue();
+        result.Value!.IsPassed.Should().BeFalse();
         result.Value.TotalReferenced.Should().Be(1);
-        result.Value.Items.Should().ContainSingle(i => i.EntryId == location.Id && i.WarningCode == "OK");
+        result.Value.Items.Should().ContainSingle(i => i.EntryId == location.Id && i.WarningCode == "ENTRY_NOT_LOCKED");
     }
 }
 

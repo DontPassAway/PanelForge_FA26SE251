@@ -94,7 +94,7 @@ public class BibleEntryRevision : BaseEntity
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.Superseded, userId, $"Bị thay bởi v{byVersionNumber}: {reason}"));
 
     /// <summary>
-    /// Writer/Editor xác nhận thiết kế. Mục có hình (<paramref name="requiresConcept"/>) chỉ duyệt được khi Artist đã nộp Concept;
+    /// Editor xác nhận thiết kế. Mục có hình (<paramref name="requiresConcept"/>) chỉ duyệt được khi Artist đã nộp Concept;
     /// mục chỉ có văn bản (thuật ngữ, quy tắc, sự kiện) duyệt thẳng từ bản nháp.
     /// </summary>
     public void Endorse(Guid reviewerId, bool requiresConcept = true)

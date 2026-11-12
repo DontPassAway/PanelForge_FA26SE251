@@ -177,7 +177,7 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/lock
-    /// Producer duyệt và khoá một revision của character sheet làm tham chiếu (V1.2). Không mở khoá được:
+    /// Producer khoá Canon một revision đã được Editor duyệt (Nhân vật, Địa điểm, Đạo cụ). Không mở khoá được:
     /// muốn thay thì thêm revision mới có hiệu lực từ chương khác, hoặc thay thế tại chương đó qua /supersede.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/lock")]
@@ -228,10 +228,10 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/endorse
-    /// V2.5: Writer hoặc Editor xác nhận duyệt thiết kế Model Sheet của Artist đã chuẩn với cốt truyện (-> WriterEndorsed).
+    /// Editor duyệt thiết kế của Artist (-> WriterEndorsed), rồi chuyển Producer khoá Canon.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/endorse")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -262,10 +262,10 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/request-rework
-    /// V2.5: Writer hoặc Editor yêu cầu Artist vẽ lại kèm nhận xét/feedback (-> ReworkRequired).
+    /// Editor (khi duyệt) hoặc Producer (thay vì khoá) yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/request-rework")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

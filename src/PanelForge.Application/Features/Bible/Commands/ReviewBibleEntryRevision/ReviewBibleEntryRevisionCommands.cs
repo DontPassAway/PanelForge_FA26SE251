@@ -8,8 +8,8 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 
 /// <summary>
-/// V2.5: Writer hoặc Editor xác nhận duyệt thiết kế Model Sheet của Artist đã khớp với cốt truyện (ConceptSubmitted -> WriterEndorsed;
-/// mục chỉ có văn bản: Draft -> WriterEndorsed).
+/// Editor duyệt thiết kế của Artist (ConceptSubmitted -> WriterEndorsed; mục chỉ có văn bản: Draft -> WriterEndorsed),
+/// sau đó Producer khoá Canon. Producer không tự duyệt để luôn có hai người kiểm.
 /// </summary>
 public sealed record EndorseBibleEntryRevisionCommand(
     Guid SeriesId,
@@ -47,7 +47,7 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
 
         try
         {
-            revision.Endorse(cmd.UserId, requiresConcept: entry.RequiresConceptArt);
+            revision.Endorse(cmd.UserId, requiresConcept: entry.IsVisualDesign);
         }
         catch (InvalidOperationException ex)
         {
@@ -62,7 +62,7 @@ public sealed class EndorseBibleEntryRevisionCommandHandler : IRequestHandler<En
 }
 
 /// <summary>
-/// V2.5: Writer hoặc Editor kiểm tra thấy thiết kế chưa đúng nguyên tác -> Yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
+/// Editor (khi duyệt) hoặc Producer (khi khoá) thấy thiết kế chưa đúng -> Yêu cầu Artist vẽ lại kèm nhận xét (-> ReworkRequired).
 /// </summary>
 public sealed record RequestReworkBibleEntryRevisionCommand(
     Guid SeriesId,
