@@ -2,74 +2,87 @@
 
 > **Dự án:** PanelForge Manga Production Platform (`SEP490_FA26SE251`)  
 > **Kiến trúc áp dụng:** .NET 9 Clean Architecture + React 19 / TypeScript + Zero-Trust RBAC + Content-Addressed Storage (CAS SHA-256).  
-> **Ngày cập nhật:** 03/11/2026.
+> **Ngày cập nhật:** 12/11/2026 (Đồng bộ chuẩn Master Spec V2.6 Final).  
+> **Tài liệu tham chiếu gốc:** [`PANELFORGE_MASTER_SPECIFICATION_V2_6.md`](./PANELFORGE_MASTER_SPECIFICATION_V2_6.md)
 
 ---
 
-## 1. TỔNG QUAN PHÂN HỆ CHAPTER & SCRIPT
+## 1. TỔNG QUAN PHÂN HỆ CHAPTER & SCRIPT (CHUẨN V2.6 FINAL)
 
 Phân hệ **Chapter (Quản lý Chương)** và **Script (Biên kịch Kịch bản Manga)** đóng vai trò là "trái tim" trong giai đoạn tiền kỳ (Pre-production) của quy trình sản xuất truyện tranh Manga trên PanelForge:
 
-1. **Chapter Management:** Thiết lập vòng đời chương truyện, tiến độ công đoạn (Pipeline Stages), ngày phát hành mục tiêu, và kiểm soát quyền hạn Zero-Trust giữa Producer và các thành viên sáng tác (Writer, Artist, Letterer, Editor).
-2. **Script & Screenplay Flow:** Soạn thảo kịch bản phân cảnh manga chuyên dụng theo định dạng Screenplay chuẩn quốc tế (Page - Panel - Scene - Dialogue - Action - SFX), liên kết thực thể Series Bible (Nhân vật, Địa danh), đồng bộ hóa với Canvas Storyboard thông qua cơ chế `IntraPageSceneBinding`, và bảo vệ tính bất biến qua cơ chế Đóng băng kịch bản (`freeze-script`) kèm hash SHA-256.
+1. **Chapter Management:** Thiết lập vòng đời chương truyện, tiến độ công đoạn (Pipeline Stages), ngày phát hành mục tiêu, và kiểm soát quyền hạn Zero-Trust giữa Producer và các thành viên sáng tác (Writer, Artist, Letterer, Editor). Trạng thái Chapter được tách biệt hoàn toàn khỏi tiến độ vẽ/kịch bản.
+2. **Script Flow Tinh Gọn (V2.5):** Loại bỏ tầng `Scene` khỏi giao diện soạn thảo, tổ chức kịch bản trực tiếp theo 3 cấp tự nhiên bên dưới. **Quyết định D2 (chốt 2026-11-12):** mỗi Chương có một Scene mặc định ẩn do hệ thống tạo; `scene_id` giữ `NOT NULL` dưới DB (không đổi sang `nullable`) để giữ nguyên lịch sử revision và luồng AI theo Scene.
+   - **Page (Trang truyện):** Sắp xếp theo thuật toán `LexoRank`.
+   - **Panel (Khung tranh):** Tọa độ BoundingBox `{x, y, w, h}` chuẩn hóa (0..1 trên khung 1200×1800) và `panelIndex`.
+   - **Panel Contents (Nội dung bên trong Panel):** Danh sách có thứ tự gồm 4 thành phần: `ACTION_DIRECTION` (vẽ gì, bắt tag `@Bible`), `DIALOGUE/THOUGHT` (thoại/suy nghĩ kèm `speaker_character_id`), `NARRATION` (hộp dẫn chuyện), `SFX` (hiệu ứng âm thanh).
+3. **Cơ chế Tiền kỳ & Gate 1:** Writer gõ `@Tên_Mới` tự động tạo stub entity nháp trong Bible (không chặn mạch viết). Producer bấm 1 nút duy nhất **Approve Script & Start Production** tại Gate 1 để đóng băng kịch bản (`is_script_frozen = true`) và mở bảng Kanban.
 
 ```mermaid
-flowchart LR
-    IP["InProduction"] -->|approve| AP["Approved"]
-    AP -->|reopen| IP
-    AP -->|publish| PB["Published"]
-    subgraph Script ["Cờ kịch bản (trong InProduction)"]
-        OPEN["Đang viết"] -->|freeze-script| FROZEN["IsScriptFrozen + ScriptContentHash"]
-        FROZEN -->|unfreeze-script / request → approve-script-reopen| OPEN
-    end
+stateDiagram-v2
+    direction LR
+    [*] --> PreProduction: Đang viết Script & thiết kế Bible
+    PreProduction --> InProduction: Gate 1 (Approve Script & Start Production)
+    InProduction --> ChapterApproved: Gate 3 (100% Trang Approved ➔ Tạo Snapshot)
+    ChapterApproved --> InProduction: Producer Reopen kèm lý do Audit
+    ChapterApproved --> Published: Publisher phát hành (publishAt <= UtcNow)
 ```
 
 ---
 
 ## 2. KIẾN TRÚC BACKEND (.NET 9 CLEAN ARCHITECTURE)
 
-> Mục 2 mô tả **đúng code hiện tại** (cập nhật 03/11/2026). Bản thiết kế cũ (enum 9 trạng thái DRAFT…ARCHIVED, `ChapterProductionStateMachine`, `ProductionAccessGuard`, API `/api/scripts/*`, `ContentJson`) đã bỏ: không khớp mô hình kịch bản theo script-lines và trùng với các gate đang có.
-
 ### 2.1. Domain Entities & Enums
 
 #### 1. `Chapter` (`PanelForge.Domain.Entities.Content.Chapter`)
-- `Id`, `SeriesId` (`Guid`). Workspace suy ra qua `Series.WorkspaceId`.
-- `ChapterNumber` (`decimal`, > 0, cho phép chương lẻ như 10.5), `Title`, `TargetReleaseDate` (`DateOnly?`), `Outline`, `CoverImageSha256`, `VersionVector`.
-- `Status` (`ChapterStatus`): `InProduction` → `Approved` → `Published` (`Approved` có thể `reopen` về `InProduction`).
-- Đóng băng kịch bản: `IsScriptFrozen`, `ScriptFrozenAt`, `ScriptFrozenById`, **`ScriptContentHash`** (SHA-256 hex, null khi chưa đóng băng).
-- Mở lại kịch bản có kiểm duyệt: `ScriptReopenStatus` (`None/Requested/Approved/Rejected`), `ScriptReopenReason`, `ScriptReopenRequestedById`, `ScriptReopenRequestedAt`.
+- **Khóa chính:** `Id` (`Guid`).
+- **Khóa ngoại:** `SeriesId` (`Guid`), `WorkspaceId` (`Guid`).
+- **Thuộc tính tiến độ:**
+  - `ChapterNumber` (`int`): Thứ tự chương (1, 2, 3...).
+  - `Title` (`string`): Tiêu đề chương.
+  - `TargetReleaseDate` (`DateTime?`): Hạn chót phát hành mục tiêu.
+  - `Status` (`ChapterStatus`): Vòng đời chương chuẩn V2.5 (`PreProduction`, `InProduction`, `ChapterApproved`, `Published`).
+  - `IsScriptFrozen` (`bool`): Cờ khóa kịch bản (ngăn chặn chỉnh sửa kịch bản khi đã bước sang Gate 1 sản xuất).
+  - `PipelineStages` (`ICollection<ChapterStage>`): Danh sách công đoạn sản xuất (Scripting, Pencil, Ink, Lettering, Review).
 
-#### 2. Kịch bản = `Scene` + `ScriptLine`
-- Kịch bản không lưu thành một khối JSON mà theo dòng: `Scene` (`SceneNumber`, `Heading`, `Summary`) chứa nhiều `ScriptLine` (`LineOrder`, `SpeakerCharacterId`, `DialogueText`, `StageDirection`, `NarrationMode`, `PanelId?`).
-- Mỗi lần sửa dòng tạo `ContentRevision` (append-only) → xem/khôi phục qua `script-revisions`.
-- `ChapterScript` vẫn còn trong schema (bảng cũ) nhưng không có use case nào dùng.
+#### 2. `ChapterScript` (`PanelForge.Domain.Entities.Content.ChapterScript`)
+- **Thuộc tính phiên bản:**
+  - `Id` (`Guid`): Định danh kịch bản.
+  - `ChapterId` (`Guid`): Liên kết 1-1 hoặc 1-N (theo revision) với `Chapter`.
+  - `Version` (`int`): Số phiên bản tăng dần (1, 2, 3...).
+  - `ContentJson` (`string`): Cấu trúc khối Tiptap/BlockNote JSON phân cấp theo Page và Panel.
+  - `RawText` (`string`): Nội dung văn bản thô hỗ trợ tìm kiếm toàn văn.
+  - `ContentHash` (`string`): Mã băm SHA-256 nội dung để kiểm tra tính toàn vẹn (CAS - Content-Addressed Storage).
+  - `IsFrozen` (`bool`): Trạng thái bất biến của phiên bản kịch bản.
 
-### 2.2. Quy tắc nghiệp vụ
+#### 3. `ChapterStatus` (`PanelForge.Domain.Enums.ChapterStatus`)
+Chuẩn hóa 4 trạng thái cốt lõi: `PreProduction`, `InProduction`, `ChapterApproved`, `Published` (đã loại bỏ hoàn toàn trạng thái thừa `Locked` và các trạng thái lai kịch bản/vẽ).
 
-- **Tạo / sửa / xoá chương:** Producer của Series (kiểm server-side trong handler).
-- **Sửa kịch bản:** Writer được giao (khi chương đã có Assignment Writer) hoặc Producer; bị chặn khi `IsScriptFrozen = true`.
-- **Đóng băng (`freeze-script`, Producer):** chương phải `InProduction`, có ≥ 1 scene và ≥ 1 script-line, và qua **Chapter Bible Gate** (mọi mục Bible được tham chiếu phải có bản CanonLocked tại chương đó). Lúc đóng băng, hệ thống tính `ScriptContentHash` = SHA-256 của chuỗi chuẩn hoá các dòng (sắp theo `SceneNumber`, `LineOrder`; mỗi dòng `scene|line|speaker|narrationMode|dialogue|stageDirection`).
-- **Mở lại:** Writer `request-script-reopen` (bắt buộc lý do) → Producer `approve`/`reject`; hoặc Producer `unfreeze-script` trực tiếp. Mở lại xoá `ScriptContentHash`.
-- **Đóng băng lại sau khi mở:** Targeted Impact Analysis — Assignment / StageProgress của panel có dòng bị sửa sau thời điểm xin mở được gắn cờ `HasScriptImpact` (Assignment chuyển `ReworkRequired`); panel không đổi giữ nguyên.
+### 2.2. Domain Services & Quy Tắc Nghiệp Vụ
 
-### 2.3. Hợp đồng API (thực tế)
+#### 1. `ChapterProductionStateMachine`
+- Quản lý việc chuyển đổi trạng thái hợp lệ giữa các bước trong quy trình.
+- **Quy tắc bắt buộc:**
+  - Chuyển từ `PreProduction` sang `InProduction` chỉ xảy ra tại Gate 1 khi Producer bấm **Approve Script & Start Production**, kích hoạt đóng băng kịch bản `IsScriptFrozen = true`.
+  - Chuyển từ `InProduction` sang `ChapterApproved` chỉ xảy ra tại Gate 3 khi kiểm tra chốt an toàn `ChapterLockGate` (BR-12): 100% Trang `Approved`, 0 ChangeRequest mở, 0 cờ Impact, 0 lỗi Blocking.
 
-| Phương thức | Đường dẫn | Vai trò | Chức năng |
+#### 2. `ProductionAccessGuard` (Zero-Trust RBAC Gate)
+- **Tạo và Xóa Chapter (`CreateChapter`, `DeleteChapter`):** Duy nhất người dùng có vai trò `Producer` hoặc `WorkspaceOwner` mới có quyền thực thi. Người dùng vai trò `Writer`, `Artist`, `Letterer`, `Editor` chỉ được xem hoặc nhận task phân công.
+- **Biên kịch (`EditScript`):** Chỉ cho phép `Writer` được phân công và `Producer`. Nếu `IsScriptFrozen == true`, mọi vai trò (kể cả Producer) đều bị từ chối sửa nội dung trừ khi thực hiện thao tác mở khóa kịch bản đặc quyền (`UnfreezeScriptCommand`).
+
+### 2.3. Hợp Đồng API RESTful (API Contracts)
+
+| Phương thức | Đường dẫn API | Vai trò tối thiểu | Chức năng |
 |---|---|---|---|
-| `POST` | `/api/series/{seriesId}/chapters` | Producer | Tạo chương |
-| `GET` | `/api/series/{seriesId}/chapters` | Thành viên | Danh sách chương |
-| `GET` | `/api/chapters/{chapterId}` | Thành viên | Chi tiết chương |
-| `PUT` | `/api/chapters/{chapterId}` | Producer | Sửa tiêu đề, ngày phát hành, outline |
-| `DELETE` | `/api/chapters/{chapterId}` | Producer | Xoá chương |
-| `GET` | `/api/chapters/{chapterId}/scenes` · `/api/scenes/{sceneId}` | Thành viên | Đọc kịch bản (scene + script-lines) |
-| `POST/PUT/DELETE` | `/api/chapters/{chapterId}/…/script-lines…` | Writer được giao / Producer | Sửa kịch bản theo dòng |
-| `POST` | `/api/chapters/{chapterId}/freeze-script` | Producer | Đóng băng + tính `ScriptContentHash` |
-| `POST` | `/api/chapters/{chapterId}/unfreeze-script` | Producer | Mở khoá trực tiếp |
-| `POST` | `/api/chapters/{chapterId}/request-script-reopen` | Writer | Xin mở lại (kèm lý do) |
-| `POST` | `/api/chapters/{chapterId}/approve-script-reopen` · `reject-script-reopen` | Producer | Duyệt / từ chối |
-| `POST` | `/api/chapters/{chapterId}/approve` · `reopen` · `publish` | Producer | Vòng đời chương |
-
-Chi tiết DTO: xem `HANDOFF.md` và `docs/api/openapi.json`.
+| `POST` | `/api/chapters` | **Producer** | Tạo mới chương truyện trong Series |
+| `GET` | `/api/chapters/series/{seriesId}` | Thành viên Workspace | Lấy danh sách chương (hỗ trợ phân trang) |
+| `GET` | `/api/chapters/{id}` | Thành viên Workspace | Lấy thông tin chi tiết của 1 chương |
+| `PUT` | `/api/chapters/{id}` | **Producer** | Cập nhật tiêu đề, số chương, ngày phát hành mục tiêu |
+| `DELETE` | `/api/chapters/{id}` | **Producer** | Xóa chương (Yêu cầu xác nhận xóa) |
+| `GET` | `/api/scripts/{chapterId}` | Thành viên Workspace | Lấy phiên bản kịch bản hiện tại |
+| `POST` | `/api/scripts/{chapterId}` | Writer / Producer | Lưu bản thảo kịch bản (Draft Auto-save) |
+| `POST` | `/api/scripts/{chapterId}/freeze` | **Producer** / Editor | Đóng băng kịch bản chuyển giao Storyboard |
+| `POST` | `/api/scripts/{chapterId}/unfreeze`| **Producer** | Mở khóa khẩn cấp kịch bản |
 
 ---
 
