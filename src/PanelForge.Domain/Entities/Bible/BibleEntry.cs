@@ -153,9 +153,29 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Danh mục có hình: phải qua bước Artist nộp Concept trước khi duyệt. Thuật ngữ/Quy tắc/Sự kiện chỉ là văn bản.</summary>
+    public bool RequiresConceptArt
+        => Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop;
+
     /// <summary>Đã có revision khoá bắt đầu đúng ở chương này: một revision mới ở cùng chương sẽ thay bản khoá tại chỗ (không cho phép).</summary>
     public bool HasLockedRevisionStartingAt(int chapterNumber)
         => Revisions.Any(r => r.IsLocked && r.EffectiveFromChapterNumber == chapterNumber);
+
+    /// <summary>
+    /// Giai đoạn được định danh bằng chương bắt đầu: mọi revision cùng EffectiveFromChapterNumber là các bản sửa của cùng một giai đoạn.
+    /// Trả về bản mới nhất của giai đoạn bắt đầu ở chương này, null nếu chưa có giai đoạn nào ở đó.
+    /// </summary>
+    public BibleEntryRevision? LatestRevisionOfStageStartingAt(int chapterNumber)
+        => Revisions
+            .Where(r => r.EffectiveFromChapterNumber == chapterNumber)
+            .MaxBy(r => r.VersionNumber);
+
+    /// <summary>Bản mới nhất của từng giai đoạn, theo thứ tự chương.</summary>
+    public IEnumerable<BibleEntryRevision> LatestRevisionPerStage()
+        => Revisions
+            .GroupBy(r => r.EffectiveFromChapterNumber)
+            .OrderBy(g => g.Key)
+            .Select(g => g.MaxBy(r => r.VersionNumber)!);
 
     public BibleEntryRevision AddRevision(
         string summary,
@@ -202,6 +222,9 @@ public class BibleEntry : BaseEntity
 
         if (revision.IsInitialVersion)
             throw new InvalidOperationException("Không thể xóa phiên bản gốc ban đầu (Initial Version).");
+
+        if (revision.HasReviewHistory)
+            throw new InvalidOperationException("Không thể xóa phiên bản đã có lịch sử nộp Concept/kiểm duyệt (append-only).");
 
         Revisions.Remove(revision);
         UpdatedAt = DateTime.UtcNow;

@@ -28,7 +28,7 @@ public sealed class DeleteBibleEntryEraCommandHandler : IRequestHandler<DeleteBi
     public async Task<Result<bool>> Handle(DeleteBibleEntryEraCommand cmd, CancellationToken ct)
     {
         var entry = await _dbContext.BibleEntries
-            .Include(e => e.Revisions)
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .Include(e => e.SeriesBible)
             .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBible.SeriesId == cmd.SeriesId, ct);
 
@@ -49,6 +49,10 @@ public sealed class DeleteBibleEntryEraCommandHandler : IRequestHandler<DeleteBi
 
         if (eraRevisions.Any(r => r.IsInitialVersion))
             return Result<bool>.Failure("Không thể xóa thời kỳ chứa phiên bản gốc ban đầu của tác phẩm.", ResultErrorCodes.Conflict);
+
+        // Append-only: thời kỳ đã có Concept/duyệt/yêu cầu vẽ lại là provenance, không được xoá
+        if (eraRevisions.Any(r => r.HasReviewHistory))
+            return Result<bool>.Failure("Không thể xóa thời kỳ đã có lịch sử nộp Concept hoặc kiểm duyệt.", ResultErrorCodes.Conflict);
 
         foreach (var rev in eraRevisions)
         {

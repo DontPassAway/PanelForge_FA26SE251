@@ -97,7 +97,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
 
         var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
         var effectiveTo = command.EffectiveToChapterNumber;
-        var stageName = command.StageName;
+        var stageName = string.IsNullOrWhiteSpace(command.StageName) ? null : command.StageName.Trim();
         var summary = command.Summary;
 
         if (command.SupersedesRevisionId is { } supersededId)
@@ -119,6 +119,12 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             effectiveTo ??= superseded.EffectiveToChapterNumber;
             stageName ??= superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
+        }
+        // Bản sửa của giai đoạn có sẵn (cùng chương bắt đầu) không gửi tên giai đoạn thì giữ tên cũ,
+        // tránh bản sửa mất tên rồi hiển thị/xoá như một giai đoạn khác.
+        else if (stageName is null && entry.LatestRevisionOfStageStartingAt(effectiveFrom) is { } sameStage)
+        {
+            stageName = sameStage.StageName;
         }
 
         if (effectiveTo < effectiveFrom)

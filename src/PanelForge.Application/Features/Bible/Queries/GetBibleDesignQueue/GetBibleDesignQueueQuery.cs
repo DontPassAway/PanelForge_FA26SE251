@@ -9,7 +9,7 @@ namespace PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
 
 /// <summary>
 /// V2.5: Lấy hàng đợi việc thiết kế Bible (Pending Concept Art / Rework) cho Artist.
-/// Trả về các mục Bible (Nhân vật, Bối cảnh, Đạo cụ...) đang ở trạng thái Draft hoặc ReworkRequired.
+/// Trả về từng giai đoạn của mục Bible (Nhân vật, Bối cảnh, Đạo cụ...) đang ở trạng thái Draft, ReworkRequired hoặc ConceptSubmitted.
 /// </summary>
 public sealed record GetBibleDesignQueueQuery(Guid SeriesId) : IRequest<Result<IReadOnlyList<BibleDesignQueueItemDto>>>;
 
@@ -39,11 +39,11 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
 
         var queue = new List<BibleDesignQueueItemDto>();
 
+        // Mỗi giai đoạn là một việc vẽ riêng: xét bản mới nhất của từng giai đoạn, không chỉ giai đoạn hiện hành,
+        // để giai đoạn cũ (vd. "Lúc nhỏ") cũng được vẽ và khoá.
         foreach (var entry in entries)
+        foreach (var latestRev in entry.LatestRevisionPerStage())
         {
-            var latestRev = entry.GetCurrentRevision();
-            if (latestRev is null) continue;
-
             // Đưa vào hàng đợi việc vẽ nếu đang ở trạng thái Draft (chưa nộp Concept), ReworkRequired (cần vẽ lại),
             // hoặc ConceptSubmitted (đã nộp nhưng chưa khoá, cho phép Artist xem lại hoặc nộp lại nếu gửi nhầm)
             if (latestRev.ReviewStatus == BibleRevisionStatus.Draft ||
@@ -57,14 +57,15 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                     Name: entry.Name,
                     Category: entry.Category,
                     Description: entry.Description,
-                    ReferenceImageUrl: entry.ReferenceImageUrl,
+                    ReferenceImageUrl: latestRev.ConceptImageUrl ?? entry.ReferenceImageUrl,
                     EffectiveFromChapterNumber: latestRev.EffectiveFromChapterNumber,
                     StageName: latestRev.StageName,
                     Status: latestRev.ReviewStatus,
                     VersionNumber: latestRev.VersionNumber,
                     ReworkFeedback: latestRev.ReworkFeedback,
                     CreatedAt: entry.CreatedAt,
-                    UpdatedAt: entry.UpdatedAt
+                    UpdatedAt: entry.UpdatedAt,
+                    RevisionId: latestRev.Id
                 ));
             }
         }
