@@ -26,7 +26,9 @@ public sealed record ChapterDto(
     DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null,
-    string? ScriptContentHash = null
+    string? ScriptContentHash = null,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -69,19 +71,25 @@ public sealed record ChapterDetailDto(
     DateTime? ScriptReopenRequestedAt = null,
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null,
-    string? ScriptContentHash = null
+    string? ScriptContentHash = null,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m
 );
 
 public sealed record CreateChapterRequest(
     decimal ChapterNumber,
     string? Title = null,
     DateOnly? TargetReleaseDate = null,
-    string? Outline = null
+    string? Outline = null,
+    bool? IsLocked = null,
+    decimal? PriceVnd = null
 );
 
 public sealed record UpdateChapterRequest(
     string? Title,
     DateOnly? TargetReleaseDate,
     bool IncrementVersion = false,
-    string? Outline = null
+    string? Outline = null,
+    bool? IsLocked = null,
+    decimal? PriceVnd = null
 );

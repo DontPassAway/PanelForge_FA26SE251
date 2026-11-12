@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Publisher.Models;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherChapters;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeries;
+using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeriesDetail;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherWorkspaces;
 
 namespace PanelForge.API.Controllers;
@@ -52,18 +53,45 @@ public sealed class PublisherController : ControllerBase
     /// <summary>
     /// GET /api/publisher/series
     /// Danh sách Series toàn hệ thống kèm số lượng chương chờ duyệt xuất bản và đã phát hành.
+    /// Hỗ trợ filter: needs_review, scheduled, all; workspaceId, search, sortBy (az, latest).
     /// </summary>
     [HttpGet("series")]
-    [ProducesResponseType(typeof(IReadOnlyList<PublisherSeriesDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<PublisherSeriesListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSeries(
+        [FromQuery] string? filter,
         [FromQuery] Guid? workspaceId,
         [FromQuery] string? search,
+        [FromQuery] string? sortBy,
         CancellationToken ct = default)
     {
         var result = await _mediator.Send(new GetPublisherSeriesQuery(
+            Filter: filter,
             WorkspaceId: workspaceId,
-            Search: search
+            Search: search,
+            SortBy: sortBy
         ), ct);
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/publisher/series/{seriesId}
+    /// Chi tiết bộ truyện & danh sách chương (Approved / Published) dành cho Publisher.
+    /// </summary>
+    [HttpGet("series/{seriesId:guid}")]
+    [ProducesResponseType(typeof(PublisherSeriesDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSeriesDetail(
+        [FromRoute] Guid seriesId,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetPublisherSeriesDetailQuery(seriesId), ct);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode == ResultErrorCodes.NotFound
+                ? NotFound(new { message = result.ErrorMessage })
+                : BadRequest(new { message = result.ErrorMessage });
+        }
 
         return Ok(result.Value);
     }

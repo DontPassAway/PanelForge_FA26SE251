@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Catalog;
@@ -23,7 +24,16 @@ public sealed record PublicSeriesDto(
     DateTime? LatestPublishedAt);
 
 /// <param name="CoverUrl">Ảnh bìa chương công khai (không cần đăng nhập); null = chương chưa có bìa.</param>
-public sealed record PublicChapterDto(Guid Id, decimal ChapterNumber, string? Title, DateTime? PublishedAt, string? CoverUrl = null);
+public sealed record PublicChapterDto(
+    Guid Id,
+    decimal ChapterNumber,
+    string? Title,
+    DateTime? PublishedAt,
+    string? CoverUrl = null,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m,
+    bool IsUnlocked = true,
+    bool IsFree = true);
 
 public sealed record PublicSeriesDetailDto(
     Guid Id,
@@ -101,7 +111,13 @@ public sealed record GetPublicSeriesDetailQuery(Guid SeriesId) : IRequest<Result
 public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPublicSeriesDetailQuery, Result<PublicSeriesDetailDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
-    public GetPublicSeriesDetailQueryHandler(IPanelForgeDbContext dbContext) => _dbContext = dbContext;
+    private readonly ICurrentUserService _currentUser;
+
+    public GetPublicSeriesDetailQueryHandler(IPanelForgeDbContext dbContext, ICurrentUserService currentUser)
+    {
+        _dbContext = dbContext;
+        _currentUser = currentUser;
+    }
 
     public async Task<Result<PublicSeriesDetailDto>> Handle(GetPublicSeriesDetailQuery q, CancellationToken ct)
     {
@@ -116,12 +132,21 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 s.Genre,
                 s.Format,
                 s.ReadingDirection,
+                s.WorkspaceId,
                 StudioName = s.Workspace.Name,
                 Chapters = s.Chapters
                     .Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now)
                     .OrderBy(c => c.ChapterNumber)
-                    .Select(c => new PublicChapterDto(c.Id, c.ChapterNumber, c.Title, c.PublishedAt,
-                        GetPublicChapterCoverQueryHandler.CoverUrl(c.Id, c.CoverImageSha256)))
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.ChapterNumber,
+                        c.Title,
+                        c.PublishedAt,
+                        c.CoverImageSha256,
+                        c.IsLocked,
+                        c.PriceVnd
+                    })
                     .ToList()
             })
             .FirstOrDefaultAsync(ct);
@@ -130,8 +155,41 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
         if (series is null || series.Chapters.Count == 0)
             return Result<PublicSeriesDetailDto>.Failure("Không tìm thấy Series đã phát hành.", ResultErrorCodes.NotFound);
 
+        // Kiểm tra quyền VIP hoặc các chương đã mua nếu có người dùng đăng nhập
+        // Cùng quy tắc với API đọc chương (ChapterReadAccess): Publisher/Admin/thành viên Studio, VIP còn hạn, hoặc đã mua.
+        bool canReadAll = false;
+        var unlockedIds = new HashSet<Guid>();
+        var currentUserId = _currentUser.UserId;
+        if (currentUserId.HasValue)
+        {
+            canReadAll = await ChapterReadAccess.IsStaffAsync(_dbContext, currentUserId, series.WorkspaceId, ct)
+                || await ChapterReadAccess.HasActiveVipAsync(_dbContext, currentUserId.Value, now, ct);
+
+            var ids = await _dbContext.ChapterEntitlements
+                .Where(e => e.UserId == currentUserId.Value && !e.IsDeleted)
+                .Select(e => e.ChapterId)
+                .ToListAsync(ct);
+            unlockedIds = ids.ToHashSet();
+        }
+
+        var chapterDtos = series.Chapters.Select(c =>
+        {
+            bool isUnlocked = !c.IsLocked || canReadAll || unlockedIds.Contains(c.Id);
+            return new PublicChapterDto(
+                Id: c.Id,
+                ChapterNumber: c.ChapterNumber,
+                Title: c.Title,
+                PublishedAt: c.PublishedAt,
+                CoverUrl: GetPublicChapterCoverQueryHandler.CoverUrl(c.Id, c.CoverImageSha256),
+                IsLocked: c.IsLocked,
+                PriceVnd: c.PriceVnd,
+                IsUnlocked: isUnlocked,
+                IsFree: !c.IsLocked
+            );
+        }).ToList();
+
         return Result<PublicSeriesDetailDto>.Success(new PublicSeriesDetailDto(
             series.Id, series.Title, series.Synopsis, series.Genre, series.Format, series.ReadingDirection,
-            series.StudioName, series.Chapters));
+            series.StudioName, chapterDtos));
     }
 }

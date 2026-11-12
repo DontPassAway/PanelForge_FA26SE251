@@ -1,3 +1,4 @@
+using PanelForge.Application.Common.Interfaces.Services;
 using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
@@ -167,11 +168,11 @@ public class ChapterPublishFlowTests
         _db.Notifications.Should().Contain(n => n.UserId == _producerId && n.Type == NotificationType.ChapterPublished);
 
         // Chưa đến giờ: Reader không thấy chương, không thấy Series trong catalog
-        (await new GetPublicChapterQueryHandler(_db).Handle(new GetPublicChapterQuery(_chapter.Id), default))
+        (await new GetPublicChapterQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicChapterQuery(_chapter.Id), default))
             .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
         (await new GetPublicCatalogQueryHandler(_db).Handle(new GetPublicCatalogQuery(), default))
             .Value!.TotalCount.Should().Be(0);
-        (await new GetPublicSeriesDetailQueryHandler(_db).Handle(new GetPublicSeriesDetailQuery(_series.Id), default))
+        (await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(_series.Id), default))
             .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 
@@ -181,7 +182,7 @@ public class ChapterPublishFlowTests
         await Approve();
         (await Publish()).IsSuccess.Should().BeTrue();
 
-        var read = await new GetPublicChapterQueryHandler(_db).Handle(new GetPublicChapterQuery(_chapter.Id), default);
+        var read = await new GetPublicChapterQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicChapterQuery(_chapter.Id), default);
 
         read.IsSuccess.Should().BeTrue();
         read.Value!.ReadingDirection.Should().Be(ReadingDirection.RightToLeft);

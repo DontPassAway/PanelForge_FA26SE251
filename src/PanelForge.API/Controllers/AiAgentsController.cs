@@ -76,11 +76,11 @@ public sealed class AiAgentsController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/series/{seriesId}/ai/copilot/publisher-metadata — Publisher/Producer xin gợi ý logline, synopsis, thể loại, teaser, age rating
+    /// POST /api/series/{seriesId}/ai/copilot/publisher-metadata — chỉ Producer (Publisher không dùng AI) xin gợi ý logline, synopsis, thể loại, teaser, age rating
     /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis + genre vào Series.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/ai/copilot/publisher-metadata")]
-    [RequireWorkspaceRole]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]

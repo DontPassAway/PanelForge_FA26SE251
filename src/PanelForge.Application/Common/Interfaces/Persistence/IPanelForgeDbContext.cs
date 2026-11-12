@@ -9,6 +9,7 @@ using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Entities.Payments;
 
 namespace PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -68,6 +69,11 @@ public interface IPanelForgeDbContext
     DbSet<Panel> Panels { get; }
     DbSet<FrameTemplate> FrameTemplates { get; }
     DbSet<ScriptLineBibleLink> ScriptLineBibleLinks { get; }
+
+    // Payments & Monetization
+    DbSet<ReaderWallet> ReaderWallets { get; }
+    DbSet<PaymentTransaction> PaymentTransactions { get; }
+    DbSet<ChapterEntitlement> ChapterEntitlements { get; }
 
     /// <summary>SELECT ... FOR UPDATE dòng Chapter; chỉ có tác dụng bên trong IUnitOfWork.ExecuteInTransactionAsync.</summary>
     Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default);

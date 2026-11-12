@@ -1,3 +1,5 @@
+using PanelForge.Application.Common.Interfaces.Services;
+using Moq;
 using FluentAssertions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Catalog;
@@ -73,7 +75,7 @@ public class PublicCatalogQueryTests
     [Fact]
     public async Task Detail_ShouldListOnlyPublishedChapters()
     {
-        var result = await new GetPublicSeriesDetailQueryHandler(_db).Handle(new GetPublicSeriesDetailQuery(_published.Id), default);
+        var result = await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(_published.Id), default);
 
         result.Value!.Chapters.Should().ContainSingle().Which.Id.Should().Be(_publishedChapter.Id);
     }
@@ -81,7 +83,7 @@ public class PublicCatalogQueryTests
     [Fact]
     public async Task Detail_OfSeriesWithoutPublishedChapters_ShouldBeNotFound()
     {
-        var result = await new GetPublicSeriesDetailQueryHandler(_db).Handle(new GetPublicSeriesDetailQuery(_inProduction.Id), default);
+        var result = await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(_inProduction.Id), default);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);

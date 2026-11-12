@@ -13,7 +13,7 @@ namespace PanelForge.Application.Features.AiAgents.Commands.RunPublisherMetadata
 
 /// <summary>
 /// Copilot Publisher (kế hoạch AI đa vai trò, Tuần 4): gợi ý logline, synopsis, thể loại, teaser, age rating cho Series khi phát hành Chapter.
-/// Quyền Producer/Publisher (BR-07); Chapter thuộc Series trên route (BR-03). Không cần InProduction: metadata là cấp Series, không sửa nội dung chương.
+/// Quyền: chỉ Producer (BR-07; Publisher không dùng AI); Chapter thuộc Series trên route (BR-03). Không cần InProduction: metadata là cấp Series, không sửa nội dung chương.
 /// Kết quả là AiSuggestion SeriesMetadata; Accept chỉ ghi synopsis + genre vào Series (BR-02), phần còn lại để Publisher dùng khi đăng.
 /// </summary>
 public sealed record RunPublisherMetadataCommand(Guid SeriesId, Guid ChapterId, Guid UserId, string? Instruction)

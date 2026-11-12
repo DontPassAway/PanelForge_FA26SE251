@@ -70,7 +70,9 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
             ScriptFrozenAt: chapter.ScriptFrozenAt,
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
-            ScriptContentHash: chapter.ScriptContentHash
+            ScriptContentHash: chapter.ScriptContentHash,
+            IsLocked: chapter.IsLocked,
+            PriceVnd: chapter.PriceVnd
         );
 
         return Result<ChapterDetailDto>.Success(detail);

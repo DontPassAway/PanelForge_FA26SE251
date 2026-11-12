@@ -14,7 +14,9 @@ public sealed record UpdateChapterCommand(
     string? Title,
     DateOnly? TargetReleaseDate,
     bool IncrementVersion,
-    string? Outline = null
+    string? Outline = null,
+    bool? IsLocked = null,
+    decimal? PriceVnd = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterCommand, Result<ChapterDto>>
@@ -40,6 +42,11 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
 
         chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();
+
+        if (command.IsLocked.HasValue || command.PriceVnd.HasValue)
+        {
+            chapter.SetPricing(command.IsLocked ?? chapter.IsLocked, command.PriceVnd ?? chapter.PriceVnd);
+        }
 
         if (command.IncrementVersion)
         {
@@ -67,7 +74,9 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             ScriptFrozenAt: chapter.ScriptFrozenAt,
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
-            ScriptContentHash: chapter.ScriptContentHash
+            ScriptContentHash: chapter.ScriptContentHash,
+            IsLocked: chapter.IsLocked,
+            PriceVnd: chapter.PriceVnd
         ));
     }
 }

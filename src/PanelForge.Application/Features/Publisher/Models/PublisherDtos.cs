@@ -28,7 +28,73 @@ public sealed record PublisherChapterDto(
     Guid? ScriptReopenRequestedById = null,
     DateTime? ScriptReopenRequestedAt = null,
     string? CoverUrl = null,
-    string? ScriptContentHash = null
+    string? ScriptContentHash = null,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m
+);
+
+public sealed record PublisherLatestChapterDto(
+    Guid ChapterId,
+    decimal ChapterNumber,
+    string? Title,
+    ChapterStatus Status,
+    DateTime? UpdatedAt
+);
+
+public sealed record PublisherSeriesListItemDto(
+    Guid SeriesId,
+    Guid Id,
+    string Title,
+    string? CoverImageUrl,
+    string? CoverUrl,
+    string Status,
+    IReadOnlyList<string> Genres,
+    string Genre,
+    string AgeRating,
+    string? Synopsis,
+    Guid WorkspaceId,
+    string WorkspaceName,
+    int TotalChaptersCount,
+    int ApprovedChaptersCount,
+    int PublishedChaptersCount,
+    PublisherLatestChapterDto? LatestChapter,
+    DateTime? UpdatedAt,
+    string Format,
+    ReadingDirection ReadingDirection
+);
+
+public sealed record PublisherManagedChapterDto(
+    Guid ChapterId,
+    Guid Id,
+    decimal ChapterNumber,
+    string? Title,
+    ChapterStatus Status,
+    DateTime? PublishAt,
+    DateTime? PublishedAt,
+    int PageCount,
+    int PagesCount,
+    DateTime? ApprovedAt,
+    string? ApprovedBy,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m
+);
+
+public sealed record PublisherSeriesDetailDto(
+    Guid SeriesId,
+    Guid Id,
+    string Title,
+    string? CoverImageUrl,
+    string? CoverUrl,
+    Guid WorkspaceId,
+    string WorkspaceName,
+    string? ProducerName,
+    IReadOnlyList<string> Genres,
+    string Genre,
+    string AgeRating,
+    string Status,
+    string? Logline,
+    string? Synopsis,
+    IReadOnlyList<PublisherManagedChapterDto> Chapters
 );
 
 public sealed record PublisherSeriesDto(

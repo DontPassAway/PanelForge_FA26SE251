@@ -127,8 +127,8 @@ public class ChapterCoverTests
         Publish(chapter, DateTime.UtcNow.AddMinutes(-1));
         db.SaveChanges();
         var cover = await handler.Handle(new GetPublicChapterCoverQuery(chapter.Id), default);
-        var read = await new GetPublicChapterQueryHandler(db).Handle(new GetPublicChapterQuery(chapter.Id), default);
-        var detail = await new GetPublicSeriesDetailQueryHandler(db).Handle(new GetPublicSeriesDetailQuery(chapter.SeriesId), default);
+        var read = await new GetPublicChapterQueryHandler(db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicChapterQuery(chapter.Id), default);
+        var detail = await new GetPublicSeriesDetailQueryHandler(db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(chapter.SeriesId), default);
 
         cover.Value!.Content.Should().Equal(Png);
         var url = $"/api/catalog/chapters/{chapter.Id}/cover?v={sha[..12]}";

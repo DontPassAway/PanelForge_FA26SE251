@@ -72,7 +72,9 @@ public sealed class ChaptersController : ControllerBase
             ChapterNumber: body.ChapterNumber,
             Title: body.Title,
             TargetReleaseDate: body.TargetReleaseDate,
-            Outline: body.Outline
+            Outline: body.Outline,
+            IsLocked: body.IsLocked,
+            PriceVnd: body.PriceVnd
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -202,7 +204,9 @@ public sealed class ChaptersController : ControllerBase
             Title: body.Title,
             TargetReleaseDate: body.TargetReleaseDate,
             IncrementVersion: body.IncrementVersion,
-            Outline: body.Outline
+            Outline: body.Outline,
+            IsLocked: body.IsLocked,
+            PriceVnd: body.PriceVnd
         );
 
         var result = await _mediator.Send(command, cancellationToken);

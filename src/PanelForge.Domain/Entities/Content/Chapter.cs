@@ -20,6 +20,12 @@ public class Chapter : BaseEntity
     public ChapterStatus Status { get; private set; } = ChapterStatus.InProduction;
     public DateTime? PublishedAt { get; private set; }
 
+    /// <summary>Khóa chương trả phí (false = miễn phí, true = chương trả phí cần mở khóa/VIP).</summary>
+    public bool IsLocked { get; private set; } = false;
+
+    /// <summary>Giá mở khóa chương tính bằng VNĐ (0 nếu miễn phí).</summary>
+    public decimal PriceVnd { get; private set; } = 0m;
+
     /// <summary>V2.5: Kịch bản thuần túy được Producer duyệt và đóng băng (Frozen / Read-only) để đưa vào guồng sản xuất tranh.</summary>
     public bool IsScriptFrozen { get; private set; } = false;
     public DateTime? ScriptFrozenAt { get; private set; }
@@ -70,6 +76,14 @@ public class Chapter : BaseEntity
     public void IncrementVersion() => VersionVector++;
 
     public void SetCover(string? sha256) => CoverImageSha256 = sha256;
+
+    /// <summary>Thiết lập khóa trả phí và giá tiền mở khóa của chương.</summary>
+    public void SetPricing(bool isLocked, decimal priceVnd)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(priceVnd);
+        IsLocked = isLocked;
+        PriceVnd = isLocked ? priceVnd : 0m;
+    }
 
     public void AttachScript(ChapterScript script)
     {

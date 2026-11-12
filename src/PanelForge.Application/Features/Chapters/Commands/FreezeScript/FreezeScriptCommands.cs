@@ -445,7 +445,9 @@ internal static class ChapterDetailDtoFactory
             ScriptReopenReason: chapter.ScriptReopenReason,
             ScriptReopenRequestedById: chapter.ScriptReopenRequestedById,
             ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt,
-            ScriptContentHash: chapter.ScriptContentHash
+            ScriptContentHash: chapter.ScriptContentHash,
+            IsLocked: chapter.IsLocked,
+            PriceVnd: chapter.PriceVnd
         );
     }
 }

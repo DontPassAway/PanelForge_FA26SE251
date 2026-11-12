@@ -21,6 +21,15 @@ public class StudioWorkspace : BaseEntity
     /// <summary>SHA-256 của ảnh bìa Studio lưu trong IAssetStorage (R2); null nếu dùng bìa mặc định.</summary>
     public string? CoverImageSha256 { get; private set; }
 
+    /// <summary>Mã BIN ngân hàng nhận tiền thanh toán VietQR của Studio (vd: 970422 - MB Bank).</summary>
+    public string? BankBin { get; private set; }
+    /// <summary>Tên ngân hàng nhận thanh toán (vd: MB Bank).</summary>
+    public string? BankName { get; private set; }
+    /// <summary>Số tài khoản ngân hàng nhận tiền VietQR.</summary>
+    public string? BankAccountNo { get; private set; }
+    /// <summary>Tên chủ tài khoản nhận tiền VietQR.</summary>
+    public string? BankAccountName { get; private set; }
+
     public User Owner { get; private set; } = default!;
     public ICollection<WorkspaceMember> Members { get; private set; } = [];
     public ICollection<Series> Series { get; private set; } = [];
@@ -28,6 +37,15 @@ public class StudioWorkspace : BaseEntity
     private StudioWorkspace() { }
 
     public void SetCover(string? sha256) => CoverImageSha256 = sha256;
+
+    /// <summary>Cập nhật thông tin tài khoản ngân hàng thụ hưởng VietQR cho Studio.</summary>
+    public void UpdateBankInfo(string? bankBin, string? bankName, string? bankAccountNo, string? bankAccountName)
+    {
+        BankBin = string.IsNullOrWhiteSpace(bankBin) ? null : bankBin.Trim();
+        BankName = string.IsNullOrWhiteSpace(bankName) ? null : bankName.Trim();
+        BankAccountNo = string.IsNullOrWhiteSpace(bankAccountNo) ? null : bankAccountNo.Trim();
+        BankAccountName = string.IsNullOrWhiteSpace(bankAccountName) ? null : bankAccountName.Trim();
+    }
 
     public static StudioWorkspace Create(string name, Guid ownerId, long storageQuotaBytes = 0)
     {

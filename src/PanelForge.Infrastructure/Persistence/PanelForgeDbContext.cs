@@ -15,6 +15,7 @@ using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Entities.Payments;
 
 namespace PanelForge.Infrastructure.Persistence;
 
@@ -83,6 +84,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<Panel> Panels => Set<Panel>();
     public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();
     public DbSet<ScriptLineBibleLink> ScriptLineBibleLinks => Set<ScriptLineBibleLink>();
+
+    // Payments & Monetization
+    public DbSet<ReaderWallet> ReaderWallets => Set<ReaderWallet>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
 
     public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
         Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken);

@@ -224,7 +224,12 @@ using (var scope = app.Services.CreateScope())
     await MasterDataSeeder.SeedAsync(db);
 
     if (app.Environment.IsDevelopment())
+    {
         await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
+        var paymentSeeded = await PaymentDemoSeeder.SeedAsync(db);
+        if (paymentSeeded)
+            app.Logger.LogInformation("PaymentDemoSeeder: đã seed KomaForge Studio và giao dịch VietQR mẫu.");
+    }
 
     // Dữ liệu mẫu demo AI: opt-in (AiService:SeedDemoData=true), chạy lặp không tạo trùng, không sửa dữ liệu có sẵn
     if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("AiService:SeedDemoData"))

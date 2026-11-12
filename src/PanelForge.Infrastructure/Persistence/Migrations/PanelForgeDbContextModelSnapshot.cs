@@ -1272,6 +1272,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_locked");
+
                     b.Property<bool>("IsScriptFrozen")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1281,6 +1287,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("Outline")
                         .HasColumnType("text")
                         .HasColumnName("outline");
+
+                    b.Property<decimal>("PriceVnd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(15,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("price_vnd");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamptz")
@@ -3041,6 +3053,282 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("pipeline_template_stages", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterEntitlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal>("PricePaidVnd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(15,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("price_paid_vnd");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transaction_id");
+
+                    b.Property<DateTime>("UnlockedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("unlocked_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId");
+
+                    b.HasIndex("SeriesId");
+
+                    b.HasIndex("TransactionId");
+
+                    b.HasIndex("WorkspaceId")
+                        .HasDatabaseName("ix_chapter_entitlements_workspace_id");
+
+                    b.HasIndex("UserId", "ChapterId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_chapter_entitlements_user_chapter")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("chapter_entitlements", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AmountVnd")
+                        .HasColumnType("numeric(15,2)")
+                        .HasColumnName("amount_vnd");
+
+                    b.Property<string>("BankAccountName")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("bank_account_name");
+
+                    b.Property<string>("BankAccountNo")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("bank_account_no");
+
+                    b.Property<string>("BankBin")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("bank_bin");
+
+                    b.Property<Guid?>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<Guid?>("ConfirmedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("OrderCode")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("order_code");
+
+                    b.Property<string>("QrImageUrl")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("qr_image_url");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<Guid?>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Pending")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId");
+
+                    b.HasIndex("ConfirmedByUserId");
+
+                    b.HasIndex("OrderCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_transactions_order_code");
+
+                    b.HasIndex("SeriesId");
+
+                    b.HasIndex("UserId", "Status")
+                        .HasDatabaseName("ix_payment_transactions_user_status");
+
+                    b.HasIndex("WorkspaceId", "Status")
+                        .HasDatabaseName("ix_payment_transactions_workspace_status");
+
+                    b.ToTable("payment_transactions", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ReaderWallet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BalanceVnd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(15,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("balance_vnd");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsVip")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_vip");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("VipExpiresAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("vip_expires_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reader_wallets_user_id");
+
+                    b.ToTable("reader_wallets", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PreviewFeedback", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4275,6 +4563,22 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("BankAccountName")
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("bank_account_name");
+
+                    b.Property<string>("BankAccountNo")
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("bank_account_no");
+
+                    b.Property<string>("BankBin")
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("bank_bin");
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("bank_name");
+
                     b.Property<string>("CoverImageSha256")
                         .HasColumnType("varchar(64)")
                         .HasColumnName("cover_image_sha256");
@@ -4910,6 +5214,98 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterEntitlement", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Payments.PaymentTransaction", "Transaction")
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
+
+                    b.Navigation("Series");
+
+                    b.Navigation("Transaction");
+
+                    b.Navigation("User");
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "ConfirmedByUser")
+                        .WithMany()
+                        .HasForeignKey("ConfirmedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Chapter");
+
+                    b.Navigation("ConfirmedByUser");
+
+                    b.Navigation("Series");
+
+                    b.Navigation("User");
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ReaderWallet", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
+                        .WithOne()
+                        .HasForeignKey("PanelForge.Domain.Entities.Payments.ReaderWallet", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PreviewFeedback", b =>

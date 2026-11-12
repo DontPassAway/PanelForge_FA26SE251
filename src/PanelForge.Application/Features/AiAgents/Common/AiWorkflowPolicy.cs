@@ -51,7 +51,8 @@ internal static class AiWorkflowPolicy
     {
         CopilotTasks.WriterRewrite => [WorkspaceRole.Producer, WorkspaceRole.Writer],
         CopilotTasks.LettererShorten => [WorkspaceRole.Letterer],
-        CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
+        // Publisher chỉ kiểm duyệt thuần túy, không dùng AI → chỉ Producer xin gợi ý metadata.
+        CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer],
         _ => []
     };
 

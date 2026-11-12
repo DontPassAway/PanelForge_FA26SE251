@@ -27,7 +27,11 @@ public sealed record PublicChapterReadDto(
     string? Title,
     DateTime? PublishedAt,
     IReadOnlyList<PublicPageDto> Pages,
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    bool IsLocked = false,
+    decimal PriceVnd = 0m,
+    bool IsUnlocked = true,
+    bool IsFree = true);
 
 // ─── Chapter + danh sách trang ────────────────────────────────────────────────
 
@@ -36,7 +40,13 @@ public sealed record GetPublicChapterQuery(Guid ChapterId) : IRequest<Result<Pub
 public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChapterQuery, Result<PublicChapterReadDto>>
 {
     private readonly IPanelForgeDbContext _db;
-    public GetPublicChapterQueryHandler(IPanelForgeDbContext db) => _db = db;
+    private readonly ICurrentUserService _currentUser;
+
+    public GetPublicChapterQueryHandler(IPanelForgeDbContext db, ICurrentUserService currentUser)
+    {
+        _db = db;
+        _currentUser = currentUser;
+    }
 
     public async Task<Result<PublicChapterReadDto>> Handle(GetPublicChapterQuery q, CancellationToken ct)
     {
@@ -46,10 +56,17 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
             .Select(c => new
             {
                 c.Id, c.SeriesId, SeriesTitle = c.Series.Title, c.Series.ReadingDirection,
-                c.ChapterNumber, c.Title, c.PublishedAt, c.CoverImageSha256
+                c.ChapterNumber, c.Title, c.PublishedAt, c.CoverImageSha256,
+                c.IsLocked, c.PriceVnd, c.Series.WorkspaceId
             })
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
+
+        // Chương trả phí: không trả danh sách trang khi người xem chưa có quyền đọc.
+        var canRead = await ChapterReadAccess.CanReadAsync(
+            _db, _currentUser.UserId, chapter.Id, chapter.WorkspaceId, chapter.IsLocked, ct);
+        if (!canRead)
+            return Result<PublicChapterReadDto>.Failure(ChapterReadAccess.LockedMessage, ResultErrorCodes.Forbidden);
 
         var pages = await _db.Pages.AsNoTracking()
             .Where(p => p.ChapterId == q.ChapterId)
@@ -67,7 +84,11 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
             pages.Select(p => new PublicPageDto(
                 p.Id, p.PageNumber,
                 p.HasArtwork ? $"/api/catalog/chapters/{chapter.Id}/pages/{p.Id}/image" : null)).ToList(),
-            GetPublicChapterCoverQueryHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256));
+            GetPublicChapterCoverQueryHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
+            IsLocked: chapter.IsLocked,
+            PriceVnd: chapter.PriceVnd,
+            IsUnlocked: true,
+            IsFree: !chapter.IsLocked);
         return Result<PublicChapterReadDto>.Success(dto);
     }
 
@@ -131,22 +152,33 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
     private readonly IAssetStorage _storage;
     private readonly IPageRepository _pages;
     private readonly IPageLetteringCompositor _compositor;
+    private readonly ICurrentUserService _currentUser;
 
     public GetPublicPageImageQueryHandler(
-        IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pages, IPageLetteringCompositor compositor)
+        IPanelForgeDbContext db,
+        IAssetStorage storage,
+        IPageRepository pages,
+        IPageLetteringCompositor compositor,
+        ICurrentUserService currentUser)
     {
         _db = db;
         _storage = storage;
         _pages = pages;
         _compositor = compositor;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<AssetDownloadDto>> Handle(GetPublicPageImageQuery q, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
-        var visible = await _db.Chapters.AsNoTracking()
-            .AnyAsync(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now, ct);
-        if (!visible) return NotFound();
+        var chapter = await _db.Chapters.AsNoTracking()
+            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Select(c => new { c.Id, c.IsLocked, c.Series.WorkspaceId })
+            .FirstOrDefaultAsync(ct);
+        if (chapter is null) return NotFound();
+
+        if (!await ChapterReadAccess.CanReadAsync(_db, _currentUser.UserId, chapter.Id, chapter.WorkspaceId, chapter.IsLocked, ct))
+            return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LockedMessage, ResultErrorCodes.Forbidden);
 
         var artwork = (await FinalArtwork.SelectAsync(_db, q.ChapterId, ct, q.PageId)).FirstOrDefault();
         if (artwork is null) return NotFound();

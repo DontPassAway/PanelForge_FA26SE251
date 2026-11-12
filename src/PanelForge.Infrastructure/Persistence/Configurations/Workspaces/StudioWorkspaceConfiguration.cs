@@ -49,6 +49,22 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
                .HasColumnType("varchar(64)")
                .IsRequired(false);
 
+        builder.Property(w => w.BankBin)
+               .HasColumnName("bank_bin")
+               .HasColumnType("varchar(20)");
+
+        builder.Property(w => w.BankName)
+               .HasColumnName("bank_name")
+               .HasColumnType("varchar(100)");
+
+        builder.Property(w => w.BankAccountNo)
+               .HasColumnName("bank_account_no")
+               .HasColumnType("varchar(50)");
+
+        builder.Property(w => w.BankAccountName)
+               .HasColumnName("bank_account_name")
+               .HasColumnType("varchar(200)");
+
         builder.Property(w => w.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

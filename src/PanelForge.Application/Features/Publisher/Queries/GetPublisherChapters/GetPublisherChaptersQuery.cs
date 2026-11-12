@@ -115,7 +115,9 @@ public sealed class GetPublisherChaptersQueryHandler
                 c.ScriptReopenRequestedById,
                 c.ScriptReopenRequestedAt,
                 c.CoverImageSha256,
-                c.ScriptContentHash
+                c.ScriptContentHash,
+                c.IsLocked,
+                c.PriceVnd
             })
             .ToListAsync(ct);
 
@@ -145,7 +147,9 @@ public sealed class GetPublisherChaptersQueryHandler
             ScriptReopenRequestedById: c.ScriptReopenRequestedById,
             ScriptReopenRequestedAt: c.ScriptReopenRequestedAt,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(c.Id, c.CoverImageSha256),
-            ScriptContentHash: c.ScriptContentHash
+            ScriptContentHash: c.ScriptContentHash,
+            IsLocked: c.IsLocked,
+            PriceVnd: c.PriceVnd
         )).ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
