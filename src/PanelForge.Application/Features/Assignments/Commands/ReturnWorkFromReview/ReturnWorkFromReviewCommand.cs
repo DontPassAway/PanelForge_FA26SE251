@@ -59,6 +59,11 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
         if (target.Status is AssignmentStatus.Submitted or AssignmentStatus.UnderReview)
             return Fail("Việc này đang chờ duyệt: hãy trả về qua cổng duyệt của chính việc đó.", ResultErrorCodes.Conflict);
 
+        // BR-06: người trả bài không được là người làm hoặc từng nộp bài cho việc đó (cùng luật với ReviewRules)
+        if (target.AssigneeUserId == cmd.UserId ||
+            await _db.Submissions.AnyAsync(s => s.AssignmentId == target.Id && s.SubmittedByUserId == cmd.UserId, ct))
+            return Fail("Không thể tự trả bài cho việc do chính mình làm hoặc đã nộp.", ResultErrorCodes.Forbidden);
+
         // Khung khoanh phải thuộc đúng việc được trả về
         if (cmd.PanelId is { } panelId &&
             !(await StageProgressRules.ResolvePanelsAsync(_db, target, ct)).Any(p => p.Id == panelId))

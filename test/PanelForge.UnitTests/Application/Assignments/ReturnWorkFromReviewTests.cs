@@ -81,6 +81,17 @@ public class ReturnWorkFromReviewTests
     }
 
     [Fact]
+    public async Task ReviewerWhoHoldsTheWork_CannotSendItBack_FourEyes()
+    {
+        _letter.Reassign(_editor, WorkspaceRole.Letterer);
+        await _db.SaveChangesAsync();
+
+        (await Return(_letter.Id, panelId: _panel.Id)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        _letter.Status.Should().Be(AssignmentStatus.Approved);
+        _db.ChangeRequests.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task InvalidRequests_AreRejectedWithoutChangingWork()
     {
         (await Return(_letter.Id, description: " ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
