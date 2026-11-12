@@ -21,6 +21,8 @@ public class LockBibleEntryRevisionTests
     private readonly BibleEntryRevision _heroV1;
     private readonly BibleEntry _location;
     private readonly BibleEntryRevision _locationV1;
+    private readonly BibleEntry _term;
+    private readonly BibleEntryRevision _termV1;
 
     public LockBibleEntryRevisionTests()
     {
@@ -28,11 +30,13 @@ public class LockBibleEntryRevisionTests
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
         _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
         _location = bible.AddEntry(BibleEntryCategory.Location, "SHOP", "Tiệm", "Tiệm đồng hồ");
-        _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true);
+        _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+        _term = bible.AddEntry(BibleEntryCategory.Terminology, "AURA", "Aura", "Năng lượng");
+        _termV1 = _term.AddRevision("v1", "{}", "hash-3", isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
 
         _db.Setup(d => d.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible> { bible }));
-        _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { _hero, _location }));
-        _db.Setup(d => d.BibleEntryRevisions).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntryRevision> { _heroV1, _locationV1 }));
+        _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { _hero, _location, _term }));
+        _db.Setup(d => d.BibleEntryRevisions).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntryRevision> { _heroV1, _locationV1, _termV1 }));
         _db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
     }
 
@@ -60,14 +64,37 @@ public class LockBibleEntryRevisionTests
     }
 
     [Fact]
-    public async Task Lock_NonCharacterEntry_IsRejected_AndNotSaved()
+    public async Task Lock_TextOnlyEntry_IsRejected_AndNotSaved()
     {
-        var result = await Lock(_location, _locationV1);
+        var result = await Lock(_term, _termV1);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        _locationV1.IsLocked.Should().BeFalse();
+        _termV1.IsLocked.Should().BeFalse();
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Lock_LocationRevision_FollowsTheSameRuleAsCharacter()
+    {
+        var result = await Lock(_location, _locationV1);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        _locationV1.IsLocked.Should().BeTrue();
+        _location.EffectiveRevisionAt(1, canonOnly: true).Should().BeSameAs(_locationV1);
+    }
+
+    [Fact]
+    public async Task Lock_ByTheSameUserWhoEndorsed_ReturnsConflict()
+    {
+        var revision = _hero.AddRevision("v2", "{}", "hash-v2", effectiveFromChapterNumber: 3);
+        revision.SubmitConcept(Guid.NewGuid(), "/img/v2.png", null);
+        revision.Endorse(_producerId);
+
+        var result = await Lock(_hero, revision);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        revision.IsLocked.Should().BeFalse();
     }
 
     [Fact]
@@ -170,7 +197,7 @@ public class LockBibleEntryRevisionTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("WriterEndorsed");
+        result.ErrorMessage.Should().Contain("Editor");
         unendorsed.IsLocked.Should().BeFalse();
     }
 

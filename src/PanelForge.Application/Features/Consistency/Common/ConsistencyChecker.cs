@@ -230,11 +230,12 @@ public static class ConsistencyChecker
                     found.Add(new(EntryNotYetEffective, ConsistencyFindingSeverity.Blocking,
                         $"{where}: \"{entry.Name}\" chỉ có hiệu lực từ chương {first}, chưa xuất hiện ở chương {chapterNumber}.",
                         text, line.SceneId, line.Id, entryId, null));
-                // Nhân vật đã có hiệu lực nhưng chưa có bản khoá: AI không dùng làm tham chiếu. Báo một lần mỗi nhân vật/chương.
-                if (entry.Category == BibleEntryCategory.Character && entry.FirstEffectiveChapter <= chapterNumber
+                // Mục có thiết kế hình đã có hiệu lực nhưng chưa có bản khoá: AI không dùng làm tham chiếu. Báo một lần mỗi mục/chương.
+                if (entry.Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop
+                    && entry.FirstEffectiveChapter <= chapterNumber
                     && !(entry.FirstLockedChapter <= chapterNumber) && notLockedReported.Add(entryId))
                     found.Add(new(CharacterNotLocked, ConsistencyFindingSeverity.Warning,
-                        $"\"{entry.Name}\" chưa có character sheet được Producer khoá ở chương {chapterNumber}: AI sẽ không dùng nhân vật này làm tham chiếu.",
+                        $"\"{entry.Name}\" chưa có bản thiết kế được Producer khoá ở chương {chapterNumber}: AI sẽ không dùng mục này làm tham chiếu.",
                         entry.Name, null, null, entryId, null));
             }
 

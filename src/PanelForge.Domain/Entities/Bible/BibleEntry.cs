@@ -153,8 +153,11 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Danh mục có hình: phải qua bước Artist nộp Concept trước khi duyệt. Thuật ngữ/Quy tắc/Sự kiện chỉ là văn bản.</summary>
-    public bool RequiresConceptArt
+    /// <summary>
+    /// Danh mục có thiết kế hình (Nhân vật, Địa điểm, Đạo cụ): Artist nộp Concept → Editor duyệt → Producer khoá Canon,
+    /// và AI chỉ dùng bản đã khoá. Thuật ngữ/Quy tắc/Sự kiện chỉ là văn bản, có hiệu lực ngay không cần khoá.
+    /// </summary>
+    public bool IsVisualDesign
         => Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop;
 
     /// <summary>Đã có revision khoá bắt đầu đúng ở chương này: một revision mới ở cùng chương sẽ thay bản khoá tại chỗ (không cho phép).</summary>
@@ -234,12 +237,12 @@ public class BibleEntry : BaseEntity
     /// Revision có hiệu lực tại một chương (BR-15): phạm vi [from, to] chứa chương (to null = tới hết truyện);
     /// nhiều bản cùng phủ thì lấy from lớn nhất (giai đoạn mới hơn) rồi đến VersionNumber lớn nhất (bản sửa mới hơn).
     /// Hết phạm vi mọi bản (vd. nhân vật đã rời truyện) → null.
-    /// <paramref name="canonOnly"/>: với Nhân vật chỉ tính revision đã được Producer khoá (V1.2, nguồn chuẩn cho AI).
+    /// <paramref name="canonOnly"/>: với mục có thiết kế hình chỉ tính revision đã được Producer khoá (nguồn chuẩn cho AI).
     /// </summary>
     public BibleEntryRevision? EffectiveRevisionAt(int chapterNumber, bool canonOnly = false)
         => Revisions
             .Where(r => r.CoversChapter(chapterNumber))
-            .Where(r => !canonOnly || Category != BibleEntryCategory.Character || r.IsLocked)
+            .Where(r => !canonOnly || !IsVisualDesign || r.IsLocked)
             .OrderByDescending(r => r.EffectiveFromChapterNumber)
             .ThenByDescending(r => r.VersionNumber)
             .FirstOrDefault();
