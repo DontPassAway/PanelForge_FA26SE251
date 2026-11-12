@@ -347,12 +347,12 @@ Everything lives under [`docs/`](docs/README.md), organised by topic.
 | [`docs/storage/`](docs/storage/) | [Asset storage architecture](docs/storage/storage-architecture.md) and [storage strategy](docs/storage/storage-strategy.md) |
 | [`docs/ai/`](docs/ai/) | [AI multi-agent design and demo](docs/ai/ai-multi-agent-demo.md) |
 | [`docs/database/`](docs/database/) | [Database setup](docs/database/setup-database.md) |
-| [`docs/archive/`](docs/archive/) | History: merged change logs (CF1, CF4, CF5), the registration-form V1.2 scope and the old project plan. Current scope is spec V2.6 (`Github/note/`). |
+| [`docs/archive/`](docs/archive/) | History: merged change logs (CF1, CF4, CF5), the registration-form V1.2 scope and the old project plan. Current scope is spec V2.6 (`panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`). |
 | [`docs/research/`](docs/research/) | Research on roles and supporting tools |
 
 Several documents are written in Vietnamese; the specification and project plan are in English.
 
-**Implementation plans** for all three repositories (backend, frontend, mobile) are not kept in this repo. They live in the workspace root: `Github/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md` (master plan) and `Github/note/plans/` (one plan per module), following the master specification `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`. Do not add new plan files under `docs/`.
+**Business specification** for all three repositories: `panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (in the frontend repo). **Who is working on what:** `panelforge-fe/docs/TEAM_WORKBOARD.md`; update it when you start and finish a task, including backend work. Do not add plan files under `docs/`.
 
 ---
 
