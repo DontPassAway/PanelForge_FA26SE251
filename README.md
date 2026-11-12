@@ -340,17 +340,19 @@ Everything lives under [`docs/`](docs/README.md), organised by topic.
 
 | Folder | What you will find |
 |---|---|
-| [`docs/requirements/`](docs/requirements/) | [Requirements](docs/requirements/requirements.md), [project plan](docs/requirements/project-plan.md), the original [specification with BR/US/UC/FR/NFR](docs/requirements/PanelForge_Capstone_Content.md), and a [glossary and rules](docs/requirements/glossary-and-rules.md) |
+| [`docs/requirements/`](docs/requirements/) | [Requirements](docs/requirements/requirements.md), the original [specification with BR/US/UC/FR/NFR](docs/requirements/PanelForge_Capstone_Content.md), and a [glossary and rules](docs/requirements/glossary-and-rules.md) |
 | [`docs/roles/`](docs/roles/) | [Role workflows](docs/roles/role-workflows.md) and [worked examples for every role](docs/roles/role-flow-examples.md) |
 | [`docs/domain/`](docs/domain/) | [Series Bible](docs/domain/series-bible.md) |
 | [`docs/architecture/`](docs/architecture/) | [Clean architecture structure](docs/architecture/clean-architecture-structure.md), [implementation and QA](docs/architecture/implementation-qa.md) |
 | [`docs/storage/`](docs/storage/) | [Asset storage architecture](docs/storage/storage-architecture.md) and [storage strategy](docs/storage/storage-strategy.md) |
 | [`docs/ai/`](docs/ai/) | [AI multi-agent design and demo](docs/ai/ai-multi-agent-demo.md) |
 | [`docs/database/`](docs/database/) | [Database setup](docs/database/setup-database.md) |
-| [`docs/implementation/`](docs/implementation/) | Implementation logs and progress reports |
+| [`docs/archive/`](docs/archive/) | History: merged change logs (CF1, CF4, CF5), the registration-form V1.2 scope and the old project plan. Current scope is spec V2.6 (`Github/note/`). |
 | [`docs/research/`](docs/research/) | Research on roles and supporting tools |
 
 Several documents are written in Vietnamese; the specification and project plan are in English.
+
+**Implementation plans** for all three repositories (backend, frontend, mobile) are not kept in this repo. They live in the workspace root: `Github/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md` (master plan) and `Github/note/plans/` (one plan per module), following the master specification `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`. Do not add new plan files under `docs/`.
 
 ---
 

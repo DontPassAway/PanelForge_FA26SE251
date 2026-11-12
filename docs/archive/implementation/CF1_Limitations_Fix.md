@@ -1,5 +1,7 @@
 # Đặc tả thay đổi: sửa các hạn chế Core Flow 1 (CF1)
 
+> **Trạng thái (rà 2026-11-12):** Đã merge, tài liệu giữ làm lịch sử thay đổi. Các mục còn mở ở §2.6 (quota ảnh) và §5 (migration, chữ giữ chỗ "Canon Spec Entity") đã được sửa trong code; checklist §6 không còn hiệu lực. Việc mới theo dõi ở `Github/note/plans/` (workspace gốc).
+
 - **Nhánh:** `test-feature-cf1-limitations` (tách từ `test-feature` @ `f46c02d`)
 - **Ngày:** 11/10/2026
 - **Người thực hiện:** Phạm Thành Danh
