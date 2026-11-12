@@ -443,3 +443,7 @@ App_Data/
 
 # Bản clone upstream (agent-skills, ponytail) chỉ để cập nhật skill thủ công; skill đã copy sẵn trong .claude/skills
 agent-tools/
+
+# Claude Code local worktrees and local tool output
+.claude/worktrees/
+output/
