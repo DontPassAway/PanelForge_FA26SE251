@@ -17,14 +17,14 @@ Mục lục các tài liệu, sắp xếp theo thư mục.
 ## Nên đọc theo thứ tự nào
 
 1. [`glossary-and-rules.md`](requirements/glossary-and-rules.md): từ khóa và quy tắc.
-2. `panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (repo `panelforge-fe`): phạm vi và nghiệp vụ hiện hành; [`requirements.md`](requirements/requirements.md): yêu cầu gốc.
+2. `panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (repo `panelforge-hub`): phạm vi và nghiệp vụ hiện hành; [`requirements.md`](requirements/requirements.md): yêu cầu gốc.
 3. [`role-workflows.md`](roles/role-workflows.md) và [`role-flow-examples.md`](roles/role-flow-examples.md): ai làm gì.
 4. [`series-bible.md`](domain/series-bible.md), [`storage-strategy.md`](storage/storage-strategy.md), [`ai-multi-agent-demo.md`](ai/ai-multi-agent-demo.md): các phần chuyên sâu.
 
 ## Đặc tả & theo dõi công việc
 
-- `panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`: đặc tả nghiệp vụ hiện hành cho cả Backend, Frontend, Mobile (bảng "Nhật ký quyết định" ở đầu file).
-- `panelforge-fe/docs/TEAM_WORKBOARD.md`: ai đang làm gì, đã xong gì, đổi API/DB nào. Cập nhật khi bắt đầu và khi xong việc.
+- `panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`: đặc tả nghiệp vụ hiện hành cho cả Backend, Frontend, Mobile (bảng "Nhật ký quyết định" ở đầu file).
+- `panelforge-hub/docs/tracking/TEAM_WORKBOARD.md`: ai đang làm gì, đã xong gì, đổi API/DB nào. Cập nhật khi bắt đầu và khi xong việc.
 Không tạo file plan mới trong `docs/`. Tài liệu kế hoạch cũ đã xong thì chuyển vào `archive/`.
 
 ## Ghi chú
