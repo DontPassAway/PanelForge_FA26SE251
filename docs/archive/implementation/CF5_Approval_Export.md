@@ -1,6 +1,6 @@
 # Đặc tả thay đổi: Core Flow 5 (CF5): Approval, Release & Export
 
-> **Trạng thái (rà 2026-11-12):** Đã merge, tài liệu giữ làm lịch sử thay đổi. Migration `NarrationMode` và khoá hàng đợi export (`SKIP LOCKED`) ở §5 đã xong; hai điểm về ảnh trang theo Panel được chuyển sang `REL-10` trong `Github/note/plans/06_RELEASE_PLAN.md`. Checklist merge §7 không còn hiệu lực.
+> **Trạng thái (rà 2026-11-12):** Đã merge, tài liệu giữ làm lịch sử thay đổi. Migration `NarrationMode` và khoá hàng đợi export (`SKIP LOCKED`) ở §5 đã xong; hai điểm về ảnh trang theo Panel được chuyển sang `REL-10`. Checklist merge §7 không còn hiệu lực.
 
 > **Người thực hiện:** Phạm Thành Danh · **Ngày:** 13/10/2026
 > **Nhánh:** BE `feat/cf5` (tách từ `test-feature` @ `127287f`) · FE `feat/cf5` (tách từ `tam` @ `4ae1d35`)

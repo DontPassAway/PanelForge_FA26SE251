@@ -11,13 +11,11 @@ dotnet test PanelForge.slnx
 
 Frontend ↔ Backend coordination follows `.agents/CODEBASE_MAP.md` and feature DTOs in `PanelForge.Application/Features/<Domain>/`. Expose clean Swagger schemas and maintain DTO parity with Frontend and Mobile.
 
-## Implement plan (shared by backend, frontend and mobile)
+## Spec & team workboard (shared by backend, frontend and mobile)
 
-One plan set covers all three repos; it lives in the workspace root, not in this repo:
-
-- Spec: `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (the copy under `docs/`, if present, is read-only).
-- Master plan: `Github/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md`.
-- Module plans and **coordination rules**: `Github/note/plans/README.md` §2 (single source of rules). Before coding a task: claim it in §5 "Đang làm", create a worktree per task (`-AgentRole <task-id>`), do only the `[BE]` sub-tasks of this repo, follow API-contract-first ordering (DB → BE → FE/MO). Never add plan files under `docs/`.
+- Business spec for all three repos: `../panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (in the `panelforge-fe` repo; decision log Q1–Q14 at the top). Cite BR-xx / Module / Q-n in commits.
+- **Team workboard `../panelforge-fe/docs/TEAM_WORKBOARD.md` is mandatory**, also for work done in this repo: before coding, pull `panelforge-fe` `trungkien`, add one row to §2 "Đang làm", commit `docs(tracker): start <task>` in `panelforge-fe` and push; when merged, move the row to §3 "Đã xong" with any API/DB/enum change other repos must know, commit `docs(tracker): finish <task>`.
+- Do not add implementation-plan files to this repo.
 ## PanelForge Agent Rules
 
 1. Read existing implementation before writing code.

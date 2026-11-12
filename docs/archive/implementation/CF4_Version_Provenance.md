@@ -1,6 +1,6 @@
 # Đặc tả thay đổi: Core Flow 4 (CF4): Version Control & Provenance
 
-> **Trạng thái (rà 2026-11-12):** Đã merge, tài liệu giữ làm lịch sử thay đổi. Hai việc còn mở được chuyển sang plan: gắn Snapshot vào `ExportJob` (§7) → `REL-05`, kiểm thử trình duyệt mục F (§8) → `REL-10` trong `Github/note/plans/06_RELEASE_PLAN.md`. Checklist merge §7 không còn hiệu lực.
+> **Trạng thái (rà 2026-11-12):** Đã merge, tài liệu giữ làm lịch sử thay đổi. Hai việc còn mở được chuyển sang kế hoạch nội bộ: gắn Snapshot vào `ExportJob` (§7) → `REL-05`, kiểm thử trình duyệt mục F (§8) → `REL-10`. Checklist merge §7 không còn hiệu lực.
 
 > **Người thực hiện:** Huỳnh Công Hoà · **Ngày:** 17/10/2026
 > **Nhánh:** BE `feat/cf4` (tách từ `test-feature` @ `63259c0`) · FE `feat/cf4` (tách từ `trungkien` @ `205c6c6`)

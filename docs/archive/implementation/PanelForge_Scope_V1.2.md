@@ -1,6 +1,6 @@
 # PanelForge – Toàn bộ scope theo phiếu đăng ký V1.2
 
-> **Đã thay thế (2026-11-12):** Phiếu đăng ký V1.2 không còn dùng làm căn cứ phạm vi. Phạm vi và nghiệp vụ hiện hành theo `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`; việc cần làm theo `Github/note/plans/`. Tài liệu này giữ làm lịch sử.
+> **Đã thay thế (2026-11-12):** Phiếu đăng ký V1.2 không còn dùng làm căn cứ phạm vi. Phạm vi và nghiệp vụ hiện hành theo `panelforge-fe/docs/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`; việc đang làm ghi ở `panelforge-fe/docs/TEAM_WORKBOARD.md`. Tài liệu này giữ làm lịch sử.
 
 Nguồn: `docs/reports/GFA26SE140_Phieu_FA26SE251_JapanComicWorkflow_V1.2.docx` (bản hiện tại, Record of Changes: dòng 1.0 và 1.1 giữ nguyên, dòng 1.2 là các chỉnh sửa sau Review 1, cập nhật đến 06/10/2026).
 Nhóm 5 người, thời gian 09/2026 – 03/2027, giảng viên hướng dẫn: Nguyễn Tấn Phúc.
