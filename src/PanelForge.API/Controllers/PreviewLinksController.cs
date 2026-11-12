@@ -132,7 +132,7 @@ public sealed class PreviewLinksController : ControllerBase
     public async Task<IActionResult> SubmitFeedback([FromBody] SubmitPreviewFeedbackRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(
-            new SubmitPreviewFeedbackCommand(body.Token, body.Message, body.PageId, body.PanelId, Ip), ct);
+            new SubmitPreviewFeedbackCommand(body.Token, body.Message, body.PageId, body.PanelId, Ip, body.ReviewerName), ct);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
     }
 

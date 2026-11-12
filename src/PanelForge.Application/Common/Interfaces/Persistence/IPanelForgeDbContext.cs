@@ -74,6 +74,7 @@ public interface IPanelForgeDbContext
     DbSet<ReaderWallet> ReaderWallets { get; }
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
+    DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }
 
     /// <summary>SELECT ... FOR UPDATE dòng Chapter; chỉ có tác dụng bên trong IUnitOfWork.ExecuteInTransactionAsync.</summary>
     Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default);

@@ -24,6 +24,8 @@ public class Series : BaseEntity
     public string? AvatarImageSha256 { get; private set; }
     /// <summary>SHA-256 banner ngang (~3:1) đầu Series Dashboard; độc lập với bìa dọc và avatar.</summary>
     public string? BannerImageSha256 { get; private set; }
+    /// <summary>Producer đánh dấu bộ truyện đã hoàn thành (Reader thấy "Hoàn thành" thay vì "Đang ra").</summary>
+    public bool IsCompleted { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
@@ -61,6 +63,13 @@ public class Series : BaseEntity
             Format = string.IsNullOrWhiteSpace(format) ? "Manga" : format.Trim(),
             ReleaseScheduleJson = releaseScheduleJson?.Trim()
         };
+    }
+
+    public void SetCompleted(bool isCompleted)
+    {
+        if (IsCompleted == isCompleted) return;
+        IsCompleted = isCompleted;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdateDetails(

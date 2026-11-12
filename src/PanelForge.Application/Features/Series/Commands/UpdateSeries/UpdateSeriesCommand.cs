@@ -19,7 +19,8 @@ public sealed record UpdateSeriesCommand(
     string? Genre = null,
     string? Format = null,
     string? ReleaseScheduleJson = null,
-    string? StoryArc = null
+    string? StoryArc = null,
+    bool? IsCompleted = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCommand, Result<SeriesDto>>
@@ -52,6 +53,7 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
                 command.StoryArc
             );
             series.SetPipelineDefinition(command.PipelineDefinitionId);
+            if (command.IsCompleted is { } completed) series.SetCompleted(completed);
             series.UpdatedBy = command.UserId.ToString();
         }
         catch (ArgumentException ex)
@@ -78,7 +80,8 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             StoryArc: series.StoryArc,
             CoverUrl: SetSeriesCoverCommandHandler.CoverUrl(series.Id, series.CoverImageSha256),
             AvatarUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Avatar, series.AvatarImageSha256),
-            BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256)
+            BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256),
+            IsCompleted: series.IsCompleted
         ));
     }
 }

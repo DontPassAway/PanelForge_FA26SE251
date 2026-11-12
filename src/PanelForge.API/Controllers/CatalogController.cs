@@ -58,6 +58,35 @@ public class CatalogController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorCode, result.ErrorMessage);
     }
 
+    /// <summary>GET /api/catalog/series/{seriesId}/cover — ảnh bìa bộ truyện đã phát hành (404 nếu chưa có bìa).</summary>
+    [HttpGet("series/{seriesId:guid}/cover")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSeriesCover([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPublicSeriesCoverQuery(seriesId), cancellationToken);
+        if (!result.IsSuccess) return NotFound(new { error = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "public, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    /// <summary>
+    /// POST /api/catalog/chapters/{chapterId}/views — Reader mở xong chương thì ghi một lượt đọc (lượt xem thật, Top Ngày/Tuần/Tháng).
+    /// 204 kể cả khi lượt bị gộp vì đọc lại trong 30 phút; 403 nếu chương trả phí chưa mở khóa; 404 nếu chưa phát hành.
+    /// </summary>
+    [HttpPost("chapters/{chapterId:guid}/views")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RecordChapterView([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+    {
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _mediator.Send(new RecordChapterViewCommand(chapterId, ip), cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.ErrorCode, result.ErrorMessage);
+    }
+
     /// <summary>GET /api/catalog/chapters/{chapterId}/cover — ảnh bìa chương đã phát hành (404 nếu chưa có bìa hoặc chưa phát hành).</summary>
     [HttpGet("chapters/{chapterId:guid}/cover")]
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]

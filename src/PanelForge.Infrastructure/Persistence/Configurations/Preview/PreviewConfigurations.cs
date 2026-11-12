@@ -67,6 +67,7 @@ internal sealed class PreviewFeedbackConfiguration : IEntityTypeConfiguration<Pr
         builder.Property(f => f.AssetReferenceId).HasColumnName("asset_reference_id").HasColumnType("uuid");
         builder.Property(f => f.ChapterVersion).HasColumnName("chapter_version").HasColumnType("bigint").IsRequired();
         builder.Property(f => f.RecipientEmail).HasColumnName("recipient_email").HasColumnType("varchar(320)").IsRequired();
+        builder.Property(f => f.ReviewerName).HasColumnName("reviewer_name").HasColumnType("varchar(80)");
         builder.Property(f => f.Message).HasColumnName("message").HasColumnType("text").IsRequired();
         builder.Property(f => f.Status).HasColumnName("status").HasColumnType("varchar(20)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<PreviewFeedbackStatus>(v)).IsRequired();

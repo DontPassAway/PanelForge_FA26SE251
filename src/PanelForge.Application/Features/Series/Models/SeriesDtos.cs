@@ -19,7 +19,8 @@ public sealed record SeriesDto(
     string? StoryArc = null,
     string? CoverUrl = null,
     string? AvatarUrl = null,
-    string? BannerUrl = null
+    string? BannerUrl = null,
+    bool IsCompleted = false
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -70,5 +71,6 @@ public sealed record UpdateSeriesRequest(
     string? Genre = null,
     string? Format = null,
     string? ReleaseScheduleJson = null,
-    string? StoryArc = null
+    string? StoryArc = null,
+    bool? IsCompleted = null
 );

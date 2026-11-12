@@ -7,6 +7,7 @@ using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 using PanelForge.Application.Features.Series.Queries.GetSeriesCover;
 using PanelForge.Domain.Enums;
 
@@ -136,6 +137,49 @@ public sealed class GetPublicChapterCoverQueryHandler : IRequestHandler<GetPubli
 
     private static Result<SeriesCoverContent> NotFound() =>
         Result<SeriesCoverContent>.Failure("Không tìm thấy bìa chương đã phát hành.", ResultErrorCodes.NotFound);
+}
+
+// ─── Ảnh bìa bộ truyện ───────────────────────────────────────────────────────
+
+/// <summary>Bìa Series cho Reader: chỉ Series đã có ít nhất một chương Published đến giờ (như catalog), ngoài ra 404.</summary>
+public sealed record GetPublicSeriesCoverQuery(Guid SeriesId) : IRequest<Result<SeriesCoverContent>>;
+
+public sealed class GetPublicSeriesCoverQueryHandler : IRequestHandler<GetPublicSeriesCoverQuery, Result<SeriesCoverContent>>
+{
+    private readonly IPanelForgeDbContext _db;
+    private readonly IAssetStorage _storage;
+
+    public GetPublicSeriesCoverQueryHandler(IPanelForgeDbContext db, IAssetStorage storage)
+    {
+        _db = db;
+        _storage = storage;
+    }
+
+    /// <summary>URL công khai; <c>v</c> đổi theo nội dung để cache không giữ bìa cũ.</summary>
+    public static string? CoverUrl(Guid seriesId, string? sha256)
+        => sha256 is null ? null : $"/api/catalog/series/{seriesId}/cover?v={sha256[..12]}";
+
+    public async Task<Result<SeriesCoverContent>> Handle(GetPublicSeriesCoverQuery q, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var sha = await _db.Series.AsNoTracking()
+            .Where(s => s.Id == q.SeriesId
+                        && s.Chapters.Any(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now))
+            .Select(s => s.CoverImageSha256).FirstOrDefaultAsync(ct);
+        if (sha is null) return NotFound();
+
+        await using var stream = await _storage.OpenReadAsync(SetSeriesCoverCommandHandler.StorageKey(q.SeriesId, sha), ct);
+        if (stream is null) return NotFound();
+
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        var content = buffer.ToArray();
+        return Result<SeriesCoverContent>.Success(
+            new SeriesCoverContent(content, AssetRules.DetectImageContentType(content) ?? "application/octet-stream"));
+    }
+
+    private static Result<SeriesCoverContent> NotFound() =>
+        Result<SeriesCoverContent>.Failure("Không tìm thấy bìa bộ truyện đã phát hành.", ResultErrorCodes.NotFound);
 }
 
 // ─── Ảnh một trang ────────────────────────────────────────────────────────────

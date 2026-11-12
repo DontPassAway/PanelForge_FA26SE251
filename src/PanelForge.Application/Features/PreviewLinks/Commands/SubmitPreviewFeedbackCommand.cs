@@ -12,7 +12,8 @@ namespace PanelForge.Application.Features.PreviewLinks.Commands;
 /// UC-21: người nhận gửi phản hồi cấp chương / trang / panel, gắn đúng phiên bản đang xem (artwork trang trong snapshot).
 /// Không có quyền sản xuất nào (BR-07).
 /// </summary>
-public sealed record SubmitPreviewFeedbackCommand(string? Token, string? Message, Guid? PageId, Guid? PanelId, string? IpAddress)
+public sealed record SubmitPreviewFeedbackCommand(string? Token, string? Message, Guid? PageId, Guid? PanelId, string? IpAddress,
+    string? ReviewerName = null)
     : IRequest<Result<PreviewFeedbackDto>>;
 
 public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<SubmitPreviewFeedbackCommand, Result<PreviewFeedbackDto>>
@@ -52,7 +53,7 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
         }
 
         PreviewFeedback feedback;
-        try { feedback = PreviewFeedback.Create(link, cmd.PageId, cmd.PanelId, assetReferenceId, cmd.Message); }
+        try { feedback = PreviewFeedback.Create(link, cmd.PageId, cmd.PanelId, assetReferenceId, cmd.Message, cmd.ReviewerName); }
         catch (ArgumentException ex) { return Fail(ex.Message, ResultErrorCodes.Validation); }
 
         feedback.CreatedBy = link.RecipientEmail;

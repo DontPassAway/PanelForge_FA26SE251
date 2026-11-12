@@ -21,7 +21,14 @@ public sealed record PublicSeriesDto(
     ReadingDirection ReadingDirection,
     string StudioName,
     int PublishedChapterCount,
-    DateTime? LatestPublishedAt);
+    DateTime? LatestPublishedAt,
+    string? CoverUrl = null,
+    bool IsCompleted = false,
+    DateTime? CreatedAt = null,
+    int ViewCount = 0,
+    int ViewsLast1Day = 0,
+    int ViewsLast7Days = 0,
+    int ViewsLast30Days = 0);
 
 /// <param name="CoverUrl">Ảnh bìa chương công khai (không cần đăng nhập); null = chương chưa có bìa.</param>
 public sealed record PublicChapterDto(
@@ -43,7 +50,11 @@ public sealed record PublicSeriesDetailDto(
     string Format,
     ReadingDirection ReadingDirection,
     string StudioName,
-    IReadOnlyList<PublicChapterDto> Chapters);
+    IReadOnlyList<PublicChapterDto> Chapters,
+    string? CoverUrl = null,
+    bool IsCompleted = false,
+    DateTime? CreatedAt = null,
+    int ViewCount = 0);
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
@@ -79,25 +90,42 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
         }
 
         var total = await query.CountAsync(ct);
+        var day = now.AddDays(-1);
+        var week = now.AddDays(-7);
+        var month = now.AddDays(-30);
 
         // Sắp xếp + phân trang trên entity TRƯỚC khi projection vào positional record:
         // EF Core không dịch được OrderBy theo member của record (LatestPublishedAt) sau khi đã Select.
-        var items = await query
+        var rows = await query
             .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt))
             .ThenBy(s => s.Title)
             .Skip((pageIndex - 1) * pageSize)
             .Take(pageSize)
-            .Select(s => new PublicSeriesDto(
-                s.Id,
-                s.Title,
-                s.Synopsis,
-                s.Genre,
-                s.Format,
-                s.ReadingDirection,
-                s.Workspace.Name,
-                s.Chapters.Count(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now),
-                s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt)))
+            .Select(s => new
+            {
+                Dto = new PublicSeriesDto(
+                    s.Id,
+                    s.Title,
+                    s.Synopsis,
+                    s.Genre,
+                    s.Format,
+                    s.ReadingDirection,
+                    s.Workspace.Name,
+                    s.Chapters.Count(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now),
+                    s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt),
+                    null,
+                    s.IsCompleted,
+                    s.CreatedAt,
+                    _dbContext.ChapterViews.Count(v => v.SeriesId == s.Id),
+                    _dbContext.ChapterViews.Count(v => v.SeriesId == s.Id && v.ViewedAt >= day),
+                    _dbContext.ChapterViews.Count(v => v.SeriesId == s.Id && v.ViewedAt >= week),
+                    _dbContext.ChapterViews.Count(v => v.SeriesId == s.Id && v.ViewedAt >= month)),
+                s.CoverImageSha256
+            })
             .ToListAsync(ct);
+        var items = rows
+            .Select(r => r.Dto with { CoverUrl = GetPublicSeriesCoverQueryHandler.CoverUrl(r.Dto.Id, r.CoverImageSha256) })
+            .ToList();
 
         return Result<PagedResult<PublicSeriesDto>>.Success(new PagedResult<PublicSeriesDto>(
             items, total, pageIndex, pageSize, (int)Math.Ceiling(total / (double)pageSize)));
@@ -134,6 +162,9 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 s.ReadingDirection,
                 s.WorkspaceId,
                 StudioName = s.Workspace.Name,
+                s.CoverImageSha256,
+                s.IsCompleted,
+                s.CreatedAt,
                 Chapters = s.Chapters
                     .Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now)
                     .OrderBy(c => c.ChapterNumber)
@@ -190,6 +221,10 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
 
         return Result<PublicSeriesDetailDto>.Success(new PublicSeriesDetailDto(
             series.Id, series.Title, series.Synopsis, series.Genre, series.Format, series.ReadingDirection,
-            series.StudioName, chapterDtos));
+            series.StudioName, chapterDtos,
+            GetPublicSeriesCoverQueryHandler.CoverUrl(series.Id, series.CoverImageSha256),
+            series.IsCompleted,
+            series.CreatedAt,
+            await _dbContext.ChapterViews.CountAsync(v => v.SeriesId == series.Id, ct)));
     }
 }

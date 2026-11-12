@@ -104,4 +104,36 @@ public class PublicCatalogQueryTests
             .Select(t => t.Code).Should().Equal("MANGA");
         (await handler.Handle(new GetPipelineTemplatesQuery(), default)).Value!.Should().HaveCount(2);
     }
+
+    [Fact]
+    public async Task ListAndDetail_ExposeCoverStatusAndCreatedAt()
+    {
+        var sha = new string('a', 64);
+        _published.SetCover(sha);
+        _published.SetCompleted(true);
+        await _db.SaveChangesAsync();
+
+        var item = (await new GetPublicCatalogQueryHandler(_db).Handle(new GetPublicCatalogQuery(), default)).Value!.Items.Single();
+        item.CoverUrl.Should().Be($"/api/catalog/series/{_published.Id}/cover?v=aaaaaaaaaaaa");
+        item.IsCompleted.Should().BeTrue();
+        item.CreatedAt.Should().Be(_published.CreatedAt);
+
+        var detail = (await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>())
+            .Handle(new GetPublicSeriesDetailQuery(_published.Id), default)).Value!;
+        detail.CoverUrl.Should().Be(item.CoverUrl);
+        detail.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SeriesCover_IsNotServedForSeriesWithoutPublishedChapter()
+    {
+        _inProduction.SetCover(new string('b', 64));
+        await _db.SaveChangesAsync();
+        var storage = new Mock<IAssetStorage>(MockBehavior.Strict);
+
+        var result = await new GetPublicSeriesCoverQueryHandler(_db, storage.Object)
+            .Handle(new GetPublicSeriesCoverQuery(_inProduction.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
 }

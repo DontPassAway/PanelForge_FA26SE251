@@ -168,6 +168,23 @@ public class SeriesCommandTests
     }
 
     [Fact]
+    public async Task UpdateSeries_SetsCompleted_AndNullLeavesItUnchanged()
+    {
+        var series = Series.Create(Guid.NewGuid(), "Title", ReadingDirection.LeftToRight);
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        var handler = new UpdateSeriesCommandHandler(_dbContextMock.Object);
+
+        var done = await handler.Handle(new UpdateSeriesCommand(
+            series.Id, Guid.NewGuid(), "Title", null, ReadingDirection.LeftToRight, null, IsCompleted: true), CancellationToken.None);
+        done.Value!.IsCompleted.Should().BeTrue();
+
+        var untouched = await handler.Handle(new UpdateSeriesCommand(
+            series.Id, Guid.NewGuid(), "Title 2", null, ReadingDirection.LeftToRight, null), CancellationToken.None);
+        untouched.Value!.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DeleteSeries_WhenSeriesExists_ShouldCallRemoveOnDbContext()
     {
         // Arrange

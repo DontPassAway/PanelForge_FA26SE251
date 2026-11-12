@@ -151,7 +151,8 @@ public sealed class SeriesController : ControllerBase
             Genre: body.Genre,
             Format: body.Format,
             ReleaseScheduleJson: body.ReleaseScheduleJson,
-            StoryArc: body.StoryArc
+            StoryArc: body.StoryArc,
+            IsCompleted: body.IsCompleted
         );
 
         var result = await _mediator.Send(command, cancellationToken);

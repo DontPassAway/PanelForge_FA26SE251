@@ -89,6 +89,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ReaderWallet> ReaderWallets => Set<ReaderWallet>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
+    public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
 
     public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
         Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken);

@@ -43,6 +43,8 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("avatar_image_sha256")
                .HasColumnType("varchar(64)");
 
+        builder.Property(s => s.IsCompleted).HasColumnName("is_completed").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
+
         builder.Property(s => s.BannerImageSha256)
                .HasColumnName("banner_image_sha256")
                .HasColumnType("varchar(64)");

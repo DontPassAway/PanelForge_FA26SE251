@@ -205,6 +205,24 @@ public class PreviewLinkTests
     }
 
     [Fact]
+    public async Task Feedback_StoresOptionalReviewerName_AndRejectsTooLongName()
+    {
+        var f = new Fixture();
+        var (_, token) = await f.CreateLink();
+        var handler = new SubmitPreviewFeedbackCommandHandler(f.Db);
+
+        var named = await handler.Handle(
+            new SubmitPreviewFeedbackCommand(token, "Thoại ổn", null, null, null, "  Cố vấn Minh "), default);
+        named.Value!.ReviewerName.Should().Be("Cố vấn Minh");
+        named.Value.Message.Should().Be("Thoại ổn");
+
+        (await handler.Handle(new SubmitPreviewFeedbackCommand(token, "x", null, null, null, "   "), default))
+            .Value!.ReviewerName.Should().BeNull();
+        (await handler.Handle(new SubmitPreviewFeedbackCommand(token, "x", null, null, null, new string('a', 81)), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    [Fact]
     public async Task Triage_NeedsChangeRequiresNote()
     {
         var f = new Fixture();

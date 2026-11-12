@@ -2304,6 +2304,40 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("script_line_bible_links", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterView", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<DateTime>("ViewedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("viewed_at");
+
+                    b.Property<string>("ViewerKey")
+                        .IsRequired()
+                        .HasColumnType("varchar(80)")
+                        .HasColumnName("viewer_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId", "ViewerKey", "ViewedAt")
+                        .HasDatabaseName("ix_chapter_views_chapter_viewer");
+
+                    b.HasIndex("SeriesId", "ViewedAt")
+                        .HasDatabaseName("ix_chapter_views_series_viewed_at");
+
+                    b.ToTable("chapter_views", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2344,6 +2378,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(50)")
                         .HasDefaultValue("Manga")
                         .HasColumnName("format");
+
+                    b.Property<bool>("IsCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_completed");
 
                     b.Property<string>("Genre")
                         .IsRequired()
@@ -3392,6 +3432,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(320)")
                         .HasColumnName("recipient_email");
+
+                    b.Property<string>("ReviewerName")
+                        .HasColumnType("varchar(80)")
+                        .HasColumnName("reviewer_name");
 
                     b.Property<string>("Status")
                         .IsRequired()

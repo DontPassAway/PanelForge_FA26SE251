@@ -69,7 +69,8 @@ public sealed class GetSeriesListQueryHandler : IRequestHandler<GetSeriesListQue
                 s.StoryArc,
                 SetSeriesCoverCommandHandler.CoverUrl(s.Id, s.CoverImageSha256),
                 SetSeriesImageCommandHandler.ImageUrl(s.Id, SeriesImageKind.Avatar, s.AvatarImageSha256),
-                SetSeriesImageCommandHandler.ImageUrl(s.Id, SeriesImageKind.Banner, s.BannerImageSha256)
+                SetSeriesImageCommandHandler.ImageUrl(s.Id, SeriesImageKind.Banner, s.BannerImageSha256),
+                s.IsCompleted
             ))
             .ToListAsync(cancellationToken);
 
