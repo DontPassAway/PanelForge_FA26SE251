@@ -11,7 +11,8 @@ Mục lục các tài liệu, sắp xếp theo thư mục.
 | [`storage/`](storage/) | Lưu trữ ảnh, cốt truyện và luồng lưu trữ | [`storage-architecture.md`](storage/storage-architecture.md), [`storage-strategy.md`](storage/storage-strategy.md), [`image_storage_architecture.md`](storage/image_storage_architecture.md) |
 | [`ai/`](ai/) | AI multi-agent | [`ai-multi-agent-demo.md`](ai/ai-multi-agent-demo.md) |
 | [`database/`](database/) | Cài đặt cơ sở dữ liệu | [`setup-database.md`](database/setup-database.md) |
-| [`implementation/`](implementation/) | Nhật ký triển khai và báo cáo tiến độ | [`PanelForge_Scope_V1.2.md`](implementation/PanelForge_Scope_V1.2.md) (toàn bộ scope theo phiếu đăng ký V1.2: flow, role, actor, AI), [`panelforge_progress_report.md`](implementation/panelforge_progress_report.md) |
+| [`implementation/`](implementation/) | Phạm vi theo phiếu đăng ký | [`PanelForge_Scope_V1.2.md`](implementation/PanelForge_Scope_V1.2.md) (toàn bộ scope theo phiếu đăng ký V1.2: flow, role, actor, AI) |
+| [`archive/`](archive/) | Tài liệu đã xong, giữ làm lịch sử | [`archive/implementation/`](archive/implementation/): đặc tả thay đổi CF1, CF4, CF5 (đã merge; việc còn lại đã chuyển vào `Github/note/plans/`) |
 | [`research/`](research/) | Nghiên cứu công cụ, role và quyết định thiết kế | [`RESEARCH_ROLES_AND_TOOLS.md`](research/RESEARCH_ROLES_AND_TOOLS.md) (công cụ ngoài), [`panelforge-design-research.md`](research/panelforge-design-research.md) (quy trình, mô hình dữ liệu, pipeline, versioning, AI; có bằng chứng và backlog), [`consistency-design.md`](research/consistency-design.md) (thiết kế kiểm tra nhất quán: quy tắc, dữ liệu, triage, kiểm thử), [`PanelForge_Research_Cau_Truc_Pipeline.md`](research/PanelForge_Research_Cau_Truc_Pipeline.md) (mô hình cấu trúc nội dung Scene/Page/Panel và pipeline sản xuất), [`PanelForge_Research_Nghiep_Vu.md`](research/PanelForge_Research_Nghiep_Vu.md) (nghiệp vụ, giá trị, nhóm người dùng) |
 
 ## Nên đọc theo thứ tự nào
@@ -20,6 +21,16 @@ Mục lục các tài liệu, sắp xếp theo thư mục.
 2. [`requirements.md`](requirements/requirements.md) và [`project-plan.md`](requirements/project-plan.md): yêu cầu và phạm vi.
 3. [`role-workflows.md`](roles/role-workflows.md) và [`role-flow-examples.md`](roles/role-flow-examples.md): ai làm gì.
 4. [`series-bible.md`](domain/series-bible.md), [`storage-strategy.md`](storage/storage-strategy.md), [`ai-multi-agent-demo.md`](ai/ai-multi-agent-demo.md): các phần chuyên sâu.
+
+## Kế hoạch triển khai
+
+Kế hoạch triển khai của cả Backend, Frontend và Mobile **không nằm trong repo này**. Chúng ở thư mục workspace gốc:
+
+- `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`: đặc tả nghiệp vụ hiện hành (bảng "Nhật ký quyết định" ở đầu file).
+- `Github/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md`: plan tổng, quyết định đã chốt, changelog chung.
+- `Github/note/plans/`: một plan cho mỗi module (`SCR`, `BIB`, `ASG`, `ART`, `REV`, `REL`, `RDR`, `UIQ`).
+
+Không tạo file plan mới trong `docs/`. Tài liệu kế hoạch cũ đã xong thì chuyển vào `archive/`.
 
 ## Ghi chú
 

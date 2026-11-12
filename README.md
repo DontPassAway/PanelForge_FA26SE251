@@ -347,10 +347,13 @@ Everything lives under [`docs/`](docs/README.md), organised by topic.
 | [`docs/storage/`](docs/storage/) | [Asset storage architecture](docs/storage/storage-architecture.md) and [storage strategy](docs/storage/storage-strategy.md) |
 | [`docs/ai/`](docs/ai/) | [AI multi-agent design and demo](docs/ai/ai-multi-agent-demo.md) |
 | [`docs/database/`](docs/database/) | [Database setup](docs/database/setup-database.md) |
-| [`docs/implementation/`](docs/implementation/) | Implementation logs and progress reports |
+| [`docs/implementation/`](docs/implementation/) | [Scope per registration form V1.2](docs/implementation/PanelForge_Scope_V1.2.md) |
+| [`docs/archive/`](docs/archive/) | Merged change logs kept as history (CF1, CF4, CF5 in `archive/implementation/`) |
 | [`docs/research/`](docs/research/) | Research on roles and supporting tools |
 
 Several documents are written in Vietnamese; the specification and project plan are in English.
+
+**Implementation plans** for all three repositories (backend, frontend, mobile) are not kept in this repo. They live in the workspace root: `Github/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md` (master plan) and `Github/note/plans/` (one plan per module), following the master specification `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`. Do not add new plan files under `docs/`.
 
 ---
 
