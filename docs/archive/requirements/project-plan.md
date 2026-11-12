@@ -1,5 +1,7 @@
 # PanelForge - Project Plan & Scope
 
+> **Đã thay thế (2026-11-12):** Phiếu đăng ký V1.2 không còn dùng làm căn cứ phạm vi. Phạm vi và nghiệp vụ hiện hành theo `Github/note/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`; việc cần làm theo `Github/note/plans/`. Tài liệu này giữ làm lịch sử.
+
 > **Updated to match the capstone registration form V1.2 (06/10/2026).** The mandatory MVP, extended scope, out-of-scope items and work-package split below follow that form. Acceptance values (timeout 30 seconds, precision and recall of at least 70%, similarity threshold 0.75, Task Success Rate of at least 80%) are proposals to be confirmed with the supervisor.
 
 ---
