@@ -16,6 +16,12 @@ internal sealed class ChapterViewConfiguration : IEntityTypeConfiguration<Chapte
         builder.Property(v => v.ViewerKey).HasColumnName("viewer_key")
                .HasColumnType($"varchar({ChapterView.MaxViewerKeyLength})").IsRequired();
         builder.Property(v => v.ViewedAt).HasColumnName("viewed_at").HasColumnType("timestamptz").IsRequired();
+        builder.Property(v => v.Language)
+               .HasColumnName("language")
+               .HasColumnType("varchar(8)")
+               .HasDefaultValue("vi")
+               .IsRequired();
+
 
         // Đếm theo bộ truyện + khoảng thời gian (Top Ngày/Tuần/Tháng) và kiểm tra trùng lượt của một người xem.
         builder.HasIndex(v => new { v.SeriesId, v.ViewedAt }).HasDatabaseName("ix_chapter_views_series_viewed_at");

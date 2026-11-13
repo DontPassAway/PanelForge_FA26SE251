@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Publisher.Models;
+using PanelForge.Application.Features.Publisher.Queries.GetPublisherRevenue;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherChapters;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeries;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeriesDetail;
@@ -93,6 +94,22 @@ public sealed class PublisherController : ControllerBase
                 : BadRequest(new { message = result.ErrorMessage });
         }
 
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/publisher/revenue
+    /// Doanh thu theo bộ truyện (mở khóa chương + trang trả phí) kèm lượt đọc; lọc theo Studio / tên truyện.
+    /// Giao dịch chi tiết và duyệt VietQR: /api/workspaces/{workspaceId}/payments (Publisher/Admin).
+    /// </summary>
+    [HttpGet("revenue")]
+    [ProducesResponseType(typeof(PublisherRevenueDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRevenue(
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] string? search,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetPublisherRevenueQuery(workspaceId, search), ct);
         return Ok(result.Value);
     }
 

@@ -16,6 +16,9 @@ public class PaymentTransaction : BaseEntity
     public Guid? SeriesId { get; private set; }
     public Guid? ChapterId { get; private set; }
 
+    /// <summary>Ngôn ngữ bản phát hành được mua (giao dịch mở chương/trang); null với nạp Ví / VIP.</summary>
+    public string? Language { get; private set; }
+
     /// <summary>Mã đơn hàng / nội dung chuyển khoản độc nhất (vd: PF123456).</summary>
     public string OrderCode { get; private set; } = default!;
 
@@ -53,7 +56,8 @@ public class PaymentTransaction : BaseEntity
         string bankAccountName,
         Guid? workspaceId = null,
         Guid? seriesId = null,
-        Guid? chapterId = null)
+        Guid? chapterId = null,
+        string? language = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderCode);
         // qrImageUrl được phép rỗng: giao dịch trừ thẳng từ số dư Ví (mở chương / VIP) không có mã VietQR.
@@ -75,7 +79,8 @@ public class PaymentTransaction : BaseEntity
             BankAccountName = bankAccountName.Trim(),
             WorkspaceId = workspaceId,
             SeriesId = seriesId,
-            ChapterId = chapterId
+            ChapterId = chapterId,
+            Language = language
         };
     }
 

@@ -47,7 +47,8 @@ public sealed class ApprovePaymentCommandHandler : IRequestHandler<ApprovePaymen
         else if (tx.Type == PaymentTransactionType.ChapterUnlock && tx.ChapterId.HasValue)
         {
             var exists = await _db.ChapterEntitlements
-                .AnyAsync(e => e.UserId == tx.UserId && e.ChapterId == tx.ChapterId.Value && !e.IsDeleted, ct);
+                .AnyAsync(e => e.UserId == tx.UserId && e.ChapterId == tx.ChapterId.Value
+                               && e.Language == (tx.Language ?? ContentLanguages.Original) && !e.IsDeleted, ct);
 
             if (!exists)
             {
@@ -60,7 +61,8 @@ public sealed class ApprovePaymentCommandHandler : IRequestHandler<ApprovePaymen
                     seriesId: seriesId,
                     workspaceId: command.WorkspaceId,
                     pricePaidVnd: tx.AmountVnd,
-                    transactionId: tx.Id
+                    transactionId: tx.Id,
+                    language: tx.Language
                 );
                 _db.ChapterEntitlements.Add(entitlement);
             }

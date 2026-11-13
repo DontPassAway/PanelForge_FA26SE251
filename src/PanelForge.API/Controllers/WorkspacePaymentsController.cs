@@ -14,12 +14,12 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.API.Controllers;
 
 /// <summary>
-/// API Quản lý Thanh toán VietQR, Phê duyệt giao dịch và Thiết lập Ngân hàng dành cho Producer.
+/// API Quản lý doanh thu (giao dịch VietQR/Ví, phê duyệt, thiết lập ngân hàng) của một Studio — chỉ Publisher/Admin.
+/// Producer không còn xem/quản lý doanh thu; Producer xem lượt đọc qua GET /api/workspaces/{id}/reader-stats.
 /// </summary>
 [ApiController]
 [Route("api/workspaces/{workspaceId:guid}/payments")]
-[Authorize]
-[RequireWorkspaceRole(WorkspaceRole.Producer)]
+[Authorize(Roles = "Publisher,Admin")]
 public class WorkspacePaymentsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -59,7 +59,7 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// POST /api/workspaces/{workspaceId}/payments/{transactionId}/approve
-    /// Producer đối soát và duyệt giao dịch VietQR đã nhận tiền.
+    /// Publisher đối soát và duyệt giao dịch VietQR đã nhận tiền.
     /// </summary>
     [HttpPost("{transactionId:guid}/approve")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -78,7 +78,7 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// POST /api/workspaces/{workspaceId}/payments/{transactionId}/reject
-    /// Producer từ chối giao dịch kèm lý do.
+    /// Publisher từ chối giao dịch kèm lý do.
     /// </summary>
     [HttpPost("{transactionId:guid}/reject")]
     [ProducesResponseType(StatusCodes.Status200OK)]

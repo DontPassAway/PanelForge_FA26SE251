@@ -15,7 +15,7 @@ namespace PanelForge.UnitTests.Application.Catalog;
 
 /// <summary>
 /// Chương trả phí (IsLocked) trên API catalog công khai: chỉ Publisher/Admin, thành viên Studio, VIP còn hạn
-/// hoặc người đã mua mới nhận danh sách trang; còn lại 403 (Forbidden) và không lộ trang nào.
+/// hoặc người đã mua mới đọc được toàn bộ (IsUnlocked); còn lại chỉ thấy trang xem trước (xem PreviewPageAccessTests).
 /// </summary>
 public class PaidChapterAccessTests
 {
@@ -52,18 +52,18 @@ public class PaidChapterAccessTests
     }
 
     [Fact]
-    public async Task Guest_IsForbidden()
+    public async Task Guest_SeesChapterAsNotUnlocked()
     {
         var result = await Read(null);
 
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.IsUnlocked.Should().BeFalse();
     }
 
     [Fact]
-    public async Task ReaderWithoutPurchase_IsForbidden()
+    public async Task ReaderWithoutPurchase_IsNotUnlocked()
     {
-        (await Read(AddUser())).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await Read(AddUser())).Value!.IsUnlocked.Should().BeFalse();
     }
 
     [Fact]
@@ -89,14 +89,14 @@ public class PaidChapterAccessTests
             ReaderWallet.Create(expired, 0m, isVip: true, vipExpiresAt: DateTime.UtcNow.AddDays(-1)));
         await _db.SaveChangesAsync();
 
-        (await Read(vip)).IsSuccess.Should().BeTrue();
-        (await Read(expired)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await Read(vip)).Value!.IsUnlocked.Should().BeTrue();
+        (await Read(expired)).Value!.IsUnlocked.Should().BeFalse();
     }
 
     [Fact]
     public async Task SystemPublisher_CanRead()
     {
-        (await Read(AddUser(SystemRole.Publisher))).IsSuccess.Should().BeTrue();
+        (await Read(AddUser(SystemRole.Publisher))).Value!.IsUnlocked.Should().BeTrue();
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class PaidChapterAccessTests
         _db.WorkspaceMembers.Add(WorkspaceMember.Create(_studio.Id, artist, WorkspaceRole.Artist));
         await _db.SaveChangesAsync();
 
-        (await Read(artist)).IsSuccess.Should().BeTrue();
+        (await Read(artist)).Value!.IsUnlocked.Should().BeTrue();
     }
 
     [Fact]

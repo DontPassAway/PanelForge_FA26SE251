@@ -15,7 +15,7 @@ namespace PanelForge.Application.Features.Catalog;
 /// (không tính lượt bị paywall chặn); cùng người xem đọc lại trong <see cref="ChapterView.DedupWindow"/> không tính thêm.
 /// Trả <c>true</c> nếu lượt được ghi.
 /// </summary>
-public sealed record RecordChapterViewCommand(Guid ChapterId, string? IpAddress) : IRequest<Result<bool>>;
+public sealed record RecordChapterViewCommand(Guid ChapterId, string? IpAddress, string? Language = null) : IRequest<Result<bool>>;
 
 public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChapterViewCommand, Result<bool>>
 {
@@ -38,9 +38,12 @@ public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChap
         if (chapter is null)
             return Result<bool>.Failure("Không tìm thấy chương đã phát hành.", ResultErrorCodes.NotFound);
 
+        var language = ContentLanguages.Normalize(cmd.Language);
+        if (language is null)
+            return Result<bool>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
+
+        // Chương trả phí chưa mua vẫn đọc được trang xem trước → mở chương cũng tính một lượt xem.
         var userId = _currentUser.UserId;
-        if (!await ChapterReadAccess.CanReadAsync(_db, userId, chapter.Id, chapter.WorkspaceId, chapter.IsLocked, ct))
-            return Result<bool>.Failure(ChapterReadAccess.LockedMessage, ResultErrorCodes.Forbidden);
 
         var viewerKey = ViewerKey(userId, cmd.IpAddress);
         if (viewerKey is null) return Result<bool>.Success(false);
@@ -50,7 +53,7 @@ public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChap
             v => v.ChapterId == chapter.Id && v.ViewerKey == viewerKey && v.ViewedAt >= since, ct);
         if (recent) return Result<bool>.Success(false);
 
-        _db.ChapterViews.Add(ChapterView.Create(chapter.Id, chapter.SeriesId, viewerKey, now));
+        _db.ChapterViews.Add(ChapterView.Create(chapter.Id, chapter.SeriesId, viewerKey, now, language));
         await _db.SaveChangesAsync(ct);
         return Result<bool>.Success(true);
     }

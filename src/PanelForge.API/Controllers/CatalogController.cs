@@ -38,9 +38,10 @@ public class CatalogController : ControllerBase
     [HttpGet("series/{seriesId:guid}")]
     [ProducesResponseType(typeof(PublicSeriesDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetSeriesDetail([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetSeriesDetail(
+        [FromRoute] Guid seriesId, [FromQuery] string? lang, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetPublicSeriesDetailQuery(seriesId), cancellationToken);
+        var result = await _mediator.Send(new GetPublicSeriesDetailQuery(seriesId, lang), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.ErrorMessage });
     }
 
@@ -52,9 +53,10 @@ public class CatalogController : ControllerBase
     [ProducesResponseType(typeof(PublicChapterReadDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ReadChapter([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+    public async Task<IActionResult> ReadChapter(
+        [FromRoute] Guid chapterId, [FromQuery] string? lang, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetPublicChapterQuery(chapterId), cancellationToken);
+        var result = await _mediator.Send(new GetPublicChapterQuery(chapterId, lang), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorCode, result.ErrorMessage);
     }
 
@@ -80,10 +82,11 @@ public class CatalogController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RecordChapterView([FromRoute] Guid chapterId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RecordChapterView(
+        [FromRoute] Guid chapterId, [FromQuery] string? lang, CancellationToken cancellationToken)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var result = await _mediator.Send(new RecordChapterViewCommand(chapterId, ip), cancellationToken);
+        var result = await _mediator.Send(new RecordChapterViewCommand(chapterId, ip, lang), cancellationToken);
         return result.IsSuccess ? NoContent() : Failure(result.ErrorCode, result.ErrorMessage);
     }
 
@@ -107,13 +110,14 @@ public class CatalogController : ControllerBase
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetPageImage([FromRoute] Guid chapterId, [FromRoute] Guid pageId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPageImage(
+        [FromRoute] Guid chapterId, [FromRoute] Guid pageId, [FromQuery] string? lang, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetPublicPageImageQuery(chapterId, pageId), cancellationToken);
+        var result = await _mediator.Send(new GetPublicPageImageQuery(chapterId, pageId, lang), cancellationToken);
         if (!result.IsSuccess) return Failure(result.ErrorCode, result.ErrorMessage);
 
-        // Nội dung đã phát hành nên cho cache ngắn; nosniff để trình duyệt không đoán lại loại file
-        Response.Headers.CacheControl = "public, max-age=300";
+        // Cache ngắn và chỉ ở trình duyệt người xem (private): trang/chương trả phí không được proxy dùng lại cho người khác.
+        Response.Headers.CacheControl = "private, max-age=300";
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(result.Value!.Content, result.Value.ContentType);
     }

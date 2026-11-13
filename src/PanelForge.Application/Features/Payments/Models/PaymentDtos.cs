@@ -33,6 +33,7 @@ public sealed record TopupRequest(
     Guid? SeriesId = null,
     Guid? ChapterId = null,
     string? Purpose = null,
+    string? Language = null,
     string? VipPlan = null
 );
 
@@ -71,7 +72,8 @@ public sealed record UnlockChapterRequest(
     int? PriceVnd = null,
     Guid? SeriesId = null,
     bool IsPermanent = true,
-    int? RentalViews = null
+    int? RentalViews = null,
+    string? Language = null
 );
 
 public sealed record UnlockChapterResponse(

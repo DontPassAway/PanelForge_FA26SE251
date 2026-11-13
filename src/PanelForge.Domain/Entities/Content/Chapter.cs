@@ -26,6 +26,13 @@ public class Chapter : BaseEntity
     /// <summary>Giá mở khóa chương tính bằng VNĐ (0 nếu miễn phí).</summary>
     public decimal PriceVnd { get; private set; } = 0m;
 
+    /// <summary>
+    /// Publisher đã chọn tay trang xem trước của chương → không áp mặc định "N trang đầu" của Series nữa.
+    /// </summary>
+    public bool PreviewPagesCustomized { get; private set; }
+
+    public void MarkPreviewPagesCustomized(bool customized = true) => PreviewPagesCustomized = customized;
+
     /// <summary>V2.5: Kịch bản thuần túy được Producer duyệt và đóng băng (Frozen / Read-only) để đưa vào guồng sản xuất tranh.</summary>
     public bool IsScriptFrozen { get; private set; } = false;
     public DateTime? ScriptFrozenAt { get; private set; }

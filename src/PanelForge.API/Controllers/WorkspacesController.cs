@@ -30,6 +30,7 @@ using PanelForge.Domain.Enums;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceCover;
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceReaderStats;
 
 namespace PanelForge.API.Controllers;
 
@@ -323,6 +324,19 @@ public class WorkspacesController : ControllerBase
     public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceUsageQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/reader-stats
+    /// Producer xem lượt đọc / số người đọc theo bộ truyện và chương (không kèm doanh thu — thuộc Publisher).
+    /// </summary>
+    [HttpGet("{id:guid}/reader-stats")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(WorkspaceReaderStatsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReaderStats(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetWorkspaceReaderStatsQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -22,12 +23,18 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
     public async Task<Result<UnlockChapterResponse>> Handle(UnlockChapterCommand command, CancellationToken ct)
     {
         var req = command.Request;
+        var language = ContentLanguages.Normalize(req.Language);
+        if (language is null)
+            return Result<UnlockChapterResponse>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
         var chapter = await _db.Chapters
             .Include(c => c.Series)
             .FirstOrDefaultAsync(c => c.Id == req.ChapterId && !c.IsDeleted, ct);
 
         if (chapter == null)
             return Result<UnlockChapterResponse>.Failure("Không tìm thấy chương truyện.", ResultErrorCodes.NotFound);
+
+        if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct)).Contains(language))
+            return Result<UnlockChapterResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.Validation);
 
         var wallet = await _db.ReaderWallets
             .FirstOrDefaultAsync(w => w.UserId == command.UserId && !w.IsDeleted, ct);
@@ -42,7 +49,7 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
 
         // Đã mở khóa trước đó
         var alreadyUnlocked = await _db.ChapterEntitlements
-            .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && !e.IsDeleted, ct);
+            .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && e.Language == language && !e.IsDeleted, ct);
 
         if (alreadyUnlocked)
         {
@@ -65,7 +72,8 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
                 chapterId: chapter.Id,
                 seriesId: chapter.SeriesId,
                 workspaceId: chapter.Series.WorkspaceId,
-                pricePaidVnd: 0m
+                pricePaidVnd: 0m,
+                language: language
             );
             _db.ChapterEntitlements.Add(freeEntitlement);
             await _db.SaveChangesAsync(ct);
@@ -88,7 +96,8 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         // Trường hợp chương trả phí cần trừ tiền ví
         // Giá luôn lấy từ chương (server là nguồn sự thật) — không tin giá client gửi lên.
         const int defaultLockedPriceVnd = 10000;
-        int priceVnd = chapter.PriceVnd > 0 ? (int)chapter.PriceVnd : defaultLockedPriceVnd;
+        var languagePrice = await ChapterReadAccess.ChapterPriceAsync(_db, chapter.Id, chapter.PriceVnd, language, ct);
+        int priceVnd = languagePrice > 0 ? (int)languagePrice : defaultLockedPriceVnd;
 
         if (wallet.BalanceVnd < priceVnd)
         {
@@ -113,7 +122,8 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             bankAccountName: "KOMAFORGE STUDIO",
             workspaceId: chapter.Series.WorkspaceId,
             seriesId: chapter.SeriesId,
-            chapterId: chapter.Id
+            chapterId: chapter.Id,
+            language: language
         );
         transaction.Approve(command.UserId, DateTime.UtcNow);
         _db.PaymentTransactions.Add(transaction);
@@ -124,7 +134,8 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             seriesId: chapter.SeriesId,
             workspaceId: chapter.Series.WorkspaceId,
             pricePaidVnd: priceVnd,
-            transactionId: transaction.Id
+            transactionId: transaction.Id,
+            language: language
         );
         _db.ChapterEntitlements.Add(entitlement);
 
