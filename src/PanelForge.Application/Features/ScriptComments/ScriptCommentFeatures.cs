@@ -73,7 +73,8 @@ public sealed class ScriptCommentHandlers :
             return Result<ScriptCommentDto>.Failure($"Góp ý tối đa {ScriptComment.MaxBodyLength} ký tự.", ResultErrorCodes.Validation);
 
         if (cmd.ScriptLineId is { } lineId &&
-            !await _db.ScriptLines.AnyAsync(l => l.Id == lineId && l.Scene.ChapterId == cmd.ChapterId, ct))
+            !await _db.ScriptLines.AnyAsync(l => l.Id == lineId &&
+                ((l.PanelId != null && l.Panel!.Page.ChapterId == cmd.ChapterId) || l.Scene.ChapterId == cmd.ChapterId), ct))
             return Result<ScriptCommentDto>.Failure("Dòng kịch bản không thuộc chương này.", ResultErrorCodes.Validation);
 
         var comment = ScriptComment.Create(cmd.ChapterId, cmd.SceneId, cmd.ScriptLineId, cmd.QuotedText, cmd.Body, cmd.UserId);

@@ -103,19 +103,22 @@ public class Chapter : BaseEntity
     /// <summary>Chương còn sửa được nội dung (chưa Approved/Locked/Published).</summary>
     public bool IsContentEditable => Status is ChapterStatus.PreProduction or ChapterStatus.InProduction;
 
-    /// <summary>Lý do kịch bản đang khoá sửa (InReview / Frozen); null khi Draft.</summary>
+    /// <summary>
+    /// Lý do kịch bản đang khoá sửa; chỉ Frozen khoá. Lưu = commit, Nộp = push: khi InReview Editor đọc bản đã nộp
+    /// (<see cref="LastSubmittedVersionId"/>) nên Writer vẫn sửa và lưu tiếp, tới lần nộp sau mới đổi bản Editor thấy.
+    /// </summary>
     public string? ScriptLockReason => ScriptStatus switch
     {
-        ScriptStatus.InReview => "Kịch bản đang chờ duyệt nên tạm khoá chỉnh sửa. Writer bấm \"Hủy gửi duyệt\" để chỉnh sửa tiếp.",
         ScriptStatus.Frozen => "Kịch bản đã được chốt để sản xuất hình ảnh. Producer cần mở lại kịch bản (kèm lý do) nếu muốn sửa.",
         _ => null
     };
 
-    /// <summary>D12: Writer nộp kịch bản (Draft → InReview); kịch bản khoá sửa.</summary>
+    /// <summary>D12: Writer nộp (push) kịch bản: Draft → InReview, hoặc nộp lại khi đang InReview để Editor thấy bản mới.</summary>
     public void SubmitScript(Guid writerUserId, Guid? scriptVersionId = null)
     {
         RequireEditable("gửi duyệt kịch bản");
-        RequireScriptStatus(ScriptStatus.Draft, "gửi duyệt");
+        if (ScriptStatus == ScriptStatus.Frozen)
+            throw new InvalidOperationException("Kịch bản đã được chốt để sản xuất, không gửi duyệt lại được.");
         ScriptStatus = ScriptStatus.InReview;
         ScriptSubmittedAt = DateTime.UtcNow;
         ScriptSubmittedById = writerUserId;

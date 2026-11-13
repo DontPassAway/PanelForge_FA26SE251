@@ -78,7 +78,7 @@ public static class MasterDataSeeder
             code: "STANDARD_MANGA",
             name: "Standard Manga Pipeline",
             description: "Canonical 7-stage manga production pipeline with guarded review gates. " +
-                         "Script → Pencil → Ink → Color → Letter → Review → Approved",
+                         "Pencil → Ink → Color → Letter → Review → Approved",
             isDefault: true
         );
 
@@ -89,13 +89,13 @@ public static class MasterDataSeeder
 
         var stages = new[]
         {
-            ("SCRIPT",    "Script",    1, WorkspaceRole.Writer,   (string?)null,       true,  """{"colorCode":"#6B7280","estimatedDays":3}"""),
-            ("PENCIL",    "Pencil",    2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
-            ("INK",       "Ink",       3, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
-            ("COLOR",     "Color",     4, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
-            ("LETTER",    "Letter",    5, WorkspaceRole.Letterer, null,                true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
-            ("REVIEW",    "Review",    6, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
-            ("APPROVED",  "Approved",  7, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
+            // D1 / SCR-12: kịch bản không phải stage pipeline (vòng đời riêng ScriptStatus, D12)
+            ("PENCIL",    "Pencil",    1, WorkspaceRole.Artist,   (string?)null,       true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
+            ("INK",       "Ink",       2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
+            ("COLOR",     "Color",     3, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
+            ("LETTER",    "Letter",    4, WorkspaceRole.Letterer, null,                true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
+            ("REVIEW",    "Review",    5, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
+            ("APPROVED",  "Approved",  6, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
         };
 
         foreach (var (code, name, order, role, gate, isRequired, cfg) in stages)

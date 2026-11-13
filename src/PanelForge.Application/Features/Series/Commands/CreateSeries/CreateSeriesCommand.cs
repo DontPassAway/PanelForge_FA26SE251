@@ -138,14 +138,14 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
         }
         else
         {
-            // Fallback: Tạo 7 công đoạn chuẩn manga trắng đen (F-02 & RF-11: không có Color mặc định)
-            pipeline.AddStage("Script", "script", 1, null, WorkspaceRole.Writer, false, isInitial: true, isTerminal: false);
-            pipeline.AddStage("Thumbnail", "thumbnail", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Pencil", "pencil", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Ink", "ink", 4, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Letter", "letter", 5, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Review", "review", 6, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Approved", "approved", 7, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
+            // Fallback: công đoạn chuẩn manga trắng đen (F-02 & RF-11: không có Color mặc định).
+            // D1 / SCR-12: kịch bản không còn là stage pipeline; vòng đời riêng theo ScriptStatus (D12).
+            pipeline.AddStage("Thumbnail", "thumbnail", 1, null, WorkspaceRole.Artist, false, isInitial: true, isTerminal: false);
+            pipeline.AddStage("Pencil", "pencil", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Ink", "ink", 3, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Letter", "letter", 4, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Review", "review", 5, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Approved", "approved", 6, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
         }
 
         // Sinh transition mặc định

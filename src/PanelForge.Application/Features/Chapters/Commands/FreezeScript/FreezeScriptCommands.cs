@@ -53,6 +53,18 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
             return Result<ChapterDetailDto>.Failure(
                 "Kịch bản chương phải có ít nhất một dòng trước khi bắt đầu sản xuất.", ResultErrorCodes.Validation);
 
+        // Producer chốt đúng bản đã nộp (push); Writer lưu thêm sau lần nộp thì phải nộp lại trước
+        var pushed = chapter.LastSubmittedVersionId is { } pushedId
+            ? await _dbContext.ScriptVersions.AsNoTracking()
+                .Where(v => v.Id == pushedId)
+                .Select(v => new { v.VersionNumber, v.ContentHash })
+                .FirstOrDefaultAsync(ct)
+            : null;
+        if (pushed is not null && pushed.ContentHash != snapshot.Hash)
+            return Result<ChapterDetailDto>.Failure(
+                $"Writer đã sửa kịch bản sau lần nộp v{pushed.VersionNumber}. Cần Writer nộp lại để bản chốt sản xuất trùng bản Editor đã đọc.",
+                ResultErrorCodes.Conflict);
+
         // Đóng băng lại sau khi mở sửa: gắn cờ ảnh hưởng cho Panel có dòng vừa sửa (WF04)
         if (chapter.ScriptReopenStatus == ScriptReopenStatus.Approved && chapter.ScriptReopenRequestedAt.HasValue)
             await FlagImpactedWorkAsync(chapter.Id, chapter.ScriptReopenRequestedAt.Value, ct);

@@ -79,7 +79,7 @@ internal static class ScriptLineRules
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<(Chapter, Guid)>.Failure(locked, ResultErrorCodes.Conflict);
 
-        // D12: InReview và Frozen đều khoá sửa kịch bản
+        // D12: chỉ Frozen khoá sửa; InReview Writer vẫn sửa (Editor đọc bản đã nộp)
         if (chapter.ScriptLockReason is { } scriptLocked)
             return Result<(Chapter, Guid)>.Failure(scriptLocked, ResultErrorCodes.Conflict);
 
