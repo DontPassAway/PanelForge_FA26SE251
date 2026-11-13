@@ -81,6 +81,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
     public DbSet<ScriptComment> ScriptComments => Set<ScriptComment>();
+    public DbSet<ScriptVersion> ScriptVersions => Set<ScriptVersion>();
     public DbSet<Page> Pages => Set<Page>();
     public DbSet<Panel> Panels => Set<Panel>();
     public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();

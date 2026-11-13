@@ -31,7 +31,10 @@ public sealed record ChapterDto(
     decimal PriceVnd = 0m,
     // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
     ScriptStatus ScriptStatus = ScriptStatus.Draft,
-    DateTime? ScriptSubmittedAt = null
+    DateTime? ScriptSubmittedAt = null,
+    // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
+    Guid? LastSubmittedVersionId = null,
+    Guid? PreviousSubmittedVersionId = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -79,7 +82,10 @@ public sealed record ChapterDetailDto(
     decimal PriceVnd = 0m,
     // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
     ScriptStatus ScriptStatus = ScriptStatus.Draft,
-    DateTime? ScriptSubmittedAt = null
+    DateTime? ScriptSubmittedAt = null,
+    // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
+    Guid? LastSubmittedVersionId = null,
+    Guid? PreviousSubmittedVersionId = null
 );
 
 public sealed record CreateChapterRequest(

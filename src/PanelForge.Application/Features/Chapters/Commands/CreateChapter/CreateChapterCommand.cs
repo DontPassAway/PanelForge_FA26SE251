@@ -101,7 +101,9 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             IsLocked: chapter.IsLocked,
             PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
-            ScriptSubmittedAt: chapter.ScriptSubmittedAt
+            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
+            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
+            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
         ));
     }
 }

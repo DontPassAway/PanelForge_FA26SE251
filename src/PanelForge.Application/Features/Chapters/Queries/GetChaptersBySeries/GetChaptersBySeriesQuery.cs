@@ -65,7 +65,9 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.IsLocked,
                 c.PriceVnd,
                 c.ScriptStatus,
-                c.ScriptSubmittedAt
+                c.ScriptSubmittedAt,
+                c.LastSubmittedVersionId,
+                c.PreviousSubmittedVersionId
             ))
             .ToListAsync(cancellationToken);
 

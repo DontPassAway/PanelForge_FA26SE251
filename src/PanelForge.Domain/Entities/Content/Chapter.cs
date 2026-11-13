@@ -30,6 +30,10 @@ public class Chapter : BaseEntity
     public ScriptStatus ScriptStatus { get; private set; } = ScriptStatus.Draft;
     public DateTime? ScriptSubmittedAt { get; private set; }
     public Guid? ScriptSubmittedById { get; private set; }
+    /// <summary>Phiên bản kịch bản (ScriptVersion) của lần gửi duyệt gần nhất (giữ cả khi Writer hủy gửi duyệt).</summary>
+    public Guid? LastSubmittedVersionId { get; private set; }
+    /// <summary>Phiên bản của lần gửi duyệt trước đó, để Editor so sánh thay đổi giữa hai lần gửi.</summary>
+    public Guid? PreviousSubmittedVersionId { get; private set; }
 
     /// <summary>Kịch bản đã đóng băng (= ScriptStatus.Frozen), giữ cột riêng cho các truy vấn cũ.</summary>
     public bool IsScriptFrozen { get; private set; } = false;
@@ -108,13 +112,19 @@ public class Chapter : BaseEntity
     };
 
     /// <summary>D12: Writer nộp kịch bản (Draft → InReview); kịch bản khoá sửa.</summary>
-    public void SubmitScript(Guid writerUserId)
+    public void SubmitScript(Guid writerUserId, Guid? scriptVersionId = null)
     {
-        RequireEditable("nộp kịch bản");
-        RequireScriptStatus(ScriptStatus.Draft, "nộp");
+        RequireEditable("gửi duyệt kịch bản");
+        RequireScriptStatus(ScriptStatus.Draft, "gửi duyệt");
         ScriptStatus = ScriptStatus.InReview;
         ScriptSubmittedAt = DateTime.UtcNow;
         ScriptSubmittedById = writerUserId;
+        // Chụp phiên bản đã gửi; lần gửi trước lùi xuống để so sánh (bỏ qua khi gửi lại đúng bản cũ)
+        if (scriptVersionId is { } rev && rev != LastSubmittedVersionId)
+        {
+            PreviousSubmittedVersionId = LastSubmittedVersionId;
+            LastSubmittedVersionId = rev;
+        }
         IncrementVersion();
     }
 

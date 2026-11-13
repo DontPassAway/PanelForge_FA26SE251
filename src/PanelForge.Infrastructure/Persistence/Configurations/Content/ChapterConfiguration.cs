@@ -91,6 +91,14 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("script_submitted_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.LastSubmittedVersionId)
+               .HasColumnName("last_submitted_version_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.PreviousSubmittedVersionId)
+               .HasColumnName("previous_submitted_version_id")
+               .HasColumnType("uuid");
+
         builder.Property(c => c.IsScriptFrozen)
                .HasColumnName("is_script_frozen")
                .HasColumnType("boolean")

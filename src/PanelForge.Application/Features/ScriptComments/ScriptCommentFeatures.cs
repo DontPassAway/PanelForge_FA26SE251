@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -77,6 +78,12 @@ public sealed class ScriptCommentHandlers :
 
         var comment = ScriptComment.Create(cmd.ChapterId, cmd.SceneId, cmd.ScriptLineId, cmd.QuotedText, cmd.Body, cmd.UserId);
         _db.ScriptComments.Add(comment);
+
+        var chapter = await _db.Chapters.FirstAsync(c => c.Id == cmd.ChapterId, ct);
+        var preview = comment.Body.Length > 120 ? comment.Body[..120] + "…" : comment.Body;
+        await ScriptNotifications.NotifyWritersAsync(_db, chapter, cmd.UserId,
+            $"Góp ý mới trên kịch bản Chương {chapter.ChapterNumber}", preview, ct);
+
         await _db.SaveChangesAsync(ct);
 
         var names = await NamesAsync([cmd.UserId], ct);

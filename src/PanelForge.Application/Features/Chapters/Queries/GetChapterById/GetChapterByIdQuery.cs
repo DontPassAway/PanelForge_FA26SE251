@@ -74,7 +74,9 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
             IsLocked: chapter.IsLocked,
             PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
-            ScriptSubmittedAt: chapter.ScriptSubmittedAt
+            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
+            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
+            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
         );
 
         return Result<ChapterDetailDto>.Success(detail);

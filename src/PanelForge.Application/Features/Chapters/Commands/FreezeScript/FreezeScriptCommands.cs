@@ -4,7 +4,9 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Models;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -46,59 +48,31 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
                     : "Writer chưa gửi duyệt kịch bản. Chỉ bắt đầu sản xuất được khi kịch bản đang chờ duyệt.",
                 ResultErrorCodes.Conflict);
 
-        var sceneIds = chapter.Scenes.Select(s => s.Id).ToList();
-        if (!await _dbContext.ScriptLines.AsNoTracking().AnyAsync(l => sceneIds.Contains(l.SceneId), ct))
+        var snapshot = await ScriptSnapshotBuilder.BuildAsync(_dbContext, chapter.Id, ct);
+        if (snapshot.LineCount == 0)
             return Result<ChapterDetailDto>.Failure(
                 "Kịch bản chương phải có ít nhất một dòng trước khi bắt đầu sản xuất.", ResultErrorCodes.Validation);
 
         // Đóng băng lại sau khi mở sửa: gắn cờ ảnh hưởng cho Panel có dòng vừa sửa (WF04)
         if (chapter.ScriptReopenStatus == ScriptReopenStatus.Approved && chapter.ScriptReopenRequestedAt.HasValue)
-            await FlagImpactedWorkAsync(chapter.Id, sceneIds, chapter.ScriptReopenRequestedAt.Value, ct);
+            await FlagImpactedWorkAsync(chapter.Id, chapter.ScriptReopenRequestedAt.Value, ct);
 
-        chapter.StartProduction(cmd.UserId, await ScriptContentHashAsync(chapter.Id, sceneIds, ct));
+        // Mã băm dùng chung với phiên bản kịch bản (Trang → Panel → dòng)
+        chapter.StartProduction(cmd.UserId, snapshot.Hash);
         chapter.UpdatedBy = cmd.UserId.ToString();
+
+        await ScriptNotifications.NotifyWritersAsync(_dbContext, chapter, cmd.UserId,
+            $"Kịch bản Chương {chapter.ChapterNumber} đã được chốt",
+            $"Producer đã bắt đầu sản xuất Chương {chapter.ChapterNumber}. Kịch bản chuyển sang chỉ đọc.", ct);
 
         await _dbContext.SaveChangesAsync(ct);
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
     }
 
-    /// <summary>
-    /// SHA-256 của kịch bản theo cấu trúc Trang → Panel (kèm Direction) → dòng (Kind, SpeakerLabel, Text):
-    /// chứng minh kịch bản không đổi sau khi đóng băng.
-    /// </summary>
-    private async Task<string> ScriptContentHashAsync(Guid chapterId, List<Guid> sceneIds, CancellationToken ct)
-    {
-        var panels = await _dbContext.Panels.AsNoTracking()
-            .Where(p => p.Page.ChapterId == chapterId)
-            .Select(p => new { p.Id, p.Page.PageNumber, p.PanelNumber, p.Direction })
-            .ToListAsync(ct);
-        var panelKey = panels.ToDictionary(p => p.Id, p => (p.PageNumber, p.PanelNumber));
-
-        var lines = await _dbContext.ScriptLines.AsNoTracking()
-            .Where(l => sceneIds.Contains(l.SceneId))
-            .Select(l => new { l.LineOrder, l.Kind, l.SpeakerLabel, l.Text, l.DialogueText, l.StageDirection, l.PanelId })
-            .ToListAsync(ct);
-
-        var panelRows = panels
-            .OrderBy(p => p.PageNumber).ThenBy(p => p.PanelNumber)
-            .Select(p => $"P|{p.PageNumber}|{p.PanelNumber}|{p.Direction}");
-        var lineRows = lines
-            .Select(l => new
-            {
-                Key = l.PanelId is { } id && panelKey.TryGetValue(id, out var k) ? k : (0, 0),
-                l.LineOrder,
-                Row = $"{l.Kind}|{l.SpeakerLabel}|{l.Text ?? l.DialogueText ?? l.StageDirection}"
-            })
-            .OrderBy(l => l.Key.Item1).ThenBy(l => l.Key.Item2).ThenBy(l => l.LineOrder)
-            .Select(l => $"L|{l.Key.Item1}|{l.Key.Item2}|{l.LineOrder}|{l.Row}");
-
-        return AiContentValidator.Sha256(string.Join('\n', panelRows.Concat(lineRows)));
-    }
-
-    private async Task FlagImpactedWorkAsync(Guid chapterId, List<Guid> sceneIds, DateTime since, CancellationToken ct)
+    private async Task FlagImpactedWorkAsync(Guid chapterId, DateTime since, CancellationToken ct)
     {
         var modified = await _dbContext.ScriptLines
-            .Where(l => sceneIds.Contains(l.SceneId) && l.PanelId != null && l.UpdatedAt >= since)
+            .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.UpdatedAt >= since)
             .Select(l => new { l.Id, PanelId = l.PanelId!.Value })
             .ToListAsync(ct);
         if (modified.Count == 0) return;
@@ -117,7 +91,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
 }
 
 /// <summary>D12: Writer nộp kịch bản (Draft → InReview); kịch bản khoá sửa, báo Editor và Producer.</summary>
-public sealed record SubmitScriptCommand(Guid ChapterId, Guid UserId) : IRequest<Result<ChapterDetailDto>>;
+public sealed record SubmitScriptCommand(Guid ChapterId, Guid UserId, string? Message = null) : IRequest<Result<ChapterDetailDto>>;
 
 /// <summary>D12: chỉ Writer rút kịch bản về sửa (InReview → Draft). Editor / Producer không đẩy kịch bản về Draft.</summary>
 public sealed record RecallScriptCommand(Guid ChapterId, Guid UserId) : IRequest<Result<ChapterDetailDto>>;
@@ -141,18 +115,20 @@ public sealed class ScriptLifecycleCommandHandler :
         if (!loaded.IsSuccess) return Result<ChapterDetailDto>.Failure(loaded.ErrorMessage!, loaded.ErrorCode);
         var (chapter, workspaceId) = loaded.Value;
 
-        var sceneIds = chapter.Scenes.Select(s => s.Id).ToList();
-        if (!await _db.ScriptLines.AsNoTracking().AnyAsync(l => sceneIds.Contains(l.SceneId), ct))
+        // Gửi duyệt = push: commit bản hiện tại (nếu khác bản gần nhất) rồi đánh dấu đã gửi
+        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct);
+        if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
         try
         {
-            chapter.SubmitScript(cmd.UserId);
+            chapter.SubmitScript(cmd.UserId, version.Id);
         }
         catch (InvalidOperationException ex)
         {
             return Result<ChapterDetailDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
         }
+        version.MarkSubmitted(cmd.UserId);
         chapter.UpdatedBy = cmd.UserId.ToString();
 
         // Báo Editor (góp ý) và Producer (Start Production)
@@ -166,7 +142,7 @@ public sealed class ScriptLifecycleCommandHandler :
                 userId,
                 NotificationType.AssignmentSubmitted,
                 $"Kịch bản Chương {chapter.ChapterNumber} chờ duyệt",
-                $"Writer đã nộp kịch bản Chương {chapter.ChapterNumber}. Editor góp ý theo dòng; Producer bấm Start Production khi sẵn sàng.",
+                $"Writer đã gửi duyệt kịch bản Chương {chapter.ChapterNumber}. Editor góp ý theo dòng; Producer bấm Bắt đầu sản xuất khi sẵn sàng.",
                 chapterId: chapter.Id));
         }
 
@@ -252,6 +228,10 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
 
         chapter.UnfreezeScript(cmd.UserId);
         chapter.UpdatedBy = cmd.UserId.ToString();
+
+        await ScriptNotifications.NotifyWritersAsync(_dbContext, chapter, cmd.UserId,
+            $"Kịch bản Chương {chapter.ChapterNumber} được mở lại",
+            $"Producer đã mở lại kịch bản Chương {chapter.ChapterNumber} để chỉnh sửa. Lý do: {reason}", ct);
 
         // BR-18: lý do không có cột trên Chapter → ghi bản audit nghiệp vụ trong cùng SaveChanges với thay đổi trạng thái
         var workspaceId = await _dbContext.Series.Where(s => s.Id == chapter.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(ct);
@@ -418,7 +398,9 @@ internal static class ChapterDetailDtoFactory
             IsLocked: chapter.IsLocked,
             PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
-            ScriptSubmittedAt: chapter.ScriptSubmittedAt
+            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
+            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
+            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
         );
     }
 }
