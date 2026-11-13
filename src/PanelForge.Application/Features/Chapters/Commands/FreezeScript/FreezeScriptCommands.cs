@@ -42,8 +42,8 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         if (chapter.ScriptStatus != ScriptStatus.InReview)
             return Result<ChapterDetailDto>.Failure(
                 chapter.ScriptStatus == ScriptStatus.Frozen
-                    ? "Kịch bản của chương này đã được đóng băng trước đó."
-                    : "Writer chưa nộp kịch bản. Chỉ bắt đầu sản xuất được khi kịch bản đang chờ duyệt.",
+                    ? "Kịch bản của chương này đã được chốt trước đó."
+                    : "Writer chưa gửi duyệt kịch bản. Chỉ bắt đầu sản xuất được khi kịch bản đang chờ duyệt.",
                 ResultErrorCodes.Conflict);
 
         var sceneIds = chapter.Scenes.Select(s => s.Id).ToList();
@@ -143,7 +143,7 @@ public sealed class ScriptLifecycleCommandHandler :
 
         var sceneIds = chapter.Scenes.Select(s => s.Id).ToList();
         if (!await _db.ScriptLines.AsNoTracking().AnyAsync(l => sceneIds.Contains(l.SceneId), ct))
-            return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa nộp được.", ResultErrorCodes.Validation);
+            return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
         try
         {
@@ -207,7 +207,7 @@ public sealed class ScriptLifecycleCommandHandler :
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         if (await _auth.GetMemberRoleAsync(userId, workspaceId, ct) != WorkspaceRole.Writer)
-            return Result<(Chapter, Guid)>.Failure("Chỉ Writer mới nộp hoặc rút kịch bản về sửa.", ResultErrorCodes.Forbidden);
+            return Result<(Chapter, Guid)>.Failure("Chỉ Writer mới gửi duyệt hoặc hủy gửi duyệt kịch bản.", ResultErrorCodes.Forbidden);
 
         return Result<(Chapter, Guid)>.Success((chapter, workspaceId));
     }

@@ -28,6 +28,7 @@ using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.ScriptComments;
 using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Bible.Models;
@@ -274,6 +275,34 @@ public sealed class ChaptersController : ControllerBase
     public async Task<IActionResult> RecallScript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new RecallScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
 
+    /// <summary>GET /api/chapters/{chapterId}/script-comments — D12: góp ý theo dòng trên kịch bản (mọi thành viên đọc).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/script-comments")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptCommentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetScriptComments([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetScriptCommentsQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>POST /api/chapters/{chapterId}/script-comments — D12: Editor / Producer góp ý theo dòng, không đổi trạng thái kịch bản.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-comments")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ScriptCommentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AddScriptComment(
+        [FromRoute] Guid chapterId,
+        [FromBody] AddScriptCommentRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new AddScriptCommentCommand(
+            chapterId, GetCurrentUserId(), body.SceneId, body.ScriptLineId, body.QuotedText, body.Body), cancellationToken));
+
+    /// <summary>POST /api/chapters/{chapterId}/script-comments/{commentId}/resolve — Writer (hoặc người góp ý) đánh dấu đã xử lý.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-comments/{commentId:guid}/resolve")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ScriptCommentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResolveScriptComment(
+        [FromRoute] Guid chapterId,
+        [FromRoute] Guid commentId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new ResolveScriptCommentCommand(chapterId, commentId, GetCurrentUserId()), cancellationToken));
+
     /// <summary>
     /// POST /api/chapters/{chapterId}/freeze-script — Gate 1 "Start Production" (D12):
     /// Producer đóng băng kịch bản đang InReview (→ Frozen) và chuyển chương PreProduction → InProduction.
@@ -486,6 +515,7 @@ public sealed class ChaptersController : ControllerBase
 
 public sealed record RequestScriptReopenRequest(string Reason);
 public sealed record UnfreezeScriptRequest(string? Reason);
+public sealed record AddScriptCommentRequest(Guid? SceneId, Guid? ScriptLineId, string? QuotedText, string Body);
 
 public sealed record SetChapterOutlineRequest(string? Outline);
 

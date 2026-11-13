@@ -102,8 +102,8 @@ public class Chapter : BaseEntity
     /// <summary>Lý do kịch bản đang khoá sửa (InReview / Frozen); null khi Draft.</summary>
     public string? ScriptLockReason => ScriptStatus switch
     {
-        ScriptStatus.InReview => "Kịch bản đang chờ duyệt nên khoá sửa. Writer bấm \"Rút về sửa\" để chỉnh tiếp.",
-        ScriptStatus.Frozen => "Kịch bản đã đóng băng để sản xuất hình ảnh. Producer cần mở lại kịch bản (kèm lý do) nếu muốn sửa.",
+        ScriptStatus.InReview => "Kịch bản đang chờ duyệt nên tạm khoá chỉnh sửa. Writer bấm \"Hủy gửi duyệt\" để chỉnh sửa tiếp.",
+        ScriptStatus.Frozen => "Kịch bản đã được chốt để sản xuất hình ảnh. Producer cần mở lại kịch bản (kèm lý do) nếu muốn sửa.",
         _ => null
     };
 
