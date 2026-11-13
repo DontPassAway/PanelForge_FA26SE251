@@ -70,6 +70,12 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
         }
 
         _dbContext.Chapters.Add(chapter);
+
+        // SCR-05: Scene mặc định ẩn mỗi chương
+        var defaultScene = PanelForge.Domain.Entities.Content.Scene.CreateDefault(chapter.Id);
+        defaultScene.CreatedBy = command.UserId.ToString();
+        _dbContext.Scenes.Add(defaultScene);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<ChapterDto>.Success(new ChapterDto(
@@ -82,7 +88,7 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             CreatedAt: chapter.CreatedAt,
             UpdatedAt: chapter.UpdatedAt,
             CreatedBy: chapter.CreatedBy,
-            ScenesCount: 0,
+            ScenesCount: 1,
             PagesCount: 0,
             Status: chapter.Status,
             PublishedAt: chapter.PublishedAt,

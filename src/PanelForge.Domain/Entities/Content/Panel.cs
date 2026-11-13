@@ -11,6 +11,9 @@ public class Panel : BaseEntity
     public int ReadingOrder { get; private set; }
     public Guid? CurrentStageId { get; private set; }
 
+    /// <summary>SCR-07: Mô tả góc máy / hướng vẽ của khung tranh (<= 1000 ký tự)</summary>
+    public string? Direction { get; private set; }
+
     /// <summary>Scene tự sự mà Panel thuộc về (tối đa một, tuỳ chọn). Một Page có thể chứa Panel của nhiều Scene (V1.2).</summary>
     public Guid? SceneId { get; private set; }
     /// <summary>
@@ -31,10 +34,15 @@ public class Panel : BaseEntity
         int panelNumber,
         int readingOrder,
         string? boundingBox = null,
-        Guid? sceneId = null)
+        Guid? sceneId = null,
+        string? direction = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(panelNumber);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(readingOrder);
+
+        var trimmedDirection = direction?.Trim();
+        if (trimmedDirection?.Length > 1000)
+            throw new ArgumentException("Panel direction cannot exceed 1000 characters.");
 
         return new Panel
         {
@@ -42,8 +50,19 @@ public class Panel : BaseEntity
             PanelNumber = panelNumber,
             ReadingOrder = readingOrder,
             BoundingBox = boundingBox?.Trim() ?? "{}",
-            SceneId = sceneId
+            SceneId = sceneId,
+            Direction = trimmedDirection
         };
+    }
+
+    public void UpdateDirection(string? direction)
+    {
+        var trimmed = direction?.Trim();
+        if (trimmed?.Length > 1000)
+            throw new ArgumentException("Panel direction cannot exceed 1000 characters.");
+        if (Direction == trimmed) return;
+        Direction = trimmed;
+        Version++;
     }
 
     // Version chỉ tăng khi giá trị thật sự đổi: lưu lại y nguyên không làm lần sửa của người khác thành xung đột

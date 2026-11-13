@@ -236,4 +236,17 @@ internal static class ScriptLineRules
             return null;
         }
     }
+
+    /// <summary>SCR-05: Lấy Scene mặc định của Chapter, tạo nếu chưa có (D2: Scene ẩn với người dùng)</summary>
+    public static async Task<Scene> EnsureDefaultSceneAsync(IPanelForgeDbContext db, Guid chapterId, CancellationToken ct = default)
+    {
+        var scene = await db.Scenes.FirstOrDefaultAsync(s => s.ChapterId == chapterId, ct);
+        if (scene is null)
+        {
+            scene = Scene.CreateDefault(chapterId);
+            db.Scenes.Add(scene);
+            await db.SaveChangesAsync(ct);
+        }
+        return scene;
+    }
 }

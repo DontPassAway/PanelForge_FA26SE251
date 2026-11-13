@@ -8,7 +8,12 @@ public class ScriptLine : BaseEntity
 {
     public Guid SceneId { get; private set; }
     public int LineOrder { get; private set; }
+    public ScriptLineKind Kind { get; private set; } = ScriptLineKind.Action;
+    public string? Text { get; private set; }
+    public string? SpeakerLabel { get; private set; }
     public Guid? SpeakerCharacterId { get; private set; }
+
+    // Tương thích ngược: chỉ giữ để code cũ biên dịch tới khi chuyển xong, xoá ở SCR-23
     public string? DialogueText { get; private set; }
     public string? StageDirection { get; private set; }
     public NarrationMode NarrationMode { get; private set; } = NarrationMode.Present;
@@ -30,33 +35,71 @@ public class ScriptLine : BaseEntity
         string? stageDirection = null,
         Guid? speakerCharacterId = null,
         Guid? id = null,
-        NarrationMode narrationMode = NarrationMode.Present)
+        NarrationMode narrationMode = NarrationMode.Present,
+        ScriptLineKind? kind = null,
+        string? speakerLabel = null,
+        string? text = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lineOrder);
 
-        if (string.IsNullOrWhiteSpace(dialogueText) && string.IsNullOrWhiteSpace(stageDirection))
-            throw new ArgumentException("ScriptLine phải có ít nhất DialogueText hoặc StageDirection.");
+        var resolvedText = text?.Trim() ?? (!string.IsNullOrWhiteSpace(dialogueText) ? dialogueText.Trim() : stageDirection?.Trim());
+        if (string.IsNullOrWhiteSpace(resolvedText))
+            throw new ArgumentException("ScriptLine phải có nội dung văn bản (Text, DialogueText hoặc StageDirection).");
+
+        var resolvedKind = kind ?? (!string.IsNullOrWhiteSpace(dialogueText) || speakerCharacterId.HasValue
+            ? ScriptLineKind.Dialogue
+            : ScriptLineKind.Action);
+
+        var trimmedSpeakerLabel = speakerLabel?.Trim();
+        if (trimmedSpeakerLabel?.Length > 100)
+            throw new ArgumentException("SpeakerLabel không được vượt quá 100 ký tự.");
+
+        // SCR-04 Luật domain: Action không có speaker
+        if (resolvedKind == ScriptLineKind.Action && (speakerCharacterId.HasValue || !string.IsNullOrWhiteSpace(trimmedSpeakerLabel)))
+            throw new InvalidOperationException("Dòng Action không được có người nói (SpeakerCharacterId hoặc SpeakerLabel).");
 
         return new ScriptLine
         {
-            // Id do ứng dụng cấp (AI draft) để sourceScriptLineIds của Storyboard trỏ đúng dòng sau khi Accept
             Id = id ?? Guid.NewGuid(),
             SceneId = sceneId,
             LineOrder = lineOrder,
-            DialogueText = dialogueText?.Trim(),
-            StageDirection = stageDirection?.Trim(),
-            SpeakerCharacterId = speakerCharacterId,
+            Kind = resolvedKind,
+            Text = resolvedText,
+            SpeakerLabel = trimmedSpeakerLabel,
+            SpeakerCharacterId = resolvedKind == ScriptLineKind.Action ? null : speakerCharacterId,
+            DialogueText = resolvedKind == ScriptLineKind.Dialogue || resolvedKind == ScriptLineKind.Thought ? resolvedText : dialogueText?.Trim(),
+            StageDirection = resolvedKind != ScriptLineKind.Dialogue && resolvedKind != ScriptLineKind.Thought ? resolvedText : stageDirection?.Trim(),
             NarrationMode = narrationMode
         };
     }
 
     public void UpdateContent(
-        string? dialogueText, string? stageDirection, Guid? speakerCharacterId,
-        NarrationMode narrationMode = NarrationMode.Present)
+        string? dialogueText,
+        string? stageDirection,
+        Guid? speakerCharacterId,
+        NarrationMode narrationMode = NarrationMode.Present,
+        ScriptLineKind? kind = null,
+        string? speakerLabel = null,
+        string? text = null)
     {
-        DialogueText = dialogueText?.Trim();
-        StageDirection = stageDirection?.Trim();
-        SpeakerCharacterId = speakerCharacterId;
+        var resolvedText = text?.Trim() ?? (!string.IsNullOrWhiteSpace(dialogueText) ? dialogueText.Trim() : stageDirection?.Trim());
+        if (string.IsNullOrWhiteSpace(resolvedText))
+            throw new ArgumentException("ScriptLine phải có nội dung văn bản.");
+
+        var resolvedKind = kind ?? Kind;
+        var trimmedSpeakerLabel = speakerLabel?.Trim();
+        if (trimmedSpeakerLabel?.Length > 100)
+            throw new ArgumentException("SpeakerLabel không được vượt quá 100 ký tự.");
+
+        if (resolvedKind == ScriptLineKind.Action && (speakerCharacterId.HasValue || !string.IsNullOrWhiteSpace(trimmedSpeakerLabel)))
+            throw new InvalidOperationException("Dòng Action không được có người nói.");
+
+        Kind = resolvedKind;
+        Text = resolvedText;
+        SpeakerLabel = trimmedSpeakerLabel;
+        SpeakerCharacterId = resolvedKind == ScriptLineKind.Action ? null : speakerCharacterId;
+        DialogueText = resolvedKind == ScriptLineKind.Dialogue || resolvedKind == ScriptLineKind.Thought ? resolvedText : dialogueText?.Trim();
+        StageDirection = resolvedKind != ScriptLineKind.Dialogue && resolvedKind != ScriptLineKind.Thought ? resolvedText : stageDirection?.Trim();
         NarrationMode = narrationMode;
         UpdatedAt = DateTime.UtcNow;
     }

@@ -50,6 +50,10 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .IsConcurrencyToken()
                .IsRequired();
 
+        builder.Property(p => p.Direction)
+               .HasColumnName("direction")
+               .HasColumnType("varchar(1000)");
+
         builder.Property(p => p.CurrentStageId)
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");

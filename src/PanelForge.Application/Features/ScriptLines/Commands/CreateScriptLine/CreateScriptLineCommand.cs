@@ -18,7 +18,10 @@ public sealed record CreateScriptLineCommand(
     Guid ChapterId, Guid SceneId, Guid UserId, string? DialogueText, string? StageDirection,
     Guid? SpeakerCharacterId, int? LineOrder, long? ExpectedChapterVersion,
     IReadOnlyList<Guid>? BibleEntryIds = null, Guid? ClientLineId = null,
-    NarrationMode? NarrationMode = null) : IRequest<Result<ScriptLineDto>>;
+    NarrationMode? NarrationMode = null,
+    ScriptLineKind? Kind = null,
+    string? SpeakerLabel = null,
+    string? Text = null) : IRequest<Result<ScriptLineDto>>;
 
 public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScriptLineCommand, Result<ScriptLineDto>>
 {
@@ -89,7 +92,10 @@ public sealed class CreateScriptLineCommandHandler : IRequestHandler<CreateScrip
             string.IsNullOrWhiteSpace(cmd.StageDirection) ? null : cmd.StageDirection,
             cmd.SpeakerCharacterId,
             cmd.ClientLineId,
-            mode);
+            mode,
+            cmd.Kind,
+            cmd.SpeakerLabel,
+            cmd.Text);
         _db.ScriptLines.Add(line);
         lines.Add(line);
         var bibleEntryIds = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, cmd.BibleEntryIds ?? [], ct);
