@@ -23,6 +23,7 @@ using PanelForge.Application.Features.Auth.Commands.ResetPassword;
 using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Features.Auth.Queries.CheckEmail;
 using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
 using PanelForge.API.Common;
 
@@ -50,6 +51,17 @@ public class AuthController : ControllerBase
         var result = await _mediator.Send(
             new RegisterCommand(request.Email, request.Password, request.FullName, request.PhoneNumber),
             cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>Luồng Email-First (Mobile): email đã có tài khoản chưa → { exists }. Giới hạn tần suất như các endpoint auth.</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("check-email")]
+    [ProducesResponseType(typeof(CheckEmailResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckEmail([FromBody] CheckEmailRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CheckEmailQuery(request.Email), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -363,3 +375,4 @@ public class AuthController : ControllerBase
             ? Unauthorized(new { message = result.ErrorMessage })
             : BadRequest(new { message = result.ErrorMessage });
 }
+
