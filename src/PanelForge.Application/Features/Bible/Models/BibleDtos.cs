@@ -211,3 +211,13 @@ public sealed record ChapterBibleGateResultDto(
     int PendingCount,
     IReadOnlyList<ChapterBibleGateItemDto> Items
 );
+
+/// <summary>Một chương mà mục Bible xuất hiện trong kịch bản (người nói hoặc @Tag).</summary>
+public sealed record BibleEntryUsageDto(
+    Guid ChapterId,
+    int ChapterNumber,
+    string? ChapterTitle,
+    int LineCount,
+    bool IsScriptFrozen,
+    bool IsCanonSatisfied
+);
