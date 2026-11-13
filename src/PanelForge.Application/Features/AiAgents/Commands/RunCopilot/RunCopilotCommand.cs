@@ -80,7 +80,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
             return Fail("Dòng này không có thoại để xử lý.", ResultErrorCodes.Validation);
 
         // BR-12: không tốn token cho đề xuất chắc chắn bị từ chối khi Accept
-        if (chapter.Status != ChapterStatus.InProduction)
+        if (!chapter.IsContentEditable)
             return Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc).", ResultErrorCodes.Conflict);
 
         if (role != WorkspaceRole.Producer

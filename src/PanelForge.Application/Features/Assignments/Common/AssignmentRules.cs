@@ -12,7 +12,7 @@ internal static class AssignmentRules
 {
     /// <summary>BR-12: Chapter đã Approved/Locked/Published thì không giao hay đổi việc.</summary>
     public static string? ChapterNotEditableReason(Chapter chapter) =>
-        chapter.Status == ChapterStatus.InProduction
+        chapter.IsContentEditable
             ? null
             : $"Chapter đang ở trạng thái {chapter.Status}, không thể thay đổi việc.";
 

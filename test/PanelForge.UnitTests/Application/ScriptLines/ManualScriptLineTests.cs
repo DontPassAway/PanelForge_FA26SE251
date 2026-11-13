@@ -136,7 +136,7 @@ public class ManualScriptLineTests
     [Fact]
     public async Task Create_ByWriterWhenScriptIsFrozen_IsConflict()
     {
-        _chapter.FreezeScript(Guid.NewGuid());
+        _chapter.SubmitScript(Guid.NewGuid()); _chapter.StartProduction(Guid.NewGuid(), null);
         await _db.SaveChangesAsync();
 
         (await Create()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);

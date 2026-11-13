@@ -75,7 +75,7 @@ public class SceneAssignmentGateTests
     [Fact]
     public async Task Writer_IsBlocked_OnAllSceneCommands_WhenScriptIsFrozen()
     {
-        _chapter.FreezeScript(_producer);
+        _chapter.SubmitScript(_producer); _chapter.StartProduction(_producer, null);
         await _db.SaveChangesAsync();
 
         (await CreateAs(_otherWriter)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);

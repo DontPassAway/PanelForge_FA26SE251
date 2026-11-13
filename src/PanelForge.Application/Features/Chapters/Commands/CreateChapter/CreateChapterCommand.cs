@@ -99,7 +99,9 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: null,
             IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd
+            PriceVnd: chapter.PriceVnd,
+            ScriptStatus: chapter.ScriptStatus,
+            ScriptSubmittedAt: chapter.ScriptSubmittedAt
         ));
     }
 }

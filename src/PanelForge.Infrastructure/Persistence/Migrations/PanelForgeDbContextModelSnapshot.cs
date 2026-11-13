@@ -1329,6 +1329,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("None")
                         .HasColumnName("script_reopen_status");
 
+                    b.Property<string>("ScriptStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Draft")
+                        .HasColumnName("script_status");
+
+                    b.Property<DateTime?>("ScriptSubmittedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("script_submitted_at");
+
+                    b.Property<Guid?>("ScriptSubmittedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_submitted_by_id");
+
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_id");
@@ -1337,7 +1352,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("varchar(20)")
-                        .HasDefaultValue("InProduction")
+                        .HasDefaultValue("PreProduction")
                         .HasColumnName("status");
 
                     b.Property<DateOnly?>("TargetReleaseDate")
@@ -1573,6 +1588,40 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_chapter_snapshots_chapter_number");
 
                     b.ToTable("chapter_snapshots", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterView", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<DateTime>("ViewedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("viewed_at");
+
+                    b.Property<string>("ViewerKey")
+                        .IsRequired()
+                        .HasColumnType("varchar(80)")
+                        .HasColumnName("viewer_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId", "ViewedAt")
+                        .HasDatabaseName("ix_chapter_views_series_viewed_at");
+
+                    b.HasIndex("ChapterId", "ViewerKey", "ViewedAt")
+                        .HasDatabaseName("ix_chapter_views_chapter_viewer");
+
+                    b.ToTable("chapter_views", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ConsistencyFinding", b =>
@@ -2035,6 +2084,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("Direction")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("direction");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -2189,6 +2242,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Action")
+                        .HasColumnName("kind");
+
                     b.Property<int>("LineOrder")
                         .HasColumnType("int")
                         .HasColumnName("line_order");
@@ -2212,9 +2272,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("speaker_character_id");
 
+                    b.Property<string>("SpeakerLabel")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("speaker_label");
+
                     b.Property<string>("StageDirection")
                         .HasColumnType("text")
                         .HasColumnName("stage_direction");
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text")
+                        .HasColumnName("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -2304,40 +2372,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("script_line_bible_links", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterView", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChapterId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("chapter_id");
-
-                    b.Property<Guid>("SeriesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("series_id");
-
-                    b.Property<DateTime>("ViewedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("viewed_at");
-
-                    b.Property<string>("ViewerKey")
-                        .IsRequired()
-                        .HasColumnType("varchar(80)")
-                        .HasColumnName("viewer_key");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChapterId", "ViewerKey", "ViewedAt")
-                        .HasDatabaseName("ix_chapter_views_chapter_viewer");
-
-                    b.HasIndex("SeriesId", "ViewedAt")
-                        .HasDatabaseName("ix_chapter_views_series_viewed_at");
-
-                    b.ToTable("chapter_views", (string)null);
-                });
-
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2379,18 +2413,18 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("Manga")
                         .HasColumnName("format");
 
-                    b.Property<bool>("IsCompleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_completed");
-
                     b.Property<string>("Genre")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("varchar(100)")
                         .HasDefaultValue("Action")
                         .HasColumnName("genre");
+
+                    b.Property<bool>("IsCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_completed");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")

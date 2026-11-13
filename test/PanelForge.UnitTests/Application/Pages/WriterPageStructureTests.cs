@@ -57,7 +57,7 @@ public class WriterPageStructureTests
     [Fact]
     public async Task Writer_CannotCreatePage_AfterScriptIsFrozen()
     {
-        _chapter.FreezeScript(Guid.NewGuid());
+        _chapter.SubmitScript(Guid.NewGuid()); _chapter.StartProduction(Guid.NewGuid(), null);
         await _db.SaveChangesAsync();
 
         var result = await PageHandler().Handle(new CreatePageCommand(_chapter.Id, 1, UserId: _writerId), default);
@@ -72,7 +72,7 @@ public class WriterPageStructureTests
     {
         var page = Page.CreateNew(_chapter.Id, 1, LayoutFormat.StandardPage, 1200, 1800, 300);
         _db.Pages.Add(page);
-        _chapter.FreezeScript(Guid.NewGuid());
+        _chapter.SubmitScript(Guid.NewGuid()); _chapter.StartProduction(Guid.NewGuid(), null);
         await _db.SaveChangesAsync();
 
         var result = await new CreatePanelCommandHandler(_db, _auth.Object)

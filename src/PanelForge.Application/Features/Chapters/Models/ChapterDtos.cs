@@ -28,7 +28,10 @@ public sealed record ChapterDto(
     string? CoverUrl = null,
     string? ScriptContentHash = null,
     bool IsLocked = false,
-    decimal PriceVnd = 0m
+    decimal PriceVnd = 0m,
+    // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
+    ScriptStatus ScriptStatus = ScriptStatus.Draft,
+    DateTime? ScriptSubmittedAt = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -73,7 +76,10 @@ public sealed record ChapterDetailDto(
     string? CoverUrl = null,
     string? ScriptContentHash = null,
     bool IsLocked = false,
-    decimal PriceVnd = 0m
+    decimal PriceVnd = 0m,
+    // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
+    ScriptStatus ScriptStatus = ScriptStatus.Draft,
+    DateTime? ScriptSubmittedAt = null
 );
 
 public sealed record CreateChapterRequest(

@@ -100,7 +100,7 @@ public class SyncScriptStructureTests
     [Fact]
     public async Task Writer_IsBlocked_AfterScriptIsFrozen()
     {
-        _chapter.FreezeScript(Guid.NewGuid());
+        _chapter.SubmitScript(Guid.NewGuid()); _chapter.StartProduction(Guid.NewGuid(), null);
         await _db.SaveChangesAsync();
 
         var result = await Sync(Page(1, Panel(1, _action.Id)));

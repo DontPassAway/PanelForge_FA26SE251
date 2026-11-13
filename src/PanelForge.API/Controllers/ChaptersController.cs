@@ -256,9 +256,27 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new CheckChapterBibleGateQuery(chapterId), cancellationToken));
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/freeze-script
-    /// V2.5: Producer duyệt kịch bản và bắt đầu sản xuất (Freeze Script & Hand-off Gate).
-    /// Đóng băng kịch bản thành read-only cho Writer và mở khóa phân công layout cho Artist.
+    /// POST /api/chapters/{chapterId}/submit-script — D12: Writer nộp kịch bản (Draft → InReview), kịch bản khoá sửa.
+    /// 409 nếu kịch bản không ở Draft; 400 nếu kịch bản trống; 403 nếu không phải Writer.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/submit-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SubmitScript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new SubmitScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/recall-script — D12: chỉ Writer rút kịch bản về sửa (InReview → Draft).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/recall-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RecallScript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RecallScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/freeze-script — Gate 1 "Start Production" (D12):
+    /// Producer đóng băng kịch bản đang InReview (→ Frozen) và chuyển chương PreProduction → InProduction.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/freeze-script")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]

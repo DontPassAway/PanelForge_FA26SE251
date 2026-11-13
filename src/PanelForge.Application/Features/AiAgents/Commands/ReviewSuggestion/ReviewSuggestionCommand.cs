@@ -118,7 +118,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (s.Kind == AiSuggestionKind.Thumbnail) return await ApplyThumbnailAsync(cmd, s, chapter, ct);
 
         // BR-12: chương Approved/Locked/Published chỉ đọc
-        if (chapter.Status != ChapterStatus.InProduction)
+        if (!chapter.IsContentEditable)
             return Applied.Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc), không áp dụng được đề xuất.", ResultErrorCodes.Conflict);
         if (s.HasBlockingFindings)
             return Applied.Fail("Đề xuất còn finding chặn từ Continuity: chỉ được Reject hoặc RequestChanges.", ResultErrorCodes.Validation);
@@ -296,7 +296,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     /// </summary>
     private async Task<Applied> ApplyThumbnailAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
     {
-        if (chapter.Status != ChapterStatus.InProduction)
+        if (!chapter.IsContentEditable)
             return Applied.Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc), không áp dụng được đề xuất.", ResultErrorCodes.Conflict);
         var sug = AiContentValidator.TryParse<ThumbnailSuggestion>(s.PayloadJson, out var pe);
         if (sug is null) return Applied.Fail($"Payload thumbnail không hợp lệ: {pe}", ResultErrorCodes.Validation);

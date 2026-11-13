@@ -79,10 +79,9 @@ internal static class ScriptLineRules
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<(Chapter, Guid)>.Failure(locked, ResultErrorCodes.Conflict);
 
-        if (chapter.IsScriptFrozen)
-            return Result<(Chapter, Guid)>.Failure(
-                "Kịch bản của chương này đã được đóng băng (Frozen / Read-only) để đưa vào sản xuất hình ảnh. Producer cần mở lại kịch bản nếu muốn sửa đổi.",
-                ResultErrorCodes.Conflict);
+        // D12: InReview và Frozen đều khoá sửa kịch bản
+        if (chapter.ScriptLockReason is { } scriptLocked)
+            return Result<(Chapter, Guid)>.Failure(scriptLocked, ResultErrorCodes.Conflict);
 
         if (expectedVersion is { } v && v != chapter.VersionVector)
             return Result<(Chapter, Guid)>.Failure(

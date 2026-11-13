@@ -6,7 +6,7 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Common;
 
 /// <summary>
-/// BR-12 / CF5 bước 2: nội dung chương (Scene, Page, Panel, Element, ScriptLine) chỉ sửa được khi chương InProduction.
+/// BR-12 / CF5 bước 2: nội dung chương (Scene, Page, Panel, Element, ScriptLine) chỉ sửa được khi chương PreProduction / InProduction.
 /// Approved/Locked/Published là chỉ đọc; muốn sửa phải mở lại chương kèm lý do. Handler trả lỗi với
 /// <c>ResultErrorCodes.ChapterReadOnly</c> (409, khác mã xung đột phiên bản để FE không mở hộp thoại tải lại).
 /// </summary>
@@ -26,7 +26,7 @@ internal static class ChapterEditGuard
 
     // Không thấy chương thì để handler tự báo "không tồn tại" như cũ
     private static string? Reason(ChapterStatus? status) =>
-        status is null or ChapterStatus.InProduction
+        status is null or ChapterStatus.PreProduction or ChapterStatus.InProduction
             ? null
             : $"Chương đang ở trạng thái {status}, nội dung chỉ đọc (BR-12). Mở lại chương kèm lý do để sửa.";
 }

@@ -159,7 +159,7 @@ internal sealed record AiWorkflowFacts(
 
         if (!AiEnabled) Add("AI_DISABLED", "Config", "Tính năng AI chưa được bật cho Workspace này.");
 
-        if (AiWorkflowPolicy.ProducesApplicableSuggestions(type) && ChapterStatus != ChapterStatus.InProduction)
+        if (AiWorkflowPolicy.ProducesApplicableSuggestions(type) && ChapterStatus is not (ChapterStatus.PreProduction or ChapterStatus.InProduction))
             Add("CHAPTER_LOCKED", "State", $"Chapter đang ở trạng thái {ChapterStatus} (chỉ đọc), không thể tạo đề xuất áp dụng được.");
 
         if (!HasBible) Add("NO_BIBLE", "Context", "Series chưa có Series Bible.");
