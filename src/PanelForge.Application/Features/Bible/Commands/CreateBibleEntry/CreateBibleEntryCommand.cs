@@ -45,7 +45,13 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
         if (bible == null)
         {
-            return Result<BibleEntryDto>.Failure($"SeriesBible cho Series {command.SeriesId} không tồn tại.");
+            // Spec: mỗi Series có một Bible rỗng; series cũ/seed chưa có thì tạo ngay (giống LinkBibleEntries).
+            var workspaceId = await _dbContext.Series.AsNoTracking()
+                .Where(s => s.Id == command.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(cancellationToken);
+            if (workspaceId == null)
+                return Result<BibleEntryDto>.Failure($"Series {command.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
+            bible = SeriesBible.Create(command.SeriesId, workspaceId.Value, "Series Bible", "Series Bible mặc định");
+            _dbContext.SeriesBibles.Add(bible);
         }
 
         // Kiểm tra trùng Code trong cùng một SeriesBible

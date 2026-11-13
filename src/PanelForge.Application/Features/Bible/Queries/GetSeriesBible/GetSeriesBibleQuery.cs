@@ -26,7 +26,12 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
 
         if (bible == null)
         {
-            return Result<SeriesBibleDto>.Failure($"SeriesBible cho Series {request.SeriesId} không tồn tại.");
+            // Series tạo trước khi có Bible (dữ liệu cũ/seed): coi là Bible rỗng; mục đầu tiên sẽ tạo Bible (CreateBibleEntry).
+            var workspaceId = await _dbContext.Series.AsNoTracking()
+                .Where(s => s.Id == request.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(cancellationToken);
+            return workspaceId == null
+                ? Result<SeriesBibleDto>.Failure($"Series {request.SeriesId} không tồn tại.", ResultErrorCodes.NotFound)
+                : Result<SeriesBibleDto>.Success(new SeriesBibleDto(Guid.Empty, request.SeriesId, workspaceId.Value, "Series Bible", null, 0, []));
         }
 
         var entryDtos = bible.Entries
