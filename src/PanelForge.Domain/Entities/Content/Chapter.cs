@@ -16,8 +16,8 @@ public class Chapter : BaseEntity
     public string? CoverImageSha256 { get; private set; }
     public long VersionVector { get; private set; } = 0;
 
-    /// <summary>E-02: chuyển trạng thái do CF5 đảm nhiệm; mặc định InProduction.</summary>
-    public ChapterStatus Status { get; private set; } = ChapterStatus.InProduction;
+    /// <summary>E-02: chương mới là PreProduction (đang viết kịch bản); Gate 1 chuyển sang InProduction.</summary>
+    public ChapterStatus Status { get; private set; } = ChapterStatus.PreProduction;
     public DateTime? PublishedAt { get; private set; }
 
     /// <summary>Khóa chương trả phí (false = miễn phí, true = chương trả phí cần mở khóa/VIP).</summary>
@@ -33,7 +33,16 @@ public class Chapter : BaseEntity
 
     public void MarkPreviewPagesCustomized(bool customized = true) => PreviewPagesCustomized = customized;
 
-    /// <summary>V2.5: Kịch bản thuần túy được Producer duyệt và đóng băng (Frozen / Read-only) để đưa vào guồng sản xuất tranh.</summary>
+    /// <summary>D12: vòng đời kịch bản Draft ↔ InReview → Frozen.</summary>
+    public ScriptStatus ScriptStatus { get; private set; } = ScriptStatus.Draft;
+    public DateTime? ScriptSubmittedAt { get; private set; }
+    public Guid? ScriptSubmittedById { get; private set; }
+    /// <summary>Phiên bản kịch bản (ScriptVersion) của lần gửi duyệt gần nhất (giữ cả khi Writer hủy gửi duyệt).</summary>
+    public Guid? LastSubmittedVersionId { get; private set; }
+    /// <summary>Phiên bản của lần gửi duyệt trước đó, để Editor so sánh thay đổi giữa hai lần gửi.</summary>
+    public Guid? PreviousSubmittedVersionId { get; private set; }
+
+    /// <summary>Kịch bản đã đóng băng (= ScriptStatus.Frozen), giữ cột riêng cho các truy vấn cũ.</summary>
     public bool IsScriptFrozen { get; private set; } = false;
     public DateTime? ScriptFrozenAt { get; private set; }
     public Guid? ScriptFrozenById { get; private set; }
@@ -98,21 +107,78 @@ public class Chapter : BaseEntity
         Script = script;
     }
 
-    /// <summary>V2.5: Producer duyệt kịch bản và đóng băng (InProduction, kịch bản thành read-only với Writer).</summary>
-    public void FreezeScript(Guid userId, string? scriptContentHash = null)
+    /// <summary>Chương còn sửa được nội dung (chưa Approved/Locked/Published).</summary>
+    public bool IsContentEditable => Status is ChapterStatus.PreProduction or ChapterStatus.InProduction;
+
+    /// <summary>
+    /// Lý do kịch bản đang khoá sửa; chỉ Frozen khoá. Lưu = commit, Nộp = push: khi InReview Editor đọc bản đã nộp
+    /// (<see cref="LastSubmittedVersionId"/>) nên Writer vẫn sửa và lưu tiếp, tới lần nộp sau mới đổi bản Editor thấy.
+    /// </summary>
+    public string? ScriptLockReason => ScriptStatus switch
     {
-        RequireStatus(ChapterStatus.InProduction, "đóng băng kịch bản");
-        if (IsScriptFrozen)
-            throw new InvalidOperationException("Kịch bản của chương này đã được duyệt và đóng băng trước đó.");
+        ScriptStatus.Frozen => "Kịch bản đã được chốt để sản xuất hình ảnh. Producer cần mở lại kịch bản (kèm lý do) nếu muốn sửa.",
+        _ => null
+    };
+
+    /// <summary>D12: Writer nộp (push) kịch bản: Draft → InReview, hoặc nộp lại khi đang InReview để Editor thấy bản mới.</summary>
+    public void SubmitScript(Guid writerUserId, Guid? scriptVersionId = null)
+    {
+        RequireEditable("gửi duyệt kịch bản");
+        if (ScriptStatus == ScriptStatus.Frozen)
+            throw new InvalidOperationException("Kịch bản đã được chốt để sản xuất, không gửi duyệt lại được.");
+        ScriptStatus = ScriptStatus.InReview;
+        ScriptSubmittedAt = DateTime.UtcNow;
+        ScriptSubmittedById = writerUserId;
+        // Chụp phiên bản đã gửi; lần gửi trước lùi xuống để so sánh (bỏ qua khi gửi lại đúng bản cũ)
+        if (scriptVersionId is { } rev && rev != LastSubmittedVersionId)
+        {
+            PreviousSubmittedVersionId = LastSubmittedVersionId;
+            LastSubmittedVersionId = rev;
+        }
+        IncrementVersion();
+    }
+
+    /// <summary>D12: chỉ Writer rút kịch bản về sửa (InReview → Draft).</summary>
+    public void RecallScript(Guid writerUserId)
+    {
+        RequireEditable("rút kịch bản về sửa");
+        RequireScriptStatus(ScriptStatus.InReview, "rút về sửa");
+        ScriptStatus = ScriptStatus.Draft;
+        ScriptSubmittedAt = null;
+        ScriptSubmittedById = null;
+        IncrementVersion();
+    }
+
+    /// <summary>
+    /// D12 / Gate 1: Producer bấm Start Production (InReview → Frozen). Chương PreProduction chuyển sang InProduction;
+    /// chương đã InProduction (đóng băng lại sau khi mở) giữ nguyên.
+    /// </summary>
+    public void StartProduction(Guid producerUserId, string? scriptContentHash)
+    {
+        RequireEditable("bắt đầu sản xuất");
+        RequireScriptStatus(ScriptStatus.InReview, "bắt đầu sản xuất");
+        ScriptStatus = ScriptStatus.Frozen;
         IsScriptFrozen = true;
         ScriptFrozenAt = DateTime.UtcNow;
-        ScriptFrozenById = userId;
+        ScriptFrozenById = producerUserId;
         ScriptContentHash = scriptContentHash;
         ScriptReopenStatus = ScriptReopenStatus.None;
         ScriptReopenReason = null;
         ScriptReopenRequestedById = null;
         ScriptReopenRequestedAt = null;
+        if (Status == ChapterStatus.PreProduction) Status = ChapterStatus.InProduction;
         IncrementVersion();
+    }
+
+    private void ReturnScriptToDraft()
+    {
+        ScriptStatus = ScriptStatus.Draft;
+        IsScriptFrozen = false;
+        ScriptFrozenAt = null;
+        ScriptFrozenById = null;
+        ScriptContentHash = null;
+        ScriptSubmittedAt = null;
+        ScriptSubmittedById = null;
     }
 
     /// <summary>V2.5: Mở lại kịch bản cho Writer sửa (sẽ đánh cờ Stage Impact Flag nếu đã có thumbnail/artwork).</summary>
@@ -139,11 +205,8 @@ public class Chapter : BaseEntity
         if (ScriptReopenStatus != ScriptReopenStatus.Requested)
             throw new InvalidOperationException("Không có yêu cầu mở lại kịch bản nào đang chờ duyệt.");
 
-        IsScriptFrozen = false;
+        ReturnScriptToDraft();
         ScriptReopenStatus = ScriptReopenStatus.Approved;
-        ScriptFrozenAt = null;
-        ScriptFrozenById = null;
-        ScriptContentHash = null;
         IncrementVersion();
     }
 
@@ -157,15 +220,12 @@ public class Chapter : BaseEntity
         ScriptReopenStatus = ScriptReopenStatus.Rejected;
     }
 
+    /// <summary>D12: Producer mở lại kịch bản đã đóng băng (Frozen → Draft); lý do ghi ở Audit Log của handler.</summary>
     public void UnfreezeScript(Guid userId)
     {
         RequireStatus(ChapterStatus.InProduction, "mở lại kịch bản");
-        if (!IsScriptFrozen)
-            throw new InvalidOperationException("Kịch bản của chương này chưa bị đóng băng.");
-        IsScriptFrozen = false;
-        ScriptFrozenAt = null;
-        ScriptFrozenById = null;
-        ScriptContentHash = null;
+        RequireScriptStatus(ScriptStatus.Frozen, "mở lại");
+        ReturnScriptToDraft();
         IncrementVersion();
     }
 
@@ -198,5 +258,17 @@ public class Chapter : BaseEntity
     {
         if (Status != expected)
             throw new InvalidOperationException($"Chỉ {action} được chương ở trạng thái {expected}, hiện là {Status}.");
+    }
+
+    private void RequireEditable(string action)
+    {
+        if (!IsContentEditable)
+            throw new InvalidOperationException($"Không thể {action}: chương đang ở trạng thái {Status}.");
+    }
+
+    private void RequireScriptStatus(ScriptStatus expected, string action)
+    {
+        if (ScriptStatus != expected)
+            throw new InvalidOperationException($"Chỉ {action} được kịch bản ở trạng thái {expected}, hiện là {ScriptStatus}.");
     }
 }

@@ -6,35 +6,59 @@ namespace PanelForge.Application.Features.ScriptLines.Models;
 /// <param name="ChapterVersion">VersionVector của Chapter SAU thay đổi; dùng làm <c>expectedChapterVersion</c> cho lần sửa kế tiếp.</param>
 /// <param name="RevisionId">Revision Script mới ghi cho thay đổi này (lịch sử, BR-01).</param>
 public sealed record ScriptLineDto(
-    Guid Id, Guid SceneId, int LineOrder, Guid? SpeakerCharacterId, string? DialogueText, string? StageDirection,
-    Guid? PanelId, long ChapterVersion, Guid RevisionId, IReadOnlyList<Guid> BibleEntryIds,
-    NarrationMode NarrationMode = NarrationMode.Present)
+    Guid Id,
+    Guid SceneId,
+    int LineOrder,
+    Guid? SpeakerCharacterId,
+    string? DialogueText,
+    string? StageDirection,
+    Guid? PanelId,
+    long ChapterVersion,
+    Guid RevisionId,
+    IReadOnlyList<Guid> BibleEntryIds,
+    NarrationMode NarrationMode = NarrationMode.Present,
+    ScriptLineKind Kind = ScriptLineKind.Action,
+    string? SpeakerLabel = null,
+    string? Text = null)
 {
     /// <summary>true = dòng với clientLineId này đã có từ lần gửi trước (gửi lại sau mất mạng), không tạo mới.</summary>
     public bool Replayed { get; init; }
 
     internal static ScriptLineDto From(ScriptLine l, long chapterVersion, Guid revisionId, IReadOnlyList<Guid> bibleEntryIds) =>
         new(l.Id, l.SceneId, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection, l.PanelId, chapterVersion, revisionId,
-            bibleEntryIds, l.NarrationMode);
+            bibleEntryIds, l.NarrationMode, l.Kind, l.SpeakerLabel, l.Text);
 }
 
 /// <param name="LineOrder">Vị trí chèn (từ 1). Bỏ trống = thêm vào cuối; trùng thì các dòng từ vị trí đó dịch xuống một.</param>
 /// <param name="ExpectedChapterVersion">VersionVector chương lúc mở form; lệch thì 409. Bỏ trống = không kiểm.</param>
 /// <param name="BibleEntryIds">Mục Series Bible mà dòng nhắc tới (địa điểm, đạo cụ, nhân vật...), ngoài speaker.</param>
 public sealed record CreateScriptLineRequest(
-    string? DialogueText, string? StageDirection, Guid? SpeakerCharacterId, int? LineOrder, long? ExpectedChapterVersion,
+    string? DialogueText,
+    string? StageDirection,
+    Guid? SpeakerCharacterId,
+    int? LineOrder,
+    long? ExpectedChapterVersion,
     IReadOnlyList<Guid>? BibleEntryIds = null,
     Guid? ClientLineId = null,
-    NarrationMode? NarrationMode = null);
+    NarrationMode? NarrationMode = null,
+    ScriptLineKind? Kind = null,
+    string? SpeakerLabel = null,
+    string? Text = null);
 
 /// <summary>
 /// PUT thay toàn bộ nội dung dòng: field không gửi hoặc null sẽ XOÁ giá trị đó (phải còn thoại hoặc chỉ dẫn).
 /// Ngoại lệ: <c>bibleEntryIds</c> null/không gửi = GIỮ liên kết hiện có; [] = gỡ hết.
 /// </summary>
 public sealed record UpdateScriptLineRequest(
-    string? DialogueText, string? StageDirection, Guid? SpeakerCharacterId, long? ExpectedChapterVersion,
+    string? DialogueText,
+    string? StageDirection,
+    Guid? SpeakerCharacterId,
+    long? ExpectedChapterVersion,
     IReadOnlyList<Guid>? BibleEntryIds = null,
-    NarrationMode? NarrationMode = null);
+    NarrationMode? NarrationMode = null,
+    ScriptLineKind? Kind = null,
+    string? SpeakerLabel = null,
+    string? Text = null);
 
 public sealed record DeleteScriptLineResult(long ChapterVersion, Guid RevisionId);
 
@@ -47,7 +71,10 @@ public sealed record BatchScriptLineItem(
     IReadOnlyList<Guid>? BibleEntryIds = null,
     NarrationMode? NarrationMode = null,
     Guid? ClientLineId = null,
-    Guid? PanelId = null
+    Guid? PanelId = null,
+    ScriptLineKind? Kind = null,
+    string? SpeakerLabel = null,
+    string? Text = null
 );
 
 public sealed record BatchSaveScriptLinesRequest(
@@ -105,3 +132,25 @@ public sealed record RestoreScriptRevisionRequest(long? ExpectedChapterVersion);
 /// <param name="RevisionId">Revision MỚI ở đầu lịch sử, mang nội dung của bản được khôi phục (BR-08).</param>
 public sealed record RestoreScriptRevisionResult(
     long ChapterVersion, Guid RevisionId, int VersionNumber, Guid RestoredFromRevisionId, int RestoredFromVersionNumber);
+
+public sealed record SceneScriptLineSummaryDto(
+    Guid SceneId,
+    int TotalLines,
+    int DialogueCount,
+    int StageDirectionCount,
+    IReadOnlyList<Guid> UniqueSpeakerIds
+);
+
+public sealed record SceneDetailDto(
+    Guid Id,
+    Guid ChapterId,
+    int SceneNumber,
+    string? Heading,
+    string? Summary,
+    NarrationMode DefaultNarrationMode,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    string? CreatedBy,
+    IReadOnlyList<ScriptLineDto> ScriptLines,
+    int Version = 0
+);

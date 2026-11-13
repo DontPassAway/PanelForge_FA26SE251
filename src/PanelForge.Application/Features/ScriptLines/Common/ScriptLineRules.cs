@@ -79,10 +79,9 @@ internal static class ScriptLineRules
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<(Chapter, Guid)>.Failure(locked, ResultErrorCodes.Conflict);
 
-        if (chapter.IsScriptFrozen)
-            return Result<(Chapter, Guid)>.Failure(
-                "Kịch bản của chương này đã được đóng băng (Frozen / Read-only) để đưa vào sản xuất hình ảnh. Producer cần mở lại kịch bản nếu muốn sửa đổi.",
-                ResultErrorCodes.Conflict);
+        // D12: chỉ Frozen khoá sửa; InReview Writer vẫn sửa (Editor đọc bản đã nộp)
+        if (chapter.ScriptLockReason is { } scriptLocked)
+            return Result<(Chapter, Guid)>.Failure(scriptLocked, ResultErrorCodes.Conflict);
 
         if (expectedVersion is { } v && v != chapter.VersionVector)
             return Result<(Chapter, Guid)>.Failure(
@@ -235,5 +234,18 @@ internal static class ScriptLineRules
         {
             return null;
         }
+    }
+
+    /// <summary>SCR-05: Lấy Scene mặc định của Chapter, tạo nếu chưa có (D2: Scene ẩn với người dùng)</summary>
+    public static async Task<Scene> EnsureDefaultSceneAsync(IPanelForgeDbContext db, Guid chapterId, CancellationToken ct = default)
+    {
+        var scene = await db.Scenes.FirstOrDefaultAsync(s => s.ChapterId == chapterId, ct);
+        if (scene is null)
+        {
+            scene = Scene.CreateDefault(chapterId);
+            db.Scenes.Add(scene);
+            await db.SaveChangesAsync(ct);
+        }
+        return scene;
     }
 }

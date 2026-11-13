@@ -37,7 +37,8 @@ public sealed class GetEditorReviewQueueQueryHandler
                         join c in _db.Chapters.AsNoTracking() on a.ChapterId equals c.Id
                         join u in _db.Users.AsNoTracking() on a.AssigneeUserId equals u.Id
                         join st in _db.PipelineStages.AsNoTracking() on a.PipelineStageId equals st.Id
-                        where a.SeriesId == q.SeriesId && !a.IsDeleted && !c.IsDeleted
+                        // SCR-12: Assignment stage Script cũ không còn duyệt ở đây (kịch bản duyệt theo ScriptStatus, D12)
+                        where a.SeriesId == q.SeriesId && !a.IsDeleted && !c.IsDeleted && st.Slug != "script"
                         select new
                         {
                             Assignment = a,
@@ -205,7 +206,7 @@ public sealed class GetEditorReviewQueueQueryHandler
 
 /// <summary>
 /// Phân cổng duyệt theo Slug công đoạn (định danh ổn định), không theo tên hiển thị.
-/// Gate 1 (tiền kỳ): kịch bản và bố cục phân cảnh, duyệt trước khi đổ công vẽ nét. Gate 2: nét, màu, chữ, bản gộp.
+/// Gate 1 (tiền kỳ): bố cục phân cảnh, duyệt trước khi đổ công vẽ nét. Gate 2: nét, màu, chữ, bản gộp.
 /// </summary>
 public static class EditorReviewGates
 {
@@ -214,7 +215,7 @@ public static class EditorReviewGates
 
     private static readonly HashSet<string> Gate1Slugs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "script", "thumbnail", "storyboard", "name", "layout"
+        "thumbnail", "storyboard", "name", "layout"
     };
 
     public static string FromStageSlug(string? slug) =>

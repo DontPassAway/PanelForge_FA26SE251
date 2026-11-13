@@ -23,6 +23,20 @@ public class Scene : BaseEntity
 
     private Scene() { }
 
+    public const string DefaultSceneHeading = "Default Scene";
+
+    public static Scene CreateDefault(Guid chapterId)
+    {
+        return new Scene
+        {
+            ChapterId = chapterId,
+            SceneNumber = 1,
+            Heading = DefaultSceneHeading,
+            Summary = "Default chapter scene",
+            DefaultNarrationMode = NarrationMode.Present
+        };
+    }
+
     public static Scene Create(
         Guid chapterId, int sceneNumber, string? heading = null, string? summary = null,
         NarrationMode defaultNarrationMode = NarrationMode.Present)

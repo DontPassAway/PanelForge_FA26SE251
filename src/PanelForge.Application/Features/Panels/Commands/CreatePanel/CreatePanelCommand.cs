@@ -16,7 +16,8 @@ public sealed record CreatePanelCommand(
     Guid UserId,
     int? PanelNumber = null,
     int? ReadingOrder = null,
-    string? BoundingBox = null
+    string? BoundingBox = null,
+    string? Direction = null
 ) : IRequest<Result<PanelDto>>;
 
 public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelCommand, Result<PanelDto>>
@@ -83,7 +84,8 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
                 pageId: command.PageId,
                 panelNumber: panelNumber,
                 readingOrder: readingOrder,
-                boundingBox: command.BoundingBox ?? "{}"
+                boundingBox: command.BoundingBox ?? "{}",
+                direction: command.Direction
             );
             panel.CreatedBy = command.UserId.ToString();
         }
@@ -106,7 +108,8 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
             UpdatedAt: panel.UpdatedAt,
             CreatedBy: panel.CreatedBy,
             SceneId: panel.SceneId,
-            Version: panel.Version
+            Version: panel.Version,
+            Direction: panel.Direction
         ));
     }
 }

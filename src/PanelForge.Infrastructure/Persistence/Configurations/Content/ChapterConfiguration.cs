@@ -39,8 +39,8 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("status")
                .HasColumnType("varchar(20)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<ChapterStatus>(v))
-               .HasDefaultValue(ChapterStatus.InProduction)
-               .HasSentinel(ChapterStatus.InProduction)
+               .HasDefaultValue(ChapterStatus.PreProduction)
+               .HasSentinel(ChapterStatus.PreProduction)
                .IsRequired();
 
         builder.Property(c => c.PublishedAt)
@@ -80,6 +80,30 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
         builder.Property(c => c.Outline)
                .HasColumnName("outline")
                .HasColumnType("text");
+
+        builder.Property(c => c.ScriptStatus)
+               .HasColumnName("script_status")
+               .HasColumnType("varchar(20)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<ScriptStatus>(v))
+               .HasDefaultValue(ScriptStatus.Draft)
+               .HasSentinel(ScriptStatus.Draft)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptSubmittedAt)
+               .HasColumnName("script_submitted_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.ScriptSubmittedById)
+               .HasColumnName("script_submitted_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.LastSubmittedVersionId)
+               .HasColumnName("last_submitted_version_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.PreviousSubmittedVersionId)
+               .HasColumnName("previous_submitted_version_id")
+               .HasColumnType("uuid");
 
         builder.Property(c => c.IsScriptFrozen)
                .HasColumnName("is_script_frozen")

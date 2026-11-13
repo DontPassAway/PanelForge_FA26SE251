@@ -186,8 +186,9 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         _db.Assignments.AddRange(assignPanel1, assignPanel2);
 
-        // Đóng băng chương ban đầu
-        _chapter.FreezeScript(_producer);
+        // Đóng băng chương ban đầu (D12: Writer nộp → Producer Start Production)
+        _chapter.SubmitScript(_writer);
+        _chapter.StartProduction(_producer, null);
         await _db.SaveChangesAsync();
 
         // 1. Writer gửi yêu cầu mở lại kịch bản
@@ -214,12 +215,11 @@ public class DynamicEntityLinkingAndScriptFlowTests
         _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới", null);
         await _db.SaveChangesAsync();
 
-        // 4. Producer đóng băng lại kịch bản (kích hoạt Targeted Impact Analysis)
-        _mediator.Setup(m => m.Send(It.IsAny<PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate.CheckChapterBibleGateQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<ChapterBibleGateResultDto>.Success(new ChapterBibleGateResultDto(
-                IsPassed: true, TotalReferenced: 0, LockedCount: 0, PendingCount: 0, Items: [])));
+        // 4. Writer nộp lại, Producer đóng băng lại kịch bản (kích hoạt Targeted Impact Analysis)
+        _chapter.SubmitScript(_writer);
+        await _db.SaveChangesAsync();
 
-        var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _mediator.Object);
+        var freezeHandler = new FreezeChapterScriptCommandHandler(_db);
         var freezeResult = await freezeHandler.Handle(
             new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 

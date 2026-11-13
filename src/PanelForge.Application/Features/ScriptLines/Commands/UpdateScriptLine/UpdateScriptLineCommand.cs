@@ -16,7 +16,10 @@ public sealed record UpdateScriptLineCommand(
     Guid ChapterId, Guid LineId, Guid UserId, string? DialogueText, string? StageDirection,
     Guid? SpeakerCharacterId, long? ExpectedChapterVersion,
     IReadOnlyList<Guid>? BibleEntryIds = null,
-    PanelForge.Domain.Enums.NarrationMode? NarrationMode = null) : IRequest<Result<ScriptLineDto>>;
+    PanelForge.Domain.Enums.NarrationMode? NarrationMode = null,
+    PanelForge.Domain.Enums.ScriptLineKind? Kind = null,
+    string? SpeakerLabel = null,
+    string? Text = null) : IRequest<Result<ScriptLineDto>>;
 
 public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScriptLineCommand, Result<ScriptLineDto>>
 {
@@ -60,7 +63,10 @@ public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScrip
             string.IsNullOrWhiteSpace(cmd.DialogueText) ? null : cmd.DialogueText,
             string.IsNullOrWhiteSpace(cmd.StageDirection) ? null : cmd.StageDirection,
             cmd.SpeakerCharacterId,
-            cmd.NarrationMode ?? line.NarrationMode);
+            cmd.NarrationMode ?? line.NarrationMode,
+            cmd.Kind,
+            cmd.SpeakerLabel,
+            cmd.Text);
         var bibleEntryIds = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, cmd.BibleEntryIds, ct);
 
         var revision = await ScriptLineRules.RecordRevisionAsync(

@@ -11,7 +11,8 @@ public sealed record PanelDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     Guid? SceneId = null,
-    int Version = 0   // BR-11: gửi lại làm expectedVersion khi sửa
+    int Version = 0,   // BR-11: gửi lại làm expectedVersion khi sửa
+    string? Direction = null
 );
 
 public sealed record PanelDetailDto(
@@ -26,7 +27,8 @@ public sealed record PanelDetailDto(
     string? CreatedBy,
     Guid? SceneId = null,
     IReadOnlyList<Guid>? ScriptLineIds = null,   // dòng thoại đang neo vào panel này (V1.2)
-    int Version = 0
+    int Version = 0,
+    string? Direction = null
 );
 
 public sealed record AssignPanelSceneRequest(Guid? SceneId);
@@ -38,12 +40,18 @@ public sealed record AutoAssignScriptLinesRequest(Guid SceneId, bool DryRun = fa
 public sealed record CreatePanelRequest(
     int? PanelNumber = null,
     int? ReadingOrder = null,
-    string? BoundingBox = null
+    string? BoundingBox = null,
+    string? Direction = null
 );
 
 /// <param name="ExpectedVersion">Version của panel lúc client tải (BR-11). Lệch → 409; null = không kiểm (client cũ).</param>
 public sealed record UpdatePanelCoordinatesRequest(
     string BoundingBox,
     int? ReadingOrder = null,
+    int? ExpectedVersion = null
+);
+
+public sealed record UpdatePanelDirectionRequest(
+    string? Direction,
     int? ExpectedVersion = null
 );

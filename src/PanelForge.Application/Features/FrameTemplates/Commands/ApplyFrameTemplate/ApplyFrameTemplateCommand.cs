@@ -72,7 +72,7 @@ public sealed class ApplyFrameTemplateCommandHandler
 
         return Result<IReadOnlyList<PanelDto>>.Success(panels.Select(p => new PanelDto(
             p.Id, p.PageId, p.PanelNumber, p.BoundingBox, p.ReadingOrder, p.CurrentStageId,
-            p.CreatedAt, p.UpdatedAt, p.CreatedBy, p.SceneId, p.Version)).ToList());
+            p.CreatedAt, p.UpdatedAt, p.CreatedBy, p.SceneId, p.Version, p.Direction)).ToList());
     }
 
     /// <summary>

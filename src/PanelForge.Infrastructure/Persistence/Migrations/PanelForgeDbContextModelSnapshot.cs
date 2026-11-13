@@ -1284,6 +1284,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_script_frozen");
 
+                    b.Property<Guid?>("LastSubmittedVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_submitted_version_id");
+
                     b.Property<string>("Outline")
                         .HasColumnType("text")
                         .HasColumnName("outline");
@@ -1293,6 +1297,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("preview_pages_customized");
+                    b.Property<Guid?>("PreviousSubmittedVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("previous_submitted_version_id");
 
                     b.Property<decimal>("PriceVnd")
                         .ValueGeneratedOnAdd()
@@ -1335,6 +1342,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("None")
                         .HasColumnName("script_reopen_status");
 
+                    b.Property<string>("ScriptStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Draft")
+                        .HasColumnName("script_status");
+
+                    b.Property<DateTime?>("ScriptSubmittedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("script_submitted_at");
+
+                    b.Property<Guid?>("ScriptSubmittedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_submitted_by_id");
+
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_id");
@@ -1343,7 +1365,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("varchar(20)")
-                        .HasDefaultValue("InProduction")
+                        .HasDefaultValue("PreProduction")
                         .HasColumnName("status");
 
                     b.Property<DateOnly?>("TargetReleaseDate")
@@ -2160,6 +2182,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("Direction")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("direction");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -2284,6 +2310,81 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("scenes", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("QuotedText")
+                        .HasColumnType("text")
+                        .HasColumnName("quoted_text");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by_id");
+
+                    b.Property<Guid?>("SceneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scene_id");
+
+                    b.Property<Guid?>("ScriptLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_line_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .HasDatabaseName("ix_script_comments_chapter_id");
+
+                    b.ToTable("script_comments", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2314,6 +2415,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Action")
+                        .HasColumnName("kind");
+
                     b.Property<int>("LineOrder")
                         .HasColumnType("int")
                         .HasColumnName("line_order");
@@ -2337,9 +2445,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("speaker_character_id");
 
+                    b.Property<string>("SpeakerLabel")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("speaker_label");
+
                     b.Property<string>("StageDirection")
                         .HasColumnType("text")
                         .HasColumnName("stage_direction");
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text")
+                        .HasColumnName("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -2427,6 +2543,88 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("script_line_bible_links", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_count");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("message");
+
+                    b.Property<string>("RowsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rows_json");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid?>("SubmittedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("version_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_script_versions_chapter_version");
+
+                    b.ToTable("script_versions", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>
@@ -5382,6 +5580,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Chapter");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptComment", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptLine", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Panel", "Panel")
@@ -5430,6 +5637,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("ResolvedRevision");
 
                     b.Navigation("ScriptLine");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptVersion", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Series", b =>

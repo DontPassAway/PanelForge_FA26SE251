@@ -90,7 +90,8 @@ public sealed class UpdatePanelCoordinatesCommandHandler : IRequestHandler<Updat
             UpdatedAt: panel.UpdatedAt,
             CreatedBy: panel.CreatedBy,
             SceneId: panel.SceneId,
-            Version: panel.Version
+            Version: panel.Version,
+            Direction: panel.Direction
         ));
     }
 }

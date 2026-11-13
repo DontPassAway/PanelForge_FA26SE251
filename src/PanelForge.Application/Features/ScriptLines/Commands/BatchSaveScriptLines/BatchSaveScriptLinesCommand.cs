@@ -101,7 +101,7 @@ public sealed class BatchSaveScriptLinesCommandHandler
                 var textBefore = ScriptLineRules.LetteringText(line);
                 var speakerBefore = line.SpeakerCharacterId;
 
-                line.UpdateContent(text, direction, item.SpeakerCharacterId, mode);
+                line.UpdateContent(text, direction, item.SpeakerCharacterId, mode, item.Kind, item.SpeakerLabel, item.Text);
                 line.Reorder(item.LineOrder);
                 if (item.PanelId != line.PanelId)
                 {
@@ -122,7 +122,10 @@ public sealed class BatchSaveScriptLinesCommandHandler
                     direction,
                     item.SpeakerCharacterId,
                     targetId,
-                    mode);
+                    mode,
+                    item.Kind,
+                    item.SpeakerLabel,
+                    item.Text);
                 if (item.PanelId.HasValue)
                 {
                     line.AssignToPanel(item.PanelId.Value);

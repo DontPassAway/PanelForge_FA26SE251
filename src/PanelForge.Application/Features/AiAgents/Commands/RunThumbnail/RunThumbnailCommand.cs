@@ -69,7 +69,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var chapter = page is null ? null
             : await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == page.ChapterId && c.SeriesId == series.Id, ct);
         if (panel is null || page is null || chapter is null) return Fail("Panel không thuộc Series này.", ResultErrorCodes.NotFound);
-        if (chapter.Status != ChapterStatus.InProduction)
+        if (!chapter.IsContentEditable)
             return Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc).", ResultErrorCodes.Conflict);
 
         var stageId = await ThumbnailRules.HeldStageAsync(_db, cmd.UserId, chapter.Id, page.Id, panel.Id, null, ct);

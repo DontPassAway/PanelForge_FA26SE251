@@ -28,6 +28,8 @@ using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.ScriptComments;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Bible.Models;
@@ -256,9 +258,92 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new CheckChapterBibleGateQuery(chapterId), cancellationToken));
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/freeze-script
-    /// V2.5: Producer duyệt kịch bản và bắt đầu sản xuất (Freeze Script & Hand-off Gate).
-    /// Đóng băng kịch bản thành read-only cho Writer và mở khóa phân công layout cho Artist.
+    /// POST /api/chapters/{chapterId}/submit-script — D12: Writer nộp kịch bản (Draft → InReview), kịch bản khoá sửa.
+    /// 409 nếu kịch bản không ở Draft; 400 nếu kịch bản trống; 403 nếu không phải Writer.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/submit-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SubmitScript(
+        [FromRoute] Guid chapterId,
+        [FromBody] SubmitScriptRequest? body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new SubmitScriptCommand(chapterId, GetCurrentUserId(), body?.Message), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/script-versions — phiên bản kịch bản (lưu = commit, gửi duyệt = push), mới nhất trước.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/script-versions")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptVersionSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetScriptVersions([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetScriptVersionsQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/script-versions/working-copy — kịch bản hiện tại (chưa commit) dạng hàng để so sánh.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/script-versions/working-copy")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ScriptWorkingCopyDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetScriptWorkingCopy([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetScriptWorkingCopyQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/script-versions/{versionId} — một phiên bản kèm các hàng kịch bản.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/script-versions/{versionId:guid}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ScriptVersionDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetScriptVersion(
+        [FromRoute] Guid chapterId, [FromRoute] Guid versionId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetScriptVersionQuery(chapterId, versionId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>POST /api/chapters/{chapterId}/script-versions — lưu = commit (trùng nội dung bản gần nhất thì trả lại bản đó).</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-versions")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ScriptVersionSummaryDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CommitScriptVersion(
+        [FromRoute] Guid chapterId,
+        [FromBody] CommitScriptVersionRequest? body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new CommitScriptVersionCommand(chapterId, GetCurrentUserId(), body?.Message), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/recall-script — D12: chỉ Writer rút kịch bản về sửa (InReview → Draft).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/recall-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RecallScript([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new RecallScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>GET /api/chapters/{chapterId}/script-comments — D12: góp ý theo dòng trên kịch bản (mọi thành viên đọc).</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/script-comments")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptCommentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetScriptComments([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetScriptCommentsQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>POST /api/chapters/{chapterId}/script-comments — D12: Editor / Producer góp ý theo dòng, không đổi trạng thái kịch bản.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-comments")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ScriptCommentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AddScriptComment(
+        [FromRoute] Guid chapterId,
+        [FromBody] AddScriptCommentRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new AddScriptCommentCommand(
+            chapterId, GetCurrentUserId(), body.SceneId, body.ScriptLineId, body.QuotedText, body.Body), cancellationToken));
+
+    /// <summary>POST /api/chapters/{chapterId}/script-comments/{commentId}/resolve — Writer (hoặc người góp ý) đánh dấu đã xử lý.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-comments/{commentId:guid}/resolve")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ScriptCommentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResolveScriptComment(
+        [FromRoute] Guid chapterId,
+        [FromRoute] Guid commentId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new ResolveScriptCommentCommand(chapterId, commentId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/freeze-script — Gate 1 "Start Production" (D12):
+    /// Producer đóng băng kịch bản đang InReview (→ Frozen) và chuyển chương PreProduction → InProduction.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/freeze-script")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
@@ -468,6 +553,9 @@ public sealed class ChaptersController : ControllerBase
 
 public sealed record RequestScriptReopenRequest(string Reason);
 public sealed record UnfreezeScriptRequest(string? Reason);
+public sealed record SubmitScriptRequest(string? Message);
+public sealed record CommitScriptVersionRequest(string? Message);
+public sealed record AddScriptCommentRequest(Guid? SceneId, Guid? ScriptLineId, string? QuotedText, string Body);
 
 public sealed record SetChapterOutlineRequest(string? Outline);
 
