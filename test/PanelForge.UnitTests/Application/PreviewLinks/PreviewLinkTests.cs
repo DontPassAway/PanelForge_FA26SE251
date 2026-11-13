@@ -55,7 +55,7 @@ public class PreviewLinkTests
             Db.WorkspaceMembers.Add(WorkspaceMember.Create(studio.Id, ProducerId, WorkspaceRole.Producer));
             var series = DomainSeries.Create(studio.Id, "Lantern", ReadingDirection.RightToLeft);
             Db.Series.Add(series);
-            Chapter = Chapter.Create(series.Id, 1, "Lá thư");
+            Chapter = Chapter.Create(series.Id, 1, "Lá thư").InProduction();
             if (approve) Chapter.Approve();
             Db.Chapters.Add(Chapter);
             Page1 = Page.CreateNew(Chapter.Id, 1, default, 1200, 1800, 300);

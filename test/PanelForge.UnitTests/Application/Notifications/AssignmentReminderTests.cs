@@ -26,7 +26,7 @@ public class AssignmentReminderTests
     {
         var studio = StudioWorkspace.Create("Studio", Guid.NewGuid());
         _series = DomainSeries.Create(studio.Id, "Moon", ReadingDirection.RightToLeft);
-        _chapter = Chapter.Create(_series.Id, 1);
+        _chapter = Chapter.Create(_series.Id, 1).InProduction();
         _db.StudioWorkspaces.Add(studio);
         _db.Series.Add(_series);
         _db.Chapters.Add(_chapter);
@@ -122,7 +122,7 @@ public class AssignmentReminderTests
     public async Task NoDueDate_OrLockedChapter_IsNotReminded()
     {
         Job(null);
-        var approved = Chapter.Create(_series.Id, 2);
+        var approved = Chapter.Create(_series.Id, 2).InProduction();
         _db.Chapters.Add(approved);
         await _db.SaveChangesAsync();
         Job(Now.AddHours(2), approved);

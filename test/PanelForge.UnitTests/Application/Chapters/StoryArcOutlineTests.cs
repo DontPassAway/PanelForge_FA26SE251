@@ -31,7 +31,7 @@ public class StoryArcOutlineTests
     public async Task SetOutline_OnLockedChapter_IsConflict()
     {
         var db = InMemoryDb.Create();
-        var chapter = Chapter.Create(Guid.NewGuid(), 1);
+        var chapter = Chapter.Create(Guid.NewGuid(), 1).InProduction();
         db.Chapters.Add(chapter);
         await db.SaveChangesAsync();
         var handler = new SetChapterOutlineCommandHandler(db);

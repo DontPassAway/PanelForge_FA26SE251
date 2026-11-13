@@ -14,7 +14,10 @@ using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 
 namespace PanelForge.UnitTests.Application.Chapters;
 
-/// <summary>D12: Writer nộp (Draft → InReview), chỉ Writer rút về, Producer Start Production (InReview → Frozen).</summary>
+/// <summary>
+/// D12: Writer nộp (Draft → InReview), chỉ Writer rút về, Producer Start Production (InReview → Frozen).
+/// Lưu = commit, Gửi duyệt = push: Writer sửa và gửi lại khi InReview; chỉ Frozen khoá sửa.
+/// </summary>
 public class ScriptLifecycleTests
 {
     private readonly PanelForgeDbContext _db = InMemoryDb.Create();
@@ -60,7 +63,7 @@ public class ScriptLifecycleTests
     }
 
     [Fact]
-    public async Task Writer_Submits_ScriptBecomesInReview_AndLocksEditing()
+    public async Task Writer_Submits_ScriptBecomesInReview_PushesVersion_AndCanKeepEditing()
     {
         AddLine();
 
@@ -69,9 +72,65 @@ public class ScriptLifecycleTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         result.Value!.ScriptStatus.Should().Be(ScriptStatus.InReview);
         result.Value.ScriptSubmittedAt.Should().NotBeNull();
+        result.Value.LastSubmittedVersionId.Should().NotBeNull("gửi duyệt = push phiên bản vừa commit");
+        _db.ScriptVersions.Single().SubmittedAt.Should().NotBeNull();
+
+        // Lưu = commit, Gửi duyệt = push: Editor đọc bản đã gửi nên Writer vẫn sửa tiếp
+        var edit = await ScriptLineRules.AuthorizeAsync(_db, _auth.Object, _writer, _chapter.Id, null, default);
+        edit.IsSuccess.Should().BeTrue(edit.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Resubmit_WhileInReview_PushesNewVersion_AndKeepsPreviousForDiff()
+    {
+        AddLine();
+        var first = await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
+
+        _db.ScriptLines.Add(ScriptLine.Create(_scene.Id, 2, stageDirection: "Tàu cập bến."));
+        _db.SaveChanges();
+        var second = await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
+
+        second.IsSuccess.Should().BeTrue(second.ErrorMessage);
+        second.Value!.ScriptStatus.Should().Be(ScriptStatus.InReview);
+        second.Value.PreviousSubmittedVersionId.Should().Be(first.Value!.LastSubmittedVersionId);
+        second.Value.LastSubmittedVersionId.Should().NotBe(first.Value.LastSubmittedVersionId!.Value);
+        _db.ScriptVersions.Count().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task StartProduction_IsRejected_WhenWriterChangedScriptAfterPush_UntilResubmitted()
+    {
+        AddLine();
+        await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
+        _db.ScriptLines.Add(ScriptLine.Create(_scene.Id, 2, stageDirection: "Tàu cập bến."));
+        _db.SaveChanges();
+
+        var blocked = await new FreezeChapterScriptCommandHandler(_db)
+            .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
+
+        blocked.IsSuccess.Should().BeFalse("bản chốt sản xuất phải trùng bản Editor đã đọc");
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _chapter.ScriptStatus.Should().Be(ScriptStatus.InReview);
+
+        await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
+        var started = await new FreezeChapterScriptCommandHandler(_db)
+            .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
+
+        started.IsSuccess.Should().BeTrue(started.ErrorMessage);
+        started.Value!.ScriptStatus.Should().Be(ScriptStatus.Frozen);
+    }
+
+    [Fact]
+    public async Task FrozenScript_LocksEditing()
+    {
+        AddLine();
+        await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
+        await new FreezeChapterScriptCommandHandler(_db)
+            .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         var edit = await ScriptLineRules.AuthorizeAsync(_db, _auth.Object, _writer, _chapter.Id, null, default);
-        edit.IsSuccess.Should().BeFalse("InReview khoá sửa kịch bản");
+
+        edit.IsSuccess.Should().BeFalse("Frozen khoá sửa kịch bản");
         edit.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
 
@@ -167,7 +226,10 @@ public class ScriptLifecycleTests
         FluentActions.Invoking(() => _chapter.RecallScript(_writer)).Should().Throw<InvalidOperationException>();
         FluentActions.Invoking(() => _chapter.StartProduction(_producer, null)).Should().Throw<InvalidOperationException>();
 
+        // Gửi lại khi InReview là hợp lệ (push bản mới); sau khi Frozen thì không gửi được nữa
         _chapter.SubmitScript(_writer);
+        FluentActions.Invoking(() => _chapter.SubmitScript(_writer)).Should().NotThrow();
+        _chapter.StartProduction(_producer, null);
         FluentActions.Invoking(() => _chapter.SubmitScript(_writer)).Should().Throw<InvalidOperationException>();
     }
 }

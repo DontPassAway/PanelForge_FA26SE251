@@ -109,7 +109,7 @@ public class DemoWorkflowTests
         script.HasBlockingFindings.Should().BeFalse();
         h.Db.ScriptLines.Count().Should().Be(0, "Accept mới là bước áp dụng nội dung");
         h.Db.ContentRevisions.Count().Should().Be(0);
-        h.Db.Chapters.Single().Status.Should().Be(ChapterStatus.InProduction);
+        h.Db.Chapters.Single().Status.Should().Be(ChapterStatus.PreProduction);
     }
 
     [Fact]
