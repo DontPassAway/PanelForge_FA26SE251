@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Domain.Entities.Content;
@@ -15,9 +16,9 @@ public sealed record ScriptStructurePanel(int PanelNumber, IReadOnlyList<Guid> S
 public sealed record ScriptStructurePage(int PageNumber, IReadOnlyList<ScriptStructurePanel> Panels);
 
 /// <summary>
-/// Lưu khung Trang → Panel → dòng kịch bản từ trình soạn script trong một transaction: tạo Page/Panel còn thiếu theo số thứ tự
-/// và neo dòng vào đúng Panel. Không xoá Page/Panel nào (có thể đã có tranh); trang có trong chương mà kịch bản không nhắc tới
-/// được trả về để màn hình cảnh báo.
+/// Lưu khung Trang → Panel → dòng kịch bản từ trình soạn script trong một transaction: tạo Page/Panel còn thiếu theo số thứ tự,
+/// neo dòng vào đúng Panel, và xoá mềm Page/Panel kịch bản không còn nhắc tới. Kịch bản là nguồn của khung: Bàn vẽ chỉ làm
+/// sau khi kịch bản chốt nên chưa có tranh để mất. Page/Panel còn việc đang giao thì từ chối (Conflict) thay vì xoá.
 /// </summary>
 public sealed record SyncScriptStructureCommand(Guid ChapterId, Guid UserId, IReadOnlyList<ScriptStructurePage> Pages)
     : IRequest<Result<SyncScriptStructureResult>>;
@@ -26,7 +27,8 @@ public sealed record SyncScriptStructureResult(
     int PagesCreated,
     int PanelsCreated,
     int LinesAnchored,
-    IReadOnlyList<int> UnlistedPageNumbers);
+    int PagesRemoved,
+    int PanelsRemoved);
 
 public sealed class SyncScriptStructureCommandHandler
     : IRequestHandler<SyncScriptStructureCommand, Result<SyncScriptStructureResult>>
@@ -103,10 +105,23 @@ public sealed class SyncScriptStructureCommandHandler
             }
         }
 
-        // Dòng được nhắc tới + dòng đang neo ở các Panel vừa đồng bộ (dòng không còn trong Panel đó thì nhả ra)
+        // Page / Panel kịch bản không còn nhắc tới
+        var listedPageNumbers = command.Pages.Select(p => p.PageNumber).ToHashSet();
+        var removedPages = pages.Where(p => !listedPageNumbers.Contains(p.PageNumber)).ToList();
+        var removedPanels = panels.Where(p => !touchedPanelIds.Contains(p.Id)).ToList();
+        var removedPanelIds = removedPanels.Select(p => p.Id).ToHashSet();
+
+        var removedTargets = removedPages.Select(p => p.Id).Concat(removedPanelIds).ToList();
+        if (removedTargets.Count > 0 &&
+            await AssignmentRules.DeleteBlockedReasonAsync(_db, "trang", removedTargets, ct) is { } blocked)
+            return Failure(blocked, ResultErrorCodes.Conflict);
+
+        // Dòng được nhắc tới + dòng đang neo ở Panel vừa đồng bộ hoặc sắp xoá (dòng không còn trong Panel đó thì nhả ra)
         var wantedLineIds = lineTarget.Keys.ToList();
         var lines = await _db.ScriptLines
-            .Where(l => wantedLineIds.Contains(l.Id) || (l.PanelId != null && touchedPanelIds.Contains(l.PanelId.Value)))
+            .Where(l => wantedLineIds.Contains(l.Id) ||
+                        (l.PanelId != null &&
+                         (touchedPanelIds.Contains(l.PanelId.Value) || removedPanelIds.Contains(l.PanelId.Value))))
             .Select(l => new { Line = l, l.Scene.ChapterId })
             .ToListAsync(ct);
 
@@ -119,12 +134,27 @@ public sealed class SyncScriptStructureCommandHandler
         foreach (var x in lines)
             x.Line.AssignToPanel(lineTarget.TryGetValue(x.Line.Id, out var panelId) ? panelId : null);
 
+        // Xoá mềm như DeletePanel / DeletePage: DbContext đổi Remove thành soft-delete; Page ghi thêm event vào stream
+        foreach (var panel in removedPanels)
+        {
+            panel.DeletedBy = command.UserId.ToString();
+            _db.Panels.Remove(panel);
+        }
+        foreach (var page in removedPages)
+        {
+            var stream = await _pageRepository.GetAsync(page.Id, ct);
+            if (stream is not null)
+            {
+                stream.Delete(command.UserId);
+                await _pageRepository.SaveAsync(stream, ct);
+            }
+            _db.Pages.Remove(page);
+        }
+
         await _db.SaveChangesAsync(ct);
 
-        var listed = command.Pages.Select(p => p.PageNumber).ToHashSet();
-        var unlisted = pages.Where(p => !listed.Contains(p.PageNumber)).Select(p => p.PageNumber).OrderBy(n => n).ToList();
-        return Result<SyncScriptStructureResult>.Success(
-            new SyncScriptStructureResult(pagesCreated, panelsCreated, wantedLineIds.Count, unlisted));
+        return Result<SyncScriptStructureResult>.Success(new SyncScriptStructureResult(
+            pagesCreated, panelsCreated, wantedLineIds.Count, removedPages.Count, removedPanels.Count));
     }
 
     private static string? Validate(IReadOnlyList<ScriptStructurePage> pages)

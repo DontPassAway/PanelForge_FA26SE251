@@ -14,7 +14,7 @@ using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 
 namespace PanelForge.UnitTests.Application.Pages;
 
-/// <summary>Lưu khung Trang → Panel → dòng kịch bản một lần, không xoá Page/Panel có sẵn.</summary>
+/// <summary>Lưu khung Trang → Panel → dòng kịch bản một lần; Page/Panel kịch bản không còn nhắc tới bị xoá mềm.</summary>
 public class SyncScriptStructureTests
 {
     private readonly PanelForgeDbContext _db = InMemoryDb.Create();
@@ -68,7 +68,7 @@ public class SyncScriptStructureTests
     }
 
     [Fact]
-    public async Task SecondSync_ReusesPanels_MovesLine_AndReportsUnlistedPages()
+    public async Task SecondSync_ReusesPanels_MovesLine_AndRemovesPagesNoLongerInScript()
     {
         await Sync(Page(1, Panel(1, _action.Id, _dialogue.Id)), Page(2, Panel(1)));
 
@@ -77,8 +77,24 @@ public class SyncScriptStructureTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         result.Value!.PagesCreated.Should().Be(0);
         result.Value.PanelsCreated.Should().Be(1);
-        result.Value.UnlistedPageNumbers.Should().Equal(2);
-        _db.Pages.Count().Should().Be(2, "trang không còn trong kịch bản không bị xoá");
+        result.Value.PagesRemoved.Should().Be(1);
+        result.Value.PanelsRemoved.Should().Be(1, "panel của trang 2 đi cùng trang");
+        _db.ChangeTracker.Clear();
+        _db.Pages.Select(p => p.PageNumber).Should().Equal(1);
+    }
+
+    [Fact]
+    public async Task PanelDroppedFromScript_IsRemoved_AndItsLinesReleased()
+    {
+        await Sync(Page(1, Panel(1, _action.Id), Panel(2, _dialogue.Id)));
+
+        var result = await Sync(Page(1, Panel(1, _action.Id)));
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Value!.PanelsRemoved.Should().Be(1);
+        _db.ChangeTracker.Clear();
+        _db.Panels.Select(p => p.PanelNumber).Should().Equal(1);
+        _db.ScriptLines.Single(l => l.Id == _dialogue.Id).PanelId.Should().BeNull();
     }
 
     [Fact]
