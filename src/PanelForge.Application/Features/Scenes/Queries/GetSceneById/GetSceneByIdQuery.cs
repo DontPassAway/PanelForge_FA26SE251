@@ -22,6 +22,7 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
         var scene = await _dbContext.Scenes
             .AsNoTracking()
             .Include(s => s.ScriptLines)
+                .ThenInclude(l => l.SpeakerCharacter)
             .FirstOrDefaultAsync(s => s.Id == query.SceneId, cancellationToken);
 
         if (scene == null)
@@ -44,7 +45,10 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 l.SpeakerCharacterId,
                 l.PanelId,
                 links[l.Id].ToList(),
-                l.NarrationMode
+                l.NarrationMode,
+                l.Kind,
+                l.SpeakerLabel ?? l.SpeakerCharacter?.Name,
+                l.Text
             ))
             .ToList();
 

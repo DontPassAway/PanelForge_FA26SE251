@@ -71,8 +71,9 @@ public sealed class BatchSaveScriptLinesCommandHandler
                 return Result<BatchSaveScriptLinesResult>.Failure(linkError, ResultErrorCodes.Validation);
         }
 
-        // 4. Lấy danh sách các dòng hiện có của Scene
-        var existingLines = await _db.ScriptLines.Where(l => l.SceneId == cmd.SceneId).ToListAsync(ct);
+        // 4. Bàn viết gửi cả kịch bản chương: lấy dòng của mọi Scene trong chương (chương cũ có thể còn nhiều Scene).
+        // Chỉ lấy theo Scene đích sẽ coi dòng của Scene khác là dòng mới → INSERT trùng Id (PK_script_lines).
+        var existingLines = await _db.ScriptLines.Where(l => l.Scene.ChapterId == chapter.Id).ToListAsync(ct);
         var beforeSnapshot = ScriptLineRules.Snapshot(existingLines);
 
         var existingMap = existingLines.ToDictionary(l => l.Id);
@@ -103,6 +104,7 @@ public sealed class BatchSaveScriptLinesCommandHandler
 
                 line.UpdateContent(text, direction, item.SpeakerCharacterId, mode, item.Kind, item.SpeakerLabel, item.Text);
                 line.Reorder(item.LineOrder);
+                if (line.SceneId != cmd.SceneId) line.MoveToScene(cmd.SceneId);
                 if (item.PanelId != line.PanelId)
                 {
                     line.AssignToPanel(item.PanelId);

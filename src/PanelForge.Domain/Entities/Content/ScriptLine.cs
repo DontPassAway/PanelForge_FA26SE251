@@ -108,6 +108,13 @@ public class ScriptLine : BaseEntity
 
     public void AssignToPanel(Guid? panelId) => PanelId = panelId;
 
+    /// <summary>D2: gom dòng của Scene cũ vào Scene mặc định của chương khi lưu cả kịch bản chương.</summary>
+    public void MoveToScene(Guid sceneId)
+    {
+        if (sceneId == Guid.Empty) throw new ArgumentException("SceneId không hợp lệ.", nameof(sceneId));
+        SceneId = sceneId;
+    }
+
     public void Reorder(int newOrder)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(newOrder);
