@@ -45,6 +45,15 @@ public sealed class Page : AggregateRoot
     public DateTime? ContentReadyAt { get; private set; }
     public Guid? ContentReadyById { get; private set; }
 
+    /// <summary>
+    /// Trang xem trước của chương trả phí: người chưa mua chương vẫn xem được trang này, các trang còn lại bị khóa.
+    /// Chỉ có hiệu lực khi Publisher đã chọn tay trang xem trước (<see cref="Content.Chapter.PreviewPagesCustomized"/>);
+    /// ngược lại áp mặc định "N trang đầu" của Series. Chương miễn phí mở toàn bộ.
+    /// </summary>
+    public bool IsPreview { get; private set; } = false;
+
+    public void SetPreview(bool isPreview) => IsPreview = isPreview;
+
     // ── EF Core Navigation Properties (cho relational queries) ───────────────
     public Chapter Chapter { get; private set; } = default!;
     public PipelineStage? CurrentStage { get; private set; }

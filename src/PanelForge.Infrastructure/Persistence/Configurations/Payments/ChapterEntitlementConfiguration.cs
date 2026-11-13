@@ -46,6 +46,12 @@ internal sealed class ChapterEntitlementConfiguration : IEntityTypeConfiguration
                .HasDefaultValue(0m)
                .IsRequired();
 
+        builder.Property(e => e.Language)
+               .HasColumnName("language")
+               .HasColumnType("varchar(8)")
+               .HasDefaultValue("vi")
+               .IsRequired();
+
         builder.Property(e => e.UnlockedAt)
                .HasColumnName("unlocked_at")
                .HasColumnType("timestamptz")
@@ -66,8 +72,8 @@ internal sealed class ChapterEntitlementConfiguration : IEntityTypeConfiguration
                .HasDefaultValue(false)
                .IsRequired();
 
-        // 1 user only unlocks a specific chapter once
-        builder.HasIndex(e => new { e.UserId, e.ChapterId })
+        // Mỗi độc giả mua một chương một lần cho mỗi ngôn ngữ
+        builder.HasIndex(e => new { e.UserId, e.ChapterId, e.Language })
                .IsUnique()
                .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_chapter_entitlements_user_chapter");

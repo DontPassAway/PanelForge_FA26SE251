@@ -27,6 +27,22 @@ public class Series : BaseEntity
     /// <summary>Producer đánh dấu bộ truyện đã hoàn thành (Reader thấy "Hoàn thành" thay vì "Đang ra").</summary>
     public bool IsCompleted { get; private set; }
 
+    /// <summary>
+    /// Publisher: mặc định N trang đầu mỗi chương trả phí là trang xem trước cho người chưa mua (0 = khóa toàn bộ).
+    /// Chương Publisher đã chọn trang xem trước bằng tay (<see cref="Chapter.PreviewPagesCustomized"/>) không theo mặc định này.
+    /// </summary>
+    public int DefaultPreviewPageCount { get; private set; }
+
+    public const int MaxDefaultPreviewPageCount = 50;
+
+    public void SetDefaultPreviewPages(int previewPageCount)
+    {
+        if (previewPageCount is < 0 or > MaxDefaultPreviewPageCount)
+            throw new ArgumentOutOfRangeException(nameof(previewPageCount),
+                $"Số trang xem trước mặc định từ 0 đến {MaxDefaultPreviewPageCount}.");
+        DefaultPreviewPageCount = previewPageCount;
+    }
+
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
     public PipelineDefinition? PipelineDefinition { get; private set; }

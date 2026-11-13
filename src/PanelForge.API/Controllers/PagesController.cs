@@ -414,6 +414,7 @@ public sealed class PagesController : ControllerBase
     private IActionResult HistoryError<T>(Result<T> result) => this.ConflictOrNull(result) ?? (result.ErrorCode switch
     {
         ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+        ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
         _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
     });
 }

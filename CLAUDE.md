@@ -98,3 +98,18 @@ Installed as a Claude Code plugin at project scope (`.claude/settings.json`, mar
 - `.claude/references/` – checklists referenced by upstream skills as `../../references/*.md`.
 - `.claude/settings.json` – shared: Ponytail plugin, `PONYTAIL_DEFAULT_MODE`, deny rules for reading secret files.
 - `.claude/settings.local.json` – personal, not committed.
+
+## Git workflow (bắt buộc cho AI Agents)
+
+- **Nhánh làm việc:** chỉ commit/push lên nhánh `feature/<tên-tính-năng>` (vd. `feature/publisher-monetization`). Chưa có nhánh phù hợp → tạo mới từ nhánh feature hiện tại, hỏi người dùng nếu không rõ tên.
+- **Lấy code mới:** `git fetch origin` rồi `git merge origin/trungkien` vào nhánh feature đang làm. Không pull/merge trực tiếp trên nhánh `trungkien`.
+- **Không tác động `trungkien` (và `main`):** không checkout để sửa, không commit, không push, không rebase, không force-push lên các nhánh này.
+- **Trước khi merge:** working tree phải sạch; nếu còn thay đổi thì commit lên nhánh feature (hoặc `git stash` rồi `stash pop` sau merge).
+- **Conflict:** giữ thay đổi của cả hai bên khi không loại trừ nhau; với `*ModelSnapshot.cs` của EF, sau khi gộp phải kiểm tra bằng `dotnet ef migrations add` thử (phải ra migration rỗng). Build/test trước khi commit merge.
+- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync trungkien into feature/<tên>`.
+- Không dùng `--no-verify`, không `push --force` lên nhánh dùng chung.
+- **Sau khi sửa code, cập nhật `panelforge-hubs` (nhánh `main`) và push:**
+  1. `git -C ../panelforge-hubs pull --ff-only origin main`.
+  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash + nhánh feature, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
+  3. Chạy `node scripts/sync-hub.mjs` để đồng bộ `hub-state.json`, `AUDIT_LOGS.md` và `web/public/docs`.
+  4. Commit `docs(tracker): <việc ngắn gọn>` rồi `git push origin main` trong `panelforge-hubs`. Đây là ngoại lệ được phép cho quy tắc "không push sau mỗi lần làm" của hub.

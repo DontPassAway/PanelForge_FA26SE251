@@ -44,6 +44,7 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnType("varchar(64)");
 
         builder.Property(s => s.IsCompleted).HasColumnName("is_completed").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
+        builder.Property(s => s.DefaultPreviewPageCount).HasColumnName("default_preview_page_count").HasColumnType("int").HasDefaultValue(0).IsRequired();
 
         builder.Property(s => s.BannerImageSha256)
                .HasColumnName("banner_image_sha256")

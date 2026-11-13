@@ -1292,6 +1292,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("outline");
 
+                    b.Property<bool>("PreviewPagesCustomized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("preview_pages_customized");
                     b.Property<Guid?>("PreviousSubmittedVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_submitted_version_id");
@@ -1607,6 +1612,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ChapterId")
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(8)")
+                        .HasDefaultValue("vi")
+                        .HasColumnName("language");
 
                     b.Property<Guid>("SeriesId")
                         .HasColumnType("uuid")
@@ -2026,6 +2038,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsPreview")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_preview");
+
                     b.Property<string>("LayoutFormat")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -2057,6 +2075,78 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("pages", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PageTranslation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("content_sha256");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("language");
+
+                    b.Property<Guid>("PageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("page_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId", "Language")
+                        .HasDatabaseName("ix_page_translations_chapter_language");
+
+                    b.HasIndex("PageId", "Language")
+                        .IsUnique()
+                        .HasDatabaseName("ix_page_translations_page_language")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("page_translations", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Panel", b =>
@@ -2563,6 +2653,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("created_by");
 
+                    b.Property<int>("DefaultPreviewPageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("default_preview_page_count");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("deleted_at");
@@ -2702,6 +2798,76 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("series_members", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.SeriesRating", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(8)")
+                        .HasDefaultValue("vi")
+                        .HasColumnName("language");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<int>("Stars")
+                        .HasColumnType("int")
+                        .HasColumnName("stars");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("SeriesId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_series_ratings_series_user")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("series_ratings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_series_ratings_stars", "stars BETWEEN 1 AND 5");
+                        });
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.TypographyPreset", b =>
@@ -3324,6 +3490,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(8)")
+                        .HasDefaultValue("vi")
+                        .HasColumnName("language");
+
                     b.Property<decimal>("PricePaidVnd")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(15,2)")
@@ -3369,12 +3542,71 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_chapter_entitlements_workspace_id");
 
-                    b.HasIndex("UserId", "ChapterId")
+                    b.HasIndex("UserId", "ChapterId", "Language")
                         .IsUnique()
                         .HasDatabaseName("ix_chapter_entitlements_user_chapter")
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("chapter_entitlements", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterLanguagePrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("language");
+
+                    b.Property<decimal>("PriceVnd")
+                        .HasColumnType("numeric(15,2)")
+                        .HasColumnName("price_vnd");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId", "Language")
+                        .IsUnique()
+                        .HasDatabaseName("ix_chapter_language_prices_chapter_language")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("chapter_language_prices", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>
@@ -3435,6 +3667,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("language");
 
                     b.Property<string>("OrderCode")
                         .IsRequired()
@@ -5297,6 +5533,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("CurrentStage");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PageTranslation", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Page");
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Panel", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", "CurrentStage")
@@ -5431,6 +5678,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.SeriesRating", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Series", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.TypographyPreset", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
@@ -5515,6 +5777,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
 
                     b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterLanguagePrice", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>

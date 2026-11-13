@@ -40,7 +40,8 @@ public sealed record PublicChapterDto(
     bool IsLocked = false,
     decimal PriceVnd = 0m,
     bool IsUnlocked = true,
-    bool IsFree = true);
+    bool IsFree = true,
+    IReadOnlyList<PublicChapterLanguageDto>? Languages = null);
 
 public sealed record PublicSeriesDetailDto(
     Guid Id,
@@ -54,7 +55,11 @@ public sealed record PublicSeriesDetailDto(
     string? CoverUrl = null,
     bool IsCompleted = false,
     DateTime? CreatedAt = null,
-    int ViewCount = 0);
+    int ViewCount = 0,
+    double RatingAverage = 0,
+    int RatingCount = 0,
+    int? MyRating = null,
+    string Language = ContentLanguages.Original);
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
@@ -134,7 +139,8 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
-public sealed record GetPublicSeriesDetailQuery(Guid SeriesId) : IRequest<Result<PublicSeriesDetailDto>>;
+/// <param name="Language">Bản ngôn ngữ đang chọn để tính giá / trạng thái mở khóa từng chương; null = bản gốc.</param>
+public sealed record GetPublicSeriesDetailQuery(Guid SeriesId, string? Language = null) : IRequest<Result<PublicSeriesDetailDto>>;
 
 public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPublicSeriesDetailQuery, Result<PublicSeriesDetailDto>>
 {
@@ -186,26 +192,54 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
         if (series is null || series.Chapters.Count == 0)
             return Result<PublicSeriesDetailDto>.Failure("Không tìm thấy Series đã phát hành.", ResultErrorCodes.NotFound);
 
-        // Kiểm tra quyền VIP hoặc các chương đã mua nếu có người dùng đăng nhập
-        // Cùng quy tắc với API đọc chương (ChapterReadAccess): Publisher/Admin/thành viên Studio, VIP còn hạn, hoặc đã mua.
+        // Cùng quy tắc với API đọc chương (ChapterReadAccess): Publisher/Admin/thành viên Studio, VIP còn hạn,
+        // hoặc đã mua đúng bản ngôn ngữ đang chọn (mua theo từng ngôn ngữ).
+        var language = ContentLanguages.Normalize(q.Language) ?? ContentLanguages.Original;
         bool canReadAll = false;
-        var unlockedIds = new HashSet<Guid>();
+        var owned = new HashSet<(Guid ChapterId, string Language)>();
         var currentUserId = _currentUser.UserId;
         if (currentUserId.HasValue)
         {
             canReadAll = await ChapterReadAccess.IsStaffAsync(_dbContext, currentUserId, series.WorkspaceId, ct)
                 || await ChapterReadAccess.HasActiveVipAsync(_dbContext, currentUserId.Value, now, ct);
 
-            var ids = await _dbContext.ChapterEntitlements
+            var rows = await _dbContext.ChapterEntitlements
                 .Where(e => e.UserId == currentUserId.Value && !e.IsDeleted)
-                .Select(e => e.ChapterId)
+                .Select(e => new { e.ChapterId, e.Language })
                 .ToListAsync(ct);
-            unlockedIds = ids.ToHashSet();
+            owned = rows.Select(r => (r.ChapterId, r.Language)).ToHashSet();
         }
+
+        // Bản ngôn ngữ đã phát hành của từng chương (bản dịch cần đủ ảnh mọi trang) và giá riêng theo ngôn ngữ.
+        var chapterIds = series.Chapters.Select(c => c.Id).ToList();
+        var pageCounts = await _dbContext.Pages.AsNoTracking()
+            .Where(p => chapterIds.Contains(p.ChapterId))
+            .GroupBy(p => p.ChapterId)
+            .Select(g => new { ChapterId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ChapterId, x => x.Count, ct);
+        var translated = await _dbContext.PageTranslations.AsNoTracking()
+            .Where(t => chapterIds.Contains(t.ChapterId) && !t.IsDeleted)
+            .GroupBy(t => new { t.ChapterId, t.Language })
+            .Select(g => new { g.Key.ChapterId, g.Key.Language, Pages = g.Select(t => t.PageId).Distinct().Count() })
+            .ToListAsync(ct);
+        var prices = await _dbContext.ChapterLanguagePrices.AsNoTracking()
+            .Where(p => chapterIds.Contains(p.ChapterId) && !p.IsDeleted)
+            .Select(p => new { p.ChapterId, p.Language, p.PriceVnd })
+            .ToListAsync(ct);
 
         var chapterDtos = series.Chapters.Select(c =>
         {
-            bool isUnlocked = !c.IsLocked || canReadAll || unlockedIds.Contains(c.Id);
+            var pageCount = pageCounts.GetValueOrDefault(c.Id);
+            var langs = new List<string> { ContentLanguages.Original };
+            langs.AddRange(ContentLanguages.Translations.Where(l =>
+                pageCount > 0 && translated.Any(t => t.ChapterId == c.Id && t.Language == l && t.Pages >= pageCount)));
+
+            var languageDtos = langs.Select(l => new PublicChapterLanguageDto(
+                l,
+                c.IsLocked ? prices.FirstOrDefault(p => p.ChapterId == c.Id && p.Language == l)?.PriceVnd ?? c.PriceVnd : 0m,
+                !c.IsLocked || canReadAll || owned.Contains((c.Id, l)))).ToList();
+
+            var current = languageDtos.FirstOrDefault(l => l.Language == language) ?? languageDtos[0];
             return new PublicChapterDto(
                 Id: c.Id,
                 ChapterNumber: c.ChapterNumber,
@@ -213,11 +247,24 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 PublishedAt: c.PublishedAt,
                 CoverUrl: GetPublicChapterCoverQueryHandler.CoverUrl(c.Id, c.CoverImageSha256),
                 IsLocked: c.IsLocked,
-                PriceVnd: c.PriceVnd,
-                IsUnlocked: isUnlocked,
-                IsFree: !c.IsLocked
+                PriceVnd: current.PriceVnd,
+                IsUnlocked: current.IsUnlocked,
+                IsFree: !c.IsLocked,
+                Languages: languageDtos
             );
         }).ToList();
+
+        var ratings = await _dbContext.SeriesRatings.AsNoTracking()
+            .Where(r => r.SeriesId == series.Id && !r.IsDeleted)
+            .GroupBy(r => 1)
+            .Select(g => new { Count = g.Count(), Avg = g.Average(r => (double)r.Stars) })
+            .FirstOrDefaultAsync(ct);
+        int? myRating = currentUserId.HasValue
+            ? await _dbContext.SeriesRatings.AsNoTracking()
+                .Where(r => r.SeriesId == series.Id && r.UserId == currentUserId.Value && !r.IsDeleted)
+                .Select(r => (int?)r.Stars)
+                .FirstOrDefaultAsync(ct)
+            : null;
 
         return Result<PublicSeriesDetailDto>.Success(new PublicSeriesDetailDto(
             series.Id, series.Title, series.Synopsis, series.Genre, series.Format, series.ReadingDirection,
@@ -225,6 +272,10 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
             GetPublicSeriesCoverQueryHandler.CoverUrl(series.Id, series.CoverImageSha256),
             series.IsCompleted,
             series.CreatedAt,
-            await _dbContext.ChapterViews.CountAsync(v => v.SeriesId == series.Id, ct)));
+            await _dbContext.ChapterViews.CountAsync(v => v.SeriesId == series.Id, ct),
+            RatingAverage: Math.Round(ratings?.Avg ?? 0, 2),
+            RatingCount: ratings?.Count ?? 0,
+            MyRating: myRating,
+            Language: language));
     }
 }

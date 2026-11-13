@@ -61,11 +61,12 @@ public class ChapterViewTests
     }
 
     [Fact]
-    public async Task LockedOrUnpublishedChapters_AreNotCounted()
+    public async Task PaidChapterPreviewIsCounted_UnpublishedIsNot()
     {
-        (await Record(_paid.Id)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        // Chương trả phí chưa mua vẫn đọc được trang xem trước → tính lượt xem.
+        (await Record(_paid.Id)).IsSuccess.Should().BeTrue();
         (await Record(_draft.Id)).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
-        (await _db.ChapterViews.CountAsync()).Should().Be(0);
+        (await _db.ChapterViews.CountAsync()).Should().Be(1);
     }
 
     [Fact]

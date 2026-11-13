@@ -34,6 +34,10 @@ internal sealed class PaymentTransactionConfiguration : IEntityTypeConfiguration
                .HasColumnName("chapter_id")
                .HasColumnType("uuid");
 
+        builder.Property(t => t.Language)
+               .HasColumnName("language")
+               .HasColumnType("varchar(8)");
+
         builder.Property(t => t.OrderCode)
                .HasColumnName("order_code")
                .HasColumnType("varchar(64)")

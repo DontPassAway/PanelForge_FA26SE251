@@ -53,6 +53,12 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasDefaultValue(false)
                .IsRequired();
 
+        builder.Property(c => c.PreviewPagesCustomized)
+               .HasColumnName("preview_pages_customized")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
         builder.Property(c => c.PriceVnd)
                .HasColumnName("price_vnd")
                .HasColumnType("numeric(15,2)")

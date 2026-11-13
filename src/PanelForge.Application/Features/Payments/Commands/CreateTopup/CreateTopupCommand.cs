@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Entities.Workspaces;
@@ -40,6 +41,7 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
         Guid? workspaceId = req.WorkspaceId;
         Guid? seriesId = req.SeriesId;
         Guid? chapterId = null;
+        string? language = null;
         int amountVnd;
 
         switch (type)
@@ -60,15 +62,21 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 if (!chapter.IsLocked || chapter.PriceVnd <= 0)
                     return Result<TopupResponse>.Failure("Chương này miễn phí, không cần thanh toán.", ResultErrorCodes.Validation);
 
+                language = ContentLanguages.Normalize(req.Language);
+                if (language is null)
+                    return Result<TopupResponse>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
+                if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct)).Contains(language))
+                    return Result<TopupResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.Validation);
+
                 var alreadyUnlocked = await _db.ChapterEntitlements
-                    .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && !e.IsDeleted, ct);
+                    .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && e.Language == language && !e.IsDeleted, ct);
                 if (alreadyUnlocked)
                     return Result<TopupResponse>.Failure("Bạn đã mở khóa chương này trước đó.", ResultErrorCodes.Validation);
 
                 chapterId = chapter.Id;
                 seriesId = chapter.SeriesId;
                 workspaceId = chapter.WorkspaceId;
-                amountVnd = (int)chapter.PriceVnd;
+                amountVnd = (int)await ChapterReadAccess.ChapterPriceAsync(_db, chapter.Id, chapter.PriceVnd, language, ct);
                 break;
             }
             case PaymentTransactionType.VipSubscription:
@@ -182,7 +190,8 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             bankAccountName: accountName,
             workspaceId: workspaceId,
             seriesId: seriesId,
-            chapterId: chapterId
+            chapterId: chapterId,
+            language: language
         );
 
         _db.PaymentTransactions.Add(transaction);

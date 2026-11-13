@@ -16,6 +16,9 @@ public class ChapterEntitlement : BaseEntity
     public Guid WorkspaceId { get; private set; }
     public Guid? TransactionId { get; private set; }
     public decimal PricePaidVnd { get; private set; }
+
+    /// <summary>Ngôn ngữ bản phát hành đã mua (mua theo từng ngôn ngữ).</summary>
+    public string Language { get; private set; } = Enums.ContentLanguages.Original;
     public DateTime UnlockedAt { get; private set; } = DateTime.UtcNow;
 
     public User User { get; private set; } = default!;
@@ -33,7 +36,8 @@ public class ChapterEntitlement : BaseEntity
         Guid workspaceId,
         decimal pricePaidVnd,
         Guid? transactionId = null,
-        DateTime? unlockedAt = null)
+        DateTime? unlockedAt = null,
+        string? language = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pricePaidVnd);
 
@@ -45,7 +49,8 @@ public class ChapterEntitlement : BaseEntity
             WorkspaceId = workspaceId,
             PricePaidVnd = pricePaidVnd,
             TransactionId = transactionId,
-            UnlockedAt = unlockedAt ?? DateTime.UtcNow
+            UnlockedAt = unlockedAt ?? DateTime.UtcNow,
+            Language = Enums.ContentLanguages.Normalize(language) ?? Enums.ContentLanguages.Original
         };
     }
 }
