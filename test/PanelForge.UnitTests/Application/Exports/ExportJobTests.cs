@@ -94,7 +94,7 @@ public class ExportJobTests
         _db.StudioWorkspaces.Add(studio);
         var series = DomainSeries.Create(studio.Id, "Đèn biển", ReadingDirection.RightToLeft);
         _db.Series.Add(series);
-        _chapter = Chapter.Create(series.Id, 2, "Bão");
+        _chapter = Chapter.Create(series.Id, 2, "Bão").InProduction();
         _chapter.Approve();
         _db.Chapters.Add(_chapter);
         // Trang 2 tạo trước để kiểm thứ tự theo số trang

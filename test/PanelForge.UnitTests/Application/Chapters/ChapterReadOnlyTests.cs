@@ -54,7 +54,7 @@ public class ChapterReadOnlyTests
         _db.WorkspaceMembers.Add(WorkspaceMember.Create(studio.Id, _userId, WorkspaceRole.Producer));
         var series = DomainSeries.Create(studio.Id, "Lantern", ReadingDirection.RightToLeft);
         _db.Series.Add(series);
-        _chapter = Chapter.Create(series.Id, 1, "Lá thư");
+        _chapter = Chapter.Create(series.Id, 1, "Lá thư").InProduction();
         _chapter.Approve();
         _db.Chapters.Add(_chapter);
         _scene = Scene.Create(_chapter.Id, 1, "Bến cảng");

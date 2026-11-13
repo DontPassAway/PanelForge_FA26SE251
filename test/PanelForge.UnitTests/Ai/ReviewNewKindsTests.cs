@@ -61,7 +61,7 @@ public class ReviewNewKindsTests
         (await h.Db.ScriptLines.ToListAsync()).Select(l => l.DialogueText).Should().Equal(scriptBefore);
         h.Db.Panels.Count().Should().Be(panelsBefore);
         h.Db.BibleEntryRevisions.Count().Should().Be(bibleBefore);
-        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.InProduction, "Accept không Approve chapter hay chuyển stage");
+        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.PreProduction, "Accept không Approve chapter hay chuyển stage");
     }
 
     [Fact]

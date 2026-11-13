@@ -37,7 +37,7 @@ public class ManualScriptLineTests
     public ManualScriptLineTests()
     {
         _series = DomainSeries.Create(_studio.Id, "Moon", ReadingDirection.RightToLeft);
-        _chapter = Chapter.Create(_series.Id, 1);
+        _chapter = Chapter.Create(_series.Id, 1).InProduction();
         _scene = Scene.Create(_chapter.Id, 1);
         _db.StudioWorkspaces.Add(_studio);
         _db.Series.Add(_series);
@@ -145,7 +145,7 @@ public class ManualScriptLineTests
     [Fact]
     public async Task Create_InSceneOfAnotherChapter_IsNotFound()
     {
-        var other = Chapter.Create(_series.Id, 2);
+        var other = Chapter.Create(_series.Id, 2).InProduction();
         var otherScene = Scene.Create(other.Id, 1);
         _db.Chapters.Add(other);
         _db.Scenes.Add(otherScene);
@@ -188,7 +188,7 @@ public class ManualScriptLineTests
     public async Task Update_LineOfAnotherChapter_IsNotFound()
     {
         var created = await Create("A");
-        var other = Chapter.Create(_series.Id, 2);
+        var other = Chapter.Create(_series.Id, 2).InProduction();
         _db.Chapters.Add(other);
         await _db.SaveChangesAsync();
 

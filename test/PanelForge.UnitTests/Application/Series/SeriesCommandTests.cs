@@ -98,7 +98,10 @@ public class SeriesCommandTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         var stages = pipelines.Single().GetOrderedStages();
-        stages.Should().HaveCount(7);
+        // SCR-12 (D1): kịch bản không còn là stage pipeline → 6 công đoạn, bắt đầu từ Thumbnail
+        stages.Should().HaveCount(6);
+        stages.Should().NotContain(s => s.Slug == "script");
+        stages.First().Slug.Should().Be("thumbnail");
         stages.Single(s => s.Slug == "review").AllowedRole.Should().Be(WorkspaceRole.Editor);
         stages.Single(s => s.Slug == "review").IsApprovalGate.Should().BeTrue();
         stages.Single(s => s.Slug == "approved").AllowedRole.Should().Be(WorkspaceRole.Editor);

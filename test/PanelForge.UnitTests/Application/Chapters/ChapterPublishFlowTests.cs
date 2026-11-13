@@ -47,7 +47,7 @@ public class ChapterPublishFlowTests
         _series = DomainSeries.Create(studio.Id, "Moon Blade", ReadingDirection.RightToLeft, genre: "Fantasy");
         _db.Series.Add(_series);
 
-        _chapter = Chapter.Create(_series.Id, 1, "Khởi đầu");
+        _chapter = Chapter.Create(_series.Id, 1, "Khởi đầu").InProduction();
         _db.Chapters.Add(_chapter);
 
         _page = Page.CreateNew(_chapter.Id, 1, default, 1200, 1800, 300);
@@ -80,7 +80,7 @@ public class ChapterPublishFlowTests
     [Fact]
     public async Task Approve_WhenChapterHasNoPage_ShouldConflict()
     {
-        var empty = Chapter.Create(_series.Id, 2);
+        var empty = Chapter.Create(_series.Id, 2).InProduction();
         _db.Chapters.Add(empty);
         await _db.SaveChangesAsync();
 
@@ -305,7 +305,7 @@ public class ChapterPublishFlowTests
     [Fact]
     public async Task Approve_WhenBlocked_ShouldNotCreateSnapshot()
     {
-        var empty = Chapter.Create(_series.Id, 2);
+        var empty = Chapter.Create(_series.Id, 2).InProduction();
         _db.Chapters.Add(empty);
         await _db.SaveChangesAsync();
 
@@ -339,7 +339,7 @@ public class ChapterPublishFlowTests
     {
         await Approve();
         var snapshot = _db.ChapterSnapshots.Single();
-        var other = Chapter.Create(_series.Id, 2);
+        var other = Chapter.Create(_series.Id, 2).InProduction();
         _db.Chapters.Add(other);
         await _db.SaveChangesAsync();
 

@@ -73,7 +73,7 @@ public class PageVersionHistoryTests
     public PageVersionHistoryTests()
     {
         _db.Users.Add(_artist);
-        _chapter = Chapter.Create(Guid.NewGuid(), 1);
+        _chapter = Chapter.Create(Guid.NewGuid(), 1).InProduction();
         _db.Chapters.Add(_chapter);
         _db.SaveChanges();
 

@@ -48,7 +48,7 @@ public class ReviewSuggestionCommandTests
 
         // Chương chưa bị Approve / chuyển stage; version tăng
         var chapter = await h.Db.Chapters.SingleAsync();
-        chapter.Status.Should().Be(ChapterStatus.InProduction);
+        chapter.Status.Should().Be(ChapterStatus.PreProduction);
         chapter.VersionVector.Should().Be(1);
         // BR-18: thay đổi được ghi audit cùng lần lưu
         h.Db.AuditLogs.Any(a => a.EntityName == "ContentRevision").Should().BeTrue();
@@ -168,7 +168,7 @@ public class ReviewSuggestionCommandTests
         var decision = await h.Db.AiSuggestionDecisions.SingleAsync(d => d.SuggestionId == layoutSuggestion.Id);
         decision.ResultRevisionId.Should().Be(revision.Id);
         (await h.Db.Chapters.SingleAsync()).VersionVector.Should().Be(2);
-        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.InProduction, "Accept không Approve Chapter");
+        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.PreProduction, "Accept không Approve Chapter");
     }
 
     [Fact]

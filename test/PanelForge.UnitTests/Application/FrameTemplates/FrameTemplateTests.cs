@@ -24,7 +24,7 @@ public class FrameTemplateTests
         var db = InMemoryDb.Create();
         var workspaceId = Guid.NewGuid();
         var series = Series.Create(workspaceId, "Manga", dir);
-        var chapter = Chapter.Create(series.Id, 1, "Ch 1");
+        var chapter = Chapter.Create(series.Id, 1, "Ch 1").InProduction();
         var page = Page.CreateNew(chapter.Id, 1, LayoutFormat.StandardPage, 1000, 1500, 300);
         db.Series.Add(series);
         db.Chapters.Add(chapter);

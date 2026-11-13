@@ -29,7 +29,9 @@ public class LockBibleEntryRevisionTests
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
         _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true);
-        _heroV1.Endorse(Guid.NewGuid()); // chỉ revision đã được Writer xác nhận mới khoá được
+        // Nhân vật cần Artist nộp Concept rồi mới được xác nhận; chỉ revision đã xác nhận mới khoá được
+        _heroV1.SubmitConcept(Guid.NewGuid(), "https://r2.example/hero-v1.png", null);
+        _heroV1.Endorse(Guid.NewGuid());
         _location = bible.AddEntry(BibleEntryCategory.Location, "SHOP", "Tiệm", "Tiệm đồng hồ");
         _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
         _term = bible.AddEntry(BibleEntryCategory.Terminology, "AURA", "Aura", "Năng lượng");
