@@ -1,7 +1,7 @@
 namespace PanelForge.Domain.Enums;
 
 /// <summary>
-/// Ngoại lệ có chủ ý trong tự sự (consistency-design §3.4).
+/// Ngoại lệ có chủ ý trong tự sự.
 /// Giúp hệ thống phân biệt sự kiện mạch chính với hồi tưởng, giấc mơ, lời nói dối để không báo lỗi sai (false positive).
 /// </summary>
 public enum NarrationMode

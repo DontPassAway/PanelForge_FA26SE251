@@ -9,7 +9,7 @@ namespace PanelForge.Application.Features.AiAgents.Common;
 ///
 /// Producer không mặc nhiên có mọi quyền nội dung: Producer chỉ được chạy workflow Script/Storyboard
 /// (giữ đúng chính sách của demo hiện có: Producer điều phối Series) và báo cáo Editor (chỉ đọc). Artist/Letterer là việc riêng của vai trò đó.
-/// Quyết định Accept/Reject vẫn thuộc Producer (nghiệm thu) + vai trò sở hữu nội dung + Editor (xem docs/roles/role-workflows.md).
+/// Quyết định Accept/Reject vẫn thuộc Producer (nghiệm thu) + vai trò sở hữu nội dung + Editor (ma trận quyền §5.1, Master Spec V2.6 ở panelforge-hub).
 /// </summary>
 internal static class AiWorkflowPolicy
 {

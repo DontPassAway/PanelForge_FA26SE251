@@ -12,15 +12,15 @@ An AI-assisted manga and webtoon production management platform with a structure
 
 Traditional manga production fragments scripts, artwork, and communication across disparate tools. PanelForge unifies production through structured data and traceable collaboration:
 
-- **Structured Content Model:** Granular hierarchy (`Series → Chapter → Scene → Page → Panel → Element`) with strict containment (BR-03) and explicit script-to-balloon bindings (BR-05).
-- **Versioned Series Bible:** Centralized repository for characters, lore, and visual rules, versioned by effective chapter (BR-15). See [`docs/domain/series-bible.md`](docs/domain/series-bible.md).
-- **Configurable Pipeline:** Cloned from templates (`Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved`) with stage gates, panel-level progression, and role-based assignments (BR-06, BR-19, BR-20).
-- **Panel-Anchored Review:** Region-specific comments, visual annotations, and triaged change requests (BR-21).
-- **Immutable Provenance:** Append-only revisions (BR-01, BR-08), optimistic concurrency (BR-11), content-addressed SHA-256 asset storage (BR-04, BR-13, BR-16), and mandatory audit logging (BR-18).
-- **Two-Level Access Control:** Platform `SystemRole` (Admin/User) and scoped `WorkspaceRole` (Producer, Writer, Artist, Letterer, Editor) (BR-07, BR-22, BR-23). Chapter locking (BR-12), recipient-bound watermarked preview links (BR-09, BR-17), and isolated public catalog (BR-24).
+- **Structured Content Model:** `Series → Chapter → Page → Panel → Content` (a hidden default Scene per chapter, D2), plain-text script lines bound 1-1 to balloons (BR-05).
+- **Script lifecycle:** `Draft ↔ InReview → Frozen` with immutable script versions (save = commit, submit = push); Producer starts production at Gate 1 (Q15).
+- **Chapter-scoped Series Bible:** speakers auto-match Bible names/aliases (unknown speakers become draft entries), narration references are highlighted by the Writer, designs are locked as Canon variants and frozen per chapter at Gate 1 (Q16, BR-35).
+- **Page-scoped production:** Layout + Pencil, then Ink ∥ Lettering per assigned page, panel-level rework at Gate 2, chapter approval at Gate 3 (BR-12, BR-19, BR-31).
+- **Immutable Provenance:** Append-only revisions (BR-01, BR-08), optimistic concurrency (BR-11), content-addressed SHA-256 assets (BR-04, BR-13), mandatory audit logging (BR-18).
+- **Release & monetization:** language editions (`ChapterEdition`), one platform Publisher sets VND prices, Producer publishes (BR-32–34).
 - **Human-in-the-Loop AI:** Seven specialist agents coordinated by a Supervisor suggest actions with recorded provenance; human approval is mandatory (BR-02, BR-10). See [`docs/ai/ai-multi-agent-demo.md`](docs/ai/ai-multi-agent-demo.md).
 
-For deep dives, see [Glossary & Rules](docs/requirements/glossary-and-rules.md), [Role Workflows](docs/roles/role-workflows.md), and [Worked Examples](docs/roles/role-flow-examples.md).
+Business specification, plans and architecture live only in `panelforge-hub/docs/` (start with `V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`).
 
 ---
 
@@ -38,7 +38,7 @@ Clean Architecture adhering to strict dependency flow (`API → Application → 
 | **PanelForge.AI.Contracts** | Shared contracts between API and AI service |
 | **Panel Splitter** | In-process splitting via OpenCvSharp4 (`PanelForge.PanelSplitter` is parity reference only) |
 
-Full architectural guide: [`docs/architecture/clean-architecture-structure.md`](docs/architecture/clean-architecture-structure.md).
+Full architectural guide: [`docs/architecture/clean-architecture-structure.md`](../panelforge-hub/docs/architecture/clean-architecture-structure.md).
 
 ---
 
@@ -47,7 +47,7 @@ Full architectural guide: [`docs/architecture/clean-architecture-structure.md`](
 ### 1. Prerequisites
 - .NET SDK 9.x
 - Docker Desktop (or local PostgreSQL 17)
-- Node.js LTS 20+ (for [`panelforge-fe`](../../Frontend/panelforge-fe/README.md))
+- Node.js LTS 20+ (for [`panelforge-fe`](../panelforge-fe/README.md))
 
 ### 2. Configuration
 ```bash
@@ -82,7 +82,7 @@ For Gemini, set `AiService:Provider=Gemini` and configure Workspace keys. Demo d
 
 ### 6. Tests & Frontend
 - Tests: `dotnet test PanelForge.slnx`
-- Frontend: See [Frontend README](../../Frontend/panelforge-fe/README.md) (`npm run dev` at `http://localhost:3000`).
+- Frontend: See [Frontend README](../panelforge-fe/README.md) (`npm run dev` at `http://localhost:3000`).
 
 ---
 
@@ -100,21 +100,16 @@ For Gemini, set `AiService:Provider=Gemini` and configure Workspace keys. Demo d
 
 ## Documentation
 
-Everything lives under [`docs/`](docs/README.md), organised by topic.
+Business specification, plans, standards and architecture: **`panelforge-hub/docs/` only**. This repo keeps operational docs under [`docs/`](docs/README.md):
 
 | Folder | What you will find |
 |---|---|
-| [`docs/requirements/`](docs/requirements/) | [Requirements](docs/requirements/requirements.md), the original [specification with BR/US/UC/FR/NFR](docs/requirements/PanelForge_Capstone_Content.md), and a [glossary and rules](docs/requirements/glossary-and-rules.md) |
-| [`docs/roles/`](docs/roles/) | [Role workflows](docs/roles/role-workflows.md) and [worked examples for every role](docs/roles/role-flow-examples.md) |
-| [`docs/domain/`](docs/domain/) | [Series Bible](docs/domain/series-bible.md) |
-| [`docs/architecture/`](docs/architecture/) | [Clean architecture structure](docs/architecture/clean-architecture-structure.md), [implementation and QA](docs/architecture/implementation-qa.md) |
-| [`docs/storage/`](docs/storage/) | [Asset storage architecture](docs/storage/storage-architecture.md) and [storage strategy](docs/storage/storage-strategy.md) |
-| [`docs/ai/`](docs/ai/) | [AI multi-agent design and demo](docs/ai/ai-multi-agent-demo.md) |
 | [`docs/database/`](docs/database/) | [Database setup](docs/database/setup-database.md) |
-| [`docs/archive/`](docs/archive/) | History: merged change logs (CF1, CF4, CF5), the registration-form V1.2 scope and the old project plan. Current scope is spec V2.6 (`panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`). |
-| [`docs/research/`](docs/research/) | Research on roles and supporting tools |
+| [`docs/setup/`](docs/setup/) | [Cloudflare R2 setup](docs/setup/R2_STORAGE_SETUP.md) |
+| [`docs/ai/`](docs/ai/) | [AI multi-agent demo](docs/ai/ai-multi-agent-demo.md) |
+| [`docs/research/`](docs/research/) | Background research on manga production (reference only) |
 
-Several documents are written in Vietnamese; the specification and project plan are in English.
+
 
 **Business specification** for all three repositories: `panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (in the `panelforge-hub` repo). **Who is working on what:** `panelforge-hub/docs/tracking/TEAM_WORKBOARD.md`; update it when you start and finish a task, including backend work. Do not add plan files under `docs/`.
 
