@@ -97,6 +97,9 @@ public sealed class AssetsController : ControllerBase
 
         // Chỉ trình duyệt của người tải được cache, và không lâu hơn hạn của link (5 phút); proxy dùng chung không được lưu
         Response.Headers.CacheControl = "private, max-age=300";
+        // Cùng URL được tải bằng <img> (không CORS) rồi fetch() (CORS). Không có Vary: Origin thì trình duyệt dùng lại bản
+        // cache của <img> (thiếu Access-Control-Allow-Origin) cho fetch() → "Failed to fetch" (vd. bước nhận diện panel).
+        Response.Headers.Vary = "Origin";
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(result.Value!.Content, result.Value.ContentType, result.Value.FileName);
     }

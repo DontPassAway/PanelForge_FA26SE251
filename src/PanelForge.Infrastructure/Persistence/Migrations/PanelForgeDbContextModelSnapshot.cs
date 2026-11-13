@@ -4830,9 +4830,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("varchar(30)")
-                        .HasDefaultValue("Active")
                         .HasColumnName("status");
 
                     b.Property<DateTime?>("UpdatedAt")

@@ -220,7 +220,9 @@ public sealed record ChangeRequestDto(
     Guid? PanelId = null,           // Panel của vùng khoanh
     Guid? SceneId = null,           // phân cảnh kịch bản bị nhận xét
     Guid? ScriptLineId = null,      // dòng kịch bản bị nhận xét
-    string? QuotedText = null)      // nguyên văn tại lần nộp
+    string? QuotedText = null,      // nguyên văn tại lần nộp
+    Guid? PageId = null,            // Trang của yêu cầu (suy ra từ khung / việc bị trả về); chỉ có ở danh sách theo chương
+    Guid? PipelineStageId = null)   // Công đoạn của việc bị trả về; chỉ có ở danh sách theo chương
 {
     public static ChangeRequestDto From(ChangeRequest c) => new(
         c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,

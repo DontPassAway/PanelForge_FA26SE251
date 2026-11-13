@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
@@ -19,6 +20,7 @@ using PanelForge.Application.Features.Consistency.Models;
 namespace PanelForge.API.Controllers;
 
 [ApiController]
+[Authorize]
 public sealed class PanelsController : ControllerBase
 {
     private readonly IMediator _mediator;

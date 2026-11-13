@@ -440,11 +440,12 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
         }
 
         // 3. Thông báo cho các việc phụ thuộc (DAG dependents)
-        var idText = completedAssignment.Id.ToString();
-        var waiting = await db.Assignments
-            .Where(a => a.ChapterId == chapter.Id && a.CancelReason == null && a.Status == AssignmentStatus.Assigned
-                        && (a.DependsOnAssignmentId == completedAssignment.Id || a.DependsOnAssignmentIdsJson.Contains(idText)))
-            .ToListAsync(ct);
+        // DependsOnAssignmentIdsJson là cột jsonb: lọc danh sách phụ thuộc trong bộ nhớ (string.Contains thành LIKE trên jsonb, lỗi 42883).
+        var waiting = (await db.Assignments
+                .Where(a => a.ChapterId == chapter.Id && a.CancelReason == null && a.Status == AssignmentStatus.Assigned)
+                .ToListAsync(ct))
+            .Where(a => a.DependsOnAssignmentId == completedAssignment.Id || a.GetDependsOnAssignmentIds().Contains(completedAssignment.Id))
+            .ToList();
 
         if (waiting.Count > 0)
         {
