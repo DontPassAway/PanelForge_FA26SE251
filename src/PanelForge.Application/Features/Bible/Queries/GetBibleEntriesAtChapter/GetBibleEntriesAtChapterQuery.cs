@@ -30,7 +30,8 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
 
         if (bible == null)
         {
-            return Result<IReadOnlyList<BibleEntryDto>>.Failure($"SeriesBible cho Series {request.SeriesId} không tồn tại.");
+            // Chưa có Bible (series cũ/seed) = chưa có mục nào hiệu lực.
+            return Result<IReadOnlyList<BibleEntryDto>>.Success([]);
         }
 
         var results = new List<BibleEntryDto>();

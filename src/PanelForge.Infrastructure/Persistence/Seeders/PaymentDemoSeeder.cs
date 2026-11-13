@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Entities.Workspaces;
@@ -57,6 +58,7 @@ public static class PaymentDemoSeeder
         );
         SetId(series, MacKiemLucSeriesId);
         db.Series.Add(series);
+        db.SeriesBibles.Add(SeriesBible.Create(MacKiemLucSeriesId, KomaWorkspaceId, "Series Bible", "Series Bible mặc định"));
 
         // 3. Chapters (Chương 1 Free, Chương 2 Locked giá 10,000 VND)
         var ch1 = Chapter.Create(MacKiemLucSeriesId, 1, "Kiếm Khởi Long Nhai");

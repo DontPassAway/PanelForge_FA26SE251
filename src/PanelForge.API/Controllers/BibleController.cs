@@ -16,6 +16,7 @@ using PanelForge.Application.Features.Bible.Queries.GetPanelBible;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntryHistory;
+using PanelForge.Application.Features.Bible.Queries.GetBibleEntryUsages;
 using PanelForge.Application.Features.Bible.Queries.GetSeriesBible;
 using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
@@ -461,6 +462,26 @@ public sealed class BibleController : ControllerBase
 
         return Ok(result.Value);
     }
+    /// <summary>
+    /// GET /api/series/{seriesId}/bible/entries/{entryId}/usages
+    /// Các chương có kịch bản dùng mục này (người nói hoặc @Tag) và đã đạt điều kiện Canon của Gate 1 chưa (BR-21).
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/usages")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<BibleEntryUsageDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBibleEntryUsages(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetBibleEntryUsagesQuery(seriesId, entryId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
     /// <summary>
     /// DELETE /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}
     /// Xóa một bản sửa đổi (revision) của mục Bible (chỉ cho phép nếu chưa khóa Canon và không phải bản gốc ban đầu).
