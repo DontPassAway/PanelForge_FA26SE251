@@ -60,8 +60,9 @@ public sealed class SyncScriptStructureCommandHandler
             return Failure($"Chapter {command.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
         if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, command.ChapterId, ct) is { } readOnly)
             return Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
-        if (await ScriptLineRules.WriterStructureBlockedReasonAsync(_db, _auth, command.UserId, command.ChapterId, ct) is { } writerBlock)
-            return Failure(writerBlock.Error, writerBlock.Code);
+        var authorized = await ScriptLineRules.AuthorizeAsync(_db, _auth, command.UserId, command.ChapterId, null, ct);
+        if (!authorized.IsSuccess)
+            return Failure(authorized.ErrorMessage!, authorized.ErrorCode);
 
         if (Validate(command.Pages) is { } invalid)
             return Failure(invalid);
