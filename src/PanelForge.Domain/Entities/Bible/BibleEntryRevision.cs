@@ -194,6 +194,21 @@ public class BibleEntryRevision : BaseEntity
         SupersedesRevisionId = supersedesRevisionId;
     }
 
+    /// <summary>
+    /// BIB-13 & 4A: Ghi đè revision v1 Draft khi Writer định nghĩa mục nháp (DefineBibleEntryCommand).
+    /// Giữ nguyên versionNumber và ID, chỉ cập nhật nội dung văn bản đặc tả đã hoàn chỉnh.
+    /// </summary>
+    public void OverwriteDraft(string summary, string snapshotJson, string contentHash, Guid authorId, string? stageName = null)
+    {
+        if (IsLocked) throw new InvalidOperationException("Không thể ghi đè revision đã được khoá.");
+        if (HasReviewHistory) throw new InvalidOperationException("Không thể ghi đè revision đã có lịch sử kiểm duyệt.");
+        Summary = summary;
+        SnapshotJson = snapshotJson;
+        ContentHash = contentHash;
+        AuthorId = authorId;
+        if (!string.IsNullOrWhiteSpace(stageName)) StageName = stageName.Trim();
+    }
+
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
         int versionNumber,

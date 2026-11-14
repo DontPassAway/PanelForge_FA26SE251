@@ -91,6 +91,7 @@ public static class DependencyInjection
 
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
+        services.AddScoped<IChapterCastInheritanceResolver, ChapterCastInheritanceResolver>();
 
         // ── Artwork assets: lưu file cục bộ + link tải ngắn hạn ký bằng Data Protection (BR-04, BR-13, BR-16) ──
         // AssetStorage:Provider = "Local" (mặc định, đĩa cục bộ) | "R2" (Cloudflare R2)

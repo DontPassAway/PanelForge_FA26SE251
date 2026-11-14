@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Enums;
 
@@ -10,6 +11,8 @@ namespace PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevisi
 /// <summary>
 /// V2.6 (Q20): Editor xác nhận = khoá Canon. Chỉ áp dụng từ ConceptSubmitted,
 /// Editor phải khác Artist đã nộp Concept (BR-06).
+/// BIB-13: Khi bản thay thế được Editor khoá, đánh dấu bản cũ thành Superseded
+/// và tính lại bản kế thừa cho các chương chưa Frozen.
 /// </summary>
 public sealed record ConfirmBibleEntryRevisionCommand(
     Guid SeriesId,
@@ -23,10 +26,14 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
     : IRequestHandler<ConfirmBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IChapterCastInheritanceResolver _inheritanceResolver;
 
-    public ConfirmBibleEntryRevisionCommandHandler(IPanelForgeDbContext dbContext)
+    public ConfirmBibleEntryRevisionCommandHandler(
+        IPanelForgeDbContext dbContext,
+        IChapterCastInheritanceResolver inheritanceResolver)
     {
         _dbContext = dbContext;
+        _inheritanceResolver = inheritanceResolver;
     }
 
     public async Task<Result<BibleEntryRevisionDto>> Handle(ConfirmBibleEntryRevisionCommand cmd, CancellationToken ct)
@@ -89,6 +96,15 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
         try
         {
             revision.ConfirmCanon(cmd.UserId, targetConceptEventId.Value);
+
+            // BIB-13 (Q23, Q24): Nếu đây là bản thay thế, đánh dấu bản cũ là Superseded
+            // và tính lại kế thừa cho các chương chưa Frozen đang kế thừa
+            if (revision.SupersedesRevisionId.HasValue)
+            {
+                var oldRevision = entry.Revisions.FirstOrDefault(r => r.Id == revision.SupersedesRevisionId.Value);
+                oldRevision?.MarkSuperseded(cmd.UserId, revision.VersionNumber, $"Bị thay bởi v{revision.VersionNumber}");
+                await _inheritanceResolver.ResolveInheritedAsync(cmd.SeriesId, 1, ct);
+            }
         }
         catch (UnauthorizedAccessException ex)
         {

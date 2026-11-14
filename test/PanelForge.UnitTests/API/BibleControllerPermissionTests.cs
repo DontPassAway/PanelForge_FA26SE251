@@ -116,4 +116,43 @@ public class BibleControllerPermissionTests
         roles.Should().NotContain(WorkspaceRole.Producer);
         roles.Should().NotContain(WorkspaceRole.Artist);
     }
+
+    [Fact]
+    public void SetBibleEntryCrowd_AllowsOnlyWriter_AndRejectsProducer()
+    {
+        var method = GetAction(nameof(BibleController.SetBibleEntryCrowd));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "BIB-13: Chỉ Writer mới có quyền bật/tắt cờ Quần chúng");
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public void DefineBibleEntry_AllowsOnlyWriter_AndRejectsProducer()
+    {
+        var method = GetAction(nameof(BibleController.DefineBibleEntry));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "BIB-13: Chỉ Writer mới có quyền viết định nghĩa mục nháp");
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public void SetChapterCastRevision_AllowsOnlyWriter_AndRejectsProducer()
+    {
+        var method = GetAction(nameof(BibleController.SetChapterCastRevision));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "BIB-13: Chỉ Writer mới có quyền chọn bản hoặc trả về bản kế thừa");
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
 }

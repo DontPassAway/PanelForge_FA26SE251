@@ -8,6 +8,9 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CancelReplacementRevision;
 using PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.DefineBibleEntry;
+using PanelForge.Application.Features.Bible.Commands.SetBibleEntryCrowd;
+using PanelForge.Application.Features.Bible.Commands.SetChapterCastRevision;
 using PanelForge.Application.Features.Bible.Commands.ConceptComments;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryEra;
@@ -393,6 +396,121 @@ public sealed class BibleController : ControllerBase
     }
 
     /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/crowd
+    /// Writer bật/tắt cờ Quần chúng cho mục Bible (BIB-13, 7A, Q19).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/crowd")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetBibleEntryCrowd(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromBody] SetBibleEntryCrowdRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SetBibleEntryCrowdCommand(seriesId, entryId, request.IsCrowd, GetCurrentUserId()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/define
+    /// Writer viết định nghĩa cho mục nháp (IsStub) (BIB-13, 4A, Q19).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/define")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DefineBibleEntry(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromBody] DefineBibleEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new DefineBibleEntryCommand(
+                SeriesId: seriesId,
+                BibleEntryId: entryId,
+                UserId: GetCurrentUserId(),
+                Name: request.Name,
+                Description: request.Description,
+                Aliases: request.Aliases,
+                Subtitle: request.Subtitle,
+                DetailsJson: request.DetailsJson,
+                ReferenceImageUrl: request.ReferenceImageUrl,
+                Priority: request.Priority,
+                StrictCheck: request.StrictCheck,
+                Code: request.Code),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/cast/{entryId}/revision
+    /// Writer đổi bản gắn cho chương hoặc trả về bản kế thừa (BIB-13, Q18, Q19, Q23, Q24).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/cast/{entryId:guid}/revision")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(SetChapterCastRevisionResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SetChapterCastRevision(
+        [FromRoute] Guid chapterId,
+        [FromRoute] Guid entryId,
+        [FromBody] SetChapterCastRevisionRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SetChapterCastRevisionCommand(chapterId, entryId, request?.RevisionId, GetCurrentUserId()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Artist tải ảnh reference sheet (PNG/JPEG/WebP, ≤ 10 MB).
     /// Trả về <c>url</c> để gửi vào <c>referenceImageUrl</c> khi tạo mục hoặc thêm revision.
     /// </summary>
@@ -668,3 +786,20 @@ public sealed class BibleController : ControllerBase
         return Ok(result.Value);
     }
 }
+
+public sealed record SetBibleEntryCrowdRequest(bool IsCrowd);
+
+public sealed record SetChapterCastRevisionRequest(Guid? RevisionId = null);
+
+public sealed record DefineBibleEntryRequest(
+    string Name,
+    string Description,
+    IReadOnlyList<string>? Aliases = null,
+    string? Subtitle = null,
+    string? DetailsJson = null,
+    string? ReferenceImageUrl = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true,
+    string? Code = null
+);
+
