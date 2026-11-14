@@ -9,8 +9,6 @@ public sealed record ScriptLineDto(
     Guid Id,
     Guid SceneId,
     int LineOrder,
-    [property: Obsolete("Removed in BIB-17. Use SpeakerLabel instead.")]
-    Guid? SpeakerCharacterId,
     string? DialogueText,
     string? StageDirection,
     Guid? PanelId,
@@ -26,7 +24,7 @@ public sealed record ScriptLineDto(
     public bool Replayed { get; init; }
 
     internal static ScriptLineDto From(ScriptLine l, long chapterVersion, Guid revisionId, IReadOnlyList<Guid> bibleEntryIds) =>
-        new(l.Id, l.SceneId, l.LineOrder, null, l.DialogueText, l.StageDirection, l.PanelId, chapterVersion, revisionId,
+        new(l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.PanelId, chapterVersion, revisionId,
             bibleEntryIds, l.NarrationMode, l.Kind, l.SpeakerLabel, l.Text);
 }
 
@@ -71,7 +69,7 @@ public sealed record ScriptLineRefInput(
 );
 
 public sealed record ScriptRevisionLineDto(
-    Guid LineId, int LineOrder, [property: Obsolete("Removed in BIB-17. Use SpeakerLabel instead.")] Guid? SpeakerCharacterId, string? DialogueText, string? StageDirection);
+    Guid LineId, int LineOrder, string? DialogueText, string? StageDirection);
 
 /// <param name="IsCurrent">true = đây là revision Script mới nhất của Scene (không khôi phục được vì đã là bản hiện tại).</param>
 /// <param name="SourceSuggestionId">Đề xuất AI sinh ra revision này; null = sửa tay, baseline hoặc khôi phục.</param>
