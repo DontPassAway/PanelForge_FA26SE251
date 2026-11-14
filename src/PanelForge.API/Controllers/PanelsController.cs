@@ -148,6 +148,7 @@ public sealed class PanelsController : ControllerBase
     /// PUT /api/panels/{panelId}/direction
     /// Cập nhật mô tả hướng vẽ / chỉ dẫn hình ảnh của Panel (V1.2 / SCR-07).
     /// </summary>
+    [Obsolete("Use PUT /api/chapters/{id}/script")]
     [HttpPut("api/panels/{panelId:guid}/direction")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist)]
     [ProducesResponseType(typeof(PanelDto), StatusCodes.Status200OK)]

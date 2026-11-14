@@ -228,31 +228,8 @@ public sealed class ScriptLifecycleCommandHandler :
                 ResultErrorCodes.Conflict);
         }
 
-        try
-        {
-            chapter.SubmitScript(cmd.UserId, version.Id);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Result<ChapterDetailDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
-        }
-        version.MarkSubmitted(cmd.UserId);
-        chapter.UpdatedBy = cmd.UserId.ToString();
-
-        // Báo Editor (góp ý) và Producer (Start Production)
-        var recipients = await _db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.UserId != cmd.UserId &&
-                        (m.Role == WorkspaceRole.Editor || m.Role == WorkspaceRole.Producer))
-            .Select(m => m.UserId).Distinct().ToListAsync(ct);
-        foreach (var userId in recipients)
-        {
-            _db.Notifications.Add(Notification.Create(
-                userId,
-                NotificationType.AssignmentSubmitted,
-                $"Kịch bản Chương {chapter.ChapterNumber} chờ duyệt",
-                $"Writer đã gửi duyệt kịch bản Chương {chapter.ChapterNumber}. Editor góp ý theo dòng; Producer bấm Bắt đầu sản xuất khi sẵn sàng.",
-                chapterId: chapter.Id));
-        }
+        if (await ScriptSubmitRules.ApplySubmitAsync(_db, chapter, version, cmd.UserId, workspaceId, ct) is { } submitError)
+            return Result<ChapterDetailDto>.Failure(submitError, ResultErrorCodes.Conflict);
 
         await _db.SaveChangesAsync(ct);
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
@@ -468,47 +445,5 @@ public sealed class RejectScriptReopenCommandHandler : IRequestHandler<RejectScr
         }
 
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
-    }
-}
-
-internal static class ChapterDetailDtoFactory
-{
-    public static ChapterDetailDto Create(Chapter chapter)
-    {
-        var scenes = chapter.Scenes.OrderBy(s => s.SceneNumber).Select(s => new ChapterSceneSummaryDto(
-            s.Id, s.SceneNumber, s.Heading, s.Summary)).ToList();
-        var pages = chapter.Pages.OrderBy(p => p.PageNumber).Select(p => new ChapterPageSummaryDto(
-            p.Id, p.PageNumber, p.LayoutFormat.ToString(), p.WidthPx, p.HeightPx, p.Dpi)).ToList();
-
-        return new ChapterDetailDto(
-            Id: chapter.Id,
-            SeriesId: chapter.SeriesId,
-            ChapterNumber: chapter.ChapterNumber,
-            Title: chapter.Title,
-            TargetReleaseDate: chapter.TargetReleaseDate,
-            VersionVector: chapter.VersionVector,
-            CreatedAt: chapter.CreatedAt,
-            UpdatedAt: chapter.UpdatedAt,
-            CreatedBy: chapter.CreatedBy,
-            Scenes: scenes,
-            Pages: pages,
-            Status: chapter.Status,
-            PublishedAt: chapter.PublishedAt,
-            Outline: chapter.Outline,
-            IsScriptFrozen: chapter.IsScriptFrozen,
-            ScriptFrozenAt: chapter.ScriptFrozenAt,
-            ScriptFrozenById: chapter.ScriptFrozenById,
-            ScriptReopenStatus: chapter.ScriptReopenStatus,
-            ScriptReopenReason: chapter.ScriptReopenReason,
-            ScriptReopenRequestedById: chapter.ScriptReopenRequestedById,
-            ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt,
-            ScriptContentHash: chapter.ScriptContentHash,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
-            ScriptStatus: chapter.ScriptStatus,
-            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
-            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
-            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
-        );
     }
 }

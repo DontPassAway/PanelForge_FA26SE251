@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Panels.Models;
+using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
 namespace PanelForge.Application.Features.Panels.Commands.UpdatePanelDirection;
@@ -43,15 +44,8 @@ public sealed class UpdatePanelDirectionCommandHandler : IRequestHandler<UpdateP
                 $"Panel Ä‘Ã£ Ä‘Æ°á»£c ngÆ°á» i khÃ¡c sá»­a (version hiá»‡n táº¡i {panel.Version}, báº¡n Ä‘ang sá»­a báº£n {expected}). Táº£i láº¡i rá»“i thá»­ láº¡i.",
                 ResultErrorCodes.Conflict);
 
-        try
-        {
-            panel.UpdateDirection(command.Direction);
-            panel.UpdatedBy = command.UserId.ToString();
-        }
-        catch (ArgumentException ex)
-        {
-            return Result<PanelDto>.Failure(ex.Message);
-        }
+        if (ScriptStructureRules.ApplyDirection(panel, command.Direction, command.UserId) is { } directionError)
+            return Result<PanelDto>.Failure(directionError);
 
         try
         {

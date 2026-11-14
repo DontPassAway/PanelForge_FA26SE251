@@ -34,6 +34,8 @@ using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript;
+using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -271,6 +273,42 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new GetChapterCastQuery(chapterId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
+    /// PUT /api/chapters/{chapterId}/script — SCR-14: lưu cả cây Trang → Panel → dòng của chương trong một request, một transaction.
+    /// </summary>
+    [HttpPut("api/chapters/{chapterId:guid}/script")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(SaveChapterScriptResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SaveChapterScript(
+        [FromRoute] Guid chapterId,
+        [FromBody] ChapterScriptBody body,
+        [FromQuery] string? message,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new SaveChapterScriptCommand(chapterId, GetCurrentUserId(), body, message), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/script/submit — SCR-14: lưu cả kịch bản rồi gửi duyệt trong cùng một transaction.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script/submit")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(SubmitChapterScriptResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SubmitChapterScript(
+        [FromRoute] Guid chapterId,
+        [FromBody] ChapterScriptBody body,
+        [FromQuery] string? message,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new SubmitChapterScriptCommand(chapterId, GetCurrentUserId(), body, message), cancellationToken));
+
+    /// <summary>
     /// POST /api/chapters/{chapterId}/submit-script — D12: Writer nộp kịch bản (Draft → InReview), kịch bản khoá sửa.
     /// 409 nếu kịch bản không ở Draft; 400 nếu kịch bản trống; 403 nếu không phải Writer.
     /// </summary>
@@ -307,6 +345,7 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new GetScriptVersionQuery(chapterId, versionId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>POST /api/chapters/{chapterId}/script-versions — lưu = commit (trùng nội dung bản gần nhất thì trả lại bản đó).</summary>
+    [Obsolete("Use PUT /api/chapters/{id}/script")]
     [HttpPost("api/chapters/{chapterId:guid}/script-versions")]
     [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(ScriptVersionSummaryDto), StatusCodes.Status200OK)]

@@ -89,6 +89,7 @@ public sealed class PagesController : ControllerBase
     /// PUT /api/chapters/{chapterId}/script-structure
     /// Lưu khung Trang → Panel → dòng kịch bản từ trình soạn script trong một transaction. Không xoá Page/Panel.
     /// </summary>
+    [Obsolete("Use PUT /api/chapters/{id}/script")]
     [HttpPut("api/chapters/{chapterId:guid}/script-structure")]
     [RequireWorkspaceRole(WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(SyncScriptStructureResult), StatusCodes.Status200OK)]
