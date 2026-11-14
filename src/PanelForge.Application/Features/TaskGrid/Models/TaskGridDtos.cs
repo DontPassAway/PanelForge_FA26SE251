@@ -49,6 +49,12 @@ public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotReques
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
+/// <summary>Nhận xét bắt buộc (BR-06), lưu vào lần nộp bị từ chối và gửi người làm.</summary>
+public sealed record RequestStageTaskChangesRequest(string Comment);
+
+public sealed record StageTaskSubmissionDto(Guid Id, int AttemptNumber, string Status, Guid SubmittedByUserId, DateTime SubmittedAt,
+    IReadOnlyList<Guid> ArtworkReferenceIds, Guid? DecidedByUserId, DateTime? DecidedAt, string? DecisionComment);
+
 public sealed record UnassignStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
 /// <summary>Reason bắt buộc; ghi vào OutdatedReason của các ô hạ nguồn bị gắn cờ.</summary>

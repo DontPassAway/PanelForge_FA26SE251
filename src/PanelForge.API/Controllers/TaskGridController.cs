@@ -15,6 +15,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
+using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -78,8 +79,15 @@ public sealed class TaskGridController : ControllerBase
     [HttpPost("tasks/{taskId:guid}/request-changes")]
     [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> RequestChanges(Guid chapterId, Guid taskId, CancellationToken ct) =>
-        ToResult(await _mediator.Send(new RequestStageTaskChangesCommand(chapterId, taskId, CurrentUserId), ct));
+    public async Task<IActionResult> RequestChanges(Guid chapterId, Guid taskId, [FromBody] RequestStageTaskChangesRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new RequestStageTaskChangesCommand(chapterId, taskId, CurrentUserId, body.Comment), ct));
+
+    /// <summary>GET /tasks/{taskId}/submissions — lịch sử lần nộp của ô, mới nhất trước.</summary>
+    [HttpGet("tasks/{taskId:guid}/submissions")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist, WorkspaceRole.Letterer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(IReadOnlyList<StageTaskSubmissionDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Submissions(Guid chapterId, Guid taskId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new GetStageTaskSubmissionsQuery(chapterId, taskId), ct));
 
     /// <summary>POST /tasks/{taskId}/reopen — Producer mở lại ô đã duyệt; ô hạ nguồn đã bắt đầu bị gắn cờ lỗi thời.</summary>
     [HttpPost("tasks/{taskId:guid}/reopen")]

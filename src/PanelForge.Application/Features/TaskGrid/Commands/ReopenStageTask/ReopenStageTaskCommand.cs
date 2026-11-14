@@ -54,6 +54,14 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         }
 
         task.UpdatedBy = cmd.UserId.ToString();
+        var reason = cmd.Reason.Trim();
+        var assigneeByLot = await TaskGridNotifications.AssigneesByLotAsync(_db, chapterTasks.Where(t => t.Id == task.Id || outdated.Contains(t.Id)), ct);
+        if (task.LotId is { } ownLot && assigneeByLot.TryGetValue(ownLot, out var owner))
+            _db.Notifications.Add(TaskGridNotifications.ChangesRequested(owner, chapter.Id, stageName, $"Producer mở lại ô đã duyệt: {reason}"));
+        foreach (var group in chapterTasks.Where(t => outdated.Contains(t.Id) && t.LotId is not null)
+                     .GroupBy(t => assigneeByLot.GetValueOrDefault(t.LotId!.Value)).Where(g => g.Key != Guid.Empty))
+            _db.Notifications.Add(TaskGridNotifications.InputOutdated(group.Key, chapter.Id, group.Count(), $"{stageName} được mở lại: {reason}"));
+
         await TaskGridRules.RefreshLotsAsync(_db, [task.LotId], [task], ct);
         await _db.SaveChangesAsync(ct);
 

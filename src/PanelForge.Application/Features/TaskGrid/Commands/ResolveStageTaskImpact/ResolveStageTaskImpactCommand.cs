@@ -36,6 +36,7 @@ public sealed class ResolveStageTaskImpactCommandHandler : IRequestHandler<Resol
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
         task.UpdatedBy = cmd.UserId.ToString();
+        if (!cmd.Keep && await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } pending) pending.Supersede();
         await TaskGridRules.RefreshLotsAsync(_db, [task.LotId], [task], ct);
         await _db.SaveChangesAsync(ct);
 

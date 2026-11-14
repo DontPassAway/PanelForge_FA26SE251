@@ -61,6 +61,12 @@ internal static class TaskGridRules
             .ToList();
     }
 
+    /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>
+    public static Task<StageTaskSubmission?> PendingSubmissionAsync(IPanelForgeDbContext db, StageTask task, CancellationToken ct) =>
+        task.CurrentSubmissionId is { } id
+            ? db.StageTaskSubmissions.FirstOrDefaultAsync(s => s.Id == id && s.Status == SubmissionStatus.Pending, ct)
+            : Task.FromResult<StageTaskSubmission?>(null);
+
     public static async Task RefreshLotsAsync(IPanelForgeDbContext db, IEnumerable<Guid?> lotIds, IReadOnlyList<StageTask> changed, CancellationToken ct)
     {
         var ids = lotIds.OfType<Guid>().Distinct().ToList();

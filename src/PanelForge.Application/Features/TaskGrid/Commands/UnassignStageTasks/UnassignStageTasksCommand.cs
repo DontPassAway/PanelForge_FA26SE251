@@ -49,6 +49,11 @@ public sealed class UnassignStageTasksCommandHandler : IRequestHandler<UnassignS
         }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
+        var assigneeByLot = await _db.StageTaskLots.AsNoTracking().Where(l => oldLotIds.Contains((Guid?)l.Id))
+            .ToDictionaryAsync(l => l.Id, l => l.AssigneeUserId, ct);
+        foreach (var group in oldLotIds.OfType<Guid>().GroupBy(id => assigneeByLot.GetValueOrDefault(id)).Where(g => g.Key != Guid.Empty))
+            _db.Notifications.Add(TaskGridNotifications.Unassigned(group.Key, chapter.Id, group.Count()));
+
         await TaskGridRules.RefreshLotsAsync(_db, oldLotIds, tasks, ct);
         await _db.SaveChangesAsync(ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(

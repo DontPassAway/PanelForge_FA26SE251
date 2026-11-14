@@ -31,7 +31,8 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
 
         await _db.LockChapterAsync(chapter.Id, ct);
 
-        var task = await _db.StageTasks.FirstOrDefaultAsync(t => t.Id == cmd.TaskId && t.ChapterId == chapter.Id, ct);
+        var chapterTasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id).ToListAsync(ct);
+        var task = chapterTasks.FirstOrDefault(t => t.Id == cmd.TaskId);
         if (task is null) return Fail($"Ô {cmd.TaskId} không thuộc chương này.", ResultErrorCodes.NotFound);
 
         var lot = task.LotId is { } lotId ? await _db.StageTaskLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct) : null;
@@ -48,6 +49,12 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
         task.UpdatedBy = cmd.UserId.ToString();
+        if (await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } submission) submission.Approve(cmd.UserId);
+
+        var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
+        var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
+        if (lot is not null) _db.Notifications.Add(TaskGridNotifications.Approved(lot.AssigneeUserId, chapter.Id, stageName));
+        await TaskGridNotifications.AddReadyAsync(_db, [task], stages, chapterTasks, chapter.Id, ct);
         await TaskGridRules.RefreshLotsAsync(_db, [task.LotId], [task], ct);
         await _db.SaveChangesAsync(ct);
         return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false));

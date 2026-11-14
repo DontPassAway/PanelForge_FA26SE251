@@ -66,6 +66,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<StageProgress> StageProgresses => Set<StageProgress>();
     public DbSet<StageTask> StageTasks => Set<StageTask>();
     public DbSet<StageTaskLot> StageTaskLots => Set<StageTaskLot>();
+    public DbSet<StageTaskSubmission> StageTaskSubmissions => Set<StageTaskSubmission>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Submission> Submissions => Set<Submission>();
     public DbSet<ChangeRequest> ChangeRequests => Set<ChangeRequest>();

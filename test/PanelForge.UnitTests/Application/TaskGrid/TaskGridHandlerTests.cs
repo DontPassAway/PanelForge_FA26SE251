@@ -13,6 +13,8 @@ using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
+using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
+using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
@@ -37,6 +39,8 @@ public class TaskGridHandlerTests
         public readonly List<Page> Pages = [];
         public readonly List<StageTask> Tasks = [];
         public readonly List<StageTaskLot> Lots = [];
+        public readonly List<StageTaskSubmission> Submissions = [];
+        public readonly List<Notification> Notifications = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
 
         public Fixture()
@@ -76,6 +80,10 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.Pages).Returns(DbSetMockHelper.CreateDbSetMock(Pages));
             Db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(Tasks));
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
+            Db.Setup(d => d.StageTaskSubmissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
+            Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
+            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
+            Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(new List<AssetReference>()));
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(members));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
@@ -272,11 +280,18 @@ public class TaskGridHandlerTests
         await f.Submit(f.ArtistId, color);
 
         var handler = new RequestStageTaskChangesCommandHandler(f.Db.Object);
-        (await handler.Handle(new(f.Chapter.Id, color.Id, f.ArtistId), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
-        (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId), default)).IsSuccess.Should().BeTrue();
+        (await handler.Handle(new(f.Chapter.Id, color.Id, f.ArtistId, "x"), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default)).IsSuccess.Should().BeTrue();
 
         color.Status.Should().Be(StageTaskStatus.ReworkRequired);
         (await f.Start(color, f.ArtistId)).IsSuccess.Should().BeTrue();
+
+        // Lịch sử: lần nộp 1 bị từ chối kèm nhận xét; người làm được báo
+        var history = f.Submissions.Where(s => s.StageTaskId == color.Id).ToList();
+        history.Should().ContainSingle().Which.Should().Match<StageTaskSubmission>(s =>
+            s.AttemptNumber == 1 && s.Status == SubmissionStatus.Rejected && s.DecisionComment == "Màu da lệch");
+        f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentChangesRequested);
+        (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId, " "), default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 
     /// <summary>Mở lại Pencil: Ink và Lettering (đã bắt đầu, cả hai nhánh) bị gắn cờ; Color chưa bắt đầu thì không.</summary>
@@ -337,5 +352,60 @@ public class TaskGridHandlerTests
         ink.Status.Should().Be(StageTaskStatus.Unassigned);
         f.Lots.Single(l => l.PipelineStageId == f.Ink.Id).Status.Should().Be(StageTaskLotStatus.Closed);
         (await f.Assign(false, f.Lot(f.Ink, f.ArtistId, ink))).IsSuccess.Should().BeTrue();
+    }
+
+    /// <summary>BR-01 + BR-14: mỗi lần nộp ghi một bản; công đoạn không cổng tự duyệt; duyệt báo người làm và người kế tiếp.</summary>
+    [Fact]
+    public async Task Submissions_AreRecordedPerAttempt_AndNotificationsReachAssignees()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        f.Notifications.Where(n => n.Type == NotificationType.AssignmentAssigned).Select(n => n.UserId)
+            .Should().BeEquivalentTo([f.ArtistId, f.ArtistId, f.ArtistId, f.LettererId]);
+
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        await f.Submit(f.ArtistId, pencil);
+
+        // Pencil không có cổng: lần nộp tự duyệt, Ink (Artist) và Lettering (Letterer) được báo đến lượt
+        var first = f.Submissions.Single(s => s.StageTaskId == pencil.Id);
+        first.Status.Should().Be(SubmissionStatus.Approved);
+        pencil.CurrentSubmissionId.Should().Be(first.Id);
+        f.Notifications.Where(n => n.Type == NotificationType.AssignmentReady).Select(n => n.UserId)
+            .Should().BeEquivalentTo([f.ArtistId, f.LettererId]);
+
+        var ink = f.Cell(f.Ink, 0);
+        await f.Start(ink, f.ArtistId);
+        await f.Submit(f.ArtistId, ink);
+        var color = f.Cell(f.Color, 0);
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+        await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Sửa"), default);
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+        (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
+
+        var history = await new GetStageTaskSubmissionsQueryHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id), default);
+        history.Value!.Select(s => (s.AttemptNumber, s.Status)).Should().Equal((2, "Approved"), (1, "Rejected"));
+        f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentApproved);
+    }
+
+    [Fact]
+    public async Task Reopen_And_Unassign_NotifyAffectedAssignees()
+    {
+        var f = new Fixture();
+        var (pencil, ink, _) = await PencilDoneInkAndLetteringStarted(f);
+        f.Notifications.Clear();
+
+        await new ReopenStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, pencil.Id, f.ProducerId, "Sai bố cục"), default);
+        f.Notifications.Where(n => n.Type == NotificationType.AssignmentUpdated).Select(n => n.UserId)
+            .Should().BeEquivalentTo([f.ArtistId, f.LettererId]);
+        f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentChangesRequested);
+
+        await f.Start(pencil, f.ArtistId);
+        await f.Submit(f.ArtistId, pencil);
+        await new ResolveStageTaskImpactCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, ink.Id, f.ProducerId, Keep: true), default);
+        await new UnassignStageTasksCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, [ink.Id], f.ProducerId), default);
+        f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentUnassigned);
     }
 }

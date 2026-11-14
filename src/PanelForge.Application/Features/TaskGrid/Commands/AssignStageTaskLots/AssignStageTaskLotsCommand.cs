@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
@@ -85,6 +86,7 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
             lot.CreatedBy = cmd.UserId.ToString();
             _db.StageTaskLots.Add(lot);
             foreach (var task in lotTasks) task.AssignTo(lot.Id);
+            _db.Notifications.Add(TaskGridNotifications.Assigned(lot, lotTasks.Count, stages[lot.PipelineStageId].Name));
         }
 
         await _db.SaveChangesAsync(ct);

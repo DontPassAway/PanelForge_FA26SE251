@@ -5043,6 +5043,94 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("stage_task_lots", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTaskSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<List<Guid>>("ArtworkReferenceIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("artwork_reference_ids");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_number");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_user_id");
+
+                    b.Property<string>("DecisionComment")
+                        .HasColumnType("text")
+                        .HasColumnName("decision_comment");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("StageTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_task_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_user_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .HasDatabaseName("ix_stage_task_submissions_chapter_id");
+
+                    b.HasIndex("StageTaskId", "AttemptNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stage_task_submissions_task_attempt");
+
+                    b.ToTable("stage_task_submissions", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTransition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6230,6 +6318,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", null)
                         .WithMany()
                         .HasForeignKey("PipelineStageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTaskSubmission", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Workflow.StageTask", null)
+                        .WithMany()
+                        .HasForeignKey("StageTaskId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

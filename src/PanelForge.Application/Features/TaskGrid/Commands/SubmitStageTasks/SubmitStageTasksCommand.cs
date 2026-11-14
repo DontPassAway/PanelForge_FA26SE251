@@ -5,12 +5,13 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Application.Features.TaskGrid.Models;
+using PanelForge.Domain.Entities.Workflow;
 
 namespace PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 
 /// <summary>
 /// Người nhận nộp một danh sách ô (không khoá theo cả lô), tất cả hoặc không. Công đoạn có cổng duyệt → Submitted,
-/// không có → tự duyệt. Chưa ghi bảng Submission (còn gắn với Assignment cũ), sẽ nối ở lát cắt sau.
+/// không có → tự duyệt. Mỗi ô ghi một <see cref="StageTaskSubmission"/> chụp các AssetReference mới nhất của ô (BR-01).
 /// </summary>
 public sealed record SubmitStageTasksCommand(Guid ChapterId, IReadOnlyList<Guid> TaskIds, Guid UserId)
     : IRequest<Result<IReadOnlyList<StageTaskDto>>>;
@@ -35,30 +36,44 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
 
         await _db.LockChapterAsync(chapter.Id, ct);
 
-        var tasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id && ids.Contains(t.Id)).ToListAsync(ct);
+        var chapterTasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id).ToListAsync(ct);
+        var tasks = chapterTasks.Where(t => ids.Contains(t.Id)).ToList();
         if (tasks.Count != ids.Count) return Fail("Có ô không thuộc chương này.", ResultErrorCodes.NotFound);
 
-        var lotIds = tasks.Select(t => t.LotId).OfType<Guid>().Distinct().ToList();
-        var assigneeByLot = await _db.StageTaskLots.AsNoTracking().Where(l => lotIds.Contains(l.Id))
-            .ToDictionaryAsync(l => l.Id, l => l.AssigneeUserId, ct);
+        var assigneeByLot = await TaskGridNotifications.AssigneesByLotAsync(_db, tasks, ct);
         if (tasks.Any(t => t.LotId is not { } lotId || assigneeByLot.GetValueOrDefault(lotId) != cmd.UserId))
             return Fail("Chỉ nộp được ô mình được giao.", ResultErrorCodes.Forbidden);
 
-        var stageIds = tasks.Select(t => t.PipelineStageId).Distinct().ToList();
-        var gateByStage = await _db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id, s => s.IsApprovalGate, ct);
+        var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
+        var gateByStage = stages.ToDictionary(s => s.Id, s => s.IsApprovalGate);
 
-        try
+        // Ảnh chụp lúc nộp: ô cấp Trang lấy trang của nó, ô cấp Chương lấy mọi trang còn sống của chương
+        var chapterPageIds = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
+        var alivePanelIds = await _db.Panels.AsNoTracking().Where(p => chapterPageIds.Contains(p.PageId)).Select(p => p.Id).ToListAsync(ct);
+        var taskIds = tasks.Select(t => t.Id).ToList();
+        var attempts = await _db.StageTaskSubmissions.AsNoTracking().Where(s => taskIds.Contains(s.StageTaskId))
+            .GroupBy(s => s.StageTaskId).Select(g => new { g.Key, Max = g.Max(s => s.AttemptNumber) })
+            .ToDictionaryAsync(x => x.Key, x => x.Max, ct);
+
+        var autoApproved = new List<StageTask>();
+        foreach (var task in tasks)
         {
-            foreach (var task in tasks)
-            {
-                task.Submit(submissionId: null, isApprovalGate: gateByStage.GetValueOrDefault(task.PipelineStageId));
-                task.UpdatedBy = cmd.UserId.ToString();
-            }
-        }
-        catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
+            var gated = gateByStage.GetValueOrDefault(task.PipelineStageId);
+            var artwork = await ChangeRequestRules.LatestArtworkIdsAsync(_db, task.PipelineStageId,
+                task.PageId is { } pageId ? [pageId] : chapterPageIds, alivePanelIds, ct);
+            var submission = StageTaskSubmission.Create(task.Id, chapter.Id, cmd.UserId,
+                attempts.GetValueOrDefault(task.Id) + 1, artwork, autoApproved: !gated);
+            try { task.Submit(submission.Id, gated); }
+            catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
-        await TaskGridRules.RefreshLotsAsync(_db, lotIds.Cast<Guid?>(), tasks, ct);
+            submission.CreatedBy = task.UpdatedBy = cmd.UserId.ToString();
+            _db.StageTaskSubmissions.Add(submission);
+            if (!gated) autoApproved.Add(task);
+        }
+
+        if (autoApproved.Count > 0)
+            await TaskGridNotifications.AddReadyAsync(_db, autoApproved, stages, chapterTasks, chapter.Id, ct);
+        await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(
             tasks.Select(t => StageTaskDto.From(t, cmd.UserId, isStartable: false)).ToList());

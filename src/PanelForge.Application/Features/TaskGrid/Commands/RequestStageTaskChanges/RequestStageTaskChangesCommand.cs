@@ -9,8 +9,8 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 
-/// <summary>Editor/Producer trả ô đã nộp về ReworkRequired (BR-06: khác người làm; ô đang do người khác duyệt thì không chồng).</summary>
-public sealed record RequestStageTaskChangesCommand(Guid ChapterId, Guid TaskId, Guid UserId) : IRequest<Result<StageTaskDto>>;
+/// <summary>Editor/Producer trả ô đã nộp về ReworkRequired kèm nhận xét bắt buộc (BR-06: khác người làm; ô đang do người khác duyệt thì không chồng).</summary>
+public sealed record RequestStageTaskChangesCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Comment) : IRequest<Result<StageTaskDto>>;
 
 public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<RequestStageTaskChangesCommand, Result<StageTaskDto>>
 {
@@ -21,6 +21,8 @@ public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<Requ
     public async Task<Result<StageTaskDto>> Handle(RequestStageTaskChangesCommand cmd, CancellationToken ct)
     {
         static Result<StageTaskDto> Fail(string msg, string code) => Result<StageTaskDto>.Failure(msg, code);
+
+        if (string.IsNullOrWhiteSpace(cmd.Comment)) return Fail("Trả về phải kèm nhận xét (BR-06).", ResultErrorCodes.Validation);
 
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
@@ -47,6 +49,10 @@ public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<Requ
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
         task.UpdatedBy = cmd.UserId.ToString();
+        if (await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } submission) submission.Reject(cmd.UserId, cmd.Comment);
+        if (lot is not null)
+            _db.Notifications.Add(TaskGridNotifications.ChangesRequested(lot.AssigneeUserId, chapter.Id,
+                stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?", cmd.Comment.Trim()));
         await _db.SaveChangesAsync(ct);
         return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false));
     }
