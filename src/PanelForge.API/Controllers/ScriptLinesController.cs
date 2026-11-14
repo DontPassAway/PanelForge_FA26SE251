@@ -44,6 +44,7 @@ public sealed class ScriptLinesController : ControllerBase
     }
 
     /// <summary>POST /api/chapters/{chapterId}/scenes/{sceneId}/script-lines/batch — Lưu đồng bộ hàng loạt các dòng kịch bản trong 1 giao dịch duy nhất.</summary>
+    [Obsolete("Use PUT /api/chapters/{id}/script")]
     [HttpPost("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-lines/batch")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(BatchSaveScriptLinesResult), StatusCodes.Status200OK)]

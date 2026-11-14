@@ -75,12 +75,8 @@ public sealed class BatchSaveScriptLinesCommandHandler
             var existingLineCheck = targetIdCheck.HasValue && existingMap.TryGetValue(targetIdCheck.Value, out var foundCheck) ? foundCheck : null;
             var effectiveKind = item.Kind ?? existingLineCheck?.Kind ?? ScriptLineKind.Action;
 
-            if (item.Refs is { Count: > 0 } && effectiveKind is not (ScriptLineKind.Action or ScriptLineKind.Narration or ScriptLineKind.Sfx))
-            {
-                return Result<BatchSaveScriptLinesResult>.Failure(
-                    $"Dòng {item.LineOrder}: Chỉ cho phép gắn tham chiếu Series Bible trên dòng Action, Narration hoặc Sfx.",
-                    ResultErrorCodes.Validation);
-            }
+            if (ScriptBibleRefs.ValidateKind(item.Refs, effectiveKind, $"Dòng {item.LineOrder}") is { } kindError)
+                return Result<BatchSaveScriptLinesResult>.Failure(kindError, ResultErrorCodes.Validation);
 
             if (await ScriptLineRules.ValidateSpeakerAsync(_db, chapter.SeriesId, item.SpeakerCharacterId, ct) is { } speakerError)
                 return Result<BatchSaveScriptLinesResult>.Failure(speakerError, ResultErrorCodes.Validation);
@@ -90,15 +86,7 @@ public sealed class BatchSaveScriptLinesCommandHandler
         }
 
         // 4. SeriesBible của Series
-        var seriesBible = await _db.SeriesBibles.FirstOrDefaultAsync(b => b.SeriesId == chapter.SeriesId, ct);
-        if (seriesBible is null)
-        {
-            var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
-            var workspaceId = series?.WorkspaceId ?? Guid.Empty;
-            seriesBible = SeriesBible.Create(chapter.SeriesId, workspaceId, "Series Bible");
-            _db.SeriesBibles.Add(seriesBible);
-            await _db.SaveChangesAsync(ct);
-        }
+        var seriesBible = await ScriptBibleRefs.GetOrAddBibleAsync(_db, chapter.SeriesId, ct);
 
         var beforeSnapshot = ScriptLineRules.Snapshot(existingLines);
 
@@ -164,142 +152,8 @@ public sealed class BatchSaveScriptLinesCommandHandler
             finalLiveLines.Add(line);
 
             // Xử lý tham chiếu Series Bible (BIB-12, 1A, 2A, 5A)
-            var lineFullText = line.Text ?? line.DialogueText ?? line.StageDirection ?? string.Empty;
-            var normLineText = BibleNameNormalizer.Normalize(lineFullText);
-
-            if (item.Refs is not null)
-            {
-                var validRefs = new List<(Guid BibleEntryId, string SurfaceText)>();
-                var seenEntries = new HashSet<Guid>();
-
-                foreach (var r in item.Refs)
-                {
-                    if (string.IsNullOrWhiteSpace(r.SurfaceText))
-                        continue;
-
-                    var normSurface = BibleNameNormalizer.Normalize(r.SurfaceText);
-                    if (string.IsNullOrEmpty(normSurface) || !normLineText.Contains(normSurface))
-                    {
-                        warnings.Add($"Dòng {item.LineOrder}: tham chiếu '{r.SurfaceText}' không có trong nội dung dòng.");
-                        continue;
-                    }
-
-                    Guid? targetEntryId = null;
-                    if (r.BibleEntryId.HasValue)
-                    {
-                        var entry = await _db.BibleEntries.AsNoTracking()
-                            .FirstOrDefaultAsync(e => e.Id == r.BibleEntryId.Value && e.SeriesBibleId == seriesBible.Id, ct);
-                        if (entry is null || !entry.IsActive)
-                        {
-                            return Result<BatchSaveScriptLinesResult>.Failure(
-                                $"Dòng {item.LineOrder}: Mục Bible '{r.BibleEntryId}' không tồn tại hoặc đã bị vô hiệu hóa.",
-                                ResultErrorCodes.Validation);
-                        }
-                        if (entry.Category is not (BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop))
-                        {
-                            return Result<BatchSaveScriptLinesResult>.Failure(
-                                $"Dòng {item.LineOrder}: Chỉ cho phép tham chiếu mục Nhân vật, Địa điểm hoặc Đạo cụ.",
-                                ResultErrorCodes.Validation);
-                        }
-                        targetEntryId = entry.Id;
-                    }
-                    else if (r.NewDraft is not null)
-                    {
-                        var draftName = r.NewDraft.Name?.Trim();
-                        if (string.IsNullOrWhiteSpace(draftName))
-                        {
-                            warnings.Add($"Dòng {item.LineOrder}: tên mục nháp không được để trống.");
-                            continue;
-                        }
-                        if (r.NewDraft.Category is not (BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop))
-                        {
-                            return Result<BatchSaveScriptLinesResult>.Failure(
-                                $"Dòng {item.LineOrder}: Mục nháp phải thuộc danh mục Nhân vật, Địa điểm hoặc Đạo cụ.",
-                                ResultErrorCodes.Validation);
-                        }
-
-                        var normDraftName = BibleNameNormalizer.Normalize(draftName);
-                        var localName = _db.BibleEntryNames.Local.FirstOrDefault(
-                            n => n.SeriesBibleId == seriesBible.Id && n.NormalizedName == normDraftName);
-                        if (localName is not null)
-                        {
-                            targetEntryId = localName.BibleEntryId;
-                        }
-                        else
-                        {
-                            var existingName = await _db.BibleEntryNames.FirstOrDefaultAsync(
-                                n => n.SeriesBibleId == seriesBible.Id && n.NormalizedName == normDraftName, ct);
-                            if (existingName is not null)
-                            {
-                                targetEntryId = existingName.BibleEntryId;
-                            }
-                            else
-                            {
-                                var stub = BibleEntry.CreateStub(seriesBible.Id, r.NewDraft.Category, draftName, description: "");
-                                _db.BibleEntries.Add(stub);
-                                var entryName = BibleEntryName.Create(seriesBible.Id, draftName, stub.Id, isPrimary: true);
-                                _db.BibleEntryNames.Add(entryName);
-                                targetEntryId = stub.Id;
-                            }
-                        }
-                    }
-
-                    if (targetEntryId.HasValue && seenEntries.Add(targetEntryId.Value))
-                    {
-                        validRefs.Add((targetEntryId.Value, r.SurfaceText.Trim()));
-                    }
-                }
-
-                // Cập nhật script_line_bible_links cho dòng
-                var currentLinks = await _db.ScriptLineBibleLinks.Where(k => k.ScriptLineId == line.Id).ToListAsync(ct);
-                var wantedEntryIds = validRefs.Select(x => x.BibleEntryId).ToHashSet();
-                foreach (var oldLink in currentLinks.Where(k => !wantedEntryIds.Contains(k.BibleEntryId)))
-                {
-                    _db.ScriptLineBibleLinks.Remove(oldLink);
-                }
-
-                var existingEntryIds = currentLinks.Select(k => k.BibleEntryId).ToHashSet();
-                foreach (var (entryId, surface) in validRefs)
-                {
-                    if (!existingEntryIds.Contains(entryId))
-                    {
-                        _db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, entryId, surfaceText: surface));
-                    }
-                }
-                bibleLinksByLine[line.Id] = validRefs.Select(x => x.BibleEntryId).ToList();
-            }
-            else
-            {
-                // Chữ của dòng đổi mà không gửi lại refs: giữ tham chiếu cũ nếu surface_text còn trong chữ mới, không còn -> gỡ và cảnh báo
-                var currentLinks = await _db.ScriptLineBibleLinks.Where(k => k.ScriptLineId == line.Id).ToListAsync(ct);
-                if (currentLinks.Count > 0)
-                {
-                    var keptEntryIds = new List<Guid>();
-                    foreach (var link in currentLinks)
-                    {
-                        var normSurface = BibleNameNormalizer.Normalize(link.SurfaceText);
-                        if (!string.IsNullOrEmpty(normSurface) && normLineText.Contains(normSurface))
-                        {
-                            keptEntryIds.Add(link.BibleEntryId);
-                        }
-                        else
-                        {
-                            _db.ScriptLineBibleLinks.Remove(link);
-                            warnings.Add($"Dòng {item.LineOrder}: gỡ tham chiếu '{link.SurfaceText}' vì nội dung đã thay đổi.");
-                        }
-                    }
-                    bibleLinksByLine[line.Id] = keptEntryIds;
-                }
-                else if (item.BibleEntryIds != null)
-                {
-                    var links = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, item.BibleEntryIds, ct);
-                    bibleLinksByLine[line.Id] = links;
-                }
-                else
-                {
-                    bibleLinksByLine[line.Id] = [];
-                }
-            }
+            if (await ScriptBibleRefs.ApplyAsync(_db, seriesBible, line, $"Dòng {item.LineOrder}", item.Refs, item.BibleEntryIds, warnings, bibleLinksByLine, ct) is { } refError)
+                return Result<BatchSaveScriptLinesResult>.Failure(refError, ResultErrorCodes.Validation);
         }
 
         // 5. Xoá mềm các dòng không còn xuất hiện trong payload

@@ -78,40 +78,8 @@ public sealed class SyncScriptStructureCommandHandler
             .Where(pan => pan.CastRevisions is { Count: > 0 })
             .SelectMany(pan => pan.CastRevisions!)
             .ToList();
-
-        if (allCastRevisions.Count > 0)
-        {
-            var chapterSeriesId = await _db.Chapters.Where(c => c.Id == command.ChapterId).Select(c => c.SeriesId).FirstOrDefaultAsync(ct);
-            var seriesBible = await _db.SeriesBibles.FirstOrDefaultAsync(sb => sb.SeriesId == chapterSeriesId, ct);
-            var seriesBibleId = seriesBible?.Id ?? Guid.Empty;
-
-            var revisionIds = allCastRevisions.Select(cr => cr.RevisionId).Distinct().ToList();
-            var revisions = await _db.BibleEntryRevisions
-                .Include(r => r.BibleEntry)
-                .Where(r => revisionIds.Contains(r.Id))
-                .ToListAsync(ct);
-            var revisionMap = revisions.ToDictionary(r => r.Id);
-
-            foreach (var cr in allCastRevisions)
-            {
-                if (!revisionMap.TryGetValue(cr.RevisionId, out var rev))
-                {
-                    return Failure($"Revision '{cr.RevisionId}' không tồn tại.", ResultErrorCodes.Validation);
-                }
-                if (rev.BibleEntryId != cr.BibleEntryId)
-                {
-                    return Failure($"Revision '{cr.RevisionId}' không thuộc mục Bible '{cr.BibleEntryId}'.", ResultErrorCodes.Validation);
-                }
-                if (rev.BibleEntry.SeriesBibleId != seriesBibleId)
-                {
-                    return Failure($"Mục Bible '{cr.BibleEntryId}' không thuộc Series này.", ResultErrorCodes.Validation);
-                }
-                if (rev.IsSuperseded)
-                {
-                    return Failure($"Revision '{cr.RevisionId}' đã bị Superseded.", ResultErrorCodes.Validation);
-                }
-            }
-        }
+        if (await ScriptStructureRules.ValidateCastRevisionsAsync(_db, command.ChapterId, allCastRevisions, ct) is { } castError)
+            return Failure(castError, ResultErrorCodes.Validation);
 
         var pages = await _db.Pages.Where(p => p.ChapterId == command.ChapterId).ToListAsync(ct);
         var pageIds = pages.Select(p => p.Id).ToList();
@@ -124,27 +92,13 @@ public sealed class SyncScriptStructureCommandHandler
 
         foreach (var wantedPage in command.Pages)
         {
-            var page = pages.FirstOrDefault(p => p.PageNumber == wantedPage.PageNumber);
-            if (page is null)
-            {
-                page = Page.CreateNew(command.ChapterId, wantedPage.PageNumber, LayoutFormat.StandardPage, 1200, 1800, 300);
-                await _pageRepository.SaveAsync(page, ct);
-                _db.Pages.Add(page);
-                pages.Add(page);
-                pagesCreated++;
-            }
+            var (page, pageCreated) = await ScriptStructureRules.EnsurePageAsync(_db, _pageRepository, pages, command.ChapterId, wantedPage.PageNumber, ct);
+            if (pageCreated) pagesCreated++;
 
             foreach (var wantedPanel in wantedPage.Panels)
             {
-                var panel = panels.FirstOrDefault(p => p.PageId == page.Id && p.PanelNumber == wantedPanel.PanelNumber);
-                if (panel is null)
-                {
-                    panel = Panel.Create(page.Id, wantedPanel.PanelNumber, wantedPanel.PanelNumber, "{}");
-                    panel.CreatedBy = command.UserId.ToString();
-                    _db.Panels.Add(panel);
-                    panels.Add(panel);
-                    panelsCreated++;
-                }
+                var (panel, panelCreated) = ScriptStructureRules.EnsurePanel(_db, panels, page.Id, wantedPanel.PanelNumber, command.UserId);
+                if (panelCreated) panelsCreated++;
 
                 touchedPanelIds.Add(panel.Id);
                 foreach (var lineId in wantedPanel.ScriptLineIds)
@@ -181,32 +135,10 @@ public sealed class SyncScriptStructureCommandHandler
         foreach (var x in lines)
             x.Line.AssignToPanel(lineTarget.TryGetValue(x.Line.Id, out var panelId) ? panelId : null);
 
-        // Xoá mềm như DeletePanel / DeletePage: DbContext đổi Remove thành soft-delete; Page ghi thêm event vào stream
-        foreach (var panel in removedPanels)
-        {
-            panel.DeletedBy = command.UserId.ToString();
-            _db.Panels.Remove(panel);
-        }
-        foreach (var page in removedPages)
-        {
-            var stream = await _pageRepository.GetAsync(page.Id, ct);
-            if (stream is not null)
-            {
-                stream.Delete(command.UserId);
-                await _pageRepository.SaveAsync(stream, ct);
-            }
-            _db.Pages.Remove(page);
-        }
+        // Xoá mềm như DeletePanel / DeletePage, gồm cả panel_bible_variants mồ côi
+        await ScriptStructureRules.RemoveAsync(_db, _pageRepository, removedPages, removedPanels, command.UserId, ct);
 
-        // BIB-11, Q23, Q24: Cập nhật panel_bible_variants
-        // 1. Xoá dòng của Panel bị xoá mềm (FK cascade không chạy với xoá mềm)
-        if (removedPanelIds.Count > 0)
-        {
-            var orphanVariants = await _db.PanelBibleVariants.Where(v => removedPanelIds.Contains(v.PanelId)).ToListAsync(ct);
-            _db.PanelBibleVariants.RemoveRange(orphanVariants);
-        }
-
-        // 2. Ghi lại dòng của các Panel được giữ
+        // BIB-11, Q23, Q24: ghi lại panel_bible_variants của các Panel được giữ
         var activePanelIds = touchedPanelIds.ToList();
         var existingVariants = await _db.PanelBibleVariants.Where(v => activePanelIds.Contains(v.PanelId)).ToListAsync(ct);
         var variantsByPanel = existingVariants.GroupBy(v => v.PanelId).ToDictionary(g => g.Key, g => g.ToList());
@@ -216,30 +148,10 @@ public sealed class SyncScriptStructureCommandHandler
             var page = pages.First(p => p.PageNumber == wantedPage.PageNumber);
             foreach (var wantedPanel in wantedPage.Panels)
             {
+                if (wantedPanel.CastRevisions is null) continue;
                 var panel = panels.First(p => p.PageId == page.Id && p.PanelNumber == wantedPanel.PanelNumber);
-                var currentVars = variantsByPanel.GetValueOrDefault(panel.Id, []);
-
-                if (wantedPanel.CastRevisions is not null)
-                {
-                    var wantedEntryIds = wantedPanel.CastRevisions.Select(x => x.BibleEntryId).ToHashSet();
-                    foreach (var oldVar in currentVars.Where(v => !wantedEntryIds.Contains(v.BibleEntryId)))
-                    {
-                        _db.PanelBibleVariants.Remove(oldVar);
-                    }
-
-                    foreach (var item in wantedPanel.CastRevisions)
-                    {
-                        var existingVar = currentVars.FirstOrDefault(v => v.BibleEntryId == item.BibleEntryId);
-                        if (existingVar is not null)
-                        {
-                            existingVar.UpdateRevision(item.RevisionId, command.UserId);
-                        }
-                        else
-                        {
-                            _db.PanelBibleVariants.Add(PanelBibleVariant.Create(panel.Id, item.BibleEntryId, item.RevisionId, command.UserId));
-                        }
-                    }
-                }
+                ScriptStructureRules.ApplyCastRevisions(
+                    _db, panel.Id, wantedPanel.CastRevisions, variantsByPanel.GetValueOrDefault(panel.Id, []), command.UserId);
             }
         }
 
