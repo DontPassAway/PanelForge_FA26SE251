@@ -90,7 +90,7 @@ public sealed class PagesController : ControllerBase
     /// Lưu khung Trang → Panel → dòng kịch bản từ trình soạn script trong một transaction. Không xoá Page/Panel.
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}/script-structure")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(SyncScriptStructureResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

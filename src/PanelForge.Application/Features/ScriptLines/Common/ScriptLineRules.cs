@@ -66,8 +66,13 @@ internal static class ScriptLineRules
     }
 
     /// <summary>
-    /// Chapter phải còn InProduction (BR-12), version khớp nếu client gửi (BR-11), và nếu Chapter đã giao việc Writer thì người sửa
-    /// phải là người được giao ở trạng thái làm việc (cùng bộ luật với AI workflow; Producer luôn được).
+    /// Kiểm tra quyền sửa kịch bản (BR-07, Q24, §5.1):
+    /// - Producer chỉ đọc kịch bản (403 Forbidden); không có quyền chỉnh sửa, lưu, xóa dòng, Page, Panel.
+    /// - Artist / Letterer / Editor luôn 403 Forbidden kể cả khi có assignment.
+    /// - Chỉ Writer mới có quyền chỉnh sửa / lưu kịch bản.
+    /// - Nếu Chapter đã giao kịch bản cho Writer cụ thể thì chỉ Writer được giao mới được sửa.
+    /// - Khi kịch bản đã đóng băng (Frozen) hoặc Chapter không còn chỉnh sửa được -> 409 Conflict.
+    /// - Phiên bản không khớp -> 409 Conflict.
     /// </summary>
     public static async Task<Result<(Chapter Chapter, Guid WorkspaceId)>> AuthorizeAsync(
         IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, Guid userId, Guid chapterId, long? expectedVersion, CancellationToken ct)
@@ -75,6 +80,23 @@ internal static class ScriptLineRules
         var chapter = await db.Chapters.FirstOrDefaultAsync(c => c.Id == chapterId, ct);
         if (chapter is null)
             return Result<(Chapter, Guid)>.Failure($"Chapter {chapterId} không tồn tại.", ResultErrorCodes.NotFound);
+
+        var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
+        var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
+        if (role is null)
+            return Result<(Chapter, Guid)>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
+
+        // Q24 & BR-07: Producer chỉ đọc kịch bản (403). Sửa/xoá/sắp xếp dòng, Page, Panel của kịch bản: chỉ Writer.
+        if (role == WorkspaceRole.Producer)
+            return Result<(Chapter, Guid)>.Failure(
+                "Producer chỉ có quyền xem và nhận xét kịch bản, không có quyền chỉnh sửa (BR-07, Q24).",
+                ResultErrorCodes.Forbidden);
+
+        // Spec §5.1: Artist/Letterer/Editor luôn 403 đối với thao tác sửa kịch bản ngay cả khi có assignment.
+        if (role != WorkspaceRole.Writer)
+            return Result<(Chapter, Guid)>.Failure(
+                $"Vai trò {role} không có quyền chỉnh sửa kịch bản. Chỉ Writer mới có quyền chỉnh sửa (BR-07, §5.1).",
+                ResultErrorCodes.Forbidden);
 
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<(Chapter, Guid)>.Failure(locked, ResultErrorCodes.Conflict);
@@ -87,30 +109,14 @@ internal static class ScriptLineRules
             return Result<(Chapter, Guid)>.Failure(
                 $"Chapter đã đổi (version hiện tại {chapter.VersionVector}, bạn đang sửa bản {v}). Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
 
-        var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
-        if (role is null)
-            return Result<(Chapter, Guid)>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
-
-        // V2.5: Producer và Writer trong Series có quyền tự do sáng tác tiền kỳ khi kịch bản chưa đóng băng,
-        // KHÔNG yêu cầu phải có thẻ Assignment do Producer giao.
-        // Nhưng khi chương đã giao kịch bản cho Writer cụ thể thì chỉ (các) Writer đó được sửa; chưa giao ai thì vẫn tự do.
-        if (role == WorkspaceRole.Writer)
-        {
-            var writerIds = await db.Assignments.AsNoTracking()
-                .Where(a => a.ChapterId == chapter.Id && a.AssignedRole == WorkspaceRole.Writer && a.CancelReason == null)
-                .Select(a => a.AssigneeUserId).ToListAsync(ct);
-            if (writerIds.Count > 0 && !writerIds.Contains(userId))
-                return Result<(Chapter, Guid)>.Failure(
-                    "Kịch bản chương này đã được giao cho Writer khác. Chỉ người được giao hoặc Producer mới sửa được.",
-                    ResultErrorCodes.Forbidden);
-        }
-        else if (role != WorkspaceRole.Producer)
-        {
-            var gate = await AiWorkflowFacts.EvaluateAssignmentAsync(db, userId, chapter, role.Value, ct);
-            if (gate.BlockedReason is not null)
-                return Result<(Chapter, Guid)>.Failure(gate.BlockedReason, ResultErrorCodes.Forbidden);
-        }
+        // Khi chương đã giao kịch bản cho Writer cụ thể thì chỉ (các) Writer đó được sửa; chưa giao ai thì vẫn tự do.
+        var writerIds = await db.Assignments.AsNoTracking()
+            .Where(a => a.ChapterId == chapter.Id && a.AssignedRole == WorkspaceRole.Writer && a.CancelReason == null)
+            .Select(a => a.AssigneeUserId).ToListAsync(ct);
+        if (writerIds.Count > 0 && !writerIds.Contains(userId))
+            return Result<(Chapter, Guid)>.Failure(
+                "Kịch bản chương này đã được giao cho Writer khác. Chỉ Writer được giao mới có quyền chỉnh sửa (BR-07).",
+                ResultErrorCodes.Forbidden);
 
         return Result<(Chapter, Guid)>.Success((chapter, workspaceId));
     }
