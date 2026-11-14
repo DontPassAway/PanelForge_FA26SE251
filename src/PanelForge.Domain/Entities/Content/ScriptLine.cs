@@ -108,6 +108,14 @@ public class ScriptLine : BaseEntity
 
     public void AssignToPanel(Guid? panelId) => PanelId = panelId;
 
+    public void AssignSpeaker(Guid? speakerCharacterId)
+    {
+        if (Kind == ScriptLineKind.Action && speakerCharacterId.HasValue)
+            throw new InvalidOperationException("Dòng Action không được có người nói.");
+        SpeakerCharacterId = speakerCharacterId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>D2: gom dòng của Scene cũ vào Scene mặc định của chương khi lưu cả kịch bản chương.</summary>
     public void MoveToScene(Guid sceneId)
     {

@@ -13,7 +13,24 @@ namespace PanelForge.Application.Features.ScriptVersions;
 /// Một hàng của kịch bản theo thứ tự đọc. <c>Type</c>: page · panel · Action · Dialogue · Thought · Narration · Sfx.
 /// <c>Key</c> ổn định giữa các phiên bản (page:{n}, panel:{page}.{n}, line:{lineId}) để so sánh từng dòng.
 /// </summary>
-public sealed record ScriptVersionRow(string Key, string Type, int Page, int Panel, string? Label, string Text);
+public sealed record ScriptVersionRowRef(Guid EntryId, string SurfaceText);
+public sealed record ScriptVersionRowCast(Guid EntryId, Guid RevisionId);
+
+public sealed record ScriptVersionRow(
+    string Key,
+    string Type,
+    int Page,
+    int Panel,
+    string? Label,
+    string Text,
+    IReadOnlyList<ScriptVersionRowRef>? Refs = null,
+    IReadOnlyList<ScriptVersionRowCast>? CastRevisions = null);
+
+public sealed record ScriptCastChoiceItem(Guid BibleEntryId, Guid? RevisionId);
+
+public sealed record ScriptVersionSnapshot(
+    IReadOnlyList<ScriptVersionRow> Rows,
+    IReadOnlyList<ScriptCastChoiceItem>? CastChoices = null);
 
 public sealed record ScriptVersionSummaryDto(
     Guid Id,
@@ -37,7 +54,7 @@ public static class ScriptSnapshotBuilder
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public static async Task<(IReadOnlyList<ScriptVersionRow> Rows, string Hash, int LineCount)> BuildAsync(
+    public static async Task<(IReadOnlyList<ScriptVersionRow> Rows, string Hash, int LineCount, IReadOnlyList<ScriptCastChoiceItem> CastChoices)> BuildWithChoicesAsync(
         IPanelForgeDbContext db, Guid chapterId, CancellationToken ct)
     {
         var pages = await db.Pages.AsNoTracking()
@@ -61,6 +78,38 @@ public static class ScriptSnapshotBuilder
             })
             .ToListAsync(ct);
 
+        var lineIds = lines.Select(l => l.Id).ToList();
+        var bibleLinks = await db.ScriptLineBibleLinks.AsNoTracking()
+            .Where(k => lineIds.Contains(k.ScriptLineId))
+            .ToListAsync(ct);
+        var refsByLine = bibleLinks
+            .GroupBy(k => k.ScriptLineId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ScriptVersionRowRef>)g
+                    .OrderBy(x => x.BibleEntryId)
+                    .Select(x => new ScriptVersionRowRef(x.BibleEntryId, x.SurfaceText))
+                    .ToList());
+
+        var panelIds = panels.Select(p => p.Id).ToList();
+        var panelVariants = await db.PanelBibleVariants.AsNoTracking()
+            .Where(v => panelIds.Contains(v.PanelId))
+            .ToListAsync(ct);
+        var castsByPanel = panelVariants
+            .GroupBy(v => v.PanelId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ScriptVersionRowCast>)g
+                    .OrderBy(x => x.BibleEntryId)
+                    .Select(x => new ScriptVersionRowCast(x.BibleEntryId, x.RevisionId))
+                    .ToList());
+
+        var writerChoices = await db.ChapterBibleBindings.AsNoTracking()
+            .Where(b => b.ChapterId == chapterId && b.ChosenByWriter)
+            .OrderBy(b => b.BibleEntryId)
+            .Select(b => new ScriptCastChoiceItem(b.BibleEntryId, b.BoundRevisionId))
+            .ToListAsync(ct);
+
         var rows = new List<ScriptVersionRow>();
         var placed = new HashSet<Guid>();
         foreach (var page in pages)
@@ -68,40 +117,112 @@ public static class ScriptSnapshotBuilder
             rows.Add(new ScriptVersionRow($"page:{page.PageNumber}", "page", page.PageNumber, 0, null, string.Empty));
             foreach (var panel in panels.Where(p => p.PageId == page.Id).OrderBy(p => p.PanelNumber))
             {
+                var pCasts = castsByPanel.GetValueOrDefault(panel.Id);
                 rows.Add(new ScriptVersionRow(
                     $"panel:{page.PageNumber}.{panel.PanelNumber}", "panel", page.PageNumber, panel.PanelNumber,
-                    null, panel.Direction ?? string.Empty));
+                    null, panel.Direction ?? string.Empty, null, pCasts is { Count: > 0 } ? pCasts : null));
                 foreach (var l in lines.Where(l => l.PanelId == panel.Id).OrderBy(l => l.LineOrder))
                 {
                     placed.Add(l.Id);
+                    var lRefs = refsByLine.GetValueOrDefault(l.Id);
                     rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), page.PageNumber, panel.PanelNumber,
-                        l.SpeakerLabel, l.Text.Trim()));
+                        l.SpeakerLabel, l.Text.Trim(), lRefs is { Count: > 0 } ? lRefs : null));
                 }
             }
         }
         foreach (var l in lines.Where(l => !placed.Contains(l.Id)).OrderBy(l => l.LineOrder))
-            rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), 0, 0, l.SpeakerLabel, l.Text.Trim()));
+        {
+            var lRefs = refsByLine.GetValueOrDefault(l.Id);
+            rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), 0, 0, l.SpeakerLabel, l.Text.Trim(), lRefs is { Count: > 0 } ? lRefs : null));
+        }
 
         var lineCount = rows.Count(r => r.Key.StartsWith("line:", StringComparison.Ordinal));
-        // Băm nội dung (không băm Id dòng) để lưu lại cùng chữ thì nhận ra là không đổi
-        var hash = AiContentValidator.Sha256(string.Join('\n',
-            rows.Select(r => $"{r.Type}|{r.Page}|{r.Panel}|{r.Label}|{r.Text}")));
+
+        // Băm nội dung: chuỗi Type|Page|Panel|Label|Text, chỉ nối thêm |refs:... / |cast:... khi có, và chapter-cast|... khi có Writer choices
+        var rowLines = rows.Select(r =>
+        {
+            var baseLine = $"{r.Type}|{r.Page}|{r.Panel}|{r.Label}|{r.Text}";
+            if (r.Refs is { Count: > 0 })
+            {
+                var sortedRefs = r.Refs.OrderBy(x => x.EntryId).Select(x => $"{x.EntryId}:{x.SurfaceText}");
+                baseLine += $"|refs:{string.Join(',', sortedRefs)}";
+            }
+            else if (r.CastRevisions is { Count: > 0 })
+            {
+                var sortedCasts = r.CastRevisions.OrderBy(x => x.EntryId).Select(x => $"{x.EntryId}:{x.RevisionId}");
+                baseLine += $"|cast:{string.Join(',', sortedCasts)}";
+            }
+            return baseLine;
+        }).ToList();
+
+        if (writerChoices.Count > 0)
+        {
+            var choiceParts = writerChoices.OrderBy(b => b.BibleEntryId).Select(b => $"{b.BibleEntryId}:{b.RevisionId}");
+            rowLines.Add($"chapter-cast|{string.Join(',', choiceParts)}");
+        }
+
+        var hash = AiContentValidator.Sha256(string.Join('\n', rowLines));
+        return (rows, hash, lineCount, writerChoices);
+    }
+
+    public static async Task<(IReadOnlyList<ScriptVersionRow> Rows, string Hash, int LineCount)> BuildAsync(
+        IPanelForgeDbContext db, Guid chapterId, CancellationToken ct)
+    {
+        var (rows, hash, lineCount, _) = await BuildWithChoicesAsync(db, chapterId, ct);
         return (rows, hash, lineCount);
     }
 
-    public static string Serialize(IReadOnlyList<ScriptVersionRow> rows) => JsonSerializer.Serialize(rows, Json);
+    public static string Serialize(IReadOnlyList<ScriptVersionRow> rows, IReadOnlyList<ScriptCastChoiceItem>? castChoices = null)
+    {
+        if (castChoices is { Count: > 0 })
+        {
+            return JsonSerializer.Serialize(new ScriptVersionSnapshot(rows, castChoices), Json);
+        }
+        return JsonSerializer.Serialize(rows, Json);
+    }
 
-    public static IReadOnlyList<ScriptVersionRow> Deserialize(string json) =>
-        JsonSerializer.Deserialize<List<ScriptVersionRow>>(json, Json) ?? [];
+    public static IReadOnlyList<ScriptVersionRow> Deserialize(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        var trimmed = json.TrimStart();
+        if (trimmed.StartsWith('['))
+        {
+            return JsonSerializer.Deserialize<List<ScriptVersionRow>>(json, Json) ?? [];
+        }
+        var snapshot = JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json);
+        return snapshot?.Rows ?? [];
+    }
+
+    public static ScriptVersionSnapshot DeserializeSnapshot(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new ScriptVersionSnapshot([]);
+        var trimmed = json.TrimStart();
+        if (trimmed.StartsWith('['))
+        {
+            var rows = JsonSerializer.Deserialize<List<ScriptVersionRow>>(json, Json) ?? [];
+            return new ScriptVersionSnapshot(rows);
+        }
+        return JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json) ?? new ScriptVersionSnapshot([]);
+    }
 
     /// <summary>
     /// Commit kịch bản hiện tại thành phiên bản mới (số tăng dần). Nội dung trùng phiên bản gần nhất thì trả lại
     /// phiên bản đó, không tạo bản trùng. Chỉ thêm vào DbContext; người gọi SaveChanges.
+    /// Chạy ChapterCastService.RecomputeAsync trước khi snapshot (BIB-12, 3A).
     /// </summary>
     public static async Task<ScriptVersion> CommitAsync(
-        IPanelForgeDbContext db, Guid chapterId, Guid authorUserId, string? message, CancellationToken ct)
+        IPanelForgeDbContext db,
+        Guid chapterId,
+        Guid authorUserId,
+        string? message,
+        CancellationToken ct,
+        Chapters.Services.IChapterCastService? castService = null,
+        IChapterCastInheritanceResolver? inheritanceResolver = null)
     {
-        var (rows, hash, lineCount) = await BuildAsync(db, chapterId, ct);
+        var service = castService ?? new Chapters.Services.ChapterCastService(db, inheritanceResolver);
+        await service.RecomputeAsync(chapterId, authorUserId, ct);
+
+        var (rows, hash, lineCount, choices) = await BuildWithChoicesAsync(db, chapterId, ct);
         var latest = await db.ScriptVersions
             .Where(v => v.ChapterId == chapterId)
             .OrderByDescending(v => v.VersionNumber)
@@ -109,7 +230,7 @@ public static class ScriptSnapshotBuilder
         if (latest is not null && latest.ContentHash == hash) return latest;
 
         var version = ScriptVersion.Create(
-            chapterId, (latest?.VersionNumber ?? 0) + 1, message, authorUserId, hash, Serialize(rows), lineCount);
+            chapterId, (latest?.VersionNumber ?? 0) + 1, message, authorUserId, hash, Serialize(rows, choices), lineCount);
         db.ScriptVersions.Add(version);
         return version;
     }
@@ -215,7 +336,7 @@ public sealed class CommitScriptVersionCommandHandler
             return Result<ScriptVersionSummaryDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId, ct);
-        if (role is not (Domain.Enums.WorkspaceRole.Writer or Domain.Enums.WorkspaceRole.Producer))
+        if (role is not Domain.Enums.WorkspaceRole.Writer)
             return Result<ScriptVersionSummaryDto>.Failure("Chỉ Writer lưu phiên bản kịch bản.", ResultErrorCodes.Forbidden);
         if (chapter.ScriptLockReason is { } locked)
             return Result<ScriptVersionSummaryDto>.Failure(locked, ResultErrorCodes.Conflict);
