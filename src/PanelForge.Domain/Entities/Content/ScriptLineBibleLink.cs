@@ -14,8 +14,10 @@ public class ScriptLineBibleLink : BaseEntity
 
     public Guid ScriptLineId { get; private set; }
     public Guid BibleEntryId { get; private set; }
-    /// <summary>V2.5: Chuỗi text thô lúc Writer gõ @-mention trong kịch bản.</summary>
-    public string? RawMentionText { get; private set; }
+    /// <summary>BIB-11, 5A: Chữ hiển thị được bôi đen hoặc khớp từ kịch bản (varchar 200 NOT NULL).</summary>
+    public string SurfaceText { get; private set; } = default!;
+    /// <summary>Tương thích ngược cho các query cũ; gỡ ở BIB-17.</summary>
+    public string? RawMentionText => SurfaceText;
     /// <summary>V2.5: Phiên bản BibleEntryRevision có hiệu lực tại thời điểm bind hoặc tại Chapter của kịch bản.</summary>
     public Guid? ResolvedRevisionId { get; private set; }
 
@@ -28,17 +30,19 @@ public class ScriptLineBibleLink : BaseEntity
     public static ScriptLineBibleLink Create(
         Guid scriptLineId,
         Guid bibleEntryId,
-        string? rawMentionText = null,
-        Guid? resolvedRevisionId = null) =>
-        new()
+        string? surfaceText = null,
+        Guid? resolvedRevisionId = null)
+    {
+        return new()
         {
             ScriptLineId = scriptLineId,
             BibleEntryId = bibleEntryId,
-            RawMentionText = rawMentionText?.Trim(),
+            SurfaceText = string.IsNullOrWhiteSpace(surfaceText) ? "mention" : surfaceText.Trim(),
             ResolvedRevisionId = resolvedRevisionId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+    }
 
     public void UpdateResolvedRevision(Guid? revisionId)
     {

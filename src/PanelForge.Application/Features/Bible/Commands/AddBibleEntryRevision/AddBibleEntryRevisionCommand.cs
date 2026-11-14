@@ -7,6 +7,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
@@ -33,7 +34,8 @@ public sealed record AddBibleEntryRevisionCommand(
     string? StageName = null,
     int? EffectiveToChapterNumber = null,
     Guid? ArtistUserId = null,
-    BibleRevisionStatus? ReviewStatus = null
+    BibleRevisionStatus? ReviewStatus = null,
+    Guid? ChapterId = null
 ) : IRequest<Result<BibleEntryRevisionDto>>;
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
@@ -114,10 +116,15 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 return Result<BibleEntryRevisionDto>.Failure(
                     $"Phải nhập lý do thay thế bản đã khoá (tối đa {MaxSupersedeReasonLength} ký tự).", ResultErrorCodes.Validation);
 
+            // BIB-09, Q23: supersede chỉ thay bản cùng biến thể
+            if (!string.IsNullOrWhiteSpace(stageName) && !string.Equals(stageName, superseded.StageName, StringComparison.OrdinalIgnoreCase))
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Bản thay thế phải thuộc cùng biến thể với bản được thay thế.", ResultErrorCodes.Conflict);
+
             effectiveFrom = superseded.EffectiveFromChapterNumber;
-            // Bản thay thế giữ đúng giai đoạn của bản bị thay, trừ khi Producer chỉnh lại
+            // Bản thay thế giữ đúng giai đoạn của bản bị thay
             effectiveTo ??= superseded.EffectiveToChapterNumber;
-            stageName ??= superseded.StageName;
+            stageName = superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
         }
         // Bản sửa của giai đoạn có sẵn (cùng chương bắt đầu) không gửi tên giai đoạn thì giữ tên cũ,
@@ -151,27 +158,52 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
 
+        var reviewStatus = command.SupersedesRevisionId.HasValue
+            ? BibleRevisionStatus.Draft
+            : (command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value);
+
         var revision = entry.AddRevision(
             summary: summary,
             snapshotJson: snapshotJson,
             contentHash: contentHash,
             authorId: command.UserId,
-            associatedChapterId: null,
+            associatedChapterId: command.ChapterId,
             effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: false,
             stageName: stageName,
             effectiveToChapterNumber: effectiveTo,
             artistUserId: command.ArtistUserId,
-            reviewStatus: command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value
+            reviewStatus: reviewStatus,
+            supersedesRevisionId: command.SupersedesRevisionId
         );
         // Artist nộp Concept kèm sửa nội dung: phiên bản mới bắt đầu Draft rồi ghi sự kiện nộp Concept như mọi lần nộp khác
         if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
             revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
-        // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
-        if (command.SupersedesRevisionId is { } oldId)
+
+        // BIB-09, Q23: Bản thay thế KHÔNG khoá ngay và KHÔNG đánh dấu bản cũ Superseded sớm.
+        // Bản cũ vẫn CanonLocked dùng được. Khi Editor khoá bản mới (BIB-10 ConfirmCanon) mới ghi sự kiện Superseded cho bản cũ.
+        // Nếu tạo từ màn kịch bản chương N thì gắn luôn bản mới cho chương N (chosen_by_writer = true).
+        if (command.SupersedesRevisionId is not null && command.ChapterId is { } chapterId)
         {
-            revision.Lock(command.UserId);
-            entry.Revisions.First(r => r.Id == oldId).MarkSuperseded(command.UserId, revision.VersionNumber, command.SupersedeReason!.Trim());
+            var binding = await _dbContext.ChapterBibleBindings
+                .FirstOrDefaultAsync(b => b.ChapterId == chapterId && b.BibleEntryId == entry.Id, cancellationToken);
+            if (binding != null)
+            {
+                binding.UpdateBinding(revision.Id, binding.Source, chosenByWriter: true, boundById: command.UserId);
+            }
+            else
+            {
+                var newBinding = ChapterBibleBinding.Create(
+                    chapterId: chapterId,
+                    bibleEntryId: entry.Id,
+                    boundRevisionId: revision.Id,
+                    source: ChapterBibleBindingSource.Speaker,
+                    chosenByWriter: true,
+                    isCrowdAtBind: entry.IsCrowd,
+                    boundById: command.UserId
+                );
+                _dbContext.ChapterBibleBindings.Add(newBinding);
+            }
         }
 
         // Chỉ cập nhật current state khi revision mới là bản có hiệu lực ở chương mới nhất.

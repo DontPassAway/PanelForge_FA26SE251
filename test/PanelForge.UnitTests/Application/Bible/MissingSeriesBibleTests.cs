@@ -26,6 +26,8 @@ public class MissingSeriesBibleTests
         _db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { _series }));
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry>()));
         _db.Setup(d => d.BibleEntryRevisions).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntryRevision>()));
+        var namesSet = DbSetMockHelper.CreateDbSetMock(new List<BibleEntryName>());
+        _db.Setup(d => d.BibleEntryNames).Returns(namesSet);
         _db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
     }
 

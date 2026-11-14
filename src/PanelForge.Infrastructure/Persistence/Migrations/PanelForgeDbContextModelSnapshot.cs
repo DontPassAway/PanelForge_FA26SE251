@@ -866,6 +866,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.PrimitiveCollection<List<string>>("Aliases")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("aliases")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -909,6 +916,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsCrowd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_crowd");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -969,6 +982,32 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_bible_entries_series_bible_id_code");
 
                     b.ToTable("bible_entries", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryName", b =>
+                {
+                    b.Property<Guid>("SeriesBibleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_bible_id");
+
+                    b.Property<string>("NormalizedName")
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<Guid>("BibleEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bible_entry_id");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
+                    b.HasKey("SeriesBibleId", "NormalizedName");
+
+                    b.HasIndex("BibleEntryId")
+                        .HasDatabaseName("ix_bible_entry_names_entry");
+
+                    b.ToTable("bible_entry_names", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryRevision", b =>
@@ -1071,6 +1110,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(500)")
                         .HasColumnName("summary");
 
+                    b.Property<Guid?>("SupersedesRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supersedes_revision_id");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
@@ -1093,6 +1136,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EffectiveFromChapterNumber")
                         .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
+
+                    b.HasIndex("SupersedesRevisionId")
+                        .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
 
                     b.HasIndex("BibleEntryId", "VersionNumber")
                         .IsUnique()
@@ -1297,6 +1343,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("preview_pages_customized");
+
                     b.Property<Guid?>("PreviousSubmittedVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_submitted_version_id");
@@ -1405,6 +1452,58 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_chapters_status_series");
 
                     b.ToTable("chapters", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterBibleBinding", b =>
+                {
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<Guid>("BibleEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bible_entry_id");
+
+                    b.Property<DateTime>("BoundAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("bound_at");
+
+                    b.Property<Guid?>("BoundById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_by");
+
+                    b.Property<Guid?>("BoundRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_revision_id");
+
+                    b.Property<bool>("ChosenByWriter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("chosen_by_writer");
+
+                    b.Property<bool>("IsCrowdAtBind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_crowd_at_bind");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("source");
+
+                    b.HasKey("ChapterId", "BibleEntryId");
+
+                    b.HasIndex("BibleEntryId")
+                        .HasDatabaseName("ix_chapter_bible_bindings_entry");
+
+                    b.HasIndex("BoundById");
+
+                    b.HasIndex("BoundRevisionId")
+                        .HasDatabaseName("ix_chapter_bible_bindings_revision");
+
+                    b.ToTable("chapter_bible_bindings", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterReview", b =>
@@ -2236,6 +2335,39 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("panels", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PanelBibleVariant", b =>
+                {
+                    b.Property<Guid>("PanelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("panel_id");
+
+                    b.Property<Guid>("BibleEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bible_entry_id");
+
+                    b.Property<Guid>("RevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revision_id");
+
+                    b.Property<DateTime>("SetAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("set_at");
+
+                    b.Property<Guid>("SetById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("set_by");
+
+                    b.HasKey("PanelId", "BibleEntryId");
+
+                    b.HasIndex("BibleEntryId");
+
+                    b.HasIndex("RevisionId");
+
+                    b.HasIndex("SetById");
+
+                    b.ToTable("panel_bible_variants", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Scene", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2509,10 +2641,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<string>("RawMentionText")
-                        .HasColumnType("varchar(100)")
-                        .HasColumnName("raw_mention_text");
-
                     b.Property<Guid?>("ResolvedRevisionId")
                         .HasColumnType("uuid")
                         .HasColumnName("resolved_revision_id");
@@ -2520,6 +2648,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ScriptLineId")
                         .HasColumnType("uuid")
                         .HasColumnName("script_line_id");
+
+                    b.Property<string>("SurfaceText")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("surface_text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -5410,6 +5543,25 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("SeriesBible");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryName", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
+                        .WithMany()
+                        .HasForeignKey("BibleEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Bible.SeriesBible", "SeriesBible")
+                        .WithMany()
+                        .HasForeignKey("SeriesBibleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BibleEntry");
+
+                    b.Navigation("SeriesBible");
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryRevision", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
@@ -5418,7 +5570,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "SupersedesRevision")
+                        .WithMany()
+                        .HasForeignKey("SupersedesRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("BibleEntry");
+
+                    b.Navigation("SupersedesRevision");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleRevisionEvent", b =>
@@ -5458,6 +5617,39 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterBibleBinding", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
+                        .WithMany()
+                        .HasForeignKey("BibleEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "BoundBy")
+                        .WithMany()
+                        .HasForeignKey("BoundById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "BoundRevision")
+                        .WithMany()
+                        .HasForeignKey("BoundRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BibleEntry");
+
+                    b.Navigation("BoundBy");
+
+                    b.Navigation("BoundRevision");
+
+                    b.Navigation("Chapter");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScript", b =>
@@ -5567,6 +5759,41 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Page");
 
                     b.Navigation("Scene");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PanelBibleVariant", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
+                        .WithMany()
+                        .HasForeignKey("BibleEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Panel", "Panel")
+                        .WithMany()
+                        .HasForeignKey("PanelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "Revision")
+                        .WithMany()
+                        .HasForeignKey("RevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", "SetBy")
+                        .WithMany()
+                        .HasForeignKey("SetById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BibleEntry");
+
+                    b.Navigation("Panel");
+
+                    b.Navigation("Revision");
+
+                    b.Navigation("SetBy");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Scene", b =>
