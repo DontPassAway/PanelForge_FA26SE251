@@ -17,6 +17,12 @@ public static class DependencyInjection
                 sp.GetRequiredService<Common.Interfaces.Persistence.IPanelForgeDbContext>(),
                 sp.GetService<Common.Interfaces.Services.IChapterCastInheritanceResolver>()));
 
+        services.AddScoped<Features.Chapters.Services.IChapterCastGate>(sp =>
+            new Features.Chapters.Services.ChapterCastGate(
+                sp.GetRequiredService<Common.Interfaces.Persistence.IPanelForgeDbContext>(),
+                sp.GetService<Features.Chapters.Services.IChapterCastService>(),
+                sp.GetService<Common.Interfaces.Services.IChapterCastInheritanceResolver>()));
+
         return services;
     }
 }

@@ -34,10 +34,13 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
 
         var chapterIds = chapters.Select(c => c.Id).ToList();
 
-        // 2. Tải toàn bộ bindings của các chương này
-        var bindings = await _dbContext.ChapterBibleBindings
+        // 2. Tải toàn bộ bindings của các chương này (bao gồm cả Local chưa SaveChanges)
+        var dbBindings = await _dbContext.ChapterBibleBindings
             .Where(b => chapterIds.Contains(b.ChapterId))
             .ToListAsync(cancellationToken);
+        var localBindings = _dbContext.ChapterBibleBindings.Local
+            .Where(b => chapterIds.Contains(b.ChapterId)).ToList();
+        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
         if (bindings.Count == 0) return;
 
@@ -47,24 +50,32 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
             .Select(b => (Guid?)b.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var entries = seriesBibleId == null
+        var dbEntries = seriesBibleId == null
             ? new List<BibleEntry>()
             : await _dbContext.BibleEntries
                 .Where(e => e.SeriesBibleId == seriesBibleId.Value)
                 .Include(e => e.Revisions).ThenInclude(r => r.Events)
                 .ToListAsync(cancellationToken);
+        var localEntries = _dbContext.BibleEntries.Local
+            .Where(e => seriesBibleId != null && e.SeriesBibleId == seriesBibleId.Value).ToList();
+        var entries = dbEntries.Union(localEntries).DistinctBy(e => e.Id).ToList();
 
         var entriesById = entries.ToDictionary(e => e.Id);
 
         // 4. Duyệt các chương theo thứ tự ChapterNumber tăng dần
         foreach (var chapter in chapters)
         {
-            var isFrozen = chapter.ScriptStatus == ScriptStatus.Frozen || chapter.IsScriptFrozen;
-            var isEligible = chapter.ChapterNumber >= fromChapterNumber && !isFrozen;
+            // Q23: chương đã chốt (kể cả khi được mở lại) không tự kế thừa lại
+            var wasEverFrozen = chapter.ScriptStatus == ScriptStatus.Frozen ||
+                                chapter.IsScriptFrozen ||
+                                chapter.ScriptFrozenAt.HasValue ||
+                                chapter.FrozenScriptVersionId.HasValue ||
+                                chapter.ScriptReopenStatus == ScriptReopenStatus.Approved;
+            var isEligible = chapter.ChapterNumber >= fromChapterNumber && !wasEverFrozen;
 
             if (!isEligible)
             {
-                // Chương đã Frozen hoặc số chương < fromChapterNumber thì giữ nguyên binding
+                // Chương đã Frozen/chốt trước đó hoặc số chương < fromChapterNumber thì giữ nguyên binding
                 continue;
             }
 

@@ -1,26 +1,33 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Application.Features.Chapters.Services;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 
 /// <summary>
-/// V2.5: Cổng kiểm tra Series Bible theo Chương (Chapter-Scoped Bible Gate).
-/// Quét toàn bộ speakerCharacterId và bibleEntryIds được dùng trong kịch bản Chương N.
-/// Đảm bảo tất cả thực thể xuất hiện trong chương đều có phiên bản CanonLocked có hiệu lực tại Chương N.
+/// Cổng kiểm tra Series Bible cũ (được thay thế bằng ChapterCastGate và GET /cast theo BIB-14).
+/// Giữ lại để tương thích ngược với FE ChecksTab, sẽ gỡ ở BIB-17.
 /// </summary>
+[Obsolete("Use GET /cast or ChapterCastGate instead. Scheduled for removal in BIB-17.")]
 public sealed record CheckChapterBibleGateQuery(Guid ChapterId) : IRequest<Result<ChapterBibleGateResultDto>>;
 
+[Obsolete("Use GET /cast or ChapterCastGate instead. Scheduled for removal in BIB-17.")]
 public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckChapterBibleGateQuery, Result<ChapterBibleGateResultDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IChapterCastGate _castGate;
 
-    public CheckChapterBibleGateQueryHandler(IPanelForgeDbContext dbContext)
+    public CheckChapterBibleGateQueryHandler(
+        IPanelForgeDbContext dbContext,
+        IChapterCastGate? castGate = null)
     {
         _dbContext = dbContext;
+        _castGate = castGate ?? new ChapterCastGate(dbContext, new ChapterCastService(dbContext));
     }
 
     public async Task<Result<ChapterBibleGateResultDto>> Handle(CheckChapterBibleGateQuery query, CancellationToken ct)
@@ -32,69 +39,74 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
         if (chapter is null)
             return Result<ChapterBibleGateResultDto>.Failure($"Chương {query.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        var chapterNumber = (int)chapter.ChapterNumber;
+        var gateResult = await _castGate.EvaluateStartAsync(query.ChapterId, ct);
 
-        // 1. Lấy tất cả scenes và script lines trong chương
-        var sceneIds = await _dbContext.Scenes
-            .AsNoTracking()
-            .Where(s => s.ChapterId == chapter.Id)
-            .Select(s => s.Id)
+        var dbBindings = await _dbContext.ChapterBibleBindings.AsNoTracking()
+            .Include(b => b.BibleEntry)
+            .Include(b => b.BoundRevision)
+            .Where(b => b.ChapterId == query.ChapterId)
             .ToListAsync(ct);
+        var localBindings = _dbContext.ChapterBibleBindings.Local
+            .Where(b => b.ChapterId == query.ChapterId).ToList();
+        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
-        var scriptLines = await _dbContext.ScriptLines
-            .AsNoTracking()
-            .Where(l => sceneIds.Contains(l.SceneId))
-            .ToListAsync(ct);
-
-        var scriptLineIds = scriptLines.Select(l => l.Id).ToList();
-
-        // 2. Thu thập tất cả BibleEntryId được tham chiếu
-        var speakerIds = scriptLines
-            .Where(l => l.SpeakerCharacterId.HasValue)
-            .Select(l => l.SpeakerCharacterId!.Value)
-            .Distinct()
-            .ToList();
-
-        var linkedEntryIds = await _dbContext.ScriptLineBibleLinks
-            .AsNoTracking()
-            .Where(l => scriptLineIds.Contains(l.ScriptLineId))
-            .Select(l => l.BibleEntryId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        var allReferencedIds = speakerIds.Union(linkedEntryIds).Distinct().ToList();
-
-        if (allReferencedIds.Count == 0)
+        if (bindings.Count == 0)
         {
-            // Không có thực thể Bible nào trong kịch bản -> Gate thông qua
             return Result<ChapterBibleGateResultDto>.Success(new ChapterBibleGateResultDto(
-                IsPassed: true,
+                IsPassed: gateResult.CanStart,
                 TotalReferenced: 0,
                 LockedCount: 0,
-                PendingCount: 0,
+                PendingCount: gateResult.Blockers.Count,
                 Items: []
             ));
         }
 
-        // 3. Tải danh sách BibleEntries cùng tất cả Revisions
-        var entries = await _dbContext.BibleEntries
-            .AsNoTracking()
-            .Where(e => allReferencedIds.Contains(e.Id))
+        var entryIds = bindings.Select(b => b.BibleEntryId).Distinct().ToList();
+        var dbEntries = await _dbContext.BibleEntries.AsNoTracking()
             .Include(e => e.Revisions)
+            .Where(e => entryIds.Contains(e.Id))
             .ToListAsync(ct);
+        var localEntries = _dbContext.BibleEntries.Local.Where(e => entryIds.Contains(e.Id)).ToList();
+        var entryMap = dbEntries.Union(localEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
+
+        var revIds = bindings.Where(b => b.BoundRevisionId.HasValue).Select(b => b.BoundRevisionId!.Value).Distinct().ToList();
+        var dbRevs = await _dbContext.BibleEntryRevisions.AsNoTracking()
+            .Where(r => revIds.Contains(r.Id))
+            .ToListAsync(ct);
+        var localRevs = _dbContext.BibleEntryRevisions.Local.Where(r => revIds.Contains(r.Id)).ToList();
+        var revMap = dbRevs.Union(localRevs).DistinctBy(r => r.Id).ToDictionary(r => r.Id);
 
         var items = new List<ChapterBibleGateItemDto>();
         int lockedCount = 0;
+        int pendingCount = 0;
 
-        foreach (var entry in entries)
+        foreach (var binding in bindings)
         {
-            var effectiveCanon = entry.EffectiveRevisionAt(chapterNumber, canonOnly: true);
-            var effectiveAny = entry.EffectiveRevisionAt(chapterNumber, canonOnly: false);
-            var latestRev = entry.GetCurrentRevision();
+            entryMap.TryGetValue(binding.BibleEntryId, out var entry);
+            entry ??= binding.BibleEntry;
+            if (entry is null) continue;
 
-            bool isSatisfied = effectiveCanon != null && (!entry.IsVisualDesign || effectiveCanon.IsLocked);
+            BibleEntryRevision? boundRev = null;
+            if (binding.BoundRevisionId.HasValue)
+            {
+                revMap.TryGetValue(binding.BoundRevisionId.Value, out boundRev);
+            }
+            boundRev ??= binding.BoundRevision;
 
-            if (isSatisfied)
+            if (boundRev is null && entry is not null && entry.Revisions.Count > 0)
+            {
+                boundRev = entry.Revisions
+                    .Where(r => r.IsLocked)
+                    .OrderByDescending(r => r.VersionNumber)
+                    .FirstOrDefault()
+                    ?? entry.Revisions
+                    .OrderByDescending(r => r.VersionNumber)
+                    .FirstOrDefault();
+            }
+
+            var blocker = gateResult.Blockers.FirstOrDefault(b => b.BibleEntryId == entry.Id);
+
+            if (blocker is null)
             {
                 lockedCount++;
                 items.Add(new ChapterBibleGateItemDto(
@@ -102,59 +114,39 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
                     Code: entry.Code,
                     Name: entry.Name,
                     Category: entry.Category,
-                    CurrentStatus: effectiveCanon!.ReviewStatus,
-                    IsLocked: entry.IsVisualDesign ? effectiveCanon.IsLocked : true,
-                    EffectiveFromChapter: effectiveCanon.EffectiveFromChapterNumber,
-                    EffectiveToChapter: effectiveCanon.EffectiveToChapterNumber,
+                    CurrentStatus: boundRev?.ReviewStatus ?? BibleRevisionStatus.CanonLocked,
+                    IsLocked: true,
+                    EffectiveFromChapter: (int)chapter.ChapterNumber,
+                    EffectiveToChapter: null,
                     WarningCode: "OK",
-                    Message: entry.IsVisualDesign
-                        ? $"Đã có phiên bản Canon khóa tại Chương {chapterNumber}."
-                        : $"Đã có phiên bản hiệu lực tại Chương {chapterNumber}."
+                    Message: "Đã có phiên bản Canon khóa tại chương."
                 ));
             }
             else
             {
-                // Chưa có bản khóa canon có hiệu lực tại chương này
-                string warnCode;
-                string message;
-
-                if (effectiveAny == null)
-                {
-                    warnCode = "ENTRY_NOT_YET_EFFECTIVE";
-                    message = $"Mục '{entry.Name}' ({entry.Code}) chưa có phiên bản nào bao phủ Chương {chapterNumber} (mới nhất từ Ch.{latestRev?.EffectiveFromChapterNumber ?? 1}).";
-                }
-                else if (entry.Category == BibleEntryCategory.Character)
-                {
-                    warnCode = "CHARACTER_NOT_LOCKED";
-                    message = $"Mục nhân vật '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa được Producer khóa Canon tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
-                }
-                else
-                {
-                    warnCode = "ENTRY_NOT_LOCKED";
-                    message = $"Mục '{entry.Name}' ({entry.Code}) xuất hiện trong kịch bản nhưng chưa được Producer khóa Canon tại Chương {chapterNumber}. Trạng thái hiện tại: {effectiveAny.ReviewStatus}.";
-                }
+                pendingCount++;
+                var warnCode = entry.Category == BibleEntryCategory.Character
+                    ? "CHARACTER_NOT_LOCKED"
+                    : "ENTRY_NOT_LOCKED";
 
                 items.Add(new ChapterBibleGateItemDto(
                     EntryId: entry.Id,
                     Code: entry.Code,
                     Name: entry.Name,
                     Category: entry.Category,
-                    CurrentStatus: effectiveAny?.ReviewStatus ?? latestRev?.ReviewStatus ?? BibleRevisionStatus.Draft,
+                    CurrentStatus: boundRev?.ReviewStatus ?? BibleRevisionStatus.Draft,
                     IsLocked: false,
-                    EffectiveFromChapter: effectiveAny?.EffectiveFromChapterNumber ?? latestRev?.EffectiveFromChapterNumber,
-                    EffectiveToChapter: effectiveAny?.EffectiveToChapterNumber ?? latestRev?.EffectiveToChapterNumber,
+                    EffectiveFromChapter: (int)chapter.ChapterNumber,
+                    EffectiveToChapter: null,
                     WarningCode: warnCode,
-                    Message: message
+                    Message: blocker.Reason
                 ));
             }
         }
 
-        int pendingCount = allReferencedIds.Count - lockedCount;
-        bool isPassed = pendingCount == 0;
-
         return Result<ChapterBibleGateResultDto>.Success(new ChapterBibleGateResultDto(
-            IsPassed: isPassed,
-            TotalReferenced: allReferencedIds.Count,
+            IsPassed: gateResult.CanStart,
+            TotalReferenced: bindings.Count,
             LockedCount: lockedCount,
             PendingCount: pendingCount,
             Items: items

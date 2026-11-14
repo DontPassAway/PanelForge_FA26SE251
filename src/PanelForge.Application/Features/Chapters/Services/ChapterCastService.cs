@@ -140,9 +140,11 @@ public sealed class ChapterCastService : IChapterCastService
         allReferencedIds.UnionWith(panelVariantEntryIds);
 
         // 4. Đồng bộ chapter_bible_bindings
-        var currentBindings = await _db.ChapterBibleBindings
+        var dbBindings = await _db.ChapterBibleBindings
             .Where(b => b.ChapterId == chapterId)
             .ToListAsync(ct);
+        var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == chapterId).ToList();
+        var currentBindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
         // Xoá các binding không còn được nhắc tới
         foreach (var oldBinding in currentBindings.Where(b => !allReferencedIds.Contains(b.BibleEntryId)))

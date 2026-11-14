@@ -79,6 +79,25 @@ public sealed class MartenPageRepository : IPageRepository
         return state?.Version ?? -1;
     }
 
+    public async Task<IReadOnlyDictionary<Guid, long>> GetStreamVersionsAsync(
+        IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default)
+    {
+        if (pageIds.Count == 0) return new Dictionary<Guid, long>();
+
+        var result = pageIds.ToDictionary(id => id, _ => -1L);
+        var tasks = pageIds.Select(async id =>
+        {
+            var state = await _session.Events.FetchStreamStateAsync(id, ct);
+            return (id, version: state?.Version ?? -1L);
+        });
+        var states = await Task.WhenAll(tasks);
+        foreach (var s in states)
+        {
+            result[s.id] = s.version;
+        }
+        return result;
+    }
+
     /// <summary>
     /// Append uncommitted events của Page vào Marten stream. KHÔNG update row nào.
     ///   - Version == -1 (chưa từng persist) → StartStream
