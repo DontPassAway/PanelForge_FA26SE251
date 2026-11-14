@@ -50,8 +50,3 @@ public sealed record UpdatePanelCoordinatesRequest(
     int? ReadingOrder = null,
     int? ExpectedVersion = null
 );
-
-public sealed record UpdatePanelDirectionRequest(
-    string? Direction,
-    int? ExpectedVersion = null
-);

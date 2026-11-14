@@ -70,34 +70,6 @@ public sealed record ScriptLineRefInput(
     NewDraftBibleEntryInput? NewDraft = null
 );
 
-public sealed record BatchScriptLineItem(
-    Guid? Id,
-    int LineOrder,
-    string? DialogueText,
-    string? StageDirection,
-    NarrationMode? NarrationMode = null,
-    Guid? ClientLineId = null,
-    Guid? PanelId = null,
-    ScriptLineKind? Kind = null,
-    string? SpeakerLabel = null,
-    string? Text = null,
-    IReadOnlyList<ScriptLineRefInput>? Refs = null
-);
-
-public sealed record BatchSaveScriptLinesRequest(
-    IReadOnlyList<BatchScriptLineItem> Lines,
-    long? ExpectedChapterVersion = null,
-    string? Summary = null,
-    string? RawText = null
-);
-
-public sealed record BatchSaveScriptLinesResult(
-    long ChapterVersion,
-    Guid RevisionId,
-    IReadOnlyList<ScriptLineDto> Lines,
-    IReadOnlyList<string>? Warnings = null
-);
-
 public sealed record ScriptRevisionLineDto(
     Guid LineId, int LineOrder, [property: Obsolete("Removed in BIB-17. Use SpeakerLabel instead.")] Guid? SpeakerCharacterId, string? DialogueText, string? StageDirection);
 

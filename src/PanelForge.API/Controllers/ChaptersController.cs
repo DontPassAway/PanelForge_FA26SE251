@@ -330,18 +330,6 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId, [FromRoute] Guid versionId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetScriptVersionQuery(chapterId, versionId, GetCurrentUserId()), cancellationToken));
 
-    /// <summary>POST /api/chapters/{chapterId}/script-versions — lưu = commit (trùng nội dung bản gần nhất thì trả lại bản đó).</summary>
-    [Obsolete("Use PUT /api/chapters/{id}/script")]
-    [HttpPost("api/chapters/{chapterId:guid}/script-versions")]
-    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Producer)]
-    [ProducesResponseType(typeof(ScriptVersionSummaryDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> CommitScriptVersion(
-        [FromRoute] Guid chapterId,
-        [FromBody] CommitScriptVersionRequest? body,
-        CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(
-            new CommitScriptVersionCommand(chapterId, GetCurrentUserId(), body?.Message), cancellationToken));
-
     /// <summary>
     /// POST /api/chapters/{chapterId}/recall-script — D12: chỉ Writer rút kịch bản về sửa (InReview → Draft).
     /// </summary>
@@ -592,7 +580,6 @@ public sealed class ChaptersController : ControllerBase
 public sealed record RequestScriptReopenRequest(string Reason);
 public sealed record UnfreezeScriptRequest(string? Reason);
 public sealed record SubmitScriptRequest(string? Message);
-public sealed record CommitScriptVersionRequest(string? Message);
 public sealed record AddScriptCommentRequest(Guid? SceneId, Guid? ScriptLineId, string? QuotedText, string Body);
 
 public sealed record SetChapterOutlineRequest(string? Outline);

@@ -4,7 +4,6 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Services;
-using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptVersions;
@@ -191,7 +190,7 @@ internal static class ChapterScriptSaver
     }
 
     /// <summary>
-    /// Page/Panel không còn trong payload: có artwork thì giữ lại kèm cảnh báo, còn lại xoá mềm như SyncScriptStructure
+    /// Page/Panel không còn trong payload: có artwork thì giữ lại kèm cảnh báo, còn lại xoá mềm
     /// (việc đang giao thì từ chối 409 thay vì xoá).
     /// </summary>
     private static async Task RemoveDroppedStructureAsync(

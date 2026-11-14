@@ -6,7 +6,6 @@ namespace PanelForge.Domain.Enums;
 /// 2. ConceptSubmitted (Artist nhận việc từ Bible Design Queue, vẽ Model Sheet và tải ảnh Asset CAS SHA-256 lên).
 /// 3. ReworkRequired (Writer/Editor/Producer yêu cầu sửa lại kèm nhận xét/feedback).
 /// 5. CanonLocked (Editor xác nhận và khóa canon; không thể sửa/mở khóa, muốn thay thế dùng /supersede).
-/// Lưu ý: Trạng thái WriterEndorsed đã được loại bỏ theo Q20 (Editor xác nhận = khoá Canon).
 /// </summary>
 public enum BibleRevisionStatus
 {

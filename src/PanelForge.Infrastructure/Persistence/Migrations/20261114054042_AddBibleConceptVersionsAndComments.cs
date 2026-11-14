@@ -100,33 +100,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 principalTable: "bible_revision_events",
                 principalColumn: "id",
                 onDelete: ReferentialAction.SetNull);
-
-            migrationBuilder.Sql("""
-                WITH ranked AS (
-                    SELECT id, ROW_NUMBER() OVER (PARTITION BY bible_entry_revision_id ORDER BY created_at) AS rn
-                    FROM bible_revision_events
-                    WHERE event_type = 'ConceptSubmitted'
-                )
-                UPDATE bible_revision_events e
-                SET concept_version_number = ranked.rn
-                FROM ranked
-                WHERE e.id = ranked.id;
-
-                WITH latest_concept AS (
-                    SELECT DISTINCT ON (bible_entry_revision_id) id, bible_entry_revision_id
-                    FROM bible_revision_events
-                    WHERE event_type = 'ConceptSubmitted'
-                    ORDER BY bible_entry_revision_id, created_at DESC
-                )
-                UPDATE bible_entry_revisions r
-                SET current_concept_event_id = latest_concept.id
-                FROM latest_concept
-                WHERE r.id = latest_concept.bible_entry_revision_id;
-
-                UPDATE bible_entry_revisions
-                SET review_status = 'ConceptSubmitted'
-                WHERE review_status = 'WriterEndorsed';
-                """);
         }
 
         /// <inheritdoc />
