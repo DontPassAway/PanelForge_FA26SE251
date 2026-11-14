@@ -41,7 +41,6 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 l.LineOrder,
                 l.DialogueText,
                 l.StageDirection,
-                null,
                 l.PanelId,
                 links[l.Id].ToList(),
                 l.NarrationMode,
