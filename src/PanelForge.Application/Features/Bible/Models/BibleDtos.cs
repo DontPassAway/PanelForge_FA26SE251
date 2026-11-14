@@ -46,7 +46,7 @@ public sealed record BibleEntryRevisionDto(
     }
 }
 
-/// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Endorsed/Locked/Superseded.</summary>
+/// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Locked/Superseded.</summary>
 public sealed record BibleRevisionEventDto(
     Guid Id,
     BibleRevisionEventType Type,

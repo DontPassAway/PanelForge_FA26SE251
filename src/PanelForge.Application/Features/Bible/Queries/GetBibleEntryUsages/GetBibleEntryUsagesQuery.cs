@@ -93,15 +93,14 @@ public sealed class GetBibleEntryUsagesQueryHandler : IRequestHandler<GetBibleEn
             .Select(c =>
             {
                 var number = (int)c.ChapterNumber;
-                bool isCanonSatisfied;
-                if (bindings.TryGetValue(c.Id, out var b) && b.BoundRevision != null)
+                bool isCanonSatisfied = false;
+                if (bindings.TryGetValue(c.Id, out var b) && b.BoundRevisionId.HasValue)
                 {
-                    isCanonSatisfied = !entry.IsVisualDesign || b.BoundRevision.IsLocked;
-                }
-                else
-                {
-                    var def = entry.GetDefaultVariantRevision(canonOnly: true);
-                    isCanonSatisfied = def != null && (!entry.IsVisualDesign || def.IsLocked);
+                    var boundRev = b.BoundRevision ?? entry.Revisions.FirstOrDefault(r => r.Id == b.BoundRevisionId.Value);
+                    if (boundRev != null)
+                    {
+                        isCanonSatisfied = !entry.IsVisualDesign || boundRev.IsLocked;
+                    }
                 }
 
                 return new BibleEntryUsageDto(
