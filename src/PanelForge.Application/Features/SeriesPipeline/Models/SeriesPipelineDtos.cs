@@ -22,7 +22,9 @@ public sealed record PipelineStageDto(
     bool IsInitial,
     bool IsTerminal,
     int? EstimatedDurationDays,
-    bool IsEnabled = true);
+    bool IsEnabled = true,
+    // Nhánh song song (BR-19): "A" = Ink → Color, "B" = Lettering; null = bước chung
+    string? Track = null);
 
 public sealed record StageTransitionDto(
     Guid Id,
@@ -53,7 +55,9 @@ public sealed record UpdatePipelineStageRequest(
     bool IsApprovalGate = false,
     int? EstimatedDurationDays = null,
     // null = giữ nguyên; false = tắt stage (vd. Color cho truyện trắng đen)
-    bool? IsEnabled = null);
+    bool? IsEnabled = null,
+    // null = giữ nguyên; "" = bỏ nhánh (thành bước chung); "A"/"B"... = đặt nhánh
+    string? Track = null);
 
 /// <param name="StageIds">Toàn bộ stage id của pipeline theo thứ tự mới.</param>
 public sealed record ReorderPipelineStagesRequest(IReadOnlyList<Guid> StageIds);
@@ -72,7 +76,7 @@ internal static class SeriesPipelineMappings
             Stages: pipeline.GetOrderedStages()
                 .Select(s => new PipelineStageDto(
                     s.Id, s.Name, s.Slug, s.StageOrder, s.ColorCode, s.AllowedRole,
-                    s.IsApprovalGate, s.IsInitial, s.IsTerminal, s.EstimatedDurationDays, s.IsEnabled))
+                    s.IsApprovalGate, s.IsInitial, s.IsTerminal, s.EstimatedDurationDays, s.IsEnabled, s.Track))
                 .ToList(),
             Transitions: pipeline.Transitions
                 .OrderBy(t => order.GetValueOrDefault(t.FromStageId))

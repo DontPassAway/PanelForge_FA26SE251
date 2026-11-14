@@ -198,14 +198,14 @@ public class StageTaskTests
         unassigned.MarkInputOutdated("x");
         unassigned.Unassign();
         unassigned.IsInputOutdated.Should().BeFalse();
-        unassigned.AssignmentId.Should().BeNull();
+        unassigned.LotId.Should().BeNull();
 
         var transferred = Started();
         transferred.MarkInputOutdated("x");
         var newLot = Guid.NewGuid();
         transferred.AssignTo(newLot);
         transferred.Status.Should().Be(StageTaskStatus.Assigned);
-        transferred.AssignmentId.Should().Be(newLot);
+        transferred.LotId.Should().Be(newLot);
         transferred.IsInputOutdated.Should().BeFalse();
 
         var cancelled = Started();

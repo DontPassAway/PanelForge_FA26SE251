@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PanelForge.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddStageTaskGridSlice0 : Migration
+    public partial class AddStageTaskGrid : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,6 +18,46 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 nullable: true);
 
             migrationBuilder.CreateTable(
+                name: "stage_task_lots",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    series_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    chapter_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    pipeline_stage_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    assignee_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    assigned_role = table.Column<string>(type: "varchar(30)", nullable: false),
+                    brief = table.Column<string>(type: "varchar(2000)", nullable: true),
+                    due_date = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    status = table.Column<string>(type: "varchar(30)", nullable: false),
+                    assigned_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    created_by = table.Column<string>(type: "text", nullable: true),
+                    updated_at = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    updated_by = table.Column<string>(type: "text", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
+                    deleted_at = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    deleted_by = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_stage_task_lots", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_stage_task_lots_chapters_chapter_id",
+                        column: x => x.chapter_id,
+                        principalTable: "chapters",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_stage_task_lots_pipeline_stages_pipeline_stage_id",
+                        column: x => x.pipeline_stage_id,
+                        principalTable: "pipeline_stages",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "stage_tasks",
                 columns: table => new
                 {
@@ -26,7 +66,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     chapter_id = table.Column<Guid>(type: "uuid", nullable: false),
                     pipeline_stage_id = table.Column<Guid>(type: "uuid", nullable: false),
                     page_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    assignment_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    lot_id = table.Column<Guid>(type: "uuid", nullable: true),
                     status = table.Column<string>(type: "varchar(30)", nullable: false),
                     is_input_outdated = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     outdated_reason = table.Column<string>(type: "varchar(500)", nullable: true),
@@ -46,12 +86,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_stage_tasks", x => x.id);
                     table.ForeignKey(
-                        name: "FK_stage_tasks_assignments_assignment_id",
-                        column: x => x.assignment_id,
-                        principalTable: "assignments",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
                         name: "FK_stage_tasks_chapters_chapter_id",
                         column: x => x.chapter_id,
                         principalTable: "chapters",
@@ -69,12 +103,33 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         principalTable: "pipeline_stages",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_stage_tasks_stage_task_lots_lot_id",
+                        column: x => x.lot_id,
+                        principalTable: "stage_task_lots",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_stage_tasks_assignment_id",
+                name: "ix_stage_task_lots_assignee_user_id",
+                table: "stage_task_lots",
+                column: "assignee_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_stage_task_lots_chapter_stage",
+                table: "stage_task_lots",
+                columns: new[] { "chapter_id", "pipeline_stage_id" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_stage_task_lots_pipeline_stage_id",
+                table: "stage_task_lots",
+                column: "pipeline_stage_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_stage_tasks_lot_id",
                 table: "stage_tasks",
-                column: "assignment_id");
+                column: "lot_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_stage_tasks_page_id",
@@ -106,6 +161,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "stage_tasks");
+
+            migrationBuilder.DropTable(
+                name: "stage_task_lots");
 
             migrationBuilder.DropColumn(
                 name: "track",

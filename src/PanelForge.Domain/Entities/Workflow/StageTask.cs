@@ -5,7 +5,7 @@ namespace PanelForge.Domain.Entities.Workflow;
 
 /// <summary>
 /// Ô việc của lưới giao việc V3: một Trang × một Công đoạn (<see cref="PageId"/> null = công đoạn cấp Chương).
-/// Mỗi ô tối đa một người qua lô <see cref="AssignmentId"/>. Cờ <see cref="IsInputOutdated"/> bật khi công đoạn tiền đề
+/// Mỗi ô tối đa một người qua lô <see cref="LotId"/> (<see cref="StageTaskLot"/>). Cờ <see cref="IsInputOutdated"/> bật khi công đoạn tiền đề
 /// bị mở lại sau khi ô đã bắt đầu; khi cờ bật thì không Start/Submit/Approve được cho tới khi xử lý Impact Review.
 /// </summary>
 public class StageTask : BaseEntity
@@ -16,7 +16,7 @@ public class StageTask : BaseEntity
     public Guid ChapterId { get; private set; }
     public Guid PipelineStageId { get; private set; }
     public Guid? PageId { get; private set; }
-    public Guid? AssignmentId { get; private set; }
+    public Guid? LotId { get; private set; }
     public StageTaskStatus Status { get; private set; } = StageTaskStatus.Unassigned;
     public bool IsInputOutdated { get; private set; }
     public string? OutdatedReason { get; private set; }
@@ -42,14 +42,14 @@ public class StageTask : BaseEntity
         or StageTaskStatus.UnderReview or StageTaskStatus.Approved or StageTaskStatus.ReworkRequired;
 
     /// <summary>Giao vào lô (lần đầu hoặc Transfer sang lô của người khác). Người mới chưa bắt đầu nên ô về Assigned.</summary>
-    public void AssignTo(Guid assignmentId)
+    public void AssignTo(Guid lotId)
     {
-        if (assignmentId == Guid.Empty) throw new ArgumentException("Thiếu lô giao việc.", nameof(assignmentId));
+        if (lotId == Guid.Empty) throw new ArgumentException("Thiếu lô giao việc.", nameof(lotId));
         if (Status is not (StageTaskStatus.Unassigned or StageTaskStatus.Assigned
             or StageTaskStatus.InProgress or StageTaskStatus.ReworkRequired))
             throw Invalid("giao việc");
 
-        AssignmentId = assignmentId;
+        LotId = lotId;
         Status = StageTaskStatus.Assigned;
         ClearOutdated();
         Touch();
@@ -60,7 +60,7 @@ public class StageTask : BaseEntity
         if (Status is not (StageTaskStatus.Assigned or StageTaskStatus.InProgress or StageTaskStatus.ReworkRequired))
             throw Invalid("bỏ gán");
 
-        AssignmentId = null;
+        LotId = null;
         Status = StageTaskStatus.Unassigned;
         ClearOutdated();
         Touch();
@@ -78,8 +78,9 @@ public class StageTask : BaseEntity
         Touch();
     }
 
+    /// <param name="submissionId">Lần nộp lưu lịch sử; null khi chưa nối bảng Submission (lát cắt sau).</param>
     /// <param name="isApprovalGate">Công đoạn có cổng duyệt; không có thì nộp là tự duyệt.</param>
-    public void Submit(Guid submissionId, bool isApprovalGate)
+    public void Submit(Guid? submissionId, bool isApprovalGate)
     {
         if (Status != StageTaskStatus.InProgress) throw Invalid("nộp");
         EnsureInputCurrent();

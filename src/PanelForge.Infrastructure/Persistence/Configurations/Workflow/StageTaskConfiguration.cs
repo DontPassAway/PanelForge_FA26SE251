@@ -19,7 +19,7 @@ internal sealed class StageTaskConfiguration : IEntityTypeConfiguration<StageTas
         builder.Property(t => t.ChapterId).HasColumnName("chapter_id").HasColumnType("uuid").IsRequired();
         builder.Property(t => t.PipelineStageId).HasColumnName("pipeline_stage_id").HasColumnType("uuid").IsRequired();
         builder.Property(t => t.PageId).HasColumnName("page_id").HasColumnType("uuid");
-        builder.Property(t => t.AssignmentId).HasColumnName("assignment_id").HasColumnType("uuid");
+        builder.Property(t => t.LotId).HasColumnName("lot_id").HasColumnType("uuid");
         builder.Property(t => t.ReviewerUserId).HasColumnName("reviewer_user_id").HasColumnType("uuid");
         builder.Property(t => t.CurrentSubmissionId).HasColumnName("current_submission_id").HasColumnType("uuid");
 
@@ -51,12 +51,12 @@ internal sealed class StageTaskConfiguration : IEntityTypeConfiguration<StageTas
                .IsUnique()
                .HasFilter("page_id IS NOT NULL AND is_deleted = false")
                .HasDatabaseName("ux_stage_tasks_chapter_stage_page");
-        builder.HasIndex(t => t.AssignmentId).HasDatabaseName("ix_stage_tasks_assignment_id");
+        builder.HasIndex(t => t.LotId).HasDatabaseName("ix_stage_tasks_lot_id");
         builder.HasIndex(t => t.PageId).HasDatabaseName("ix_stage_tasks_page_id");
 
         builder.HasOne<Chapter>().WithMany().HasForeignKey(t => t.ChapterId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Page>().WithMany().HasForeignKey(t => t.PageId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<PipelineStage>().WithMany().HasForeignKey(t => t.PipelineStageId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<Assignment>().WithMany().HasForeignKey(t => t.AssignmentId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<StageTaskLot>().WithMany().HasForeignKey(t => t.LotId).OnDelete(DeleteBehavior.SetNull);
     }
 }
