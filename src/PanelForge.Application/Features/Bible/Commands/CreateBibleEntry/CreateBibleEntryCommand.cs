@@ -4,6 +4,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Bible.Commands.DefineBibleEntry;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Common;
@@ -64,9 +65,30 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
         // BIB-09, 9A: Kiểm tra trùng tên chính và bí danh trong Series Bible (409)
         var normalizedPrimary = BibleNameNormalizer.Normalize(command.Name);
         var existingPrimary = await _dbContext.BibleEntries
+            .Include(e => e.Revisions)
             .FirstOrDefaultAsync(e => e.SeriesBibleId == bible.Id && e.NormalizedName == normalizedPrimary, cancellationToken);
         if (existingPrimary != null)
         {
+            if (existingPrimary.IsStub)
+            {
+                return await BibleEntryStubDefinition.DefineAsync(
+                    _dbContext,
+                    bible,
+                    existingPrimary,
+                    new BibleEntryDefinition(
+                        command.UserId,
+                        command.Name,
+                        command.Description,
+                        command.Subtitle,
+                        command.DetailsJson,
+                        command.ReferenceImageUrl,
+                        command.Priority,
+                        command.StrictCheck,
+                        codeUpper,
+                        command.IsCrowd),
+                    cancellationToken);
+            }
+
             return Result<BibleEntryDto>.Failure(
                 $"Tên '{command.Name}' đã trùng với mục '{existingPrimary.Name}' trong Series Bible.",
                 ResultErrorCodes.Conflict);
@@ -128,32 +150,6 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
         _dbContext.BibleEntryRevisions.Add(revision);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // V2.5 Stub Auto-Matching: Remap toàn bộ script_line_bible_links của Stub có cùng tên sang BibleEntry chính thức vừa tạo
-        var cleanName = entry.Name.Trim();
-        var matchingStubs = await _dbContext.BibleEntries
-            .Where(e => e.SeriesBibleId == bible.Id && e.IsStub && e.Name.ToLower() == cleanName.ToLower() && e.Id != entry.Id)
-            .ToListAsync(cancellationToken);
-
-        if (matchingStubs.Count > 0)
-        {
-            var stubIds = matchingStubs.Select(s => s.Id).ToList();
-            var linksToRemap = await _dbContext.ScriptLineBibleLinks
-                .Where(l => stubIds.Contains(l.BibleEntryId))
-                .ToListAsync(cancellationToken);
-
-            foreach (var link in linksToRemap)
-            {
-                link.RemapTargetEntry(entry.Id);
-            }
-
-            foreach (var stub in matchingStubs)
-            {
-                stub.SetActiveStatus(false);
-            }
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
 
         var revisionDto = BibleEntryRevisionDto.From(revision);
 

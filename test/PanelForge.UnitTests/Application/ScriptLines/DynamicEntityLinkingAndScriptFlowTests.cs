@@ -103,14 +103,17 @@ public class DynamicEntityLinkingAndScriptFlowTests
         // Assert
         createResult.IsSuccess.Should().BeTrue();
         var formalEntryId = createResult.Value!.Id;
+        formalEntryId.Should().Be(stub.Id);
 
-        // Kiểm tra Stub Link đã được tự động chuyển hướng sang formal entry
+        // Link vẫn trỏ tới cùng ID vì stub được định nghĩa tại chỗ.
         var updatedLink = await _db.ScriptLineBibleLinks.FirstAsync(l => l.ScriptLineId == _line1.Id);
         updatedLink.BibleEntryId.Should().Be(formalEntryId);
 
-        // Stub cũ phải bị đánh dấu inactive
-        var oldStub = await _db.BibleEntries.FirstAsync(e => e.Id == stub.Id);
-        oldStub.IsActive.Should().BeFalse();
+        // Stub trở thành entry chính thức và vẫn active.
+        var definedEntry = await _db.BibleEntries.FirstAsync(e => e.Id == stub.Id);
+        definedEntry.IsStub.Should().BeFalse();
+        definedEntry.IsActive.Should().BeTrue();
+        definedEntry.Code.Should().Be("CHR_AKIRA");
     }
 
     [Fact]
