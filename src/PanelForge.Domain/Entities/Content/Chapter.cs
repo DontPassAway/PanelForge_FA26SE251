@@ -46,6 +46,8 @@ public class Chapter : BaseEntity
     public bool IsScriptFrozen { get; private set; } = false;
     public DateTime? ScriptFrozenAt { get; private set; }
     public Guid? ScriptFrozenById { get; private set; }
+    /// <summary>V2.6 (Q26, SCR-41, BIB-14): Phiên bản kịch bản (ScriptVersion) được chốt khi Bắt đầu sản xuất.</summary>
+    public Guid? FrozenScriptVersionId { get; private set; }
     // SHA-256 của toàn bộ script-lines lúc đóng băng; null khi chưa đóng băng
     public string? ScriptContentHash { get; private set; }
 
@@ -153,7 +155,7 @@ public class Chapter : BaseEntity
     /// D12 / Gate 1: Producer bấm Start Production (InReview → Frozen). Chương PreProduction chuyển sang InProduction;
     /// chương đã InProduction (đóng băng lại sau khi mở) giữ nguyên.
     /// </summary>
-    public void StartProduction(Guid producerUserId, string? scriptContentHash)
+    public void StartProduction(Guid producerUserId, string? scriptContentHash, Guid? frozenScriptVersionId = null)
     {
         RequireEditable("bắt đầu sản xuất");
         RequireScriptStatus(ScriptStatus.InReview, "bắt đầu sản xuất");
@@ -161,6 +163,7 @@ public class Chapter : BaseEntity
         IsScriptFrozen = true;
         ScriptFrozenAt = DateTime.UtcNow;
         ScriptFrozenById = producerUserId;
+        FrozenScriptVersionId = frozenScriptVersionId ?? LastSubmittedVersionId;
         ScriptContentHash = scriptContentHash;
         ScriptReopenStatus = ScriptReopenStatus.None;
         ScriptReopenReason = null;

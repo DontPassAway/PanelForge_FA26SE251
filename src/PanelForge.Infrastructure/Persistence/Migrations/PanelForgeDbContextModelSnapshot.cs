@@ -1409,6 +1409,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid?>("FrozenScriptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("frozen_script_version_id");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");

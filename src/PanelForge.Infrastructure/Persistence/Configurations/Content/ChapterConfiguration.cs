@@ -119,6 +119,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("script_frozen_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.FrozenScriptVersionId)
+               .HasColumnName("frozen_script_version_id")
+               .HasColumnType("uuid");
+
         builder.Property(c => c.ScriptContentHash)
                .HasColumnName("script_content_hash")
                .HasColumnType("varchar(64)");

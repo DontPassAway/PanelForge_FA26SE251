@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -101,13 +102,16 @@ public sealed class GetChapterCastQueryHandler
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IChapterCastGate _castGate;
 
     public GetChapterCastQueryHandler(
         IPanelForgeDbContext db,
-        IWorkspaceAuthorizationService auth)
+        IWorkspaceAuthorizationService auth,
+        IChapterCastGate? castGate = null)
     {
         _db = db;
         _auth = auth;
+        _castGate = castGate ?? new ChapterCastGate(db);
     }
 
     public async Task<Result<ChapterCastDto>> Handle(GetChapterCastQuery q, CancellationToken ct)
@@ -185,8 +189,6 @@ public sealed class GetChapterCastQueryHandler
             .OrderByDescending(b => b.ChapterNumber)
             .ToListAsync(ct);
 
-        var submitBlockers = new List<ChapterCastBlockerDto>();
-        var startBlockers = new List<ChapterCastBlockerDto>();
         var entities = new List<ChapterCastItemDto>();
 
         foreach (var binding in bindings)
@@ -313,64 +315,10 @@ public sealed class GetChapterCastQueryHandler
                 entityPanelVariants,
                 available,
                 entityMentions));
-
-            // Evaluate submitGate:
-            // Chặn khi còn mục is_crowd_at_bind = false mà IsStub (chờ định nghĩa) hoặc chưa có bound_revision_id
-            if (!isCrowd)
-            {
-                if (entry.IsStub)
-                {
-                    submitBlockers.Add(new ChapterCastBlockerDto(
-                        entry.Id, entry.Name, boundRev?.Id, "Thực thể chưa được Writer viết định nghĩa."));
-                }
-                else if (boundRev is null)
-                {
-                    submitBlockers.Add(new ChapterCastBlockerDto(
-                        entry.Id, entry.Name, null, "Thực thể chưa có bản thiết kế (revision) nào được gán."));
-                }
-            }
-
-            // Evaluate gate (Start Production):
-            // Mọi bản chương dùng (bound_revision_id và panelVariants) phải CanonLocked
-            if (!isCrowd)
-            {
-                if (boundRev is null || !boundRev.IsLocked)
-                {
-                    var sourceText = binding.ChosenByWriter
-                        ? "bản do Writer chọn"
-                        : (inheritedChapterNumber.HasValue ? $"kế thừa từ chương {inheritedChapterNumber}" : "bản mặc định");
-                    startBlockers.Add(new ChapterCastBlockerDto(
-                        entry.Id,
-                        entry.Name,
-                        boundRev?.Id,
-                        $"Bản '{boundRev?.StageName ?? "Mặc định"}' v{boundRev?.VersionNumber ?? 1} chưa được khoá Canon.",
-                        sourceText));
-                }
-
-                foreach (var pv in entityPanelVariants)
-                {
-                    if (!pv.IsCanonLocked)
-                    {
-                        startBlockers.Add(new ChapterCastBlockerDto(
-                            entry.Id,
-                            entry.Name,
-                            pv.RevisionId,
-                            $"Bản theo Panel '{pv.VariantLabel ?? "Mặc định"}' v{pv.VersionNumber} (Trang {pv.PageNumber}, Panel {pv.PanelNumber}) chưa được khoá Canon.",
-                            $"Panel {pv.PageNumber}.{pv.PanelNumber}"));
-                    }
-                }
-            }
         }
 
-        // Add any submit blockers to start blockers
-        foreach (var sb in submitBlockers)
-        {
-            if (!startBlockers.Any(b => b.BibleEntryId == sb.BibleEntryId))
-                startBlockers.Add(sb);
-        }
-
-        var submitGate = new ChapterCastSubmitGateDto(submitBlockers.Count == 0, submitBlockers);
-        var startGate = new ChapterCastStartGateDto(startBlockers.Count == 0, startBlockers);
+        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
+        var startGate = await _castGate.EvaluateStartAsync(chapter.Id, ct);
 
         return Result<ChapterCastDto>.Success(new ChapterCastDto(
             chapter.Id,

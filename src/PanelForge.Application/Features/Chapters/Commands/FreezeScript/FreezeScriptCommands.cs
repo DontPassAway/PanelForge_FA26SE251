@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Models;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Content;
@@ -24,10 +25,12 @@ public sealed record FreezeChapterScriptCommand(Guid ChapterId, Guid UserId) : I
 public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeChapterScriptCommand, Result<ChapterDetailDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IChapterCastGate _castGate;
 
-    public FreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext)
+    public FreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext, IChapterCastGate? castGate = null)
     {
         _dbContext = dbContext;
+        _castGate = castGate ?? new ChapterCastGate(dbContext);
     }
 
     public async Task<Result<ChapterDetailDto>> Handle(FreezeChapterScriptCommand cmd, CancellationToken ct)
@@ -57,7 +60,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         var pushed = chapter.LastSubmittedVersionId is { } pushedId
             ? await _dbContext.ScriptVersions.AsNoTracking()
                 .Where(v => v.Id == pushedId)
-                .Select(v => new { v.VersionNumber, v.ContentHash })
+                .Select(v => new { v.Id, v.VersionNumber, v.ContentHash })
                 .FirstOrDefaultAsync(ct)
             : null;
         if (pushed is not null && pushed.ContentHash != snapshot.Hash)
@@ -65,12 +68,32 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
                 $"Writer đã sửa kịch bản sau lần nộp v{pushed.VersionNumber}. Cần Writer nộp lại để bản chốt sản xuất trùng bản Editor đã đọc.",
                 ResultErrorCodes.Conflict);
 
-        // Đóng băng lại sau khi mở sửa: gắn cờ ảnh hưởng cho Panel có dòng vừa sửa (WF04)
+        // BIB-14: Gate 1 check trước khi StartProduction
+        var startGate = await _castGate.EvaluateStartAsync(chapter.Id, ct);
+        if (!startGate.CanStart)
+        {
+            var blockerSummary = string.Join("; ", startGate.Blockers.Select(b => $"{b.EntryName}: {b.Reason} ({b.SourceExplanation ?? "chương"})"));
+            return Result<ChapterDetailDto>.Failure(
+                $"Không thể bắt đầu sản xuất do Series Bible chưa sẵn sàng: {blockerSummary}",
+                ResultErrorCodes.Conflict);
+        }
+
+        // Đóng băng lại sau khi mở sửa: gắn cờ ảnh hưởng cho Panel có dòng vừa sửa hoặc đổi binding (WF04 / SCR-01)
         if (chapter.ScriptReopenStatus == ScriptReopenStatus.Approved && chapter.ScriptReopenRequestedAt.HasValue)
             await FlagImpactedWorkAsync(chapter.Id, chapter.ScriptReopenRequestedAt.Value, ct);
 
-        // Mã băm dùng chung với phiên bản kịch bản (Trang → Panel → dòng)
-        chapter.StartProduction(cmd.UserId, snapshot.Hash);
+        // Đóng băng is_crowd_at_bind và bound_revision_id
+        var chapterBindings = await _dbContext.ChapterBibleBindings
+            .Include(b => b.BibleEntry)
+            .Where(b => b.ChapterId == chapter.Id)
+            .ToListAsync(ct);
+        foreach (var b in chapterBindings)
+        {
+            b.SetCrowdAtBind(b.BibleEntry.IsCrowd);
+        }
+
+        // Mã băm dùng chung với phiên bản kịch bản (Trang → Panel → dòng), chốt frozen_script_version_id
+        chapter.StartProduction(cmd.UserId, snapshot.Hash, pushed?.Id);
         chapter.UpdatedBy = cmd.UserId.ToString();
 
         await ScriptNotifications.NotifyWritersAsync(_dbContext, chapter, cmd.UserId,
@@ -83,22 +106,77 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
 
     private async Task FlagImpactedWorkAsync(Guid chapterId, DateTime since, CancellationToken ct)
     {
-        var modified = await _dbContext.ScriptLines
+        // 1. Dòng kịch bản sửa sau khi mở lại
+        var modifiedLines = await _dbContext.ScriptLines
             .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.UpdatedAt >= since)
             .Select(l => new { l.Id, PanelId = l.PanelId!.Value })
             .ToListAsync(ct);
-        if (modified.Count == 0) return;
 
-        var panelMap = modified.GroupBy(p => p.PanelId).ToDictionary(g => g.Key, g => g.First().Id);
-        var panelIds = panelMap.Keys.ToList();
+        // 2. Biến thể Panel bị đặt/sửa sau khi mở lại
+        var modifiedVariants = await _dbContext.PanelBibleVariants
+            .Where(v => v.Panel.Page.ChapterId == chapterId && v.SetAt >= since)
+            .Select(v => v.PanelId)
+            .ToListAsync(ct);
+
+        // 3. Thực thể binding đổi bound_revision_id hoặc thêm mới sau khi mở lại
+        var modifiedBindingEntryIds = await _dbContext.ChapterBibleBindings
+            .Where(b => b.ChapterId == chapterId && b.BoundAt >= since)
+            .Select(b => b.BibleEntryId)
+            .ToListAsync(ct);
+
+        List<Guid> panelsFromChangedBindings = [];
+        if (modifiedBindingEntryIds.Count > 0)
+        {
+            var speakerPanels = await _dbContext.ScriptLines
+                .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId &&
+                            l.SpeakerCharacterId.HasValue && modifiedBindingEntryIds.Contains(l.SpeakerCharacterId.Value))
+                .Select(l => l.PanelId!.Value)
+                .ToListAsync(ct);
+
+            var linkPanels = await _dbContext.ScriptLineBibleLinks
+                .Where(k => modifiedBindingEntryIds.Contains(k.BibleEntryId) &&
+                            k.ScriptLine.PanelId != null && k.ScriptLine.Panel!.Page.ChapterId == chapterId)
+                .Select(k => k.ScriptLine.PanelId!.Value)
+                .ToListAsync(ct);
+
+            panelsFromChangedBindings = speakerPanels.Union(linkPanels).Distinct().ToList();
+        }
+
+        var allAffectedPanelIds = modifiedLines.Select(l => l.PanelId)
+            .Union(modifiedVariants)
+            .Union(panelsFromChangedBindings)
+            .Distinct()
+            .ToList();
+
+        if (allAffectedPanelIds.Count == 0) return;
+
+        var lineByPanel = modifiedLines.GroupBy(p => p.PanelId).ToDictionary(g => g.Key, g => g.First().Id);
+        var missingPanels = allAffectedPanelIds.Where(id => !lineByPanel.ContainsKey(id)).ToList();
+        if (missingPanels.Count > 0)
+        {
+            var fallbackLines = await _dbContext.ScriptLines
+                .Where(l => l.PanelId != null && missingPanels.Contains(l.PanelId.Value))
+                .Select(l => new { l.Id, PanelId = l.PanelId!.Value })
+                .ToListAsync(ct);
+            foreach (var fl in fallbackLines)
+            {
+                lineByPanel.TryAdd(fl.PanelId, fl.Id);
+            }
+        }
 
         foreach (var a in await _dbContext.Assignments
-                     .Where(a => a.ChapterId == chapterId && panelIds.Contains(a.TargetEntityId)).ToListAsync(ct))
-            a.FlagScriptImpact(panelMap[a.TargetEntityId]);
+                     .Where(a => a.ChapterId == chapterId && allAffectedPanelIds.Contains(a.TargetEntityId)).ToListAsync(ct))
+        {
+            var lineId = lineByPanel.GetValueOrDefault(a.TargetEntityId, Guid.Empty);
+            a.FlagScriptImpact(lineId);
+        }
 
         foreach (var sp in await _dbContext.StageProgresses
-                     .Where(sp => panelIds.Contains(sp.PanelId)).ToListAsync(ct))
-            sp.FlagScriptImpact(panelMap[sp.PanelId]);
+                     .Where(sp => allAffectedPanelIds.Contains(sp.PanelId)).ToListAsync(ct))
+        {
+            var lineId = lineByPanel.GetValueOrDefault(sp.PanelId, Guid.Empty);
+            sp.FlagScriptImpact(lineId);
+        }
     }
 }
 
@@ -114,11 +192,16 @@ public sealed class ScriptLifecycleCommandHandler :
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IChapterCastGate _castGate;
 
-    public ScriptLifecycleCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public ScriptLifecycleCommandHandler(
+        IPanelForgeDbContext db,
+        IWorkspaceAuthorizationService auth,
+        IChapterCastGate? castGate = null)
     {
         _db = db;
         _auth = auth;
+        _castGate = castGate ?? new ChapterCastGate(db);
     }
 
     public async Task<Result<ChapterDetailDto>> Handle(SubmitScriptCommand cmd, CancellationToken ct)
@@ -131,6 +214,16 @@ public sealed class ScriptLifecycleCommandHandler :
         var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct);
         if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
+
+        // BIB-14: Evaluate submit gate
+        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
+        if (!submitGate.CanSubmit)
+        {
+            var blockerSummary = string.Join("; ", submitGate.Blockers.Select(b => $"{b.EntryName}: {b.Reason}"));
+            return Result<ChapterDetailDto>.Failure(
+                $"Không thể gửi duyệt kịch bản do Series Bible chưa sẵn sàng: {blockerSummary}",
+                ResultErrorCodes.Conflict);
+        }
 
         try
         {

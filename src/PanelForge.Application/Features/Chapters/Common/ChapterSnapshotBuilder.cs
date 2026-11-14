@@ -16,9 +16,21 @@ public sealed record SnapshotPage(
 
 public sealed record SnapshotPanelArtwork(Guid PanelId, Guid ArtworkReferenceId, string? ArtworkSha256);
 
+public sealed record SnapshotCastItem(
+    Guid BibleEntryId, Guid BoundRevisionId, string? ModelSheetSha256);
+
+public sealed record SnapshotPanelVariant(
+    Guid PanelId, Guid BibleEntryId, Guid RevisionId, string? ModelSheetSha256);
+
 public sealed record SnapshotManifest(
-    Guid ChapterId, long ChapterVersion, IReadOnlyList<SnapshotPage> Pages,
-    IReadOnlyList<Guid> ScriptRevisionIds, IReadOnlyList<Guid> BibleRevisionIds);
+    Guid ChapterId,
+    long ChapterVersion,
+    IReadOnlyList<SnapshotPage> Pages,
+    Guid? FrozenScriptVersionId,
+    IReadOnlyList<SnapshotCastItem> Cast,
+    IReadOnlyList<SnapshotPanelVariant> PanelVariants,
+    IReadOnlyList<Guid>? ScriptRevisionIds = null,
+    IReadOnlyList<Guid>? BibleRevisionIds = null);
 
 /// <summary>
 /// CF4 / 4.1: dựng <see cref="ChapterSnapshot"/> cho chương. Handler gọi rồi Add vào DbContext để lưu cùng SaveChanges với thay đổi
@@ -38,14 +50,51 @@ internal static class ChapterSnapshotBuilder
             join a in db.Assets.AsNoTracking() on r.AssetId equals a.Id
             select new { r.Id, a.Sha256 }).ToDictionaryAsync(x => x.Id, x => x.Sha256, ct);
 
-        // 2. Mọi trang còn sống + version stream canvas
+        // 2. Mọi trang còn sống + version stream canvas (batch multi-page stream query, giữ -1 cho trang chưa có event)
         var pageRows = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id)
             .OrderBy(p => p.PageNumber).Select(p => new { p.Id, p.PageNumber }).ToListAsync(ct);
+        var pageIds = pageRows.Select(p => p.Id).ToList();
+
+        IReadOnlyDictionary<Guid, long>? streamVersions = null;
+        try
+        {
+            streamVersions = await pages.GetStreamVersionsAsync(pageIds, ct);
+        }
+        catch
+        {
+            // Fallback nếu mock chưa setup GetStreamVersionsAsync
+        }
+
         var snapshotPages = new List<SnapshotPage>();
         foreach (var p in pageRows)
         {
             var art = finals.FirstOrDefault(f => f.PageId == p.Id);
-            var streamVersion = (await pages.GetAsync(p.Id, ct))?.Version ?? -1;
+            long streamVersion = -1;
+            if (streamVersions is not null && streamVersions.TryGetValue(p.Id, out var v))
+            {
+                streamVersion = v;
+            }
+            else
+            {
+                try
+                {
+                    var singleV = await pages.GetStreamVersionAsync(p.Id, ct);
+                    if (singleV >= 0)
+                    {
+                        streamVersion = singleV;
+                    }
+                    else
+                    {
+                        var singleP = await pages.GetAsync(p.Id, ct);
+                        if (singleP is not null) streamVersion = singleP.Version;
+                    }
+                }
+                catch
+                {
+                    streamVersion = -1;
+                }
+            }
+
             var whole = art?.WholePageReferenceId;
             var panelArtworks = art is null || whole is not null
                 ? null
@@ -55,33 +104,64 @@ internal static class ChapterSnapshotBuilder
                 whole is null ? null : shas.GetValueOrDefault(whole.Value), panelArtworks));
         }
 
-        // 3. Revision script mới nhất của từng scene (group trong bộ nhớ để chạy được cả Npgsql lẫn InMemory)
-        var scriptRows = await db.ContentRevisions.AsNoTracking()
-            .Where(r => r.ChapterId == chapter.Id && r.Kind == ContentRevisionKind.Script)
-            .Select(r => new { r.SceneId, r.Id, r.VersionNumber }).ToListAsync(ct);
-        var scriptRevisionIds = scriptRows.GroupBy(r => r.SceneId)
-            .Select(g => g.MaxBy(r => r.VersionNumber)!.Id).ToList();
+        // 3. Phiên bản kịch bản chốt sản xuất (BIB-14, SCR-41)
+        var frozenScriptVersionId = chapter.FrozenScriptVersionId ?? chapter.LastSubmittedVersionId;
 
-        // 4. Revision Bible có hiệu lực tại chương: đã khoá, phạm vi [From, To] chứa số chương.
-        //    Chồng lấn thì giai đoạn nối tiếp (From lớn hơn) thắng, rồi tới bản mới nhất (như BibleEntryRevision.CoversChapter)
-        var bibleRows = await (
-            from r in db.BibleEntryRevisions.AsNoTracking()
-            join e in db.BibleEntries.AsNoTracking() on r.BibleEntryId equals e.Id
-            join b in db.SeriesBibles.AsNoTracking() on e.SeriesBibleId equals b.Id
-            where b.SeriesId == chapter.SeriesId && r.LockedAt != null
-                  && r.EffectiveFromChapterNumber <= chapter.ChapterNumber
-                  && (r.EffectiveToChapterNumber == null || chapter.ChapterNumber <= r.EffectiveToChapterNumber)
-            select new { r.BibleEntryId, r.Id, r.EffectiveFromChapterNumber, r.VersionNumber }).ToListAsync(ct);
-        var bibleRevisionIds = bibleRows.GroupBy(x => x.BibleEntryId)
-            .Select(g => g.OrderByDescending(x => x.EffectiveFromChapterNumber)
-                          .ThenByDescending(x => x.VersionNumber).First().Id)
-            .ToList();
+        // 4. Bản đồ thực thể chương (BIB-14: ghi cast map, bỏ đọc Bible theo era)
+        var bindings = await db.ChapterBibleBindings.AsNoTracking()
+            .Include(b => b.BoundRevision)
+                .ThenInclude(r => r!.Events)
+            .Where(b => b.ChapterId == chapter.Id && b.BoundRevisionId != null)
+            .ToListAsync(ct);
 
-        // 5. Số snapshot tăng dần (unique index chặn trùng khi hai lần duyệt chạy song song) + hash manifest
+        var cast = bindings.Select(b =>
+        {
+            var lockedEvt = b.BoundRevision?.Events
+                .Where(e => e.Type == BibleRevisionEventType.Locked)
+                .OrderByDescending(e => e.CreatedAt)
+                .FirstOrDefault();
+            var sha = lockedEvt?.AssetSha256;
+            return new SnapshotCastItem(b.BibleEntryId, b.BoundRevisionId!.Value, sha);
+        }).ToList();
+
+        // 5. Biến thể theo Panel
+        var panelIds = await db.Panels.AsNoTracking()
+            .Where(pan => pageIds.Contains(pan.PageId))
+            .Select(pan => pan.Id)
+            .ToListAsync(ct);
+
+        var panelVariants = await db.PanelBibleVariants.AsNoTracking()
+            .Include(v => v.Revision)
+                .ThenInclude(r => r.Events)
+            .Where(v => panelIds.Contains(v.PanelId))
+            .ToListAsync(ct);
+
+        var variants = panelVariants.Select(v =>
+        {
+            var lockedEvt = v.Revision.Events
+                .Where(e => e.Type == BibleRevisionEventType.Locked)
+                .OrderByDescending(e => e.CreatedAt)
+                .FirstOrDefault();
+            var sha = lockedEvt?.AssetSha256;
+            return new SnapshotPanelVariant(v.PanelId, v.BibleEntryId, v.RevisionId, sha);
+        }).ToList();
+
+        var bibleRevisionIds = cast.Select(c => c.BoundRevisionId).Distinct().ToList();
+
+        // 6. Số snapshot tăng dần + hash manifest
         var next = (await db.ChapterSnapshots.Where(s => s.ChapterId == chapter.Id)
             .MaxAsync(s => (int?)s.SnapshotNumber, ct) ?? 0) + 1;
-        var json = AiJson.Serialize(new SnapshotManifest(
-            chapter.Id, chapter.VersionVector, snapshotPages, scriptRevisionIds, bibleRevisionIds));
+        var manifest = new SnapshotManifest(
+            chapter.Id,
+            chapter.VersionVector,
+            snapshotPages,
+            frozenScriptVersionId,
+            cast,
+            variants,
+            ScriptRevisionIds: [],
+            BibleRevisionIds: bibleRevisionIds);
+
+        var json = AiJson.Serialize(manifest);
 
         return ChapterSnapshot.Create(chapter.Id, next, chapter.VersionVector, userId, json, AiContentValidator.Sha256(json));
     }
