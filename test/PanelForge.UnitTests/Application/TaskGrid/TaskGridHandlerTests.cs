@@ -18,6 +18,9 @@ using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
+using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
+using PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
+using PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsToGrid;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -48,6 +51,8 @@ public class TaskGridHandlerTests
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IPageRepository> PageRepo = new();
         public readonly List<ScriptVersion> ScriptVersions = [];
+        public readonly List<Assignment> Assignments = [];
+        public Guid WorkspaceId => _workspaceId;
         private readonly Guid _workspaceId;
         private readonly List<WorkspaceMember> _members;
 
@@ -95,7 +100,7 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
             Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(new List<AssetReference>()));
-            Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+            Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChangeRequest>()));
             Db.Setup(d => d.ConsistencyFindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ConsistencyFinding>()));
@@ -525,5 +530,83 @@ public class TaskGridHandlerTests
         (await SeriesPipelineStore.StageInUseOnGridReasonAsync(f.Db.Object, f.Pencil.Id, default)).Should().NotBeNull();
         (await SeriesPipelineStore.StageInUseOnGridReasonAsync(f.Db.Object, f.Review.Id, default))
             .Should().BeNull("Review chưa có ô được giao nên tắt được");
+    }
+
+    // ─── Lát cắt 4: Clean Cutover ─────────────────────────────────────────────
+
+    private static Assignment Legacy(Fixture f, WorkflowEntityType type, Guid target, PipelineStage stage, Guid user, WorkspaceRole role) =>
+        Assignment.Create(f.Chapter.SeriesId, f.Chapter.Id, type, target, stage.Id, user, role, "việc cũ");
+
+    private static Task<Result<MigrateAssignmentsResultDto>> Migrate(Fixture f)
+    {
+        var sender = new Mock<MediatR.ISender>();
+        sender.Setup(s => s.Send(It.IsAny<GenerateStageTasksCommand>(), It.IsAny<CancellationToken>()))
+            .Returns((GenerateStageTasksCommand c, CancellationToken ct) => new GenerateStageTasksCommandHandler(f.Db.Object).Handle(c, ct));
+        return new MigrateAssignmentsToGridCommandHandler(f.Db.Object, sender.Object)
+            .Handle(new MigrateAssignmentsToGridCommand(f.Chapter.SeriesId, f.ProducerId), default);
+    }
+
+    [Fact]
+    public async Task MigrateAssignments_MapsLegacyWorkToLots_SkipsDisabledStage_AndBlocksNewLegacyAssignments()
+    {
+        var f = new Fixture();
+        var pencil = Legacy(f, WorkflowEntityType.Page, f.Pages[0].Id, f.Pencil, f.ArtistId, WorkspaceRole.Artist);
+        pencil.StartWork();
+        pencil.SubmitForReview();
+        var lettering = Legacy(f, WorkflowEntityType.Chapter, f.Chapter.Id, f.Lettering, f.LettererId, WorkspaceRole.Letterer);
+        var review = Legacy(f, WorkflowEntityType.Chapter, f.Chapter.Id, f.Review, f.EditorId, WorkspaceRole.Editor);
+        var ink = Legacy(f, WorkflowEntityType.Page, f.Pages[0].Id, f.Ink, f.ArtistId, WorkspaceRole.Artist);
+        f.Assignments.AddRange([pencil, lettering, review, ink]);
+        f.Ink.SetEnabled(false);
+
+        var result = await Migrate(f);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Value!.Migrated.Should().Be(3);
+        result.Value.CellsAssigned.Should().Be(4, "Pencil trang 1 + Lettering 2 trang + Review");
+        result.Value.Skipped.Should().ContainSingle(s => s.AssignmentId == ink.Id);
+        f.Cell(f.Pencil, 0).Status.Should().Be(StageTaskStatus.InProgress, "Submitted V2 về InProgress để nộp lại có ảnh chụp");
+        f.Cell(f.Pencil, 1).Status.Should().Be(StageTaskStatus.Unassigned);
+        f.Cell(f.Lettering, 0).LotId.Should().NotBeNull().And.Be(f.Cell(f.Lettering, 1).LotId, "việc cả chương phủ mọi trang trong một lô");
+        f.Tasks.Single(t => t.PipelineStageId == f.Review.Id).Status.Should().Be(StageTaskStatus.Assigned);
+        f.Assignments.Should().ContainSingle().Which.Should().Be(ink, "việc đã chuyển bị xoá mềm, việc bỏ qua giữ nguyên");
+        pencil.CancelReason.Should().Be(MigrateAssignmentsToGridCommandHandler.CancelReason);
+
+        (await Migrate(f)).Value!.Migrated.Should().Be(0, "gọi lại an toàn");
+        (await AssignmentRules.GridActiveReasonAsync(f.Db.Object, f.Chapter.Id, default)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MyTaskLots_ListsCallerLotsWithStartableCells()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+
+        var artist = await new GetMyTaskLotsQueryHandler(f.Db.Object).Handle(new GetMyTaskLotsQuery(f.WorkspaceId, f.ArtistId), default);
+        var letterer = await new GetMyTaskLotsQueryHandler(f.Db.Object).Handle(new GetMyTaskLotsQuery(f.WorkspaceId, f.LettererId), default);
+
+        artist.Value!.Select(l => l.StageName).Should().Equal("Pencil", "Ink", "Color");
+        artist.Value![0].Tasks.Should().ContainSingle().Which.IsStartable.Should().BeTrue();
+        artist.Value![1].Tasks.Single().IsStartable.Should().BeFalse("Ink chờ Pencil");
+        letterer.Value!.Should().ContainSingle().Which.Tasks.Single().PageNumber.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ReviewQueue_ListsSubmittedGatedCells()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink, f.Color })
+        {
+            (await f.Start(f.Cell(stage, 0), f.ArtistId)).IsSuccess.Should().BeTrue();
+            (await f.Submit(f.ArtistId, f.Cell(stage, 0))).IsSuccess.Should().BeTrue();
+        }
+
+        var queue = await new GetTaskGridReviewQueueQueryHandler(f.Db.Object).Handle(new GetTaskGridReviewQueueQuery(f.WorkspaceId), default);
+
+        var item = queue.Value!.Should().ContainSingle().Subject;
+        item.StageName.Should().Be("Color");
+        item.AssigneeUserId.Should().Be(f.ArtistId);
+        item.AttemptNumber.Should().Be(1);
     }
 }

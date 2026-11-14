@@ -45,6 +45,8 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
 
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Fail(locked, ResultErrorCodes.Conflict);
+        if (await AssignmentRules.GridActiveReasonAsync(_db, chapter.Id, ct) is { } grid)
+            return Fail(grid, ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);

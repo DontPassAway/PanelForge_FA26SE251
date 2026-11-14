@@ -70,3 +70,28 @@ public sealed record ReopenStageTaskResultDto(StageTaskDto Task, IReadOnlyList<G
 public sealed record AssignStageTaskLotsResultDto(bool DryRun, int TaskCount, IReadOnlyList<StageTaskLotDto> Lots);
 
 public sealed record GenerateStageTasksResultDto(int Created, int Cancelled, int Total);
+
+// ─── Clean Cutover ────────────────────────────────────────────────────────────
+
+/// <param name="Migrated">Số việc V2 đã chuyển (mỗi việc thành một lô).</param>
+/// <param name="CellsAssigned">Số ô được gắn vào các lô đó.</param>
+/// <param name="Skipped">Việc giữ nguyên ở V2 kèm lý do.</param>
+public sealed record MigrateAssignmentsResultDto(int Migrated, int CellsAssigned, IReadOnlyList<MigrateSkippedDto> Skipped);
+
+public sealed record MigrateSkippedDto(Guid AssignmentId, Guid ChapterId, string Reason);
+
+/// <summary>Một lô của người gọi, xuyên chương (thay cho my-assignments V2).</summary>
+public sealed record MyTaskLotDto(
+    Guid Id, Guid SeriesId, string SeriesTitle, Guid ChapterId, decimal ChapterNumber, string? ChapterTitle,
+    Guid PipelineStageId, string StageName, int StageOrder, string? StageColorCode, WorkspaceRole AssignedRole,
+    string? Brief, DateTime? DueDate, StageTaskLotStatus Status, bool IsOverdue, IReadOnlyList<MyTaskCellDto> Tasks);
+
+/// <param name="PageNumber">null = ô cấp Chương.</param>
+public sealed record MyTaskCellDto(
+    Guid Id, Guid? PageId, int? PageNumber, StageTaskStatus Status, bool IsStartable, bool IsInputOutdated, string? OutdatedReason);
+
+/// <summary>Ô đang chờ duyệt (Submitted) hoặc đang được duyệt (UnderReview).</summary>
+public sealed record TaskGridReviewItemDto(
+    Guid TaskId, Guid SeriesId, string SeriesTitle, Guid ChapterId, decimal ChapterNumber, string? ChapterTitle,
+    Guid PipelineStageId, string StageName, Guid? PageId, int? PageNumber, StageTaskStatus Status,
+    Guid? AssigneeUserId, Guid? ReviewerUserId, int? AttemptNumber, DateTime? SubmittedAt);

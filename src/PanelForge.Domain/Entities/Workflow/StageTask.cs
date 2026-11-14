@@ -55,6 +55,24 @@ public class StageTask : BaseEntity
         Touch();
     }
 
+    /// <summary>
+    /// Clean Cutover: chuyển việc Assignment V2 sang ô. Chỉ cho ô chưa giao. Không nhận Submitted/UnderReview vì V2 không có
+    /// ảnh chụp lần nộp theo ô; người gọi đưa các việc đó về InProgress để người làm nộp lại.
+    /// </summary>
+    public void RestoreFromLegacy(Guid lotId, StageTaskStatus status, DateTime? startedAt)
+    {
+        if (lotId == Guid.Empty) throw new ArgumentException("Thiếu lô giao việc.", nameof(lotId));
+        if (Status != StageTaskStatus.Unassigned) throw Invalid("chuyển việc cũ vào");
+        if (status is not (StageTaskStatus.Assigned or StageTaskStatus.InProgress
+            or StageTaskStatus.ReworkRequired or StageTaskStatus.Approved))
+            throw new ArgumentOutOfRangeException(nameof(status), status, "Trạng thái không chuyển được từ việc cũ.");
+
+        LotId = lotId;
+        Status = status;
+        StartedAt = status == StageTaskStatus.Assigned ? null : startedAt ?? DateTime.UtcNow;
+        Touch();
+    }
+
     public void Unassign()
     {
         if (Status is not (StageTaskStatus.Assigned or StageTaskStatus.InProgress or StageTaskStatus.ReworkRequired))

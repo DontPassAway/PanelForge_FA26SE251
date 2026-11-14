@@ -16,6 +16,9 @@ using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
+using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
+using PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
+using PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsToGrid;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
@@ -109,6 +112,30 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<StageTaskDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Unassign(Guid chapterId, [FromBody] UnassignStageTasksRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new UnassignStageTasksCommand(chapterId, body.TaskIds, CurrentUserId), ct));
+
+    // ─── Clean Cutover: xuyên chương ───────────────────────────────────────────
+
+    /// <summary>GET /api/workspaces/{workspaceId}/my-task-lots — lô của tôi xuyên chương (thay my-assignments V2).</summary>
+    [HttpGet("~/api/workspaces/{workspaceId:guid}/my-task-lots")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<MyTaskLotDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> MyLots(Guid workspaceId, [FromQuery] Guid? seriesId, [FromQuery] bool includeCompleted = true,
+        CancellationToken ct = default) =>
+        ToResult(await _mediator.Send(new GetMyTaskLotsQuery(workspaceId, CurrentUserId, seriesId, includeCompleted), ct));
+
+    /// <summary>GET /api/workspaces/{workspaceId}/task-grid/review-queue — ô chờ duyệt (thay editor/review-queue V2).</summary>
+    [HttpGet("~/api/workspaces/{workspaceId:guid}/task-grid/review-queue")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<TaskGridReviewItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReviewQueue(Guid workspaceId, [FromQuery] Guid? seriesId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new GetTaskGridReviewQueueQuery(workspaceId, seriesId), ct));
+
+    /// <summary>POST /api/series/{seriesId}/task-grid/migrate-assignments — Producer chuyển Assignment V2 sang lưới (gọi lại an toàn).</summary>
+    [HttpPost("~/api/series/{seriesId:guid}/task-grid/migrate-assignments")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MigrateAssignmentsResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> MigrateAssignments(Guid seriesId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new MigrateAssignmentsToGridCommand(seriesId, CurrentUserId), ct));
 
     private IActionResult ToResult<T>(Result<T> result) => result.IsSuccess
         ? Ok(result.Value)

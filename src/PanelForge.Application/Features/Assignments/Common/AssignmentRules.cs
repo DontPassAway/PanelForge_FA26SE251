@@ -10,6 +10,12 @@ namespace PanelForge.Application.Features.Assignments.Common;
 /// <summary>Luật dùng chung của Create/Update Assignment (BR-03, BR-07, BR-12).</summary>
 internal static class AssignmentRules
 {
+    /// <summary>Clean Cutover: chương đã có ô lưới V3 thì giao việc qua lưới, không tạo Assignment V2 nữa.</summary>
+    public static async Task<string?> GridActiveReasonAsync(IPanelForgeDbContext db, Guid chapterId, CancellationToken ct) =>
+        await db.StageTasks.AsNoTracking().AnyAsync(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled, ct)
+            ? "Chương này đã dùng Lưới giao việc V3; hãy giao việc trên lưới."
+            : null;
+
     /// <summary>BR-12: Chapter đã Approved/Locked/Published thì không giao hay đổi việc.</summary>
     public static string? ChapterNotEditableReason(Chapter chapter) =>
         chapter.IsContentEditable
