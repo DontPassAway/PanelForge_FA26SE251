@@ -16,6 +16,7 @@ using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -36,11 +37,16 @@ public class ChapterCastRecomputeTests
     private readonly Chapter _chapter;
     private readonly Scene _scene;
     private readonly SeriesBible _bible;
+    private readonly ChapterCastInheritanceResolver _resolver;
+    private readonly ChapterCastService _castService;
     private readonly Guid _writerId = Guid.NewGuid();
     private readonly Guid _producerId = Guid.NewGuid();
 
     public ChapterCastRecomputeTests()
     {
+        _resolver = new ChapterCastInheritanceResolver(_db);
+        _castService = new ChapterCastService(_db, _resolver);
+
         _studio = StudioWorkspace.Create("Test Studio", _producerId);
         _db.StudioWorkspaces.Add(_studio);
         _series = DomainSeries.Create(_studio.Id, "Manga Cast", ReadingDirection.RightToLeft);
@@ -337,7 +343,7 @@ public class ChapterCastRecomputeTests
         await _db.SaveChangesAsync();
 
         // Commit ban đầu
-        var version = await ScriptSnapshotBuilder.CommitAsync(_db, _chapter.Id, _writerId, "Bản 1", default);
+        var version = await ScriptSnapshotBuilder.CommitAsync(_db, _chapter.Id, _writerId, "Bản 1", default, _castService);
         version.MarkSubmitted(_writerId);
         await _db.SaveChangesAsync();
 
@@ -357,7 +363,7 @@ public class ChapterCastRecomputeTests
     public async Task CommitScriptVersion_ProducerReturnsForbidden_WriterSucceeds()
     {
         // 13. Commit chỉ Writer
-        var handler = new CommitScriptVersionCommandHandler(_db, _auth.Object);
+        var handler = new CommitScriptVersionCommandHandler(_db, _auth.Object, _castService);
 
         var prodResult = await handler.Handle(new CommitScriptVersionCommand(_chapter.Id, _producerId, "Producer commit"), default);
         prodResult.IsSuccess.Should().BeFalse();
@@ -382,7 +388,8 @@ public class ChapterCastRecomputeTests
         _db.ChapterBibleBindings.Add(ChapterBibleBinding.Create(_chapter.Id, canonEntry.Id, canonRev.Id, ChapterBibleBindingSource.Speaker, isCrowdAtBind: false));
         await _db.SaveChangesAsync();
 
-        var queryHandler = new GetChapterCastQueryHandler(_db, _auth.Object);
+        var castGate = new ChapterCastGate(_db, _castService, _resolver);
+        var queryHandler = new GetChapterCastQueryHandler(_db, _auth.Object, castGate);
         var result = await queryHandler.Handle(new GetChapterCastQuery(_chapter.Id, _writerId), default);
 
         result.IsSuccess.Should().BeTrue();

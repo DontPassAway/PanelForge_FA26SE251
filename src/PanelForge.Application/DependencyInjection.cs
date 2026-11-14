@@ -12,16 +12,8 @@ public static class DependencyInjection
         // để tìm tất cả IRequestHandler<TCommand, TResult>
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly));
 
-        services.AddScoped<Features.Chapters.Services.IChapterCastService>(sp =>
-            new Features.Chapters.Services.ChapterCastService(
-                sp.GetRequiredService<Common.Interfaces.Persistence.IPanelForgeDbContext>(),
-                sp.GetService<Common.Interfaces.Services.IChapterCastInheritanceResolver>()));
-
-        services.AddScoped<Features.Chapters.Services.IChapterCastGate>(sp =>
-            new Features.Chapters.Services.ChapterCastGate(
-                sp.GetRequiredService<Common.Interfaces.Persistence.IPanelForgeDbContext>(),
-                sp.GetService<Features.Chapters.Services.IChapterCastService>(),
-                sp.GetService<Common.Interfaces.Services.IChapterCastInheritanceResolver>()));
+        services.AddScoped<Features.Chapters.Services.IChapterCastService, Features.Chapters.Services.ChapterCastService>();
+        services.AddScoped<Features.Chapters.Services.IChapterCastGate, Features.Chapters.Services.ChapterCastGate>();
 
         return services;
     }

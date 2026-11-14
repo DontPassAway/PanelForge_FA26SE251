@@ -24,10 +24,10 @@ public sealed class CheckChapterBibleGateQueryHandler : IRequestHandler<CheckCha
 
     public CheckChapterBibleGateQueryHandler(
         IPanelForgeDbContext dbContext,
-        IChapterCastGate? castGate = null)
+        IChapterCastGate castGate)
     {
         _dbContext = dbContext;
-        _castGate = castGate ?? new ChapterCastGate(dbContext, new ChapterCastService(dbContext));
+        _castGate = castGate;
     }
 
     public async Task<Result<ChapterBibleGateResultDto>> Handle(CheckChapterBibleGateQuery query, CancellationToken ct)

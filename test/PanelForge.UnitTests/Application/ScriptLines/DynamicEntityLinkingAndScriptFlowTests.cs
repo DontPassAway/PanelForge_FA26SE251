@@ -8,6 +8,7 @@ using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Pages.Commands.TogglePageContentReady;
 using PanelForge.Application.Features.ScriptLines.Commands.LinkBibleEntries;
 using PanelForge.Application.Features.ScriptLines.Models;
@@ -17,6 +18,7 @@ using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -219,7 +221,10 @@ public class DynamicEntityLinkingAndScriptFlowTests
         _chapter.SubmitScript(_writer);
         await _db.SaveChangesAsync();
 
-        var freezeHandler = new FreezeChapterScriptCommandHandler(_db);
+        var resolver = new ChapterCastInheritanceResolver(_db);
+        var castService = new ChapterCastService(_db, resolver);
+        var castGate = new ChapterCastGate(_db, castService, resolver);
+        var freezeHandler = new FreezeChapterScriptCommandHandler(_db, castGate);
         var freezeResult = await freezeHandler.Handle(
             new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 

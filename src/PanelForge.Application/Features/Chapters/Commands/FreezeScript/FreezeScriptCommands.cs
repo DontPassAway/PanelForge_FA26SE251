@@ -27,10 +27,10 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IChapterCastGate _castGate;
 
-    public FreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext, IChapterCastGate? castGate = null)
+    public FreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext, IChapterCastGate castGate)
     {
         _dbContext = dbContext;
-        _castGate = castGate ?? new ChapterCastGate(dbContext);
+        _castGate = castGate;
     }
 
     public async Task<Result<ChapterDetailDto>> Handle(FreezeChapterScriptCommand cmd, CancellationToken ct)
@@ -193,15 +193,18 @@ public sealed class ScriptLifecycleCommandHandler :
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
     private readonly IChapterCastGate _castGate;
+    private readonly IChapterCastService _castService;
 
     public ScriptLifecycleCommandHandler(
         IPanelForgeDbContext db,
         IWorkspaceAuthorizationService auth,
-        IChapterCastGate? castGate = null)
+        IChapterCastGate castGate,
+        IChapterCastService castService)
     {
         _db = db;
         _auth = auth;
-        _castGate = castGate ?? new ChapterCastGate(db);
+        _castGate = castGate;
+        _castService = castService;
     }
 
     public async Task<Result<ChapterDetailDto>> Handle(SubmitScriptCommand cmd, CancellationToken ct)
@@ -211,7 +214,7 @@ public sealed class ScriptLifecycleCommandHandler :
         var (chapter, workspaceId) = loaded.Value;
 
         // Gửi duyệt = push: commit bản hiện tại (nếu khác bản gần nhất) rồi đánh dấu đã gửi
-        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct);
+        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct, _castService);
         if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 

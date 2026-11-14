@@ -118,7 +118,7 @@ public sealed class SetChapterCastRevisionCommandHandler
         }
 
         // Tính lại bản kế thừa cho chương này (nếu chosen_by_writer = false) và các chương sau chưa Frozen
-        await _inheritanceResolver.ResolveInheritedAsync(chapter.SeriesId, (int)chapter.ChapterNumber, ct);
+        await _inheritanceResolver.ResolveInheritedAsync(chapter.SeriesId, chapter.ChapterNumber, ct);
 
         // Thu thập các chương phía sau kế thừa theo và cảnh báo các chương phía sau đã chốt với bản khác
         var laterChapters = await _dbContext.Chapters

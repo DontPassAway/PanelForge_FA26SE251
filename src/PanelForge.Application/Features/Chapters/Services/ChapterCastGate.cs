@@ -10,13 +10,13 @@ namespace PanelForge.Application.Features.Chapters.Services;
 public sealed class ChapterCastGate : IChapterCastGate
 {
     private readonly IPanelForgeDbContext _db;
-    private readonly IChapterCastService? _castService;
-    private readonly IChapterCastInheritanceResolver? _inheritanceResolver;
+    private readonly IChapterCastService _castService;
+    private readonly IChapterCastInheritanceResolver _inheritanceResolver;
 
     public ChapterCastGate(
         IPanelForgeDbContext db,
-        IChapterCastService? castService = null,
-        IChapterCastInheritanceResolver? inheritanceResolver = null)
+        IChapterCastService castService,
+        IChapterCastInheritanceResolver inheritanceResolver)
     {
         _db = db;
         _castService = castService;
@@ -29,7 +29,7 @@ public sealed class ChapterCastGate : IChapterCastGate
         if (chapter is null)
             return new ChapterCastSubmitGateDto(false, [new ChapterCastBlockerDto(Guid.Empty, "Chương", null, $"Chương {chapterId} không tồn tại.")]);
 
-        if (_castService is not null && chapter.ScriptStatus != ScriptStatus.Frozen)
+        if (chapter.ScriptStatus != ScriptStatus.Frozen)
         {
             var authorId = chapter.ScriptSubmittedById ?? chapter.ScriptFrozenById ?? Guid.Empty;
             await _castService.RecomputeAsync(chapterId, authorId, ct);
@@ -41,7 +41,14 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(b => b.ChapterId == chapterId)
             .ToListAsync(ct);
         var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == chapterId).ToList();
-        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+        var bindings = localBindings.Union(dbBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+
+        var entryIds = bindings.Select(b => b.BibleEntryId).Distinct().ToList();
+        var dbEntries = await _db.BibleEntries.AsNoTracking()
+            .Where(e => entryIds.Contains(e.Id))
+            .ToListAsync(ct);
+        var localEntries = _db.BibleEntries.Local.Where(e => entryIds.Contains(e.Id)).ToList();
+        var entryMap = localEntries.Union(dbEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
 
         var blockers = new List<ChapterCastBlockerDto>();
 
@@ -49,22 +56,26 @@ public sealed class ChapterCastGate : IChapterCastGate
         {
             if (b.IsCrowdAtBind) continue;
 
-            if (b.BibleEntry.IsStub)
+            entryMap.TryGetValue(b.BibleEntryId, out var entry);
+            entry ??= b.BibleEntry;
+            if (entry is null) continue;
+
+            if (entry.IsStub)
             {
                 blockers.Add(new ChapterCastBlockerDto(
-                    b.BibleEntryId,
-                    b.BibleEntry.Name,
+                    entry.Id,
+                    entry.Name,
                     b.BoundRevisionId,
-                    $"Thực thể '{b.BibleEntry.Name}' chưa được Writer viết định nghĩa (chờ định nghĩa).",
+                    $"Thực thể '{entry.Name}' chưa được Writer viết định nghĩa (chờ định nghĩa).",
                     "chờ định nghĩa"));
             }
             else if (b.BoundRevisionId is null)
             {
                 blockers.Add(new ChapterCastBlockerDto(
-                    b.BibleEntryId,
-                    b.BibleEntry.Name,
+                    entry.Id,
+                    entry.Name,
                     null,
-                    $"Thực thể '{b.BibleEntry.Name}' chưa có bản thiết kế (revision) nào được gán.",
+                    $"Thực thể '{entry.Name}' chưa có bản thiết kế (revision) nào được gán.",
                     "chờ định nghĩa"));
             }
         }
@@ -78,7 +89,7 @@ public sealed class ChapterCastGate : IChapterCastGate
         if (chapter is null)
             return new ChapterCastStartGateDto(false, [new ChapterCastBlockerDto(Guid.Empty, "Chương", null, $"Chương {chapterId} không tồn tại.")]);
 
-        if (_castService is not null && chapter.ScriptStatus != ScriptStatus.Frozen)
+        if (chapter.ScriptStatus != ScriptStatus.Frozen)
         {
             var authorId = chapter.ScriptSubmittedById ?? chapter.ScriptFrozenById ?? Guid.Empty;
             await _castService.RecomputeAsync(chapterId, authorId, ct);
@@ -90,7 +101,7 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(b => b.ChapterId == chapterId)
             .ToListAsync(ct);
         var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == chapterId).ToList();
-        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+        var bindings = localBindings.Union(dbBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
         var entryIds = bindings.Select(b => b.BibleEntryId).Distinct().ToList();
         var dbEntries = await _db.BibleEntries.AsNoTracking()
@@ -98,14 +109,14 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(e => entryIds.Contains(e.Id))
             .ToListAsync(ct);
         var localEntries = _db.BibleEntries.Local.Where(e => entryIds.Contains(e.Id)).ToList();
-        var entryMap = dbEntries.Union(localEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
+        var entryMap = localEntries.Union(dbEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
 
         var revIds = bindings.Where(b => b.BoundRevisionId.HasValue).Select(b => b.BoundRevisionId!.Value).Distinct().ToList();
         var dbRevs = await _db.BibleEntryRevisions.AsNoTracking()
             .Where(r => revIds.Contains(r.Id))
             .ToListAsync(ct);
         var localRevs = _db.BibleEntryRevisions.Local.Where(r => revIds.Contains(r.Id)).ToList();
-        var revMap = dbRevs.Union(localRevs).DistinctBy(r => r.Id).ToDictionary(r => r.Id);
+        var revMap = localRevs.Union(dbRevs).DistinctBy(r => r.Id).ToDictionary(r => r.Id);
 
         // Load pages and panels of this chapter
         var pages = await _db.Pages.AsNoTracking()
@@ -186,12 +197,12 @@ public sealed class ChapterCastGate : IChapterCastGate
             }
 
             // Start condition: boundRevision must be CanonLocked
-            int? inheritedChapterNumber = null;
+            decimal? inheritedChapterNumber = null;
             if (!b.ChosenByWriter && boundRev is not null)
             {
                 var prev = previousChapterBindings
                     .FirstOrDefault(pb => pb.BibleEntryId == entry.Id && pb.BoundRevisionId == boundRev.Id);
-                inheritedChapterNumber = (int?)prev?.ChapterNumber;
+                inheritedChapterNumber = prev?.ChapterNumber;
             }
 
             var sourceText = b.ChosenByWriter

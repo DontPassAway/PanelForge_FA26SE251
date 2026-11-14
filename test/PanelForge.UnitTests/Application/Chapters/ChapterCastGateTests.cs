@@ -100,7 +100,7 @@ public class ChapterCastGateTests
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
-        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var result = await handler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
         result.IsSuccess.Should().BeFalse();
@@ -126,7 +126,7 @@ public class ChapterCastGateTests
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
-        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var result = await handler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -159,7 +159,7 @@ public class ChapterCastGateTests
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Hero", hero.Id, isPrimary: true));
         await _db.SaveChangesAsync();
 
-        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var result = await handler.Handle(new SubmitScriptCommand(ch2.Id, _writerId), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -191,7 +191,7 @@ public class ChapterCastGateTests
         _db.ScriptLines.Add(ScriptLine.Create(sc1.Id, 1, "Dattebayo!", "Naruto", hero.Id));
         await _db.SaveChangesAsync();
 
-        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _castGate);
 
         await submitHandler.Handle(new SubmitScriptCommand(ch1.Id, _writerId), default);
@@ -289,7 +289,7 @@ public class ChapterCastGateTests
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
-        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         await submitHandler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _castGate);
@@ -319,7 +319,7 @@ public class ChapterCastGateTests
         _db.ScriptLines.Add(ScriptLine.Create(scene.Id, 1, "Chidori!", "Kakashi", hero.Id));
         await _db.SaveChangesAsync();
 
-        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         await submitHandler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _castGate);
@@ -457,7 +457,7 @@ public class ChapterCastGateTests
         _db.StageProgresses.Add(stageProgress);
         await _db.SaveChangesAsync();
 
-        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         await submitHandler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _castGate);

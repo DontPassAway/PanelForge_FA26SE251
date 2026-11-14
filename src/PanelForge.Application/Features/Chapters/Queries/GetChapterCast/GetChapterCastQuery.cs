@@ -79,7 +79,7 @@ public sealed record ChapterCastItemDto(
     string BibleStatus,
     ChapterCastBoundRevisionDto? BoundRevision,
     bool ChosenByWriter,
-    int? InheritedFromChapterNumber,
+    decimal? InheritedFromChapterNumber,
     IReadOnlyList<ChapterCastPanelRevisionDto> PanelRevisions,
     IReadOnlyList<ChapterCastAvailableRevisionDto> AvailableRevisions,
     IReadOnlyList<ChapterCastMentionDto> Mentions
@@ -87,7 +87,7 @@ public sealed record ChapterCastItemDto(
 
 public sealed record ChapterCastDto(
     Guid ChapterId,
-    int ChapterNumber,
+    decimal ChapterNumber,
     string ChapterTitle,
     IReadOnlyList<ChapterCastItemDto> Entities,
     ChapterCastSubmitGateDto SubmitGate,
@@ -107,11 +107,11 @@ public sealed class GetChapterCastQueryHandler
     public GetChapterCastQueryHandler(
         IPanelForgeDbContext db,
         IWorkspaceAuthorizationService auth,
-        IChapterCastGate? castGate = null)
+        IChapterCastGate castGate)
     {
         _db = db;
         _auth = auth;
-        _castGate = castGate ?? new ChapterCastGate(db);
+        _castGate = castGate;
     }
 
     public async Task<Result<ChapterCastDto>> Handle(GetChapterCastQuery q, CancellationToken ct)
@@ -181,13 +181,22 @@ public sealed class GetChapterCastQueryHandler
             .ToListAsync(ct);
 
         // Pre-query previous chapters to determine inheritedFromChapterNumber when not chosenByWriter
-        var previousChapterBindings = await _db.ChapterBibleBindings.AsNoTracking()
+        var dbPrevBindings = await _db.ChapterBibleBindings.AsNoTracking()
             .Where(b => b.Chapter.SeriesId == chapter.SeriesId &&
                         b.Chapter.ChapterNumber < chapter.ChapterNumber &&
                         b.BoundRevisionId != null)
             .Select(b => new { b.Chapter.ChapterNumber, b.BibleEntryId, b.BoundRevisionId })
-            .OrderByDescending(b => b.ChapterNumber)
             .ToListAsync(ct);
+        var localPrevBindings = _db.ChapterBibleBindings.Local
+            .Where(b => b.Chapter != null &&
+                        b.Chapter.SeriesId == chapter.SeriesId &&
+                        b.Chapter.ChapterNumber < chapter.ChapterNumber &&
+                        b.BoundRevisionId != null)
+            .Select(b => new { b.Chapter.ChapterNumber, b.BibleEntryId, b.BoundRevisionId })
+            .ToList();
+        var previousChapterBindings = localPrevBindings.Union(dbPrevBindings).Distinct()
+            .OrderByDescending(b => b.ChapterNumber)
+            .ToList();
 
         var entities = new List<ChapterCastItemDto>();
 
@@ -220,12 +229,12 @@ public sealed class GetChapterCastQueryHandler
             }
 
             // InheritedFromChapterNumber
-            int? inheritedChapterNumber = null;
+            decimal? inheritedChapterNumber = null;
             if (!binding.ChosenByWriter && boundRev is not null)
             {
                 var prev = previousChapterBindings
                     .FirstOrDefault(pb => pb.BibleEntryId == entry.Id && pb.BoundRevisionId == boundRev.Id);
-                inheritedChapterNumber = (int?)prev?.ChapterNumber;
+                inheritedChapterNumber = prev?.ChapterNumber;
             }
 
             // BoundRevisionDto
@@ -322,7 +331,7 @@ public sealed class GetChapterCastQueryHandler
 
         return Result<ChapterCastDto>.Success(new ChapterCastDto(
             chapter.Id,
-            (int)chapter.ChapterNumber,
+            chapter.ChapterNumber,
             chapter.Title ?? string.Empty,
             entities,
             submitGate,
