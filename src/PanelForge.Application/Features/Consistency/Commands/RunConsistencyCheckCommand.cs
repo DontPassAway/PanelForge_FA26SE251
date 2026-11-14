@@ -64,23 +64,67 @@ public sealed class RunConsistencyCheckCommandHandler
 
         var bibleIds = await _db.SeriesBibles.AsNoTracking().Where(b => b.SeriesId == chapter.SeriesId)
             .Select(b => b.Id).ToListAsync(ct);
-        var rawEntries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
-            .Select(e => new
-            {
-                e.Id,
-                e.Name,
-                e.Category,
-                e.IsActive,
-                e.DetailsJson,
-                e.Code,
-                FirstEffective = e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min(),
-                FirstLocked = e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min()
-            })
+        var bibleEntries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .ToListAsync(ct);
 
-        var entries = rawEntries.ToDictionary(e => e.Id, e => new CheckEntry(
-            e.Id, e.Name, e.Category, e.IsActive, e.FirstEffective, e.FirstLocked,
-            detailsJson: e.DetailsJson, code: e.Code));
+        var bindings = await _db.ChapterBibleBindings.AsNoTracking()
+            .Where(b => b.ChapterId == chapter.Id)
+            .ToListAsync(ct);
+        var bindingByEntryId = bindings.ToDictionary(b => b.BibleEntryId);
+
+        var chapterInt = (int)Math.Floor(chapter.ChapterNumber);
+        var isFrozen = chapter.ScriptStatus == ScriptStatus.Frozen || chapter.IsScriptFrozen;
+
+        var entries = new Dictionary<Guid, CheckEntry>();
+        foreach (var e in bibleEntries)
+        {
+            int? firstEffective;
+            int? firstLocked;
+
+            if (bindings.Count > 0)
+            {
+                if (bindingByEntryId.TryGetValue(e.Id, out var cb))
+                {
+                    firstEffective = chapterInt;
+                    var boundRev = cb.BoundRevisionId.HasValue
+                        ? e.Revisions.FirstOrDefault(r => r.Id == cb.BoundRevisionId.Value)
+                        : null;
+                    firstLocked = (boundRev?.IsLocked == true) ? chapterInt : null;
+                }
+                else if (!isFrozen)
+                {
+                    // Trước Gate 1: dùng bản tự gắn (auto binding)
+                    var autoRev = e.GetDefaultVariantRevision(canonOnly: false);
+                    if (autoRev != null)
+                    {
+                        firstEffective = chapterInt;
+                        firstLocked = autoRev.IsLocked ? chapterInt : null;
+                    }
+                    else
+                    {
+                        firstEffective = int.MaxValue;
+                        firstLocked = null;
+                    }
+                }
+                else
+                {
+                    // Chương đã khoá nhưng không có binding cho mục này
+                    firstEffective = int.MaxValue;
+                    firstLocked = null;
+                }
+            }
+            else
+            {
+                // Fallback tương thích cho các unit test cũ chưa nạp ChapterBibleBindings
+                firstEffective = e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min();
+                firstLocked = e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min();
+            }
+
+            entries[e.Id] = new CheckEntry(
+                e.Id, e.Name, e.Category, e.IsActive, firstEffective, firstLocked,
+                detailsJson: e.DetailsJson, code: e.Code);
+        }
 
         var rules = await _db.ConsistencyRules.AsNoTracking().Where(r => r.SeriesId == chapter.SeriesId && r.IsEnabled)
             .Select(r => new CheckRule(r.Id, r.Name, r.RuleType, r.Pattern, r.Severity, r.ConfigurationJson))

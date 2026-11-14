@@ -306,4 +306,73 @@ public class BibleEntry : BaseEntity
             .OrderByDescending(r => r.EffectiveFromChapterNumber)
             .ThenByDescending(r => r.VersionNumber)
             .FirstOrDefault();
+
+    /// <summary>
+    /// Tên biến thể mặc định của mục = StageName của bản đầu tiên (VersionNumber nhỏ nhất).
+    /// </summary>
+    public string? GetDefaultVariantStageName()
+        => Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault()?.StageName;
+
+    /// <summary>
+    /// Lấy bản của biến thể mặc định (Q23, Q24):
+    /// Ưu tiên bản CanonLocked mới nhất chưa bị thay thế; nếu chưa có bản khoá thì lấy bản mới nhất
+    /// (nếu canonOnly = true và IsVisualDesign thì trả về null).
+    /// </summary>
+    public BibleEntryRevision? GetDefaultVariantRevision(bool canonOnly = false)
+    {
+        if (Revisions.Count == 0) return null;
+
+        var firstRev = Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault();
+        var defaultStageName = firstRev?.StageName;
+
+        var defaultVariantRevisions = Revisions
+            .Where(r => string.Equals(r.StageName, defaultStageName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (defaultVariantRevisions.Count == 0) return firstRev;
+
+        var lockedNonSuperseded = defaultVariantRevisions
+            .Where(r => r.IsLocked && !IsRevisionSuperseded(r))
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
+        if (lockedNonSuperseded != null)
+            return lockedNonSuperseded;
+
+        if (canonOnly && IsVisualDesign)
+            return null;
+
+        return defaultVariantRevisions
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Đi theo chuỗi supersedes_revision_id tới bản đã khoá Canon mới nhất (Q23, Q24).
+    /// </summary>
+    public BibleEntryRevision ResolveLatestLockedReplacement(Guid initialRevisionId)
+    {
+        var currentId = initialRevisionId;
+        while (true)
+        {
+            var nextLocked = Revisions
+                .Where(r => r.SupersedesRevisionId == currentId && r.IsLocked)
+                .OrderByDescending(r => r.VersionNumber)
+                .FirstOrDefault();
+
+            if (nextLocked == null) break;
+            currentId = nextLocked.Id;
+        }
+
+        return Revisions.First(r => r.Id == currentId);
+    }
+
+    /// <summary>
+    /// Kiểm tra revision đã bị supersede hay chưa (có sự kiện Superseded hoặc có bản thay thế đã khoá).
+    /// </summary>
+    public bool IsRevisionSuperseded(BibleEntryRevision rev)
+    {
+        return rev.Events.Any(e => e.Type == BibleRevisionEventType.Superseded)
+            || Revisions.Any(other => other.SupersedesRevisionId == rev.Id && other.IsLocked);
+    }
 }

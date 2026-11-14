@@ -98,13 +98,13 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
                 if (closestPrevBinding?.BoundRevisionId != null)
                 {
                     // Đi theo chuỗi thay thế tới bản đã khoá Canon mới nhất
-                    targetRevisionId = ResolveLatestLockedReplacement(entry, closestPrevBinding.BoundRevisionId.Value);
+                    targetRevisionId = entry.ResolveLatestLockedReplacement(closestPrevBinding.BoundRevisionId.Value).Id;
                 }
                 else
                 {
                     // Chưa có chương nào phía trước: lấy bản CanonLocked mới nhất (chưa Superseded) của biến thể mặc định,
                     // nếu chưa có bản khoá thì lấy bản mới nhất của biến thể mặc định.
-                    targetRevisionId = ResolveDefaultVariantRevisionId(entry);
+                    targetRevisionId = entry.GetDefaultVariantRevision()?.Id;
                 }
 
                 if (binding.BoundRevisionId != targetRevisionId)
@@ -117,61 +117,5 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
                 }
             }
         }
-    }
-
-    private static Guid ResolveLatestLockedReplacement(BibleEntry entry, Guid initialRevisionId)
-    {
-        var currentId = initialRevisionId;
-
-        // Đi theo chuỗi supersedes_revision_id tới bản đã khoá mới nhất
-        while (true)
-        {
-            var nextLocked = entry.Revisions
-                .Where(r => r.SupersedesRevisionId == currentId && r.IsLocked)
-                .OrderByDescending(r => r.VersionNumber)
-                .FirstOrDefault();
-
-            if (nextLocked == null) break;
-            currentId = nextLocked.Id;
-        }
-
-        return currentId;
-    }
-
-    private static Guid? ResolveDefaultVariantRevisionId(BibleEntry entry)
-    {
-        if (entry.Revisions.Count == 0) return null;
-
-        // Biến thể mặc định = bản đầu tiên của mục (versionNumber nhỏ nhất)
-        var firstRev = entry.Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault();
-        var defaultStageName = firstRev?.StageName;
-
-        var defaultVariantRevisions = entry.Revisions
-            .Where(r => string.Equals(r.StageName, defaultStageName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (defaultVariantRevisions.Count == 0) return firstRev?.Id;
-
-        // Bản CanonLocked mới nhất (chưa Superseded)
-        var lockedNonSuperseded = defaultVariantRevisions
-            .Where(r => r.IsLocked && !IsRevisionSuperseded(r, entry.Revisions))
-            .OrderByDescending(r => r.VersionNumber)
-            .FirstOrDefault();
-
-        if (lockedNonSuperseded != null)
-        {
-            return lockedNonSuperseded.Id;
-        }
-
-        // Chưa có bản khoá: bản mới nhất của biến thể mặc định
-        return defaultVariantRevisions
-            .OrderByDescending(r => r.VersionNumber)
-            .FirstOrDefault()?.Id;
-    }
-
-    private static bool IsRevisionSuperseded(BibleEntryRevision rev, IEnumerable<BibleEntryRevision> allRevs)
-    {
-        return rev.Events.Any(e => e.Type == BibleRevisionEventType.Superseded)
-            || allRevs.Any(other => other.SupersedesRevisionId == rev.Id && other.IsLocked);
     }
 }
