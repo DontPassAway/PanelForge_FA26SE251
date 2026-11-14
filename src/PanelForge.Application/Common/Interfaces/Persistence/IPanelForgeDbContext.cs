@@ -44,6 +44,9 @@ public interface IPanelForgeDbContext
     DbSet<BibleEntry> BibleEntries { get; }
     DbSet<BibleEntryRevision> BibleEntryRevisions { get; }
     DbSet<BibleRevisionEvent> BibleRevisionEvents { get; }
+    DbSet<BibleEntryName> BibleEntryNames { get; }
+    DbSet<ChapterBibleBinding> ChapterBibleBindings { get; }
+    DbSet<PanelBibleVariant> PanelBibleVariants { get; }
     DbSet<PipelineDefinition> PipelineDefinitions { get; }
     DbSet<PipelineStage> PipelineStages { get; }
     DbSet<StageTransition> StageTransitions { get; }

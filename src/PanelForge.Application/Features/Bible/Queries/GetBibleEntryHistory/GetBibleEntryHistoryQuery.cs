@@ -59,7 +59,8 @@ public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleE
                 r.ConceptImageUrl,
                 r.Events.OrderBy(e => e.CreatedAt)
                     .Select(e => new BibleRevisionEventDto(e.Id, e.Type, e.ActorId, e.Comment, e.ImageUrl, e.EventHash, e.CreatedAt))
-                    .ToList()
+                    .ToList(),
+                r.SupersedesRevisionId
             ))
             .ToListAsync(cancellationToken);
 

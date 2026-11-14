@@ -11,15 +11,15 @@ public sealed class PanelForgeDbContextFactory : IDesignTimeDbContextFactory<Pan
         var currentDir = Directory.GetCurrentDirectory();
         var apiPath = currentDir;
 
-        if (File.Exists(Path.Combine(currentDir, "appsettings.json")))
+        if (File.Exists(Path.Combine(currentDir, "appsettings.json")) || File.Exists(Path.Combine(currentDir, "appsettings.Example.json")))
         {
             apiPath = currentDir;
         }
-        else if (File.Exists(Path.Combine(currentDir, "src", "PanelForge.API", "appsettings.json")))
+        else if (File.Exists(Path.Combine(currentDir, "src", "PanelForge.API", "appsettings.Example.json")))
         {
             apiPath = Path.Combine(currentDir, "src", "PanelForge.API");
         }
-        else if (File.Exists(Path.Combine(currentDir, "..", "PanelForge.API", "appsettings.json")))
+        else if (File.Exists(Path.Combine(currentDir, "..", "PanelForge.API", "appsettings.Example.json")))
         {
             apiPath = Path.Combine(currentDir, "..", "PanelForge.API");
         }
@@ -30,12 +30,26 @@ public sealed class PanelForgeDbContextFactory : IDesignTimeDbContextFactory<Pan
 
         var configuration = new ConfigurationBuilder()
             .SetBasePath(apiPath)
-            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("appsettings.Example.json", optional: true)
+            .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile("appsettings.Development.json", optional: true)
             .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = DatabaseConnection.Resolve(configuration);
+        string connectionString;
+        try
+        {
+            connectionString = DatabaseConnection.Resolve(configuration);
+        }
+        catch
+        {
+            connectionString = "Host=localhost;Database=panelforge_dev;Username=postgres;Password=postgres";
+        }
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            connectionString = "Host=localhost;Database=panelforge_dev;Username=postgres;Password=postgres";
+        }
 
         var optionsBuilder = new DbContextOptionsBuilder<PanelForgeDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsql =>

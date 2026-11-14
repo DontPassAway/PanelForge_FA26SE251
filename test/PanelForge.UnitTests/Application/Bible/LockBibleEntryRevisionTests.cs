@@ -161,7 +161,7 @@ public class LockBibleEntryRevisionTests
                 SupersedesRevisionId: revision.Id, SupersedeReason: reason), CancellationToken.None);
 
     [Fact]
-    public async Task Supersede_LockedRevision_AddsNewLockedCanonAtTheSameChapter_AndKeepsTheOldOneIntact()
+    public async Task Supersede_LockedRevision_AddsReplacementRevisionInDraft_WithSupersedesRevisionId_AndKeepsOldCanonIntact()
     {
         await Lock(_hero, _heroV1);
         var oldLockedAt = _heroV1.LockedAt;
@@ -171,12 +171,17 @@ public class LockBibleEntryRevisionTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         result.Value!.VersionNumber.Should().Be(2);
         result.Value.EffectiveFromChapterNumber.Should().Be(1);
-        result.Value.IsLocked.Should().BeTrue();
-        result.Value.LockedById.Should().Be(_producerId);
+        // Q23: Bản thay thế bắt đầu từ Draft (chờ duyệt), chưa bị khoá sớm
+        result.Value.IsLocked.Should().BeFalse();
+        result.Value.ReviewStatus.Should().Be(BibleRevisionStatus.Draft);
+        result.Value.SupersedesRevisionId.Should().Be(_heroV1.Id);
         result.Value.Summary.Should().Contain("v1").And.Contain("Sai màu tóc trong bản khoá");
+        // Bản cũ vẫn CanonLocked và dùng được, không bị đánh Superseded sớm
+        _heroV1.IsLocked.Should().BeTrue();
+        _heroV1.ReviewStatus.Should().Be(BibleRevisionStatus.CanonLocked);
         _heroV1.LockedAt.Should().Be(oldLockedAt, "bản khoá cũ không bị mở khoá");
         _heroV1.SnapshotJson.Should().Be("{}");
-        _hero.EffectiveRevisionAt(1, canonOnly: true)!.VersionNumber.Should().Be(2);
+        _hero.EffectiveRevisionAt(1, canonOnly: true)!.VersionNumber.Should().Be(1, "v1 vẫn là canon có hiệu lực tới khi v2 được Editor khoá");
     }
 
     [Fact]

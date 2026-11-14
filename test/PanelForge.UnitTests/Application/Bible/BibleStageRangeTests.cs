@@ -102,6 +102,7 @@ public class BibleStageRangeTests
 
         result.Value!.StageName.Should().Be("Lúc nhỏ");
         result.Value.EffectiveToChapterNumber.Should().Be(19);
-        result.Value.IsLocked.Should().BeTrue();
+        result.Value.IsLocked.Should().BeFalse();
+        result.Value.ReviewStatus.Should().Be(BibleRevisionStatus.Draft);
     }
 }

@@ -15,7 +15,8 @@ internal sealed class ScriptLineBibleLinkConfiguration : IEntityTypeConfiguratio
         builder.Property(k => k.Id).HasColumnName("id").HasColumnType("uuid").ValueGeneratedNever();
         builder.Property(k => k.ScriptLineId).HasColumnName("script_line_id").HasColumnType("uuid").IsRequired();
         builder.Property(k => k.BibleEntryId).HasColumnName("bible_entry_id").HasColumnType("uuid").IsRequired();
-        builder.Property(k => k.RawMentionText).HasColumnName("raw_mention_text").HasColumnType("varchar(100)");
+        builder.Property(k => k.SurfaceText).HasColumnName("surface_text").HasColumnType("varchar(200)").IsRequired();
+        builder.Ignore(k => k.RawMentionText);
         builder.Property(k => k.ResolvedRevisionId).HasColumnName("resolved_revision_id").HasColumnType("uuid");
         builder.Property(k => k.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(k => k.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");

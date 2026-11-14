@@ -105,9 +105,20 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("locked_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(r => r.SupersedesRevisionId)
+               .HasColumnName("supersedes_revision_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(r => r.SupersedesRevisionId)
+               .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
+
         builder.Property(r => r.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
                .IsRequired();
+
+        builder.HasOne(r => r.SupersedesRevision)
+               .WithMany()
+               .HasForeignKey(r => r.SupersedesRevisionId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }

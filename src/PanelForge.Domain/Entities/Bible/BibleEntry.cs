@@ -21,6 +21,10 @@ public class BibleEntry : BaseEntity
     public bool IsActive { get; private set; } = true;
     /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ cú pháp @-mention trong kịch bản (Write First, Bible Later).</summary>
     public bool IsStub { get; private set; } = false;
+    /// <summary>BIB-09 & 9A: Danh sách bí danh của mục (tối đa 20 bí danh, mỗi bí danh <= 100 ký tự).</summary>
+    public List<string> Aliases { get; private set; } = [];
+    /// <summary>BIB-11 & 7A: Cờ Quần chúng; mục quần chúng không bắt buộc khoá Canon ở Gate 1.</summary>
+    public bool IsCrowd { get; private set; } = false;
 
     public SeriesBible SeriesBible { get; private set; } = default!;
     public ICollection<BibleEntryRevision> Revisions { get; private set; } = [];
@@ -82,7 +86,7 @@ public class BibleEntry : BaseEntity
             Category = category,
             Code = code,
             Name = trimmedName,
-            Description = description?.Trim() ?? $"Thực thể tạm thời từ kịch bản cho '@{trimmedName}'",
+            Description = description?.Trim() ?? string.Empty,
             DetailsJson = "{}",
             Priority = BiblePriority.Standard,
             StrictCheck = false,
@@ -91,6 +95,49 @@ public class BibleEntry : BaseEntity
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+    }
+
+    public void SetAliases(IEnumerable<string>? aliases)
+    {
+        Aliases.Clear();
+        if (aliases == null)
+        {
+            UpdatedAt = DateTime.UtcNow;
+            return;
+        }
+
+        var normalizedPrimary = BibleNameNormalizer.Normalize(Name);
+        var seenNormalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var alias in aliases)
+        {
+            if (string.IsNullOrWhiteSpace(alias))
+                throw new ArgumentException("Bí danh không được để trống.", nameof(aliases));
+
+            var trimmed = alias.Trim();
+            if (trimmed.Length > 100)
+                throw new ArgumentException($"Bí danh '{trimmed}' vượt quá độ dài tối đa 100 ký tự.", nameof(aliases));
+
+            var normalized = BibleNameNormalizer.Normalize(trimmed);
+            if (string.Equals(normalized, normalizedPrimary, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"Bí danh '{trimmed}' trùng với tên chính của thực thể.", nameof(aliases));
+
+            if (!seenNormalized.Add(normalized))
+                continue; // Bỏ trùng theo normalized
+
+            Aliases.Add(trimmed);
+        }
+
+        if (Aliases.Count > 20)
+            throw new ArgumentException("Số lượng bí danh tối đa là 20.", nameof(aliases));
+
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetCrowd(bool isCrowd)
+    {
+        IsCrowd = isCrowd;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdateDetails(
@@ -192,7 +239,8 @@ public class BibleEntry : BaseEntity
         int? effectiveToChapterNumber = null,
         Guid? artistUserId = null,
         BibleRevisionStatus reviewStatus = BibleRevisionStatus.Draft,
-        string? reworkFeedback = null)
+        string? reworkFeedback = null,
+        Guid? supersedesRevisionId = null)
     {
         var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
         var revision = BibleEntryRevision.Create(
@@ -209,7 +257,8 @@ public class BibleEntry : BaseEntity
             effectiveToChapterNumber,
             artistUserId,
             reviewStatus,
-            reworkFeedback);
+            reworkFeedback,
+            supersedesRevisionId);
 
         Revisions.Add(revision);
         UpdatedAt = DateTime.UtcNow;

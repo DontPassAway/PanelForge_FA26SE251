@@ -60,6 +60,13 @@ public class BibleEntryRevision : BaseEntity
     public Guid? LockedById { get; private set; }
     public bool IsLocked => LockedAt.HasValue || ReviewStatus == BibleRevisionStatus.CanonLocked;
 
+    /// <summary>
+    /// BIB-09 & Q23: Revision mà bản này thay thế (cùng biến thể).
+    /// Bản cũ vẫn giữ trạng thái CanonLocked cho tới khi bản thay thế được Editor khoá Canon (BIB-10).
+    /// </summary>
+    public Guid? SupersedesRevisionId { get; private set; }
+    public BibleEntryRevision? SupersedesRevision { get; private set; }
+
     public BibleEntry BibleEntry { get; private set; } = default!;
 
     private BibleEntryRevision() { }
@@ -132,6 +139,11 @@ public class BibleEntryRevision : BaseEntity
         ArtistUserId = artistId;
     }
 
+    public void SetSupersedesRevisionId(Guid? supersedesRevisionId)
+    {
+        SupersedesRevisionId = supersedesRevisionId;
+    }
+
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
         int versionNumber,
@@ -146,7 +158,8 @@ public class BibleEntryRevision : BaseEntity
         int? effectiveToChapterNumber = null,
         Guid? artistUserId = null,
         BibleRevisionStatus reviewStatus = BibleRevisionStatus.Draft,
-        string? reworkFeedback = null)
+        string? reworkFeedback = null,
+        Guid? supersedesRevisionId = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
@@ -173,6 +186,7 @@ public class BibleEntryRevision : BaseEntity
             ArtistUserId = artistUserId,
             ReviewStatus = reviewStatus,
             ReworkFeedback = reworkFeedback?.Trim(),
+            SupersedesRevisionId = supersedesRevisionId,
             CreatedAt = DateTime.UtcNow
         };
         revision.Events.Add(BibleRevisionEvent.Create(revision.Id, BibleRevisionEventType.Created, authorId, revision.Summary));

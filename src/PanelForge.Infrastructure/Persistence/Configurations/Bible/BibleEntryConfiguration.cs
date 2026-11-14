@@ -92,6 +92,18 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasDefaultValue(false)
                .IsRequired();
 
+        builder.Property(e => e.Aliases)
+               .HasColumnName("aliases")
+               .HasColumnType("text[]")
+               .HasDefaultValueSql("'{}'::text[]")
+               .IsRequired();
+
+        builder.Property(e => e.IsCrowd)
+               .HasColumnName("is_crowd")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
         builder.Property(e => e.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

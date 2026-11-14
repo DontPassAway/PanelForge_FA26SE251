@@ -27,7 +27,8 @@ public sealed record BibleEntryRevisionDto(
     string? ReworkFeedback = null,
     // Ảnh Concept hiện hành của phiên bản (nộp Concept không tạo phiên bản mới) và dòng thời gian duyệt, cũ → mới
     string? ConceptImageUrl = null,
-    IReadOnlyList<BibleRevisionEventDto>? Events = null
+    IReadOnlyList<BibleRevisionEventDto>? Events = null,
+    Guid? SupersedesRevisionId = null
 )
 {
     /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
@@ -35,7 +36,8 @@ public sealed record BibleEntryRevisionDto(
         r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
         r.EffectiveFromChapterNumber, r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
         r.EffectiveToChapterNumber, r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
-        r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList());
+        r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
+        r.SupersedesRevisionId);
 }
 
 /// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Endorsed/Locked/Superseded.</summary>
@@ -68,7 +70,9 @@ public sealed record BibleEntryDto(
     BibleEntryRevisionDto? EffectiveRevision,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    bool IsStub = false
+    bool IsStub = false,
+    IReadOnlyList<string>? Aliases = null,
+    bool IsCrowd = false
 );
 
 public sealed record SeriesBibleDto(
@@ -93,7 +97,9 @@ public sealed record CreateBibleEntryRequest(
     bool StrictCheck = true,
     int EffectiveFromChapterNumber = 1,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null
+    int? EffectiveToChapterNumber = null,
+    IReadOnlyList<string>? Aliases = null,
+    bool IsCrowd = false
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
@@ -132,7 +138,8 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     int? ExpectedVersionNumber = null,
     // null = giữ giai đoạn và chương kết thúc của bản bị thay
     string? StageName = null,
-    int? EffectiveToChapterNumber = null
+    int? EffectiveToChapterNumber = null,
+    Guid? ChapterId = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;

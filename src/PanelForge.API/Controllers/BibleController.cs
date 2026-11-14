@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.CancelReplacementRevision;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryEra;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
@@ -113,14 +114,20 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber
+            StageName: body.StageName,
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
+            Aliases: body.Aliases,
+            IsCrowd: body.IsCrowd
         );
 
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.ErrorMessage?.Contains("không tồn tại") == true)
+            if (result.ErrorCode == ResultErrorCodes.NotFound || result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
+
+            if (result.ErrorCode == ResultErrorCodes.Conflict)
+                return Conflict(new { error = result.ErrorMessage, code = result.ErrorCode });
 
             return BadRequest(new { error = result.ErrorMessage });
         }
@@ -361,7 +368,8 @@ public sealed class BibleController : ControllerBase
             SupersedesRevisionId: revisionId,
             SupersedeReason: body.Reason,
             StageName: body.StageName,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber
+            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
+            ChapterId: body.ChapterId
         );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -375,6 +383,39 @@ public sealed class BibleController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/cancel-replacement
+    /// Writer huỷ bản thay thế chưa có sự kiện kiểm duyệt (Q23); binding đang trỏ bản đó quay về bản kế thừa.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/cancel-replacement")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelReplacementRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CancelReplacementRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(new { success = true });
     }
 
     /// <summary>
