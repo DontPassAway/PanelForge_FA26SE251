@@ -62,6 +62,19 @@ public sealed record UpdateScriptLineRequest(
 
 public sealed record DeleteScriptLineResult(long ChapterVersion, Guid RevisionId);
 
+/// <summary>Tạo nhanh mục nháp Series Bible từ bôi đen trong dòng kịch bản (BIB-12, 1A, 2A).</summary>
+public sealed record NewDraftBibleEntryInput(
+    string Name,
+    BibleEntryCategory Category = BibleEntryCategory.Character
+);
+
+/// <summary>Tham chiếu Series Bible từ bôi đen trên dòng kịch bản (BIB-12, 1A, 2A).</summary>
+public sealed record ScriptLineRefInput(
+    string SurfaceText,
+    Guid? BibleEntryId = null,
+    NewDraftBibleEntryInput? NewDraft = null
+);
+
 public sealed record BatchScriptLineItem(
     Guid? Id,
     int LineOrder,
@@ -74,7 +87,8 @@ public sealed record BatchScriptLineItem(
     Guid? PanelId = null,
     ScriptLineKind? Kind = null,
     string? SpeakerLabel = null,
-    string? Text = null
+    string? Text = null,
+    IReadOnlyList<ScriptLineRefInput>? Refs = null
 );
 
 public sealed record BatchSaveScriptLinesRequest(
@@ -87,7 +101,8 @@ public sealed record BatchSaveScriptLinesRequest(
 public sealed record BatchSaveScriptLinesResult(
     long ChapterVersion,
     Guid RevisionId,
-    IReadOnlyList<ScriptLineDto> Lines
+    IReadOnlyList<ScriptLineDto> Lines,
+    IReadOnlyList<string>? Warnings = null
 );
 
 /// <summary>V2.5 & Module A: DTO chuyển giao cho các @-mention trong dòng kịch bản.</summary>
