@@ -63,6 +63,7 @@ public class BibleEntryRevision : BaseEntity
     public DateTime? LockedAt { get; private set; }
     public Guid? LockedById { get; private set; }
     public bool IsLocked => LockedAt.HasValue || ReviewStatus == BibleRevisionStatus.CanonLocked;
+    public bool IsSuperseded => Events.Any(e => e.Type == BibleRevisionEventType.Superseded);
 
     /// <summary>
     /// BIB-09 & Q23: Revision mà bản này thay thế (cùng biến thể).

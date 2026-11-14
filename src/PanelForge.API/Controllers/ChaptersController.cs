@@ -27,6 +27,7 @@ using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.ScriptComments;
 using PanelForge.Application.Features.ScriptVersions;
@@ -256,6 +257,18 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId,
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new CheckChapterBibleGateQuery(chapterId), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/cast
+    /// BIB-12, Q16, Q19, Q21: Lấy Danh sách & Bản đồ thực thể chương kèm submitGate và gate.
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/cast")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ChapterCastDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChapterCast(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterCastQuery(chapterId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/submit-script — D12: Writer nộp kịch bản (Draft → InReview), kịch bản khoá sửa.

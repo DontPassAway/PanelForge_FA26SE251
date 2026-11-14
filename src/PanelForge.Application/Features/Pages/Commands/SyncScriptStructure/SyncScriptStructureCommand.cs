@@ -11,7 +11,12 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 
-public sealed record ScriptStructurePanel(int PanelNumber, IReadOnlyList<Guid> ScriptLineIds);
+public sealed record PanelCastRevisionItem(Guid BibleEntryId, Guid RevisionId);
+
+public sealed record ScriptStructurePanel(
+    int PanelNumber,
+    IReadOnlyList<Guid> ScriptLineIds,
+    IReadOnlyList<PanelCastRevisionItem>? CastRevisions = null);
 
 public sealed record ScriptStructurePage(int PageNumber, IReadOnlyList<ScriptStructurePanel> Panels);
 
@@ -66,6 +71,47 @@ public sealed class SyncScriptStructureCommandHandler
 
         if (Validate(command.Pages) is { } invalid)
             return Failure(invalid);
+
+        // BIB-11, Q23, Q24: Validate castRevisions
+        var allCastRevisions = command.Pages
+            .SelectMany(p => p.Panels)
+            .Where(pan => pan.CastRevisions is { Count: > 0 })
+            .SelectMany(pan => pan.CastRevisions!)
+            .ToList();
+
+        if (allCastRevisions.Count > 0)
+        {
+            var chapterSeriesId = await _db.Chapters.Where(c => c.Id == command.ChapterId).Select(c => c.SeriesId).FirstOrDefaultAsync(ct);
+            var seriesBible = await _db.SeriesBibles.FirstOrDefaultAsync(sb => sb.SeriesId == chapterSeriesId, ct);
+            var seriesBibleId = seriesBible?.Id ?? Guid.Empty;
+
+            var revisionIds = allCastRevisions.Select(cr => cr.RevisionId).Distinct().ToList();
+            var revisions = await _db.BibleEntryRevisions
+                .Include(r => r.BibleEntry)
+                .Where(r => revisionIds.Contains(r.Id))
+                .ToListAsync(ct);
+            var revisionMap = revisions.ToDictionary(r => r.Id);
+
+            foreach (var cr in allCastRevisions)
+            {
+                if (!revisionMap.TryGetValue(cr.RevisionId, out var rev))
+                {
+                    return Failure($"Revision '{cr.RevisionId}' không tồn tại.", ResultErrorCodes.Validation);
+                }
+                if (rev.BibleEntryId != cr.BibleEntryId)
+                {
+                    return Failure($"Revision '{cr.RevisionId}' không thuộc mục Bible '{cr.BibleEntryId}'.", ResultErrorCodes.Validation);
+                }
+                if (rev.BibleEntry.SeriesBibleId != seriesBibleId)
+                {
+                    return Failure($"Mục Bible '{cr.BibleEntryId}' không thuộc Series này.", ResultErrorCodes.Validation);
+                }
+                if (rev.IsSuperseded)
+                {
+                    return Failure($"Revision '{cr.RevisionId}' đã bị Superseded.", ResultErrorCodes.Validation);
+                }
+            }
+        }
 
         var pages = await _db.Pages.Where(p => p.ChapterId == command.ChapterId).ToListAsync(ct);
         var pageIds = pages.Select(p => p.Id).ToList();
@@ -150,6 +196,51 @@ public sealed class SyncScriptStructureCommandHandler
                 await _pageRepository.SaveAsync(stream, ct);
             }
             _db.Pages.Remove(page);
+        }
+
+        // BIB-11, Q23, Q24: Cập nhật panel_bible_variants
+        // 1. Xoá dòng của Panel bị xoá mềm (FK cascade không chạy với xoá mềm)
+        if (removedPanelIds.Count > 0)
+        {
+            var orphanVariants = await _db.PanelBibleVariants.Where(v => removedPanelIds.Contains(v.PanelId)).ToListAsync(ct);
+            _db.PanelBibleVariants.RemoveRange(orphanVariants);
+        }
+
+        // 2. Ghi lại dòng của các Panel được giữ
+        var activePanelIds = touchedPanelIds.ToList();
+        var existingVariants = await _db.PanelBibleVariants.Where(v => activePanelIds.Contains(v.PanelId)).ToListAsync(ct);
+        var variantsByPanel = existingVariants.GroupBy(v => v.PanelId).ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var wantedPage in command.Pages)
+        {
+            var page = pages.First(p => p.PageNumber == wantedPage.PageNumber);
+            foreach (var wantedPanel in wantedPage.Panels)
+            {
+                var panel = panels.First(p => p.PageId == page.Id && p.PanelNumber == wantedPanel.PanelNumber);
+                var currentVars = variantsByPanel.GetValueOrDefault(panel.Id, []);
+
+                if (wantedPanel.CastRevisions is not null)
+                {
+                    var wantedEntryIds = wantedPanel.CastRevisions.Select(x => x.BibleEntryId).ToHashSet();
+                    foreach (var oldVar in currentVars.Where(v => !wantedEntryIds.Contains(v.BibleEntryId)))
+                    {
+                        _db.PanelBibleVariants.Remove(oldVar);
+                    }
+
+                    foreach (var item in wantedPanel.CastRevisions)
+                    {
+                        var existingVar = currentVars.FirstOrDefault(v => v.BibleEntryId == item.BibleEntryId);
+                        if (existingVar is not null)
+                        {
+                            existingVar.UpdateRevision(item.RevisionId, command.UserId);
+                        }
+                        else
+                        {
+                            _db.PanelBibleVariants.Add(PanelBibleVariant.Create(panel.Id, item.BibleEntryId, item.RevisionId, command.UserId));
+                        }
+                    }
+                }
+            }
         }
 
         await _db.SaveChangesAsync(ct);
