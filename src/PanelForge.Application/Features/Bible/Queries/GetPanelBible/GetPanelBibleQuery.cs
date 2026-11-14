@@ -66,9 +66,9 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
             .ToList();
 
         var speakerEntryIds = speakerCandidates.Count > 0
-            ? await _dbContext.BibleEntryNames
-                .Where(n => speakerCandidates.Contains(n.NormalizedName))
-                .Select(n => n.BibleEntryId)
+            ? await _dbContext.BibleEntries
+                .Where(e => e.Category == BibleEntryCategory.Character && speakerCandidates.Contains(e.NormalizedName))
+                .Select(e => e.Id)
                 .ToListAsync(cancellationToken)
             : [];
 
@@ -172,7 +172,6 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
                 CreatedAt: entry.CreatedAt,
                 UpdatedAt: entry.UpdatedAt,
                 IsStub: entry.IsStub,
-                Aliases: entry.Aliases,
                 IsCrowd: binding?.IsCrowdAtBind ?? entry.IsCrowd
             ));
         }

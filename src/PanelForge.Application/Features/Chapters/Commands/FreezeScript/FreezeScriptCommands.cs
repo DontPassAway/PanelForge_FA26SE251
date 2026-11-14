@@ -129,18 +129,10 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         {
             var modifiedEntries = await _dbContext.BibleEntries
                 .Where(e => modifiedBindingEntryIds.Contains(e.Id))
-                .Select(e => new { e.Id, e.Name, e.Aliases })
+                .Select(e => new { e.Id, e.NormalizedName })
                 .ToListAsync(ct);
 
-            var entryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var e in modifiedEntries)
-            {
-                entryNames.Add(e.Name);
-                foreach (var alias in e.Aliases)
-                {
-                    if (!string.IsNullOrWhiteSpace(alias)) entryNames.Add(alias);
-                }
-            }
+            var entryNames = modifiedEntries.Select(e => e.NormalizedName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var chapterLinesWithPanel = await _dbContext.ScriptLines
                 .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.SpeakerLabel != null)

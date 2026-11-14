@@ -24,7 +24,6 @@ public sealed record DefineBibleEntryCommand(
     Guid UserId,
     string Name,
     string Description,
-    IReadOnlyList<string>? Aliases = null,
     string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
@@ -83,35 +82,13 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
 
         // Kiểm tra chống trùng tên chính và bí danh trong SeriesBible (BIB-09, 9A)
         var normalizedPrimary = BibleNameNormalizer.Normalize(cmd.Name);
-        var existingPrimary = await _dbContext.BibleEntryNames
-            .Include(n => n.BibleEntry)
-            .FirstOrDefaultAsync(n => n.SeriesBibleId == bible.Id && n.NormalizedName == normalizedPrimary && n.BibleEntryId != entry.Id, ct);
+        var existingPrimary = await _dbContext.BibleEntries
+            .FirstOrDefaultAsync(e => e.SeriesBibleId == bible.Id && e.NormalizedName == normalizedPrimary && e.Id != entry.Id, ct);
 
         if (existingPrimary != null)
         {
-            var conflicting = existingPrimary.BibleEntry?.Name ?? existingPrimary.NormalizedName;
             return Result<BibleEntryDto>.Failure(
-                $"Tên '{cmd.Name}' đã trùng với mục '{conflicting}' trong Series Bible.", ResultErrorCodes.Conflict);
-        }
-
-        if (cmd.Aliases != null)
-        {
-            foreach (var alias in cmd.Aliases)
-            {
-                var norm = BibleNameNormalizer.Normalize(alias);
-                if (string.IsNullOrWhiteSpace(norm)) continue;
-
-                var existingAlias = await _dbContext.BibleEntryNames
-                    .Include(n => n.BibleEntry)
-                    .FirstOrDefaultAsync(n => n.SeriesBibleId == bible.Id && n.NormalizedName == norm && n.BibleEntryId != entry.Id, ct);
-
-                if (existingAlias != null)
-                {
-                    var conflicting = existingAlias.BibleEntry?.Name ?? existingAlias.NormalizedName;
-                    return Result<BibleEntryDto>.Failure(
-                        $"Bí danh '{alias}' đã trùng với mục '{conflicting}' trong Series Bible.", ResultErrorCodes.Conflict);
-                }
-            }
+                $"Tên '{cmd.Name}' đã trùng với mục '{existingPrimary.Name}' trong Series Bible.", ResultErrorCodes.Conflict);
         }
 
         // Sinh mã chuẩn thay thế STUB_xxxx
@@ -170,7 +147,6 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
                 priority: cmd.Priority,
                 strictCheck: cmd.StrictCheck);
 
-            entry.SetAliases(cmd.Aliases);
             entry.UpdatedBy = cmd.UserId.ToString();
         }
         catch (ArgumentException ex)
@@ -217,18 +193,6 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
                 isInitialVersion: true,
                 stageName: stageName);
             _dbContext.BibleEntryRevisions.Add(newRev);
-        }
-
-        // Cập nhật lại danh mục tên chuẩn hoá bible_entry_names trong cùng transaction
-        var oldNames = await _dbContext.BibleEntryNames
-            .Where(n => n.BibleEntryId == entry.Id)
-            .ToListAsync(ct);
-        _dbContext.BibleEntryNames.RemoveRange(oldNames);
-
-        _dbContext.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, entry.Name, entry.Id, isPrimary: true));
-        foreach (var alias in entry.Aliases)
-        {
-            _dbContext.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, alias, entry.Id, isPrimary: false));
         }
 
         await _dbContext.SaveChangesAsync(ct);

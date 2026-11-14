@@ -947,13 +947,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.PrimitiveCollection<List<string>>("Aliases")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text[]")
-                        .HasColumnName("aliases")
-                        .HasDefaultValueSql("'{}'::text[]");
-
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -1019,6 +1012,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("normalized_name");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasColumnType("varchar(20)")
@@ -1062,33 +1060,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_bible_entries_series_bible_id_code");
 
+                    b.HasIndex("SeriesBibleId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bible_entries_series_bible_id_normalized_name");
+
                     b.ToTable("bible_entries", (string)null);
-                });
-
-            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryName", b =>
-                {
-                    b.Property<Guid>("SeriesBibleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("series_bible_id");
-
-                    b.Property<string>("NormalizedName")
-                        .HasColumnType("varchar(200)")
-                        .HasColumnName("normalized_name");
-
-                    b.Property<Guid>("BibleEntryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("bible_entry_id");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_primary");
-
-                    b.HasKey("SeriesBibleId", "NormalizedName");
-
-                    b.HasIndex("BibleEntryId")
-                        .HasDatabaseName("ix_bible_entry_names_entry");
-
-                    b.ToTable("bible_entry_names", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryRevision", b =>
@@ -5637,25 +5613,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SeriesBibleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("SeriesBible");
-                });
-
-            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntryName", b =>
-                {
-                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "BibleEntry")
-                        .WithMany()
-                        .HasForeignKey("BibleEntryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PanelForge.Domain.Entities.Bible.SeriesBible", "SeriesBible")
-                        .WithMany()
-                        .HasForeignKey("SeriesBibleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("BibleEntry");
 
                     b.Navigation("SeriesBible");
                 });

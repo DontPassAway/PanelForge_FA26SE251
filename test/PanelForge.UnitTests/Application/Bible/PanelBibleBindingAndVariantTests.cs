@@ -71,7 +71,6 @@ public class PanelBibleBindingAndVariantTests
 
         _db.SeriesBibles.Add(_bible);
         _db.BibleEntries.Add(_hero);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Akira", _hero.Id, isPrimary: true));
         _db.BibleEntryRevisions.AddRange(_heroV1, _heroV2Replacement, _heroYoungVariant);
         _db.SaveChanges();
     }

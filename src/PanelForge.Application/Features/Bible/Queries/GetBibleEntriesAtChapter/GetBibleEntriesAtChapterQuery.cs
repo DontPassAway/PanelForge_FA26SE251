@@ -141,7 +141,6 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 CreatedAt: entry.CreatedAt,
                 UpdatedAt: entry.UpdatedAt,
                 IsStub: entry.IsStub,
-                Aliases: entry.Aliases,
                 IsCrowd: (bindings != null && bindings.TryGetValue(entry.Id, out var cb)) ? cb.IsCrowdAtBind : entry.IsCrowd
             ));
         }

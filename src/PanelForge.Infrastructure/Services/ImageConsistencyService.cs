@@ -143,7 +143,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Chỉ nhân vật thật sự có mặt trong Panel; ưu tiên nhân vật đã có character sheet.
-        var targetCharacter = characterEntries.Where(c => linkedEntryIds.Contains(c.Id) || speakerNames.Contains(c.Name) || c.Aliases.Any(speakerNames.Contains))
+        var targetCharacter = characterEntries.Where(c => linkedEntryIds.Contains(c.Id) || speakerNames.Contains(c.NormalizedName))
             .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.ReferenceImageUrl))
             .FirstOrDefault();
 

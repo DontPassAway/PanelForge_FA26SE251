@@ -94,7 +94,6 @@ public static class AiDemoSeeder
         var entry = bible.AddEntry(category, code, name, description);
         if (db != null)
         {
-            db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, name, entry.Id, isPrimary: true));
         }
         var snapshot = JsonSerializer.Serialize(new { Name = name, Description = description });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();

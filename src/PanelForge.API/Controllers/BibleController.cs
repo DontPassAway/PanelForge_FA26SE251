@@ -118,7 +118,6 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             StageName: body.StageName,
-            Aliases: body.Aliases,
             IsCrowd: body.IsCrowd
         );
 
@@ -495,7 +494,6 @@ public sealed class BibleController : ControllerBase
                 UserId: GetCurrentUserId(),
                 Name: request.Name,
                 Description: request.Description,
-                Aliases: request.Aliases,
                 Subtitle: request.Subtitle,
                 DetailsJson: request.DetailsJson,
                 ReferenceImageUrl: request.ReferenceImageUrl,
@@ -811,7 +809,6 @@ public sealed record SetChapterCastRevisionRequest(Guid? RevisionId = null);
 public sealed record DefineBibleEntryRequest(
     string Name,
     string Description,
-    IReadOnlyList<string>? Aliases = null,
     string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,

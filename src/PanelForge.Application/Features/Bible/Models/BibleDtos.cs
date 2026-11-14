@@ -79,7 +79,6 @@ public sealed record BibleEntryDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool IsStub = false,
-    IReadOnlyList<string>? Aliases = null,
     bool IsCrowd = false,
     int? LatestDraftVersionNumber = null
 )
@@ -113,7 +112,6 @@ public sealed record BibleEntryDto(
             entry.CreatedAt,
             entry.UpdatedAt,
             entry.IsStub,
-            entry.Aliases,
             entry.IsCrowd,
             latestDraftVersionNumber
         );
@@ -141,7 +139,6 @@ public sealed record CreateBibleEntryRequest(
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
     string? StageName = null,
-    IReadOnlyList<string>? Aliases = null,
     bool IsCrowd = false
 )
 {

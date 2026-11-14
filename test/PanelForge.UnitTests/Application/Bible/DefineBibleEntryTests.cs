@@ -32,9 +32,6 @@ public class DefineBibleEntryTests
         _db.BibleEntries.AddRange(_stubEntry, _existingNormalEntry);
         _db.BibleEntryRevisions.AddRange(stubRev1, existingRev1);
 
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kuro", _stubEntry.Id, isPrimary: true));
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Shiro", _existingNormalEntry.Id, isPrimary: true));
-
         _db.SaveChanges();
     }
 
@@ -48,7 +45,6 @@ public class DefineBibleEntryTests
             UserId: _userId,
             Name: "Kurogane",
             Description: "Hắc kiếm sĩ bí ẩn vùng biên cảnh",
-            Aliases: new[] { "Black Steel", "Kiếm Đen" },
             Subtitle: "Hắc Kiếm",
             Code: null // Tự sinh
         );
@@ -63,7 +59,6 @@ public class DefineBibleEntryTests
         entry.Description.Should().Be("Hắc kiếm sĩ bí ẩn vùng biên cảnh");
         entry.Code.Should().StartWith("CHR_");
         entry.Code.Should().NotStartWith("STUB_");
-        entry.Aliases.Should().BeEquivalentTo(new[] { "Black Steel", "Kiếm Đen" });
 
         // Chỉ có đúng 1 revision (v1 bị ghi đè, không sinh v2)
         var revisions = await _db.BibleEntryRevisions.Where(r => r.BibleEntryId == _stubEntry.Id).ToListAsync();
@@ -73,12 +68,7 @@ public class DefineBibleEntryTests
         rev.Summary.Should().Contain("Kurogane");
         rev.SnapshotJson.Should().Contain("Kurogane");
 
-        // Bảng bible_entry_names cập nhật đúng
-        var names = await _db.BibleEntryNames.Where(n => n.BibleEntryId == _stubEntry.Id).ToListAsync();
-        names.Should().HaveCount(3); // Kurogane (primary) + 2 aliases
-        names.Should().Contain(n => n.NormalizedName == "kurogane" && n.IsPrimary);
-        names.Should().Contain(n => n.NormalizedName == "black steel" && !n.IsPrimary);
-        names.Should().Contain(n => n.NormalizedName == "kiếm đen" && !n.IsPrimary);
+        _stubEntry.NormalizedName.Should().Be("kurogane");
     }
 
     [Fact]
@@ -127,28 +117,8 @@ public class DefineBibleEntryTests
             SeriesId: _seriesId,
             BibleEntryId: _stubEntry.Id,
             UserId: _userId,
-            Name: "Shiro", // Đã có mục Shiro
+            Name: "  SHIRO  ", // Trùng sau khi chuẩn hoá
             Description: "Mô tả hợp lệ"
-        );
-
-        var result = await handler.Handle(cmd, default);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("trùng");
-    }
-
-    [Fact]
-    public async Task Define_DuplicateAliasWithAnotherEntry_ReturnsConflict()
-    {
-        var handler = new DefineBibleEntryCommandHandler(_db);
-        var cmd = new DefineBibleEntryCommand(
-            SeriesId: _seriesId,
-            BibleEntryId: _stubEntry.Id,
-            UserId: _userId,
-            Name: "Kuro New",
-            Description: "Mô tả hợp lệ",
-            Aliases: new[] { "shiro" } // Trùng với tên mục Shiro
         );
 
         var result = await handler.Handle(cmd, default);

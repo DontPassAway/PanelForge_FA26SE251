@@ -13,7 +13,7 @@ public interface IChapterCastService
 {
     /// <summary>
     /// Tính lại toàn bộ Danh sách & Bản đồ thực thể chương (BIB-12, 3A):
-    /// 1. SpeakerResolver: khớp người nói nguyên chuỗi với bible_entry_names; không khớp -> tạo stub Nhân vật.
+    /// 1. SpeakerResolver: khớp người nói nguyên chuỗi với tên chuẩn hoá; không khớp -> tạo stub Nhân vật.
     /// 2. Đồng bộ chapter_bible_bindings (nguồn Speaker/Highlight, kế thừa, is_crowd_at_bind).
     /// 3. Dọn mục stub thừa.
     /// </summary>
@@ -55,19 +55,21 @@ public sealed class ChapterCastService : IChapterCastService
             .OrderBy(l => l.LineOrder)
             .ToListAsync(ct);
 
-        // 2. SpeakerResolver: chuẩn hoá người nói của dòng Dialogue & Thought, khớp bible_entry_names mục Nhân vật
+        // 2. SpeakerResolver: chuẩn hoá người nói của dòng Dialogue & Thought, khớp tên mục Nhân vật
         var candidates = SpeakerResolver.ExtractSpeakerCandidates(lines);
         var normKeys = candidates.Select(c => c.NormalizedName).ToList();
 
-        var existingNames = await _db.BibleEntryNames
-            .Include(n => n.BibleEntry)
-            .Where(n => n.SeriesBibleId == seriesBible.Id && normKeys.Contains(n.NormalizedName))
+        var existingEntries = await _db.BibleEntries
+            .Where(e => e.SeriesBibleId == seriesBible.Id
+                && e.Category == BibleEntryCategory.Character
+                && e.IsActive
+                && normKeys.Contains(e.NormalizedName))
             .ToListAsync(ct);
 
         var resolvedSpeakerMap = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var en in existingNames.Where(n => n.BibleEntry.Category == BibleEntryCategory.Character && n.BibleEntry.IsActive))
+        foreach (var entry in existingEntries)
         {
-            resolvedSpeakerMap[en.NormalizedName] = en.BibleEntryId;
+            resolvedSpeakerMap[entry.NormalizedName] = entry.Id;
         }
 
         foreach (var cand in candidates)
@@ -76,19 +78,20 @@ public sealed class ChapterCastService : IChapterCastService
                 continue;
 
             // Kiểm tra trong bộ nhớ local (tránh trùng lặp trong cùng transaction)
-            var localName = _db.BibleEntryNames.Local.FirstOrDefault(
-                n => n.SeriesBibleId == seriesBible.Id && n.NormalizedName == cand.NormalizedName);
-            if (localName is not null)
+            var localEntry = _db.BibleEntries.Local.FirstOrDefault(e =>
+                e.SeriesBibleId == seriesBible.Id
+                && e.Category == BibleEntryCategory.Character
+                && e.IsActive
+                && e.NormalizedName == cand.NormalizedName);
+            if (localEntry is not null)
             {
-                resolvedSpeakerMap[cand.NormalizedName] = localName.BibleEntryId;
+                resolvedSpeakerMap[cand.NormalizedName] = localEntry.Id;
                 continue;
             }
 
             // Không khớp -> tạo mục Nhân vật Draft (CreateStub, IsStub = true, mô tả rỗng)
             var stub = BibleEntry.CreateStub(seriesBible.Id, BibleEntryCategory.Character, cand.DisplayName, description: string.Empty);
             _db.BibleEntries.Add(stub);
-            var entryName = BibleEntryName.Create(seriesBible.Id, cand.DisplayName, stub.Id, isPrimary: true);
-            _db.BibleEntryNames.Add(entryName);
 
             _db.AuditLogs.Add(AuditLog.Create(
                 action: "AutoCreateFromSpeaker",
@@ -227,10 +230,6 @@ public sealed class ChapterCastService : IChapterCastService
 
                 if (onlyCreated)
                 {
-                    var names = await _db.BibleEntryNames
-                        .Where(n => n.BibleEntryId == stub.Id)
-                        .ToListAsync(ct);
-                    _db.BibleEntryNames.RemoveRange(names);
                     _db.BibleEntries.Remove(stub);
                 }
             }

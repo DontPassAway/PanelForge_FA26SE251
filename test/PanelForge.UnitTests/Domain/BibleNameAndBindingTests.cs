@@ -32,50 +32,6 @@ public class BibleNameAndBindingTests
     }
 
     [Fact]
-    public void SetAliases_ShouldValidateAndDeduplicate()
-    {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Hắc Long", "Mô tả");
-
-        entry.SetAliases(["Dark Dragon", "  dark   dragon  ", "Black Dragon"]);
-
-        entry.Aliases.Should().HaveCount(2);
-        entry.Aliases.Should().Contain("Dark Dragon");
-        entry.Aliases.Should().Contain("Black Dragon");
-    }
-
-    [Fact]
-    public void SetAliases_DuplicateOfPrimaryName_ShouldThrow()
-    {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Hắc Long", "Mô tả");
-
-        var act = () => entry.SetAliases(["hắc   long"]);
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*trùng với tên chính*");
-    }
-
-    [Fact]
-    public void SetAliases_MoreThan20_ShouldThrow()
-    {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Hắc Long", "Mô tả");
-        var list = Enumerable.Range(1, 21).Select(i => $"Alias_{i}").ToList();
-
-        var act = () => entry.SetAliases(list);
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*tối đa là 20*");
-    }
-
-    [Fact]
-    public void SetAliases_MoreThan100Chars_ShouldThrow()
-    {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Hắc Long", "Mô tả");
-        var longAlias = new string('x', 101);
-
-        var act = () => entry.SetAliases([longAlias]);
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*100 ký tự*");
-    }
-
-    [Fact]
     public void SetCrowd_ShouldToggleFlag()
     {
         var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Dân làng A", "Mô tả");
@@ -149,19 +105,11 @@ public class BibleNameAndBindingTests
     }
 
     [Fact]
-    public void BibleEntryName_Create_ShouldNormalizeAndValidate()
+    public void BibleEntry_Create_ShouldStoreNormalizedName()
     {
         var seriesBibleId = Guid.NewGuid();
-        var entryId = Guid.NewGuid();
+        var entry = BibleEntry.Create(seriesBibleId, BibleEntryCategory.Character, "CHR-01", "  Hắc   Long  ", "Mô tả");
 
-        var name = BibleEntryName.Create(seriesBibleId, "   Hắc   Long   ", entryId, isPrimary: true);
-
-        name.SeriesBibleId.Should().Be(seriesBibleId);
-        name.NormalizedName.Should().Be("hắc long");
-        name.BibleEntryId.Should().Be(entryId);
-        name.IsPrimary.Should().BeTrue();
-
-        var act = () => BibleEntryName.Create(seriesBibleId, "   ", entryId, isPrimary: false);
-        act.Should().Throw<ArgumentException>();
+        entry.NormalizedName.Should().Be("hắc long");
     }
 }

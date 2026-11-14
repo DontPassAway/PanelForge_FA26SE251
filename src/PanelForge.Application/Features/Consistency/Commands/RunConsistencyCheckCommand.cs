@@ -49,12 +49,11 @@ public sealed class RunConsistencyCheckCommandHandler
             .Select(p => new { p.Id, p.ReadingOrder, PageNumber = p.Page.PageNumber })
             .ToDictionaryAsync(p => p.Id, ct);
 
-        var bibleNames = await _db.BibleEntryNames.AsNoTracking()
-            .Where(n => _db.BibleEntries.Any(e => e.Id == n.BibleEntryId && e.SeriesBible.SeriesId == chapter.SeriesId))
+        var bibleNames = await _db.BibleEntries.AsNoTracking()
+            .Where(e => e.SeriesBible.SeriesId == chapter.SeriesId)
             .ToListAsync(ct);
         var speakerToEntryMap = bibleNames
-            .GroupBy(n => n.NormalizedName)
-            .ToDictionary(g => g.Key, g => g.First().BibleEntryId);
+            .ToDictionary(e => e.NormalizedName, e => e.Id);
 
         var lines = rawLines.Select(l =>
         {

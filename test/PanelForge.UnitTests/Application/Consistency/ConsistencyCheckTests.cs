@@ -40,9 +40,6 @@ public class ConsistencyCheckTests
             Db.Chapters.Add(Chapter);
             Db.Scenes.Add(Scene);
             Db.SeriesBibles.Add(bible);
-            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Mira", Mira.Id, isPrimary: true));
-            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Hải đăng", Lighthouse.Id, isPrimary: true));
-            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Kẻ phản diện", FutureVillain.Id, isPrimary: true));
             Db.SaveChanges();
         }
 
@@ -189,7 +186,6 @@ public class ConsistencyCheckTests
             detailsJson: """{"diesAtChapter": 1}""");
         ghost.AddRevision("v1", "{}", "hg1", isInitialVersion: true).Lock(f.UserId);
         f.Db.BibleEntries.Add(ghost);
-        f.Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Hồn Ma", ghost.Id, isPrimary: true));
 
         var ch2 = Chapter.Create(f.Chapter.SeriesId, 2);
         var sc2 = Scene.Create(ch2.Id, 1);

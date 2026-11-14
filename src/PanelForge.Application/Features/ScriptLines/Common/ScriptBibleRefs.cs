@@ -85,25 +85,24 @@ internal static class ScriptBibleRefs
                         return $"{lineLabel}: Mục nháp phải thuộc danh mục Nhân vật, Địa điểm hoặc Đạo cụ.";
 
                     var normDraftName = BibleNameNormalizer.Normalize(draftName);
-                    var localName = db.BibleEntryNames.Local.FirstOrDefault(
-                        n => n.SeriesBibleId == seriesBible.Id && n.NormalizedName == normDraftName);
-                    if (localName is not null)
+                    var localEntry = db.BibleEntries.Local.FirstOrDefault(e =>
+                        e.SeriesBibleId == seriesBible.Id && e.NormalizedName == normDraftName);
+                    if (localEntry is not null)
                     {
-                        targetEntryId = localName.BibleEntryId;
+                        targetEntryId = localEntry.Id;
                     }
                     else
                     {
-                        var existingName = await db.BibleEntryNames.FirstOrDefaultAsync(
-                            n => n.SeriesBibleId == seriesBible.Id && n.NormalizedName == normDraftName, ct);
-                        if (existingName is not null)
+                        var existingEntry = await db.BibleEntries.FirstOrDefaultAsync(
+                            e => e.SeriesBibleId == seriesBible.Id && e.NormalizedName == normDraftName, ct);
+                        if (existingEntry is not null)
                         {
-                            targetEntryId = existingName.BibleEntryId;
+                            targetEntryId = existingEntry.Id;
                         }
                         else
                         {
                             var stub = BibleEntry.CreateStub(seriesBible.Id, r.NewDraft.Category, draftName, description: "");
                             db.BibleEntries.Add(stub);
-                            db.BibleEntryNames.Add(BibleEntryName.Create(seriesBible.Id, draftName, stub.Id, isPrimary: true));
                             targetEntryId = stub.Id;
                         }
                     }
