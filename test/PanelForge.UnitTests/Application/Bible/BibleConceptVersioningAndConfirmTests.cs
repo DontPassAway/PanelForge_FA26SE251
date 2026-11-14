@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Moq;
@@ -136,6 +137,37 @@ public class BibleConceptVersioningAndConfirmTests
         var lockedEvt = _heroV1.Events.Single(e => e.Type == BibleRevisionEventType.Locked);
         lockedEvt.ActorId.Should().Be(_editorId);
         lockedEvt.ConceptVersionNumber.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ConfirmCanon_UpdatesEntryCacheFromLockedRevision()
+    {
+        var revision = _heroEntry.AddRevision(
+            "v2",
+            JsonSerializer.Serialize(new
+            {
+                Name = _heroEntry.Name,
+                Description = "Mô tả Canon mới",
+                Subtitle = "Bản trưởng thành",
+                DetailsJson = "{\"age\":18}",
+                ReferenceImageUrl = "draft.png",
+                Priority = BiblePriority.StrictCheck,
+                StrictCheck = false
+            }),
+            "hash-v2");
+        revision.SubmitConcept(_artistId, "canon-v2.png", "Bản hoàn chỉnh");
+
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object, _inheritanceResolver.Object);
+        var result = await handler.Handle(
+            new ConfirmBibleEntryRevisionCommand(_seriesId, _heroEntry.Id, revision.Id, _editorId, revision.CurrentConceptEventId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        _heroEntry.Name.Should().Be("Naruto");
+        _heroEntry.Description.Should().Be("Mô tả Canon mới");
+        _heroEntry.ReferenceImageUrl.Should().Be("canon-v2.png");
+        _heroEntry.Priority.Should().Be(BiblePriority.StrictCheck);
+        _heroEntry.StrictCheck.Should().BeFalse();
     }
 
     [Fact]

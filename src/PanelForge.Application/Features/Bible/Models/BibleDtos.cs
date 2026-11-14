@@ -80,31 +80,42 @@ public sealed record BibleEntryDto(
     DateTime? UpdatedAt,
     bool IsStub = false,
     IReadOnlyList<string>? Aliases = null,
-    bool IsCrowd = false
+    bool IsCrowd = false,
+    int? LatestDraftVersionNumber = null
 )
 {
     public static BibleEntryDto From(BibleEntry entry)
     {
-        var rev = entry.GetCurrentRevision() ?? entry.Revisions.OrderByDescending(r => r.VersionNumber).FirstOrDefault();
+        var rev = entry.GetDisplayRevision();
+        var snapshot = BibleEntrySnapshot.From(entry, rev);
+        var latestDraftVersionNumber = rev is null
+            ? null
+            : entry.Revisions
+                .Where(r => r.VersionNumber > rev.VersionNumber
+                    && r.ReviewStatus != BibleRevisionStatus.CanonLocked
+                    && !entry.IsRevisionSuperseded(r))
+                .Select(r => (int?)r.VersionNumber)
+                .Max();
         return new(
             entry.Id,
             entry.SeriesBibleId,
             entry.Category,
             entry.Code,
             entry.Name,
-            entry.Subtitle,
-            entry.Description,
-            entry.DetailsJson,
-            entry.ReferenceImageUrl,
-            entry.Priority,
-            entry.StrictCheck,
+            snapshot.Subtitle,
+            snapshot.Description,
+            snapshot.DetailsJson,
+            snapshot.ReferenceImageUrl,
+            snapshot.Priority,
+            snapshot.StrictCheck,
             entry.IsActive,
             rev != null ? BibleEntryRevisionDto.From(rev) : null,
             entry.CreatedAt,
             entry.UpdatedAt,
             entry.IsStub,
             entry.Aliases,
-            entry.IsCrowd
+            entry.IsCrowd,
+            latestDraftVersionNumber
         );
     }
 }

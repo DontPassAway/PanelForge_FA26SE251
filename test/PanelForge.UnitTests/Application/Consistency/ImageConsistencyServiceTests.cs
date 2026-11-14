@@ -152,7 +152,7 @@ public class ImageConsistencyServiceTests
     public async Task NoCharacterSheet_IsSkipped_WithoutCallingAi()
     {
         var fixture = new TestFixture(Reply(0.9m));
-        fixture.Character.UpdateDetails(fixture.Character.Name, fixture.Character.Description, null, null, null,
+        fixture.Character.UpdateDetails(fixture.Character.Description, null, null, null,
             fixture.Character.Priority, fixture.Character.StrictCheck);
         fixture.Db.SaveChanges();
 

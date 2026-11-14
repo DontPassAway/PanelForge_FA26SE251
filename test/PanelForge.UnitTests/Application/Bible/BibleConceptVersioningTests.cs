@@ -54,7 +54,8 @@ public class BibleConceptVersioningTests
         result.Value.Events!.Select(e => e.Type).Should().Equal(BibleRevisionEventType.Created, BibleRevisionEventType.ConceptSubmitted);
         _db.BibleEntryRevisions.Should().ContainSingle();
         _v1.ContentHash.Should().Be("C9279D77");
-        _entry.ReferenceImageUrl.Should().Be("/assets/concept-1.png");
+        _entry.ReferenceImageUrl.Should().BeNull();
+        BibleEntryDto.From(_entry).ReferenceImageUrl.Should().Be("/assets/concept-1.png");
         _sender.VerifyNoOtherCalls();
     }
 
