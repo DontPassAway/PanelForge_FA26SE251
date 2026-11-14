@@ -15,9 +15,11 @@ using PanelForge.Application.Features.Bible.Commands.SetChapterCastRevision;
 using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.ScriptLines.Commands.BatchSaveScriptLines;
 using PanelForge.Application.Features.ScriptLines.Models;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workspaces;
@@ -305,7 +307,7 @@ public class SeriesBibleScenarioTests
         readyGate.CanSubmit.Should().BeTrue();
 
         // 5. Submit script for review via lifecycle handler
-        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate);
+        var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var submitResult = await submitHandler.Handle(
             new SubmitScriptCommand(chapter.Id, _writerId, "Kịch bản Chương 1 hoàn thiện"),
             CancellationToken.None);
@@ -593,5 +595,266 @@ public class SeriesBibleScenarioTests
 
         var finalCh2Binding = await _db.ChapterBibleBindings.FirstAsync(b => b.ChapterId == ch2.Id && b.BibleEntryId == naruto.Id);
         finalCh2Binding.BoundRevisionId.Should().Be(reV2Id);
+    }
+
+    [Fact]
+    public async Task Scenario_SpeakerAutoMatchAndCreate_DialogueAndThought_CreatesStubOnce()
+    {
+        var chapter = Chapter.Create(_series.Id, 101, "Chương Thoại");
+        _db.Chapters.Add(chapter);
+        var scene = Scene.Create(chapter.Id, 1, "Cảnh 1");
+        _db.Scenes.Add(scene);
+
+        var line1 = ScriptLine.Create(scene.Id, 1, text: "Tôi là Sakura!", kind: ScriptLineKind.Dialogue, speakerLabel: "Sakura");
+        var line2 = ScriptLine.Create(scene.Id, 2, text: "Mình phải cố lên...", kind: ScriptLineKind.Thought, speakerLabel: "Sakura (nghĩ)");
+        _db.ScriptLines.AddRange(line1, line2);
+        await _db.SaveChangesAsync();
+
+        await _castService.RecomputeAsync(chapter.Id, _writerId);
+        await _db.SaveChangesAsync();
+
+        // Sakura should be created as a single stub
+        var sakuraStubs = await _db.BibleEntries.Where(e => e.Name == "Sakura").ToListAsync();
+        sakuraStubs.Should().ContainSingle();
+        sakuraStubs[0].IsStub.Should().BeTrue();
+
+        var reloadedLines = await _db.ScriptLines.Where(l => l.SceneId == scene.Id).ToListAsync();
+        reloadedLines.Should().AllSatisfy(l => l.SpeakerCharacterId.Should().Be(sakuraStubs[0].Id));
+    }
+
+    [Fact]
+    public async Task Scenario_CommitChapter2_ResolvesInheritanceFromChapter1_ThroughRealHandler()
+    {
+        // Setup Canon character
+        var kakashi = _bible.AddEntry(BibleEntryCategory.Character, "CHR10", "Kakashi", "Ninja Thượng Đẳng");
+        var v1 = kakashi.AddRevision("v1", "{}", "hash-k1", effectiveFromChapterNumber: 1, isInitialVersion: true, stageName: "Mặc định");
+        v1.SubmitConcept(_artistId, "https://storage/k1.png", "c1", "hk1");
+        v1.ConfirmCanon(_editorId, v1.CurrentConceptEventId!.Value);
+        _db.BibleEntries.Add(kakashi);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kakashi", kakashi.Id, isPrimary: true));
+        _db.BibleEntryRevisions.Add(v1);
+
+        // Ch1 with Kakashi bound to v1
+        var ch1 = Chapter.Create(_series.Id, 201, "Chương 201");
+        ch1.SubmitScript(_writerId, Guid.NewGuid());
+        ch1.StartProduction(_producerId, "hash-ch1", null); // Frozen
+        var bindCh1 = ChapterBibleBinding.Create(ch1.Id, kakashi.Id, v1.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: false, isCrowdAtBind: false, _writerId);
+        _db.Chapters.Add(ch1);
+        _db.ChapterBibleBindings.Add(bindCh1);
+
+        // Ch2 has a line with speaker "Kakashi"
+        var ch2 = Chapter.Create(_series.Id, 202, "Chương 202");
+        _db.Chapters.Add(ch2);
+        var scene2 = Scene.Create(ch2.Id, 1, "Cảnh Ch2");
+        _db.Scenes.Add(scene2);
+        var lineCh2 = ScriptLine.Create(scene2.Id, 1, text: "Nhìn vào mắt ta!", kind: ScriptLineKind.Dialogue, speakerLabel: "Kakashi");
+        _db.ScriptLines.Add(lineCh2);
+        await _db.SaveChangesAsync();
+
+        // Real handler invocation for CommitScriptVersionCommand on Ch2
+        var handler = new CommitScriptVersionCommandHandler(_db, _auth.Object, _castService);
+        var commitResult = await handler.Handle(new CommitScriptVersionCommand(ch2.Id, _writerId, "Writer commit ch2"), CancellationToken.None);
+
+        commitResult.IsSuccess.Should().BeTrue();
+
+        // Chapter 2 binding should exist and inherit v1 from Chapter 1!
+        var ch2Binding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == ch2.Id && b.BibleEntryId == kakashi.Id);
+        ch2Binding.Should().NotBeNull();
+        ch2Binding!.BoundRevisionId.Should().Be(v1.Id);
+        ch2Binding.ChosenByWriter.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Scenario_DecimalChapterInheritance_10_5_InheritsFrom_10_And_11_InheritsFrom_10_5()
+    {
+        var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR20", "Gai", "Mãnh thú Làng Lá");
+        var v10 = entry.AddRevision("v10", "{}", "hash-g10", effectiveFromChapterNumber: 10, isInitialVersion: true, stageName: "Thường");
+        v10.SubmitConcept(_artistId, "https://storage/g10.png", "c10", "hg10");
+        v10.ConfirmCanon(_editorId, v10.CurrentConceptEventId!.Value);
+
+        var v105 = entry.AddRevision("v10.5", "{}", "hash-g105", effectiveFromChapterNumber: 10, isInitialVersion: false, stageName: "Mở Bát Môn");
+        v105.SubmitConcept(_artistId, "https://storage/g105.png", "c105", "hg105");
+        v105.ConfirmCanon(_editorId, v105.CurrentConceptEventId!.Value);
+
+        _db.BibleEntries.Add(entry);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Gai", entry.Id, isPrimary: true));
+        _db.BibleEntryRevisions.AddRange(v10, v105);
+
+        // Chapter 10, 10.5, 11
+        var ch10 = Chapter.Create(_series.Id, 10m, "Chương 10");
+        var ch105 = Chapter.Create(_series.Id, 10.5m, "Chương 10.5 (Ngoại truyện)");
+        var ch11 = Chapter.Create(_series.Id, 11m, "Chương 11");
+        _db.Chapters.AddRange(ch10, ch105, ch11);
+
+        // Ch10 is frozen with v10
+        ch10.SubmitScript(_writerId, Guid.NewGuid());
+        ch10.StartProduction(_producerId, "hash-10", null);
+        var bind10 = ChapterBibleBinding.Create(ch10.Id, entry.Id, v10.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: false, isCrowdAtBind: false, _writerId);
+        _db.ChapterBibleBindings.Add(bind10);
+
+        // Ch10.5 starts un-frozen, chosen_by_writer = false
+        var bind105 = ChapterBibleBinding.Create(ch105.Id, entry.Id, null, ChapterBibleBindingSource.Speaker, chosenByWriter: false, isCrowdAtBind: false, _writerId);
+        _db.ChapterBibleBindings.Add(bind105);
+
+        // Ch11 starts un-frozen, chosen_by_writer = false
+        var bind11 = ChapterBibleBinding.Create(ch11.Id, entry.Id, null, ChapterBibleBindingSource.Speaker, chosenByWriter: false, isCrowdAtBind: false, _writerId);
+        _db.ChapterBibleBindings.Add(bind11);
+        await _db.SaveChangesAsync();
+
+        // 1. Resolve inherited for 10.5 -> inherits from 10 (v10)
+        await _resolver.ResolveInheritedAsync(_series.Id, 10.5m);
+        bind105.BoundRevisionId.Should().Be(v10.Id);
+
+        // 2. Ch10.5 writer explicitly chooses v105 (Bát Môn)
+        bind105.UpdateBinding(v105.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: true, _writerId);
+        await _db.SaveChangesAsync();
+
+        // 3. Resolve inherited from 11 -> Ch11 inherits from closest previous chapter (10.5), getting v105!
+        await _resolver.ResolveInheritedAsync(_series.Id, 11m);
+        bind11.BoundRevisionId.Should().Be(v105.Id);
+        await _db.SaveChangesAsync();
+
+        // 4. GET /cast on Chapter 10.5 returns decimal ChapterNumber and decimal InheritedFromChapterNumber
+        var queryHandler = new GetChapterCastQueryHandler(_db, _auth.Object, _castGate);
+        var cast105Result = await queryHandler.Handle(new GetChapterCastQuery(ch105.Id, _writerId), default);
+        cast105Result.IsSuccess.Should().BeTrue();
+        cast105Result.Value!.ChapterNumber.Should().Be(10.5m);
+
+        var cast11Result = await queryHandler.Handle(new GetChapterCastQuery(ch11.Id, _writerId), default);
+        cast11Result.IsSuccess.Should().BeTrue();
+        cast11Result.Value!.ChapterNumber.Should().Be(11m);
+        var gaiIn11 = cast11Result.Value.Entities.First(e => e.BibleEntryId == entry.Id);
+        gaiIn11.InheritedFromChapterNumber.Should().Be(10.5m);
+    }
+
+    [Fact]
+    public async Task Scenario_PerPanelVariant_Flashback_Gate1Validation()
+    {
+        var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR30", "Sasuke", "Đối thủ");
+        var canonRev = entry.AddRevision("v1", "{}", "h-s1", effectiveFromChapterNumber: 1, isInitialVersion: true, stageName: "Mặc định");
+        canonRev.SubmitConcept(_artistId, "https://storage/s1.png", "c-s1", "hs1");
+        canonRev.ConfirmCanon(_editorId, canonRev.CurrentConceptEventId!.Value);
+
+        var flashbackRev = entry.AddRevision("v1-kid", "{}", "h-kid", effectiveFromChapterNumber: 1, isInitialVersion: false, stageName: "Lúc nhỏ");
+        // Flashback is Draft (not yet CanonLocked)
+        _db.BibleEntries.Add(entry);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Sasuke", entry.Id, isPrimary: true));
+        _db.BibleEntryRevisions.AddRange(canonRev, flashbackRev);
+
+        var chapter = Chapter.Create(_series.Id, 301, "Chương Hồi Tưởng");
+        _db.Chapters.Add(chapter);
+        var page = Page.CreateNew(chapter.Id, 1, default, 1200, 1800, 300);
+        _db.Pages.Add(page);
+        var panel1 = Panel.Create(page.Id, 1, 1);
+        var panel2 = Panel.Create(page.Id, 2, 2);
+        _db.Panels.AddRange(panel1, panel2);
+
+        // Chapter uses canonRev
+        var binding = ChapterBibleBinding.Create(chapter.Id, entry.Id, canonRev.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: false, isCrowdAtBind: false, _writerId);
+        _db.ChapterBibleBindings.Add(binding);
+
+        // Panel 2 has flashback variant (not locked)
+        var panelVariant = PanelBibleVariant.Create(panel2.Id, entry.Id, flashbackRev.Id, _writerId);
+        _db.PanelBibleVariants.Add(panelVariant);
+
+        chapter.SubmitScript(_writerId, Guid.NewGuid());
+        await _db.SaveChangesAsync();
+
+        // Gate 1 should fail because panel 2 flashback variant is not CanonLocked
+        var gateBeforeLock = await _castGate.EvaluateStartAsync(chapter.Id);
+        gateBeforeLock.CanStart.Should().BeFalse();
+        gateBeforeLock.Blockers.Should().Contain(b => b.RevisionId == flashbackRev.Id && b.SourceExplanation!.Contains("Panel 1.2"));
+
+        // Now lock flashbackRev
+        flashbackRev.SubmitConcept(_artistId, "https://storage/kid.png", "concept kid", "hkid");
+        flashbackRev.ConfirmCanon(_editorId, flashbackRev.CurrentConceptEventId!.Value);
+        await _db.SaveChangesAsync();
+
+        // Gate 1 should now pass
+        var gateAfterLock = await _castGate.EvaluateStartAsync(chapter.Id);
+        gateAfterLock.CanStart.Should().BeTrue();
+        gateAfterLock.Blockers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Scenario_EditorConfirmLocksCanon_RejectsWriterOrArtist()
+    {
+        var entry = _bible.AddEntry(BibleEntryCategory.Prop, "PRP01", "Kiếm Kusanagi", "Bảo kiếm");
+        var rev = entry.AddRevision("v1", "{}", "h-prop", isInitialVersion: true);
+        rev.SubmitConcept(_artistId, "https://storage/sword.png", "Kiếm bản 1", "h-sw");
+        _db.BibleEntries.Add(entry);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kiếm Kusanagi", entry.Id, isPrimary: true));
+        _db.BibleEntryRevisions.Add(rev);
+        await _db.SaveChangesAsync();
+
+        var confirmHandler = new ConfirmBibleEntryRevisionCommandHandler(_db, _resolver);
+        var conceptEventId = rev.CurrentConceptEventId!.Value;
+
+        // Artist cannot confirm (BR-06) -> 403 Forbidden
+        var artistResult = await confirmHandler.Handle(
+            new ConfirmBibleEntryRevisionCommand(_series.Id, entry.Id, rev.Id, _artistId, conceptEventId),
+            CancellationToken.None);
+        artistResult.IsSuccess.Should().BeFalse();
+        artistResult.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+
+        // Editor confirms -> Success & CanonLocked
+        var editorResult = await confirmHandler.Handle(
+            new ConfirmBibleEntryRevisionCommand(_series.Id, entry.Id, rev.Id, _editorId, conceptEventId),
+            CancellationToken.None);
+        editorResult.IsSuccess.Should().BeTrue();
+        rev.IsLocked.Should().BeTrue();
+        rev.ReviewStatus.Should().Be(BibleRevisionStatus.CanonLocked);
+    }
+
+    [Fact]
+    public async Task Scenario_ProducerRequestRework_TransitionsToReworkRequired()
+    {
+        var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR40", "Jiraiya", "Hiền nhân Cóc");
+        var rev = entry.AddRevision("v1", "{}", "h-j1", isInitialVersion: true);
+        rev.SubmitConcept(_artistId, "https://storage/j1.png", "Jiraiya v1", "hj1");
+        _db.BibleEntries.Add(entry);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Jiraiya", entry.Id, isPrimary: true));
+        _db.BibleEntryRevisions.Add(rev);
+        await _db.SaveChangesAsync();
+
+        var reworkHandler = new RequestReworkBibleEntryRevisionCommandHandler(_db);
+        var result = await reworkHandler.Handle(
+            new RequestReworkBibleEntryRevisionCommand(_series.Id, entry.Id, rev.Id, _producerId, "Vẽ mặt chưa đủ già"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        rev.ReviewStatus.Should().Be(BibleRevisionStatus.ReworkRequired);
+    }
+
+    [Fact]
+    public async Task Scenario_ConceptVersion_CommentsAndReplies_Threaded()
+    {
+        var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR50", "Tsunade", "Hokage Đệ Ngũ");
+        var rev = entry.AddRevision("v1", "{}", "h-tsu", isInitialVersion: true);
+        rev.SubmitConcept(_artistId, "https://storage/tsu.png", "Bản vẽ Tsunade", "htsu");
+        _db.BibleEntries.Add(entry);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Tsunade", entry.Id, isPrimary: true));
+        _db.BibleEntryRevisions.Add(rev);
+        await _db.SaveChangesAsync();
+
+        // Writer posts a comment
+        var commentHandler = new CreateBibleConceptCommentCommandHandler(_db);
+        var commentResult = await commentHandler.Handle(
+            new CreateBibleConceptCommentCommand(_series.Id, entry.Id, rev.Id, _writerId, new CreateConceptCommentRequest("Màu áo cần xanh lá đậm hơn")),
+            CancellationToken.None);
+        commentResult.IsSuccess.Should().BeTrue();
+        var parentCommentId = commentResult.Value.Id;
+
+        // Artist replies to the comment
+        var replyHandler = new ReplyBibleConceptCommentCommandHandler(_db);
+        var replyResult = await replyHandler.Handle(
+            new ReplyBibleConceptCommentCommand(_series.Id, entry.Id, rev.Id, parentCommentId, _artistId, new ReplyConceptCommentRequest("Đã ghi nhận, sẽ sửa lại trong concept tiếp theo")),
+            CancellationToken.None);
+        replyResult.IsSuccess.Should().BeTrue();
+        replyResult.Value.ParentCommentId.Should().Be(parentCommentId);
+
+        // Verify threaded comments in DB
+        var comments = await _db.BibleConceptComments.Where(c => c.RevisionId == rev.Id).ToListAsync();
+        comments.Should().HaveCount(2);
     }
 }

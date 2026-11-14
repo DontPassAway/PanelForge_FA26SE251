@@ -5,6 +5,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Domain.Entities.Content;
@@ -12,6 +13,7 @@ using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -247,7 +249,10 @@ public class ScriptPermissionMatrixTests
         await _db.SaveChangesAsync();
 
         // 2. Producer Start Production (Freeze Script)
-        var freezeResult = await new FreezeChapterScriptCommandHandler(_db)
+        var resolver = new ChapterCastInheritanceResolver(_db);
+        var castService = new ChapterCastService(_db, resolver);
+        var castGate = new ChapterCastGate(_db, castService, resolver);
+        var freezeResult = await new FreezeChapterScriptCommandHandler(_db, castGate)
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producerId), default);
 
         freezeResult.IsSuccess.Should().BeTrue(freezeResult.ErrorMessage);

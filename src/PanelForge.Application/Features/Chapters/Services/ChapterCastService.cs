@@ -23,11 +23,11 @@ public interface IChapterCastService
 public sealed class ChapterCastService : IChapterCastService
 {
     private readonly IPanelForgeDbContext _db;
-    private readonly IChapterCastInheritanceResolver? _inheritanceResolver;
+    private readonly IChapterCastInheritanceResolver _inheritanceResolver;
 
     public ChapterCastService(
         IPanelForgeDbContext db,
-        IChapterCastInheritanceResolver? inheritanceResolver = null)
+        IChapterCastInheritanceResolver inheritanceResolver)
     {
         _db = db;
         _inheritanceResolver = inheritanceResolver;
@@ -39,14 +39,14 @@ public sealed class ChapterCastService : IChapterCastService
         if (chapter is null)
             return;
 
-        var seriesBible = await _db.SeriesBibles.FirstOrDefaultAsync(b => b.SeriesId == chapter.SeriesId, ct);
+        var seriesBible = await _db.SeriesBibles.FirstOrDefaultAsync(b => b.SeriesId == chapter.SeriesId, ct)
+            ?? _db.SeriesBibles.Local.FirstOrDefault(b => b.SeriesId == chapter.SeriesId);
         if (seriesBible is null)
         {
             var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
             var workspaceId = series?.WorkspaceId ?? Guid.Empty;
             seriesBible = SeriesBible.Create(chapter.SeriesId, workspaceId, "Series Bible");
             _db.SeriesBibles.Add(seriesBible);
-            await _db.SaveChangesAsync(ct);
         }
 
         // 1. Lấy toàn bộ dòng kịch bản thuộc chương (sắp xếp theo thứ tự để giữ tên hiển thị đầu tiên)
@@ -197,10 +197,7 @@ public sealed class ChapterCastService : IChapterCastService
         }
 
         // 5. Tính lại bản kế thừa cho các binding và dây chuyền chương sau chưa Frozen qua IChapterCastInheritanceResolver
-        if (_inheritanceResolver is not null)
-        {
-            await _inheritanceResolver.ResolveInheritedAsync(chapter.SeriesId, (int)chapter.ChapterNumber, ct);
-        }
+        await _inheritanceResolver.ResolveInheritedAsync(chapter.SeriesId, chapter.ChapterNumber, ct);
 
         // 6. Dọn mục thừa: IsStub, hệ thống tạo, không còn binding và tham chiếu nào, chỉ có sự kiện Created -> xoá
         var stubCandidates = await _db.BibleEntries

@@ -1,10 +1,12 @@
 using FluentAssertions;
 using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -19,6 +21,7 @@ public class CheckChapterBibleGateTests
     private readonly Chapter _chapter;
     private readonly Scene _scene;
     private readonly SeriesBible _bible;
+    private readonly ChapterCastGate _castGate;
 
     public CheckChapterBibleGateTests()
     {
@@ -38,6 +41,10 @@ public class CheckChapterBibleGateTests
         _scene = Scene.Create(_chapter.Id, 1, "Cảnh 1");
         _db.Scenes.Add(_scene);
 
+        var resolver = new ChapterCastInheritanceResolver(_db);
+        var castService = new ChapterCastService(_db, resolver);
+        _castGate = new ChapterCastGate(_db, castService, resolver);
+
         _db.SaveChanges();
     }
 
@@ -49,7 +56,7 @@ public class CheckChapterBibleGateTests
         await _db.SaveChangesAsync();
 
         var query = new CheckChapterBibleGateQuery(_chapter.Id);
-        var handler = new CheckChapterBibleGateQueryHandler(_db);
+        var handler = new CheckChapterBibleGateQueryHandler(_db, _castGate);
 
         var result = await handler.Handle(query, default);
 
@@ -71,7 +78,7 @@ public class CheckChapterBibleGateTests
         await _db.SaveChangesAsync();
 
         var query = new CheckChapterBibleGateQuery(_chapter.Id);
-        var handler = new CheckChapterBibleGateQueryHandler(_db);
+        var handler = new CheckChapterBibleGateQueryHandler(_db, _castGate);
 
         var result = await handler.Handle(query, default);
 
@@ -95,7 +102,7 @@ public class CheckChapterBibleGateTests
         await _db.SaveChangesAsync();
 
         var query = new CheckChapterBibleGateQuery(_chapter.Id);
-        var handler = new CheckChapterBibleGateQueryHandler(_db);
+        var handler = new CheckChapterBibleGateQueryHandler(_db, _castGate);
 
         var result = await handler.Handle(query, default);
 
@@ -120,7 +127,7 @@ public class CheckChapterBibleGateTests
         await _db.SaveChangesAsync();
 
         var query = new CheckChapterBibleGateQuery(_chapter.Id);
-        var handler = new CheckChapterBibleGateQueryHandler(_db);
+        var handler = new CheckChapterBibleGateQueryHandler(_db, _castGate);
 
         var result = await handler.Handle(query, default);
 

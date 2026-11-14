@@ -14,5 +14,5 @@ public interface IChapterCastInheritanceResolver
     /// Dòng <c>chosen_by_writer = true</c> và chương đã <c>Frozen</c> giữ nguyên.
     /// Chỉ thay đổi entity đang được track; KHÔNG gọi SaveChanges — người gọi lưu trong cùng transaction.
     /// </summary>
-    Task ResolveInheritedAsync(Guid seriesId, int fromChapterNumber, CancellationToken cancellationToken = default);
+    Task ResolveInheritedAsync(Guid seriesId, decimal fromChapterNumber, CancellationToken cancellationToken = default);
 }

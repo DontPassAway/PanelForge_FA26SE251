@@ -216,11 +216,9 @@ public static class ScriptSnapshotBuilder
         Guid authorUserId,
         string? message,
         CancellationToken ct,
-        Chapters.Services.IChapterCastService? castService = null,
-        IChapterCastInheritanceResolver? inheritanceResolver = null)
+        Chapters.Services.IChapterCastService castService)
     {
-        var service = castService ?? new Chapters.Services.ChapterCastService(db, inheritanceResolver);
-        await service.RecomputeAsync(chapterId, authorUserId, ct);
+        await castService.RecomputeAsync(chapterId, authorUserId, ct);
 
         var (rows, hash, lineCount, choices) = await BuildWithChoicesAsync(db, chapterId, ct);
         var latest = await db.ScriptVersions
@@ -322,11 +320,16 @@ public sealed class CommitScriptVersionCommandHandler
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly Chapters.Services.IChapterCastService _castService;
 
-    public CommitScriptVersionCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public CommitScriptVersionCommandHandler(
+        IPanelForgeDbContext db,
+        IWorkspaceAuthorizationService auth,
+        Chapters.Services.IChapterCastService castService)
     {
         _db = db;
         _auth = auth;
+        _castService = castService;
     }
 
     public async Task<Result<ScriptVersionSummaryDto>> Handle(CommitScriptVersionCommand cmd, CancellationToken ct)
@@ -341,7 +344,7 @@ public sealed class CommitScriptVersionCommandHandler
         if (chapter.ScriptLockReason is { } locked)
             return Result<ScriptVersionSummaryDto>.Failure(locked, ResultErrorCodes.Conflict);
 
-        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct);
+        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct, _castService);
         await _db.SaveChangesAsync(ct);
 
         var name = await _db.Users.AsNoTracking().Where(u => u.Id == version.AuthorUserId).Select(u => u.FullName).FirstOrDefaultAsync(ct);

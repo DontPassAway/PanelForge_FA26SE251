@@ -22,7 +22,7 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
     }
 
     /// <inheritdoc />
-    public async Task ResolveInheritedAsync(Guid seriesId, int fromChapterNumber, CancellationToken cancellationToken = default)
+    public async Task ResolveInheritedAsync(Guid seriesId, decimal fromChapterNumber, CancellationToken cancellationToken = default)
     {
         // 1. Tải toàn bộ chương cùng Series theo thứ tự số chương tăng dần
         var chapters = await _dbContext.Chapters
