@@ -4,6 +4,8 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
+using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
+using PanelForge.Domain.Entities.Preview;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
@@ -43,15 +45,21 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
             return Fail($"Chương đang ở trạng thái {chapter.Status}: mở lại chương (kèm lý do) trước khi tạo yêu cầu sửa.",
                 ResultErrorCodes.Conflict);
 
-        var assignment = await _db.Assignments.FirstOrDefaultAsync(a => a.Id == cmd.AssignmentId && a.ChapterId == cmd.ChapterId, ct);
-        if (assignment is null) return Fail("Việc được chọn không thuộc chương này.", ResultErrorCodes.NotFound);
-        if (assignment.Status is AssignmentStatus.Submitted or AssignmentStatus.UnderReview)
-            return Fail("Việc đang chờ duyệt: hãy trả về qua cổng duyệt (CF3) kèm yêu cầu sửa.", ResultErrorCodes.Conflict);
-
         var description = string.IsNullOrWhiteSpace(cmd.Description)
             ? $"Phản hồi xem thử từ {feedback.RecipientEmail}: {feedback.Message}" +
               (feedback.TriageNote is { } note ? $"\nGhi chú triage: {note}" : "")
             : cmd.Description.Trim();
+
+        var assignment = await _db.Assignments.FirstOrDefaultAsync(a => a.Id == cmd.AssignmentId && a.ChapterId == cmd.ChapterId, ct);
+        if (assignment is null)
+        {
+            // Lưới V3: AssignmentId mang id của ô lưới
+            var task = await _db.StageTasks.FirstOrDefaultAsync(t => t.Id == cmd.AssignmentId && t.ChapterId == cmd.ChapterId, ct);
+            if (task is null) return Fail("Việc được chọn không thuộc chương này.", ResultErrorCodes.NotFound);
+            return await FromGridAsync(cmd, feedback, task, description, ct);
+        }
+        if (assignment.Status is AssignmentStatus.Submitted or AssignmentStatus.UnderReview)
+            return Fail("Việc đang chờ duyệt: hãy trả về qua cổng duyệt (CF3) kèm yêu cầu sửa.", ResultErrorCodes.Conflict);
 
         // Việc đã duyệt: mở lại stage đã đóng của các Panel việc bao phủ để người làm Start lại được
         if (assignment.Status == AssignmentStatus.Approved)
@@ -73,6 +81,41 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
         _db.Notifications.Add(Notification.Create(assignment.AssigneeUserId, NotificationType.AssignmentChangesRequested,
             "Có yêu cầu sửa từ phản hồi xem thử", description, assignment.Id, assignment.ChapterId));
 
+        await _db.SaveChangesAsync(ct);
+        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+    }
+
+    /// <summary>
+    /// Lưới V3: ô đã duyệt được mở lại (ReworkRequired, ô hạ nguồn đã bắt đầu mang cờ lỗi thời, người làm được báo) qua đúng
+    /// luật của POST …/task-grid/tasks/{id}/reopen; ô đang làm chỉ nhận thông báo yêu cầu sửa. Phản hồi gắn với ô.
+    /// </summary>
+    private async Task<Result<PreviewFeedbackDto>> FromGridAsync(
+        CreateChangeRequestFromFeedbackCommand cmd, PreviewFeedback feedback, StageTask task, string description, CancellationToken ct)
+    {
+        static Result<PreviewFeedbackDto> Fail(string m, string c) => Result<PreviewFeedbackDto>.Failure(m, c);
+
+        switch (task.Status)
+        {
+            case StageTaskStatus.Submitted or StageTaskStatus.UnderReview:
+                return Fail("Ô đang chờ duyệt: hãy trả về qua nút yêu cầu sửa trên lưới kèm nhận xét.", ResultErrorCodes.Conflict);
+            case StageTaskStatus.Unassigned or StageTaskStatus.Cancelled:
+                return Fail("Ô chưa có người làm, chưa chuyển phản hồi thành yêu cầu sửa được.", ResultErrorCodes.Conflict);
+            case StageTaskStatus.Approved:
+                var reopened = await new ReopenStageTaskCommandHandler(_db)
+                    .Handle(new ReopenStageTaskCommand(cmd.ChapterId, task.Id, cmd.UserId, description), ct);
+                if (!reopened.IsSuccess) return Fail(reopened.ErrorMessage!, reopened.ErrorCode!);
+                break;
+            default:
+                if (task.LotId is { } lotId &&
+                    await _db.StageTaskLots.AsNoTracking().Where(l => l.Id == lotId).Select(l => (Guid?)l.AssigneeUserId)
+                        .FirstOrDefaultAsync(ct) is { } assignee)
+                    _db.Notifications.Add(Notification.Create(assignee, NotificationType.AssignmentChangesRequested,
+                        "Có yêu cầu sửa từ phản hồi xem thử", description, chapterId: cmd.ChapterId));
+                break;
+        }
+
+        feedback.LinkStageTask(task.Id);
+        feedback.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
         return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
     }

@@ -58,11 +58,12 @@ public sealed record PreviewFeedbackDto(
     DateTime? TriagedAt,
     DateTime CreatedAt,
     Guid? ChangeRequestId,
-    string? ReviewerName = null)
+    string? ReviewerName = null,
+    Guid? StageTaskId = null)
 {
     public static PreviewFeedbackDto From(PreviewFeedback f) => new(
         f.Id, f.PreviewLinkId, f.ChapterId, f.PageId, f.PanelId, f.AssetReferenceId, f.ChapterVersion, f.RecipientEmail,
-        f.Message, f.Status, f.TriageNote, f.TriagedByUserId, f.TriagedAt, f.CreatedAt, f.ChangeRequestId, f.ReviewerName);
+        f.Message, f.Status, f.TriageNote, f.TriagedByUserId, f.TriagedAt, f.CreatedAt, f.ChangeRequestId, f.ReviewerName, f.StageTaskId);
 }
 
 public sealed record CreatePreviewLinkRequest(string RecipientEmail, int? ExpiresInHours = null);

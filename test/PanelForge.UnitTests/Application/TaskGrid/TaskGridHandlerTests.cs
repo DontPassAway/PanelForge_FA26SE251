@@ -2,6 +2,9 @@ using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Domain.Entities.Ai;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
@@ -42,6 +45,10 @@ public class TaskGridHandlerTests
         public readonly List<StageTaskSubmission> Submissions = [];
         public readonly List<Notification> Notifications = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
+        private readonly Guid _workspaceId;
+        private readonly List<WorkspaceMember> _members;
+
+        public void AddMember(Guid userId, WorkspaceRole role) => _members.Add(WorkspaceMember.Create(_workspaceId, userId, role));
 
         public Fixture()
         {
@@ -64,7 +71,8 @@ public class TaskGridHandlerTests
             Pages.Add(Page.CreateNew(Chapter.Id, 1, default, 1200, 1800, 300));
             Pages.Add(Page.CreateNew(Chapter.Id, 2, default, 1200, 1800, 300));
 
-            var members = new List<WorkspaceMember>
+            _workspaceId = workspaceId;
+            _members = new List<WorkspaceMember>
             {
                 WorkspaceMember.Create(workspaceId, ArtistId, WorkspaceRole.Artist),
                 WorkspaceMember.Create(workspaceId, LettererId, WorkspaceRole.Letterer),
@@ -84,7 +92,12 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
             Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(new List<AssetReference>()));
-            Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(members));
+            Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+            Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
+            Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChangeRequest>()));
+            Db.Setup(d => d.ConsistencyFindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ConsistencyFinding>()));
+            Db.Setup(d => d.AiSuggestions).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiSuggestion>()));
+            Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(_members));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -407,5 +420,48 @@ public class TaskGridHandlerTests
         await new ResolveStageTaskImpactCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, ink.Id, f.ProducerId, Keep: true), default);
         await new UnassignStageTasksCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, [ink.Id], f.ProducerId), default);
         f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentUnassigned);
+    }
+
+    // ---- Lát cắt 3: phần còn lại của hệ thống đọc lưới ----
+
+    /// <summary>Quyền ghi canvas theo ô lưới: chỉ người giữ ô đang làm; người khác, ô chưa bắt đầu, ô đã nộp đều bị chặn.</summary>
+    [Fact]
+    public async Task WorkScopeGuard_FollowsGridCells()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        var page = f.Pages[0].Id;
+        var otherArtist = Guid.NewGuid();
+        f.AddMember(otherArtist, WorkspaceRole.Artist);
+        Task<string?> Deny(Guid user) => WorkScopeGuard.DenyReasonAsync(f.Db.Object, user, page, null, default);
+
+        (await Deny(f.ArtistId)).Should().Contain("Bắt đầu");          // ô Pencil mới Assigned
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        (await Deny(f.ArtistId)).Should().BeNull();
+        (await Deny(otherArtist)).Should().Contain("người khác");
+        (await Deny(f.LettererId)).Should().Contain("Bắt đầu");        // Letterer giữ ô Lettering chưa bắt đầu
+
+        await f.Submit(f.ArtistId, pencil);                                // Pencil không cổng → Approved; Ink còn Assigned
+        (await Deny(f.ArtistId)).Should().Contain("Bắt đầu");
+        (await WorkScopeGuard.DenyReasonAsync(f.Db.Object, otherArtist, f.Pages[1].Id, null, default))
+            .Should().BeNull("trang 2 chưa giao ô nào qua lưới nên giữ luật cũ");
+    }
+
+    [Fact]
+    public async Task ChapterLockGate_BlocksUnfinishedAndOutdatedGridCells_OnlyWhenGridIsUsed()
+    {
+        var f = new Fixture();
+        await f.Generate();
+        (await ChapterLockGate.EvaluateAsync(f.Db.Object, f.Chapter, default))
+            .Should().NotContain(i => i.Code == "TASK_GRID_NOT_APPROVED", "chưa giao lô nào thì lưới chưa được dùng");
+
+        var (pencil, _, _) = await PencilDoneInkAndLetteringStarted(f);
+        await new ReopenStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, pencil.Id, f.ProducerId, "Sửa"), default);
+
+        var gate = await ChapterLockGate.EvaluateAsync(f.Db.Object, f.Chapter, default);
+        gate.Should().Contain(i => i.Code == "TASK_GRID_NOT_APPROVED" && i.Blocking);
+        gate.Should().Contain(i => i.Code == "IMPACT_FLAGS" && i.Count == 2);
+        gate.Should().NotContain(i => i.Code == "PAGES_WITHOUT_WORK" && i.Count == 2);
     }
 }

@@ -3873,6 +3873,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(80)")
                         .HasColumnName("reviewer_name");
 
+                    b.Property<Guid?>("StageTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_task_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("varchar(20)")

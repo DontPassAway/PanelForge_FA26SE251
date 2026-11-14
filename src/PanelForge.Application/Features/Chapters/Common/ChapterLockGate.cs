@@ -28,6 +28,14 @@ public static class ChapterLockGate
         var unfinished = await db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && a.Status != AssignmentStatus.Approved, ct);
         Block("ASSIGNMENTS_NOT_APPROVED", unfinished, $"Còn {unfinished} việc chưa được duyệt, chưa thể duyệt Chapter.");
 
+        // Lưới V3: chỉ xét khi chương đã thật sự giao việc qua lưới (có lô), để chương làm theo luồng cũ không bị chặn oan.
+        var usesGrid = await db.StageTaskLots.AnyAsync(l => l.ChapterId == chapter.Id, ct);
+        var gridUnfinished = usesGrid
+            ? await db.StageTasks.CountAsync(t => t.ChapterId == chapter.Id &&
+                t.Status != StageTaskStatus.Approved && t.Status != StageTaskStatus.Cancelled, ct)
+            : 0;
+        Block("TASK_GRID_NOT_APPROVED", gridUnfinished, $"Còn {gridUnfinished} ô trên lưới giao việc chưa được duyệt, chưa thể duyệt Chapter.");
+
         var openRequests = await db.ChangeRequests.CountAsync(c => c.ChapterId == chapter.Id &&
             (c.Status == ChangeRequestStatus.Open || c.Status == ChangeRequestStatus.Resolved), ct);
         Block("OPEN_CHANGE_REQUESTS", openRequests, $"Còn {openRequests} yêu cầu sửa chưa đóng, chưa thể duyệt Chapter.");
@@ -45,7 +53,8 @@ public static class ChapterLockGate
         var chapterPanelIds = db.Panels.Where(p => db.Pages.Any(pg => pg.Id == p.PageId && pg.ChapterId == chapter.Id)).Select(p => p.Id);
         var impactFlags =
             await db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && (a.ImpactReviewRequestedAt != null || a.HasScriptImpact), ct) +
-            await db.StageProgresses.CountAsync(sp => chapterPanelIds.Contains(sp.PanelId) && sp.HasScriptImpact, ct);
+            await db.StageProgresses.CountAsync(sp => chapterPanelIds.Contains(sp.PanelId) && sp.HasScriptImpact, ct) +
+            await db.StageTasks.CountAsync(t => t.ChapterId == chapter.Id && t.IsInputOutdated && t.Status != StageTaskStatus.Cancelled, ct);
         Block("IMPACT_FLAGS", impactFlags, $"Còn {impactFlags} cờ ảnh hưởng ⚑ chưa quyết định Keep/Rework, chưa thể duyệt Chapter.");
 
         // Trang chưa từng được giao cho Artist/Letterer thì không có lượt duyệt Gate 2 nào. Đang để cảnh báo vì luồng cũ
@@ -75,6 +84,12 @@ public static class ChapterLockGate
         var panelTargets = work.Where(a => a.EntityType == WorkflowEntityType.Panel).Select(a => a.TargetEntityId).ToList();
         var covered = work.Where(a => a.EntityType == WorkflowEntityType.Page).Select(a => a.TargetEntityId).ToHashSet();
         covered.UnionWith(await db.Panels.AsNoTracking().Where(p => panelTargets.Contains(p.Id)).Select(p => p.PageId).ToListAsync(ct));
+        // Ô lưới V3 cấp Trang đã có người nhận ở công đoạn của Artist/Letterer cũng tính là trang đã được giao
+        covered.UnionWith(await (from t in db.StageTasks.AsNoTracking()
+                                 join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                                 where t.ChapterId == chapterId && t.PageId != null &&
+                                       (l.AssignedRole == WorkspaceRole.Artist || l.AssignedRole == WorkspaceRole.Letterer)
+                                 select t.PageId!.Value).ToListAsync(ct));
 
         return await db.Pages.AsNoTracking()
             .Where(p => p.ChapterId == chapterId && !covered.Contains(p.Id))

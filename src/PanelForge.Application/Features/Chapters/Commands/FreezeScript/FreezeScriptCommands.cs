@@ -99,6 +99,14 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         foreach (var sp in await _dbContext.StageProgresses
                      .Where(sp => panelIds.Contains(sp.PanelId)).ToListAsync(ct))
             sp.FlagScriptImpact(panelMap[sp.PanelId]);
+
+        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review.
+        // Không gắn ô cấp Chương: ô Script chính là phần vừa sửa, gắn cờ sẽ khoá mọi ô sau nó.
+        var pageIds = await _dbContext.Panels.Where(p => panelIds.Contains(p.Id)).Select(p => p.PageId).Distinct().ToListAsync(ct);
+        foreach (var task in await _dbContext.StageTasks
+                     .Where(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled &&
+                                 t.PageId != null && pageIds.Contains(t.PageId.Value)).ToListAsync(ct))
+            task.MarkInputOutdated("Kịch bản của trang đã được sửa sau khi mở lại kịch bản.");
     }
 }
 

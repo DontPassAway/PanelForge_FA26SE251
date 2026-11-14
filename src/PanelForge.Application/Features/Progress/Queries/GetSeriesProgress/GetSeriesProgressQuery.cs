@@ -75,7 +75,21 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
             .Select(p => new { p.Id, p.PageId }).ToListAsync(ct);
         var panelIds = panels.Select(p => p.Id).ToList();
         var progress = await _db.StageProgresses.AsNoTracking().Where(s => panelIds.Contains(s.PanelId)).ToListAsync(ct);
-        var assignments = await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct);
+        // Việc = Assignment cũ + ô lưới V3 đã giao (theo lô). Trạng thái ô cùng tên với AssignmentStatus.
+        var gridRows = await (from t in _db.StageTasks.AsNoTracking()
+                              join l in _db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                              where t.SeriesId == q.SeriesId && t.Status != StageTaskStatus.Unassigned && t.Status != StageTaskStatus.Cancelled
+                              select new { t.Id, t.ChapterId, t.Status, t.CreatedAt, t.UpdatedAt, l.AssigneeUserId, l.AssignedRole, l.DueDate, l.Brief })
+                             .ToListAsync(ct);
+        var assignments = (await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct))
+            .Select(a => new WorkItem(a.Id, a.ChapterId, a.AssigneeUserId, a.AssignedRole, a.Status, a.DueDate, a.Brief, a.CreatedAt, a.CompletedAt))
+            .Concat(gridRows.Select(t =>
+            {
+                var status = Enum.Parse<AssignmentStatus>(t.Status.ToString());
+                return new WorkItem(t.Id, t.ChapterId, t.AssigneeUserId, t.AssignedRole, status, t.DueDate, t.Brief ?? "",
+                    t.CreatedAt, status == AssignmentStatus.Approved ? t.UpdatedAt ?? t.CreatedAt : null);
+            }))
+            .ToList();
         var changeRequests = await _db.ChangeRequests.AsNoTracking()
             .Where(cr => chapterIds.Contains(cr.ChapterId))
             .ToListAsync(ct);
@@ -83,7 +97,7 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var pageChapter = pages.ToDictionary(p => p.Id, p => p.ChapterId);
         var panelChapter = panels.ToDictionary(p => p.Id, p => pageChapter[p.PageId]);
 
-        bool IsOverdue(Assignment a) => a.DueDate is { } due && due < now && a.Status != AssignmentStatus.Approved;
+        bool IsOverdue(WorkItem a) => a.DueDate is { } due && due < now && a.Status != AssignmentStatus.Approved;
         bool IsCrOverdue(ChangeRequest cr) => cr.DueDate is { } due && due < now && cr.Status == ChangeRequestStatus.Open;
 
         var chapterDtos = chapters.Select(c =>
@@ -154,3 +168,8 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         return Result<SeriesProgressDto>.Success(new SeriesProgressDto(q.SeriesId, now, chapterDtos, workload, overdue, burndown, overdueCrs));
     }
 }
+
+/// <summary>Một việc trên dashboard: Assignment cũ hoặc ô lưới V3 đã giao.</summary>
+internal sealed record WorkItem(
+    Guid Id, Guid ChapterId, Guid AssigneeUserId, WorkspaceRole AssignedRole, AssignmentStatus Status,
+    DateTime? DueDate, string Brief, DateTime CreatedAt, DateTime? CompletedAt);
