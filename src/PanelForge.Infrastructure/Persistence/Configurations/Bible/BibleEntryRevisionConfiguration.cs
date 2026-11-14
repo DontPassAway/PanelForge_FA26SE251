@@ -93,6 +93,15 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("concept_image_url")
                .HasColumnType("text");
 
+        builder.Property(r => r.CurrentConceptEventId)
+               .HasColumnName("current_concept_event_id")
+               .HasColumnType("uuid");
+
+        builder.HasOne(r => r.CurrentConceptEvent)
+               .WithMany()
+               .HasForeignKey(r => r.CurrentConceptEventId)
+               .OnDelete(DeleteBehavior.SetNull);
+
         builder.Property(r => r.ReworkFeedback)
                .HasColumnName("rework_feedback")
                .HasColumnType("varchar(1000)");

@@ -39,11 +39,22 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
             return Result<BibleEntryRevisionDto>.Failure("Thiếu ảnh bản vẽ Concept.", ResultErrorCodes.Validation);
 
         // Entry phải thuộc SeriesBible của seriesId trên route (chống IDOR, như AddBibleEntryRevision)
-        var entry = await _db.BibleEntries
-            .Include(e => e.Revisions).ThenInclude(r => r.Events)
-            .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBible.SeriesId == cmd.SeriesId, ct);
+        var bibleId = await _db.SeriesBibles
+            .Where(b => b.SeriesId == cmd.SeriesId)
+            .Select(b => (Guid?)b.Id)
+            .FirstOrDefaultAsync(ct);
+
+        var entry = bibleId is null
+            ? null
+            : await _db.BibleEntries
+                .Include(e => e.Revisions).ThenInclude(r => r.Events)
+                .FirstOrDefaultAsync(e => e.Id == cmd.BibleEntryId && e.SeriesBibleId == bibleId.Value, ct);
         if (entry is null)
             return Result<BibleEntryRevisionDto>.Failure($"Mục BibleEntry {cmd.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
+
+        // V2.6 (BIB-10 / 4A): Chặn nộp concept khi mục còn là nháp hoặc mô tả rỗng
+        if (entry.IsStub || string.IsNullOrWhiteSpace(entry.Description))
+            return Result<BibleEntryRevisionDto>.Failure("Thực thể chưa được Writer viết định nghĩa.", ResultErrorCodes.Conflict);
 
         var latestVersion = entry.Revisions.Count > 0 ? entry.Revisions.Max(r => r.VersionNumber) : 0;
         if (body.ExpectedVersionNumber is { } expected && expected != latestVersion)
@@ -93,7 +104,7 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 $"Phiên bản v{target.VersionNumber} đã khoá Canon. Muốn đổi thiết kế, Producer phải dùng Thay thế (supersede).",
                 ResultErrorCodes.Conflict);
 
-        target.SubmitConcept(cmd.ArtistUserId, body.EffectiveImageUrl, body.EffectiveSummary);
+        target.SubmitConcept(cmd.ArtistUserId, body.EffectiveImageUrl, body.EffectiveSummary, body.AssetSha256);
         // Ảnh hiện hành của mục = Concept mới nhất của phiên bản hiện hành; Concept của giai đoạn cũ không đổi ảnh hiện hành
         if (isCurrent)
             entry.UpdateDetails(entry.Name, entry.Description, entry.Subtitle, entry.DetailsJson,

@@ -860,6 +860,87 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleConceptComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<Guid>("ConceptEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("concept_event_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("ParentCommentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_comment_id");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("region");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<Guid>("RevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revision_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConceptEventId");
+
+                    b.HasIndex("ParentCommentId");
+
+                    b.HasIndex("RevisionId", "CreatedAt")
+                        .HasDatabaseName("ix_bible_concept_comments_revision");
+
+                    b.ToTable("bible_concept_comments", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1049,6 +1130,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("created_by");
 
+                    b.Property<Guid?>("CurrentConceptEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_concept_event_id");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("deleted_at");
@@ -1134,6 +1219,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("ContentHash")
                         .HasDatabaseName("ix_bible_entry_revisions_content_hash");
 
+                    b.HasIndex("CurrentConceptEventId");
+
                     b.HasIndex("EffectiveFromChapterNumber")
                         .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
 
@@ -1157,6 +1244,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("actor_id");
 
+                    b.Property<string>("AssetSha256")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("asset_sha256");
+
                     b.Property<Guid>("BibleEntryRevisionId")
                         .HasColumnType("uuid")
                         .HasColumnName("bible_entry_revision_id");
@@ -1164,6 +1255,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("Comment")
                         .HasColumnType("varchar(1000)")
                         .HasColumnName("comment");
+
+                    b.Property<int?>("ConceptVersionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("concept_version_number");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -5532,6 +5627,32 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleConceptComment", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleRevisionEvent", "ConceptEvent")
+                        .WithMany()
+                        .HasForeignKey("ConceptEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleConceptComment", "ParentComment")
+                        .WithMany("Replies")
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "Revision")
+                        .WithMany()
+                        .HasForeignKey("RevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConceptEvent");
+
+                    b.Navigation("ParentComment");
+
+                    b.Navigation("Revision");
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntry", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Bible.SeriesBible", "SeriesBible")
@@ -5570,12 +5691,19 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleRevisionEvent", "CurrentConceptEvent")
+                        .WithMany()
+                        .HasForeignKey("CurrentConceptEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "SupersedesRevision")
                         .WithMany()
                         .HasForeignKey("SupersedesRevisionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("BibleEntry");
+
+                    b.Navigation("CurrentConceptEvent");
 
                     b.Navigation("SupersedesRevision");
                 });
@@ -6290,6 +6418,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
 
                     b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleConceptComment", b =>
+                {
+                    b.Navigation("Replies");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Bible.BibleEntry", b =>

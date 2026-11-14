@@ -8,11 +8,9 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 
 /// <summary>
-/// V1.2: Producer duyệt và khoá một revision của character sheet (mục Nhân vật) làm tham chiếu.
-/// Không có thao tác mở khoá: muốn thay thì thêm revision mới có hiệu lực từ chương khác, hoặc Producer thay thế
-/// tại chương đó kèm lý do (AddBibleEntryRevision với SupersedesRevisionId).
-/// Quyền Producer do [RequireWorkspaceRole] kiểm tra theo seriesId trên route.
+/// V1.2 (Obsolete Q20): Thay thế bằng ConfirmBibleEntryRevisionCommand.
 /// </summary>
+[Obsolete("Use ConfirmBibleEntryRevisionCommand instead per Q20.")]
 public sealed record LockBibleEntryRevisionCommand(
     Guid SeriesId,
     Guid BibleEntryId,
@@ -20,6 +18,7 @@ public sealed record LockBibleEntryRevisionCommand(
     Guid UserId
 ) : IRequest<Result<BibleEntryRevisionDto>>;
 
+[Obsolete("Use ConfirmBibleEntryRevisionCommandHandler instead per Q20.")]
 public sealed class LockBibleEntryRevisionCommandHandler
     : IRequestHandler<LockBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
 {
@@ -59,20 +58,11 @@ public sealed class LockBibleEntryRevisionCommandHandler
             return Result<BibleEntryRevisionDto>.Failure("Revision này đã được khoá trước đó.", ResultErrorCodes.Conflict);
         }
 
-        // BR-25 / F-03: Chỉ khoá đúng revision đã được Writer/Editor xác nhận (WriterEndorsed).
-        if (revision.ReviewStatus != BibleRevisionStatus.WriterEndorsed)
+        if (revision.ReviewStatus != BibleRevisionStatus.ConceptSubmitted)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                $"Chỉ khoá Canon được revision đã được Writer/Editor xác nhận (WriterEndorsed), hiện là {revision.ReviewStatus}.",
+                $"Chỉ khoá Canon được revision đã nộp Concept (ConceptSubmitted), hiện là {revision.ReviewStatus}.",
                 ResultErrorCodes.Conflict);
-        }
-
-        // Người duyệt và người khoá phải khác nhau, kể cả khi một tài khoản giữ cả vai Editor lẫn Producer.
-        var endorser = revision.Events.Where(e => e.Type == BibleRevisionEventType.Endorsed).MaxBy(e => e.CreatedAt)?.ActorId;
-        if (endorser == command.UserId)
-        {
-            return Result<BibleEntryRevisionDto>.Failure(
-                "Bạn đã duyệt phiên bản này; Canon phải do một Producer khác khoá.", ResultErrorCodes.Conflict);
         }
 
         revision.Lock(command.UserId);
