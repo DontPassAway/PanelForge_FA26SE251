@@ -33,6 +33,7 @@ public sealed class ChapterCastGate : IChapterCastGate
         {
             var authorId = chapter.ScriptSubmittedById ?? chapter.ScriptFrozenById ?? Guid.Empty;
             await _castService.RecomputeAsync(chapterId, authorId, ct);
+            await _db.SaveChangesAsync(ct);
         }
 
         var dbBindings = await _db.ChapterBibleBindings.AsNoTracking()
@@ -41,7 +42,7 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(b => b.ChapterId == chapterId)
             .ToListAsync(ct);
         var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == chapterId).ToList();
-        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+        var bindings = localBindings.Union(dbBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
         var blockers = new List<ChapterCastBlockerDto>();
 
@@ -82,6 +83,7 @@ public sealed class ChapterCastGate : IChapterCastGate
         {
             var authorId = chapter.ScriptSubmittedById ?? chapter.ScriptFrozenById ?? Guid.Empty;
             await _castService.RecomputeAsync(chapterId, authorId, ct);
+            await _db.SaveChangesAsync(ct);
         }
 
         var dbBindings = await _db.ChapterBibleBindings.AsNoTracking()
@@ -90,7 +92,7 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(b => b.ChapterId == chapterId)
             .ToListAsync(ct);
         var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == chapterId).ToList();
-        var bindings = dbBindings.Union(localBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+        var bindings = localBindings.Union(dbBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
 
         var entryIds = bindings.Select(b => b.BibleEntryId).Distinct().ToList();
         var dbEntries = await _db.BibleEntries.AsNoTracking()
@@ -98,14 +100,14 @@ public sealed class ChapterCastGate : IChapterCastGate
             .Where(e => entryIds.Contains(e.Id))
             .ToListAsync(ct);
         var localEntries = _db.BibleEntries.Local.Where(e => entryIds.Contains(e.Id)).ToList();
-        var entryMap = dbEntries.Union(localEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
+        var entryMap = localEntries.Union(dbEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
 
         var revIds = bindings.Where(b => b.BoundRevisionId.HasValue).Select(b => b.BoundRevisionId!.Value).Distinct().ToList();
         var dbRevs = await _db.BibleEntryRevisions.AsNoTracking()
             .Where(r => revIds.Contains(r.Id))
             .ToListAsync(ct);
         var localRevs = _db.BibleEntryRevisions.Local.Where(r => revIds.Contains(r.Id)).ToList();
-        var revMap = dbRevs.Union(localRevs).DistinctBy(r => r.Id).ToDictionary(r => r.Id);
+        var revMap = localRevs.Union(dbRevs).DistinctBy(r => r.Id).ToDictionary(r => r.Id);
 
         // Load pages and panels of this chapter
         var pages = await _db.Pages.AsNoTracking()
