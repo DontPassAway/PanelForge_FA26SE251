@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -25,6 +25,25 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 type: "varchar(200)",
                 nullable: false,
                 defaultValue: "");
+
+            migrationBuilder.Sql(@"
+                WITH numbered AS (
+                    SELECT id,
+                           COALESCE(NULLIF(lower(trim(regexp_replace(name, '\s+', ' ', 'g'))), ''), 'entry') AS norm,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY series_bible_id, COALESCE(NULLIF(lower(trim(regexp_replace(name, '\s+', ' ', 'g'))), ''), 'entry')
+                               ORDER BY created_at ASC, id ASC
+                           ) AS rn
+                    FROM bible_entries
+                )
+                UPDATE bible_entries b
+                SET normalized_name = CASE
+                    WHEN n.rn = 1 THEN n.norm
+                    ELSE substring(n.norm || '-' || n.rn from 1 for 200)
+                END
+                FROM numbered n
+                WHERE b.id = n.id;
+            ");
 
             migrationBuilder.CreateIndex(
                 name: "ix_bible_entries_series_bible_id_normalized_name",
