@@ -96,7 +96,8 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 ReferenceImageUrl: body.EffectiveImageUrl,
                 StageName: body.StageName,
                 ExpectedVersionNumber: body.ExpectedVersionNumber,
-                ArtistUserId: cmd.ArtistUserId), ct);
+                ArtistUserId: cmd.ArtistUserId,
+                TargetRevisionId: target?.Id), ct);
 
         if (target.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure(

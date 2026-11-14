@@ -148,11 +148,15 @@ public sealed record AddBibleEntryRevisionRequest(
     bool StrictCheck = true,
     string? StageName = null,
     // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
-    int? ExpectedVersionNumber = null
+    int? ExpectedVersionNumber = null,
+    bool IsNewVariant = false,
+    Guid? TargetRevisionId = null,
+    string? VariantLabel = null
 )
 {
     public string EffectiveSummary => Summary;
     public string? EffectiveImageUrl => ReferenceImageUrl;
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
 }
 
 /// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do.</summary>
@@ -167,11 +171,25 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     bool StrictCheck = true,
     int? ExpectedVersionNumber = null,
     string? StageName = null,
-    Guid? ChapterId = null
+    Guid? ChapterId = null,
+    string? VariantLabel = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
 }
+
+public sealed record CreateBibleVariantRequest(
+    string VariantLabel,
+    string Summary,
+    string? Name = null,
+    string? Description = null,
+    string? Subtitle = null,
+    string? DetailsJson = null,
+    string? ReferenceImageUrl = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true
+);
 
 public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, string? ReworkReason = null)
 {
