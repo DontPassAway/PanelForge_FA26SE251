@@ -158,23 +158,22 @@ public class SeriesBibleTests
     }
 
     [Fact]
-    public void EffectiveRevisionAt_CanonOnly_UsesLatestLockedDesign_ButNotForTextOnlyCategories()
+    public void GetDefaultVariantRevision_CanonOnly_UsesLatestLockedDesign_ButNotForTextOnlyCategories()
     {
         var hero = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Desc");
-        var v1 = hero.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, isInitialVersion: true);
-        hero.AddRevision("v2 nháp", "{}", "h2", effectiveFromChapterNumber: 3);
+        var v1 = hero.AddRevision("v1", "{}", "h1", isInitialVersion: true);
+        hero.AddRevision("v2 nháp", "{}", "h2");
         var shop = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Location, "SHOP", "Tiệm", "Desc");
-        shop.AddRevision("v1", "{}", "h3", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        shop.AddRevision("v1", "{}", "h3", isInitialVersion: true);
         var term = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Terminology, "AURA", "Aura", "Desc");
-        term.AddRevision("v1", "{}", "h4", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        term.AddRevision("v1", "{}", "h4", isInitialVersion: true);
 
-        hero.EffectiveRevisionAt(5, canonOnly: true).Should().BeNull("chưa khoá bản nào");
+        hero.GetDefaultVariantRevision(canonOnly: true).Should().BeNull("chưa khoá bản nào");
         v1.Lock(Guid.NewGuid());
 
-        hero.EffectiveRevisionAt(5)!.VersionNumber.Should().Be(2, "màn hình vẫn thấy bản nháp mới nhất");
-        hero.EffectiveRevisionAt(5, canonOnly: true)!.VersionNumber.Should().Be(1, "AI chỉ dùng bản đã khoá");
-        hero.EffectiveRevisionAt(0).Should().BeNull();
-        shop.EffectiveRevisionAt(1, canonOnly: true).Should().BeNull("Địa điểm cũng phải khoá như Nhân vật");
-        term.EffectiveRevisionAt(1, canonOnly: true).Should().NotBeNull("mục chỉ có văn bản không cần khoá");
+        hero.GetDefaultVariantRevision()!.VersionNumber.Should().Be(2, "màn hình vẫn thấy bản nháp mới nhất");
+        hero.GetDefaultVariantRevision(canonOnly: true)!.VersionNumber.Should().Be(1, "AI chỉ dùng bản đã khoá");
+        shop.GetDefaultVariantRevision(canonOnly: true).Should().BeNull("Địa điểm cũng phải khoá như Nhân vật");
+        term.GetDefaultVariantRevision(canonOnly: true).Should().NotBeNull("mục chỉ có văn bản không cần khoá");
     }
 }

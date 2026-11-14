@@ -86,9 +86,6 @@ public class ChapterCastRecomputeTests
         await service.RecomputeAsync(_chapter.Id, _writerId);
         await _db.SaveChangesAsync();
 
-        line1.SpeakerCharacterId.Should().Be(naruto.Id);
-        line2.SpeakerCharacterId.Should().Be(naruto.Id);
-
         var binding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == _chapter.Id && b.BibleEntryId == naruto.Id);
         binding.Should().NotBeNull();
         binding!.Source.Should().Be(ChapterBibleBindingSource.Speaker);
@@ -112,9 +109,9 @@ public class ChapterCastRecomputeTests
         await service.RecomputeAsync(_chapter.Id, _writerId);
         await _db.SaveChangesAsync();
 
-        line1.SpeakerCharacterId.Should().Be(minh.Id);
-        line2.SpeakerCharacterId.Should().Be(minh.Id);
-        line3.SpeakerCharacterId.Should().Be(minh.Id);
+        var binding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == _chapter.Id && b.BibleEntryId == minh.Id);
+        binding.Should().NotBeNull();
+        binding!.Source.Should().Be(ChapterBibleBindingSource.Speaker);
     }
 
     [Fact]
@@ -137,9 +134,9 @@ public class ChapterCastRecomputeTests
         stub.IsStub.Should().BeTrue();
         stub.Category.Should().Be(BibleEntryCategory.Character);
 
-        line1.SpeakerCharacterId.Should().Be(stub.Id);
-        line2.SpeakerCharacterId.Should().Be(stub.Id);
-        line3.SpeakerCharacterId.Should().Be(stub.Id);
+        var binding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == _chapter.Id && b.BibleEntryId == stub.Id);
+        binding.Should().NotBeNull();
+        binding!.Source.Should().Be(ChapterBibleBindingSource.Speaker);
 
         var audit = await _db.AuditLogs.FirstOrDefaultAsync(a => a.Action == "AutoCreateFromSpeaker" && a.EntityId == stub.Id.ToString());
         audit.Should().NotBeNull();
@@ -154,7 +151,6 @@ public class ChapterCastRecomputeTests
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kẻ Qua Đường", stub.Id, isPrimary: true));
 
         var line = ScriptLine.Create(_scene.Id, 1, text: "Xin chào!", kind: ScriptLineKind.Dialogue, speakerLabel: "Kẻ Qua Đường");
-        line.AssignSpeaker(stub.Id);
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
@@ -166,7 +162,7 @@ public class ChapterCastRecomputeTests
         _db.BibleEntries.Any(e => e.Id == stub.Id).Should().BeTrue();
 
         // Giờ đổi người nói của line sang người khác
-        line.UpdateContent(text: "Xin chào!", dialogueText: "Xin chào!", stageDirection: null, speakerCharacterId: null, kind: ScriptLineKind.Dialogue, speakerLabel: "Người Khác");
+        line.UpdateContent(text: "Xin chào!", dialogueText: "Xin chào!", stageDirection: null, kind: ScriptLineKind.Dialogue, speakerLabel: "Người Khác");
         await _db.SaveChangesAsync();
 
         await service.RecomputeAsync(_chapter.Id, _writerId);
@@ -192,7 +188,6 @@ public class ChapterCastRecomputeTests
                     LineOrder: 1,
                     DialogueText: "Đợi đã!",
                     StageDirection: null,
-                    SpeakerCharacterId: null,
                     Kind: ScriptLineKind.Dialogue,
                     Refs: [new ScriptLineRefInput("Đợi đã")])
             ]);
@@ -224,7 +219,6 @@ public class ChapterCastRecomputeTests
                     LineOrder: 1,
                     DialogueText: null,
                     StageDirection: "Minh rút Hắc Kiếm lao tới.",
-                    SpeakerCharacterId: null,
                     Kind: ScriptLineKind.Action,
                     Refs: [new ScriptLineRefInput("Hắc Kiếm", sword.Id)])
             ]), default);
@@ -247,7 +241,6 @@ public class ChapterCastRecomputeTests
                     LineOrder: 1,
                     DialogueText: null,
                     StageDirection: "Minh quay người bỏ chạy.",
-                    SpeakerCharacterId: null,
                     Kind: ScriptLineKind.Action,
                     Refs: null)
             ]), default);

@@ -115,7 +115,7 @@ public sealed class ChapterCastInheritanceResolver : IChapterCastInheritanceReso
                 {
                     // Chưa có chương nào phía trước: lấy bản CanonLocked mới nhất (chưa Superseded) của biến thể mặc định,
                     // nếu chưa có bản khoá thì lấy bản mới nhất của biến thể mặc định.
-                    targetRevisionId = entry.GetDefaultVariantRevision()?.Id;
+                    targetRevisionId = (entry.GetDefaultVariantRevision(canonOnly: true) ?? entry.GetDefaultVariantRevision(canonOnly: false))?.Id;
                 }
 
                 if (binding.BoundRevisionId != targetRevisionId)

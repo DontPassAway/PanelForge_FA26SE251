@@ -1142,16 +1142,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
-                    b.Property<int>("EffectiveFromChapterNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1)
-                        .HasColumnName("effective_from_chapter_number");
-
-                    b.Property<int?>("EffectiveToChapterNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("effective_to_chapter_number");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -1220,9 +1210,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_bible_entry_revisions_content_hash");
 
                     b.HasIndex("CurrentConceptEventId");
-
-                    b.HasIndex("EffectiveFromChapterNumber")
-                        .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
 
                     b.HasIndex("SupersedesRevisionId")
                         .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
@@ -2672,10 +2659,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("scene_id");
 
-                    b.Property<Guid?>("SpeakerCharacterId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("speaker_character_id");
-
                     b.Property<string>("SpeakerLabel")
                         .HasColumnType("varchar(100)")
                         .HasColumnName("speaker_label");
@@ -2700,9 +2683,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PanelId")
                         .HasDatabaseName("ix_script_lines_panel");
-
-                    b.HasIndex("SpeakerCharacterId")
-                        .HasDatabaseName("ix_script_lines_speaker_character_id");
 
                     b.HasIndex("SceneId", "LineOrder")
                         .HasDatabaseName("ix_script_lines_scene_order");
@@ -2740,10 +2720,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid?>("ResolvedRevisionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resolved_revision_id");
-
                     b.Property<Guid>("ScriptLineId")
                         .HasColumnType("uuid")
                         .HasColumnName("script_line_id");
@@ -2765,9 +2741,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BibleEntryId")
                         .HasDatabaseName("ix_script_line_bible_links_bible_entry_id");
-
-                    b.HasIndex("ResolvedRevisionId")
-                        .HasDatabaseName("ix_script_line_bible_links_resolved_revision_id");
 
                     b.HasIndex("ScriptLineId", "BibleEntryId")
                         .IsUnique()
@@ -5961,15 +5934,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntry", "SpeakerCharacter")
-                        .WithMany()
-                        .HasForeignKey("SpeakerCharacterId");
-
                     b.Navigation("Panel");
 
                     b.Navigation("Scene");
-
-                    b.Navigation("SpeakerCharacter");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ScriptLineBibleLink", b =>
@@ -5980,11 +5947,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "ResolvedRevision")
-                        .WithMany()
-                        .HasForeignKey("ResolvedRevisionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("PanelForge.Domain.Entities.Content.ScriptLine", "ScriptLine")
                         .WithMany("BibleLinks")
                         .HasForeignKey("ScriptLineId")
@@ -5992,8 +5954,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("BibleEntry");
-
-                    b.Navigation("ResolvedRevision");
 
                     b.Navigation("ScriptLine");
                 });

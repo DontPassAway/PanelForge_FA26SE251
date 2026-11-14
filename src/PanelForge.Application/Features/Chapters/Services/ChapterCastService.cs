@@ -100,21 +100,6 @@ public sealed class ChapterCastService : IChapterCastService
             resolvedSpeakerMap[cand.NormalizedName] = stub.Id;
         }
 
-        // Cập nhật SpeakerCharacterId cho các dòng script
-        foreach (var cand in candidates)
-        {
-            if (resolvedSpeakerMap.TryGetValue(cand.NormalizedName, out var entryId))
-            {
-                foreach (var line in cand.Lines)
-                {
-                    if (line.SpeakerCharacterId != entryId)
-                    {
-                        line.AssignSpeaker(entryId);
-                    }
-                }
-            }
-        }
-
         // 3. Tổng hợp người nói + script_line_bible_links + panel_bible_variants
         var lineIds = lines.Select(l => l.Id).ToList();
         var links = await _db.ScriptLineBibleLinks
@@ -127,9 +112,9 @@ public sealed class ChapterCastService : IChapterCastService
             .Where(v => panelIds.Contains(v.PanelId))
             .ToListAsync(ct);
 
-        var speakerEntryIds = lines
-            .Where(l => l.SpeakerCharacterId.HasValue)
-            .Select(l => l.SpeakerCharacterId!.Value)
+        var speakerEntryIds = candidates
+            .Where(c => resolvedSpeakerMap.ContainsKey(c.NormalizedName))
+            .Select(c => resolvedSpeakerMap[c.NormalizedName])
             .ToHashSet();
 
         var highlightEntryIds = links.Select(l => l.BibleEntryId).ToHashSet();
@@ -228,17 +213,10 @@ public sealed class ChapterCastService : IChapterCastService
                 .Distinct()
                 .ToListAsync(ct);
 
-            var otherChapterSpeakerIds = await _db.ScriptLines
-                .Where(l => l.Scene.ChapterId != chapterId && l.SpeakerCharacterId.HasValue && stubIds.Contains(l.SpeakerCharacterId.Value))
-                .Select(l => l.SpeakerCharacterId!.Value)
-                .Distinct()
-                .ToListAsync(ct);
-
             var inUseSet = new HashSet<Guid>(allReferencedIds);
             inUseSet.UnionWith(otherChapterBoundIds);
             inUseSet.UnionWith(otherChapterVariantIds);
             inUseSet.UnionWith(otherChapterLinkIds);
-            inUseSet.UnionWith(otherChapterSpeakerIds);
 
             foreach (var stub in stubCandidates)
             {

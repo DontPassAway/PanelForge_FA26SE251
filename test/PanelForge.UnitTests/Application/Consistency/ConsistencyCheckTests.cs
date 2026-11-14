@@ -31,20 +31,24 @@ public class ConsistencyCheckTests
             Scene = Scene.Create(Chapter.Id, 1);
             var bible = SeriesBible.Create(seriesId, Guid.NewGuid(), "Bible");
             Mira = bible.AddEntry(BibleEntryCategory.Character, "MIRA", "Mira", "Nhân vật chính");
-            Mira.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, isInitialVersion: true).Lock(UserId);
+            Mira.AddRevision("v1", "{}", "h1", isInitialVersion: true).Lock(UserId);
             Lighthouse = bible.AddEntry(BibleEntryCategory.Location, "LIGHTHOUSE", "Hải đăng", "Bối cảnh");
-            FutureVillain = bible.AddEntry(BibleEntryCategory.Character, "VILLAIN", "Kẻ phản diện", "Xuất hiện từ chương 3");
-            FutureVillain.AddRevision("v1", "{}", "h2", effectiveFromChapterNumber: 3, isInitialVersion: true);
+            Lighthouse.AddRevision("v1", "{}", "hl1", isInitialVersion: true).Lock(UserId);
+            FutureVillain = bible.AddEntry(BibleEntryCategory.Character, "VILLAIN", "Kẻ phản diện", "Xuất hiện từ chương 3", detailsJson: """{"availableFromChapter": 3}""");
+            FutureVillain.AddRevision("v1", "{}", "h2", isInitialVersion: true).Lock(UserId);
 
             Db.Chapters.Add(Chapter);
             Db.Scenes.Add(Scene);
             Db.SeriesBibles.Add(bible);
+            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Mira", Mira.Id, isPrimary: true));
+            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Hải đăng", Lighthouse.Id, isPrimary: true));
+            Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Kẻ phản diện", FutureVillain.Id, isPrimary: true));
             Db.SaveChanges();
         }
 
-        public ScriptLine Line(int order, string? dialogue, Guid? speaker = null, string? direction = null)
+        public ScriptLine Line(int order, string? dialogue, string? speaker = null, string? direction = null)
         {
-            var line = ScriptLine.Create(Scene.Id, order, dialogue, direction, speaker);
+            var line = ScriptLine.Create(Scene.Id, order, dialogue, direction, speakerLabel: speaker);
             Db.ScriptLines.Add(line);
             Db.SaveChanges();
             return line;
@@ -58,10 +62,10 @@ public class ConsistencyCheckTests
     public async Task Check_FindsBuiltInViolations_WithEvidence()
     {
         var f = new Fixture();
-        f.Line(1, "Chào chú!", f.Mira.Id);                 // hợp lệ
+        f.Line(1, "Chào chú!", "Mira");                 // hợp lệ
         f.Line(2, "Ai đó?");                                // SPEAKER_MISSING
-        f.Line(3, "Ta là ngọn hải đăng.", f.Lighthouse.Id); // SPEAKER_NOT_CHARACTER
-        f.Line(4, "Ha ha ha.", f.FutureVillain.Id);         // ENTRY_NOT_YET_EFFECTIVE (chương 3 > 1)
+        f.Line(3, "Ta là ngọn hải đăng.", "Hải đăng"); // SPEAKER_NOT_CHARACTER
+        f.Line(4, "Ha ha ha.", "Kẻ phản diện");         // ENTRY_NOT_YET_EFFECTIVE (chương 3 > 1)
 
         var result = await f.Run();
 
@@ -78,11 +82,15 @@ public class ConsistencyCheckTests
     {
         var f = new Fixture();
         var draft = f.Db.SeriesBibles.Local.Single().AddEntry(BibleEntryCategory.Character, "NAM", "Nam", "Bạn của Mira");
-        draft.AddRevision("v1", "{}", "h3", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        draft.AddRevision("v1", "{}", "h3", isInitialVersion: true);
         f.Db.BibleEntries.Add(draft);
         await f.Db.SaveChangesAsync();
-        f.Line(1, "Chào Mira!", draft.Id);
-        f.Line(2, "Đi đâu đấy?", draft.Id);
+        f.Line(1, "Chào Mira!", "Mira");
+        f.Line(2, "Đi đâu đấy?", "Mira");
+
+        f.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(f.Scene.ScriptLines.First().Id, draft.Id));
+        f.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(f.Scene.ScriptLines.Last().Id, draft.Id));
+        await f.Db.SaveChangesAsync();
 
         var result = await f.Run();
 
@@ -103,7 +111,7 @@ public class ConsistencyCheckTests
             severity: "Warning", configurationJson: """{"maxChars": 10}"""));
         f.Db.ConsistencyRules.Add(ConsistencyRule.Create(f.Chapter.SeriesId, "Regex hỏng", "Custom", pattern: "(("));
         await f.Db.SaveChangesAsync();
-        f.Line(1, "Ok, đi thôi nào mọi người!", f.Mira.Id);
+        f.Line(1, "Ok, đi thôi nào mọi người!", "Mira");
 
         var result = await f.Run();
 
@@ -118,8 +126,8 @@ public class ConsistencyCheckTests
     {
         var f = new Fixture();
         var missing = f.Line(1, "Ai đó?");
-        f.Line(2, "Ta là ngọn hải đăng.", f.Lighthouse.Id);
-        var villainLine = f.Line(3, "Ha ha ha.", f.FutureVillain.Id);
+        f.Line(2, "Ta là ngọn hải đăng.", "Hải đăng");
+        var villainLine = f.Line(3, "Ha ha ha.", "Kẻ phản diện");
         var first = await f.Run();
         var byCode = first.Value!.Findings.ToDictionary(x => x.RuleCode);
 
@@ -179,15 +187,17 @@ public class ConsistencyCheckTests
         var bible = f.Db.SeriesBibles.Local.Single();
         var ghost = bible.AddEntry(BibleEntryCategory.Character, "GHOST", "Hồn Ma", "Đã chết",
             detailsJson: """{"diesAtChapter": 1}""");
-        ghost.AddRevision("v1", "{}", "hg1", effectiveFromChapterNumber: 1, isInitialVersion: true).Lock(f.UserId);
+        ghost.AddRevision("v1", "{}", "hg1", isInitialVersion: true).Lock(f.UserId);
         f.Db.BibleEntries.Add(ghost);
+        f.Db.BibleEntryNames.Add(BibleEntryName.Create(bible.Id, "Hồn Ma", ghost.Id, isPrimary: true));
 
         var ch2 = Chapter.Create(f.Chapter.SeriesId, 2);
         var sc2 = Scene.Create(ch2.Id, 1);
         f.Db.Chapters.Add(ch2);
         f.Db.Scenes.Add(sc2);
-        var line = ScriptLine.Create(sc2.Id, 1, "Tôi vẫn ở đây...", speakerCharacterId: ghost.Id);
+        var line = ScriptLine.Create(sc2.Id, 1, "Tôi vẫn ở đây...", speakerLabel: "Hồn Ma");
         f.Db.ScriptLines.Add(line);
+        f.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, ghost.Id));
         await f.Db.SaveChangesAsync();
 
         var result = await new RunConsistencyCheckCommandHandler(f.Db)
@@ -208,10 +218,10 @@ public class ConsistencyCheckTests
         var bible = f.Db.SeriesBibles.Local.Single();
         var silverKey = bible.AddEntry(BibleEntryCategory.Prop, "CHIA_KHOA_BAC", "Chìa khóa bạc", "Đạo cụ bí mật",
             detailsJson: """{"availableFromChapter": 5}""");
-        silverKey.AddRevision("v1", "{}", "hk1", effectiveFromChapterNumber: 1, isInitialVersion: true).Lock(f.UserId);
+        silverKey.AddRevision("v1", "{}", "hk1", isInitialVersion: true).Lock(f.UserId);
         f.Db.BibleEntries.Add(silverKey);
 
-        var line = f.Line(1, "Tôi tìm thấy chiếc chìa khóa này.", f.Mira.Id);
+        var line = f.Line(1, "Tôi tìm thấy chiếc chìa khóa này.");
         f.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, silverKey.Id));
         await f.Db.SaveChangesAsync();
 
@@ -232,10 +242,10 @@ public class ConsistencyCheckTests
         var bible = f.Db.SeriesBibles.Local.Single();
         var secret = bible.AddEntry(BibleEntryCategory.PlotFact, "SECRET", "Bí mật cổ đại", "Sự thật",
             detailsJson: """{"knownBy": [{"character": "AN", "fromChapter": 5}]}""");
-        secret.AddRevision("v1", "{}", "hs1", effectiveFromChapterNumber: 1, isInitialVersion: true).Lock(f.UserId);
+        secret.AddRevision("v1", "{}", "hs1", isInitialVersion: true).Lock(f.UserId);
         f.Db.BibleEntries.Add(secret);
 
-        var line = f.Line(1, "Tôi biết về bí mật cổ đại!", f.Mira.Id);
+        var line = f.Line(1, "Tôi biết về bí mật cổ đại.", "Mira");
         f.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, secret.Id));
         await f.Db.SaveChangesAsync();
 
@@ -258,8 +268,8 @@ public class ConsistencyCheckTests
         f.Db.Pages.Add(page);
         f.Db.Panels.AddRange(p1, p2);
 
-        var line1 = f.Line(1, "Câu nói đầu tiên.", f.Mira.Id);
-        var line2 = f.Line(2, "Câu trả lời sau.", f.Mira.Id);
+        var line1 = f.Line(1, "Câu nói đầu tiên.", "Mira");
+        var line2 = f.Line(2, "Câu trả lời sau.", "Mira");
         line1.AssignToPanel(p1.Id);
         line2.AssignToPanel(p2.Id);
         await f.Db.SaveChangesAsync();

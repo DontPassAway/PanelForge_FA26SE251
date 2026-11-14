@@ -63,22 +63,23 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 "Vui lòng tải lại nội dung mới nhất rồi gửi lại.",
                 ResultErrorCodes.Conflict);
 
-        // Nhắm đúng giai đoạn: RevisionId tường minh, hoặc giai đoạn bắt đầu ở chương được gửi lên; mặc định là giai đoạn hiện hành.
-        // Trước đây luôn lấy giai đoạn mới nhất nên giai đoạn cũ (vd. "Lúc nhỏ") không bao giờ nộp được Concept.
+        // Nhắm đúng giai đoạn: RevisionId tường minh; mặc định là giai đoạn hiện hành.
         BibleEntryRevision? target;
         if (body.RevisionId is { } revisionId)
         {
             target = entry.Revisions.FirstOrDefault(r => r.Id == revisionId);
             if (target is null)
                 return Result<BibleEntryRevisionDto>.Failure($"Revision {revisionId} không tồn tại.", ResultErrorCodes.NotFound);
-            if (entry.LatestRevisionOfStageStartingAt(target.EffectiveFromChapterNumber) != target)
+            var latestOfStage = entry.Revisions
+                .Where(r => string.Equals(r.StageName, target.StageName, StringComparison.OrdinalIgnoreCase))
+                .MaxBy(r => r.VersionNumber);
+            if (latestOfStage != null && latestOfStage != target)
                 return Result<BibleEntryRevisionDto>.Failure(
                     $"v{target.VersionNumber} không còn là bản mới nhất của giai đoạn; hãy nộp cho bản mới nhất.", ResultErrorCodes.Conflict);
         }
         else
         {
-            target = (body.EffectiveFromChapterNumber is { } from ? entry.LatestRevisionOfStageStartingAt(from) : null)
-                ?? entry.GetCurrentRevision();
+            target = entry.GetCurrentRevision();
         }
 
         var isCurrent = target is not null && entry.GetCurrentRevision() == target;
@@ -94,8 +95,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 DetailsJson: body.DetailsJson,
                 ReferenceImageUrl: body.EffectiveImageUrl,
                 StageName: body.StageName,
-                EffectiveFromChapterNumber: body.EffectiveFromChapterNumber ?? target?.EffectiveFromChapterNumber ?? 1,
-                EffectiveToChapterNumber: body.EffectiveToChapterNumber,
                 ExpectedVersionNumber: body.ExpectedVersionNumber,
                 ArtistUserId: cmd.ArtistUserId), ct);
 
@@ -132,9 +131,7 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
             || Differs(b.Description, description)
             || Differs(b.Subtitle, subtitle)
             || Differs(b.DetailsJson, detailsJson)
-            || Differs(b.StageName, target.StageName)
-            || (b.EffectiveFromChapterNumber is { } from && from != target.EffectiveFromChapterNumber)
-            || (b.EffectiveToChapterNumber is { } to && to != target.EffectiveToChapterNumber);
+            || Differs(b.StageName, target.StageName);
     }
 
     private static (string? Name, string? Description, string? Subtitle, string? DetailsJson) ReadSnapshot(string snapshotJson, BibleEntry fallback)

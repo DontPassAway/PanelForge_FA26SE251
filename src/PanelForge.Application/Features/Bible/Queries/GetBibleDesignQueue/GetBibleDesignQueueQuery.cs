@@ -89,7 +89,6 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                     Category: entry.Category,
                     Description: entry.Description,
                     ReferenceImageUrl: latestRev.ConceptImageUrl ?? entry.ReferenceImageUrl,
-                    EffectiveFromChapterNumber: latestRev.EffectiveFromChapterNumber,
                     StageName: latestRev.StageName,
                     Status: latestRev.ReviewStatus,
                     VersionNumber: latestRev.VersionNumber,

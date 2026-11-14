@@ -13,9 +13,7 @@ using PanelForge.Application.Features.Bible.Commands.SetBibleEntryCrowd;
 using PanelForge.Application.Features.Bible.Commands.SetChapterCastRevision;
 using PanelForge.Application.Features.Bible.Commands.ConceptComments;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryRevision;
-using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryEra;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
-using PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
 using PanelForge.Application.Features.Bible.Queries.GetBibleConceptComments;
 using PanelForge.Application.Features.Bible.Queries.GetBibleReferenceImage;
@@ -119,9 +117,7 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
             StageName: body.StageName,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             Aliases: body.Aliases,
             IsCrowd: body.IsCrowd
         );
@@ -170,9 +166,7 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            EffectiveFromChapterNumber: body.EffectiveFromChapterNumber,
             StageName: body.StageName,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ExpectedVersionNumber: body.ExpectedVersionNumber
         );
 
@@ -345,7 +339,6 @@ public sealed class BibleController : ControllerBase
             SupersedesRevisionId: revisionId,
             SupersedeReason: body.Reason,
             StageName: body.StageName,
-            EffectiveToChapterNumber: body.EffectiveToChapterNumber,
             ChapterId: body.ChapterId
         );
         var result = await _mediator.Send(command, cancellationToken);
@@ -632,32 +625,6 @@ public sealed class BibleController : ControllerBase
     {
         var userId = GetCurrentUserId();
         var result = await _mediator.Send(new DeleteBibleEntryRevisionCommand(seriesId, entryId, revisionId, userId), cancellationToken);
-        if (!result.IsSuccess)
-        {
-            if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });
-            return BadRequest(new { error = result.ErrorMessage });
-        }
-        return NoContent();
-    }
-
-    /// <summary>
-    /// DELETE /api/series/{seriesId}/bible/entries/{entryId}/eras
-    /// Xóa toàn bộ một thời kỳ (Era) của mục Bible (chỉ cho phép nếu không có bản khóa Canon và không phải era gốc).
-    /// </summary>
-    [HttpDelete("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/eras")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteEra(
-        [FromRoute] Guid seriesId,
-        [FromRoute] Guid entryId,
-        [FromQuery] int chapterNumber,
-        [FromQuery] string? stageName,
-        CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        var result = await _mediator.Send(new DeleteBibleEntryEraCommand(seriesId, entryId, chapterNumber, stageName, userId), cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });

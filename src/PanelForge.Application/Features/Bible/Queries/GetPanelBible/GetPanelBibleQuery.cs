@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Queries.GetPanelBible;
 
@@ -45,7 +47,7 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
         // Thu thập các dòng trong Panel
         var lines = await _dbContext.ScriptLines
             .Where(l => l.PanelId == request.PanelId)
-            .Select(l => new { l.Id, l.SpeakerCharacterId })
+            .Select(l => new { l.Id, l.SpeakerLabel, l.Kind })
             .ToListAsync(cancellationToken);
 
         var lineIds = lines.Select(l => l.Id).ToList();
@@ -56,9 +58,21 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
             .Select(k => k.BibleEntryId)
             .ToListAsync(cancellationToken);
 
-        var mentionedEntryIds = lines
-            .Where(l => l.SpeakerCharacterId.HasValue)
-            .Select(l => l.SpeakerCharacterId!.Value)
+        var speakerCandidates = lines
+            .Where(l => l.Kind is ScriptLineKind.Dialogue or ScriptLineKind.Thought && !string.IsNullOrWhiteSpace(l.SpeakerLabel))
+            .Select(l => SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel))
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct()
+            .ToList();
+
+        var speakerEntryIds = speakerCandidates.Count > 0
+            ? await _dbContext.BibleEntryNames
+                .Where(n => speakerCandidates.Contains(n.NormalizedName))
+                .Select(n => n.BibleEntryId)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var mentionedEntryIds = speakerEntryIds
             .Concat(linkedEntryIds)
             .Distinct()
             .ToList();

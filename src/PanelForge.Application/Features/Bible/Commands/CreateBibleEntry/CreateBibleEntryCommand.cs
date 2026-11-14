@@ -24,9 +24,7 @@ public sealed record CreateBibleEntryCommand(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     IReadOnlyList<string>? Aliases = null,
     bool IsCrowd = false
 ) : IRequest<Result<BibleEntryDto>>;
@@ -122,11 +120,6 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             return Result<BibleEntryDto>.Failure(ex.Message);
         }
 
-        var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
-        if (command.EffectiveToChapterNumber < effectiveFrom)
-            return Result<BibleEntryDto>.Failure(
-                $"Chương kết thúc hiệu lực phải ≥ chương bắt đầu ({effectiveFrom}).", ResultErrorCodes.Validation);
-
         // Tự động sinh snapshot & revision v1 ban đầu (BR-18, CF1 Step 8)
         var snapshotObj = new
         {
@@ -139,9 +132,7 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             entry.ReferenceImageUrl,
             entry.Priority,
             entry.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom,
-            StageName = command.StageName?.Trim(),
-            command.EffectiveToChapterNumber
+            StageName = command.StageName?.Trim()
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
@@ -152,10 +143,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             contentHash: contentHash,
             authorId: command.UserId,
             associatedChapterId: null,
-            effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: true,
-            stageName: command.StageName,
-            effectiveToChapterNumber: command.EffectiveToChapterNumber
+            stageName: command.StageName
         );
 
         _dbContext.BibleEntries.Add(entry);
@@ -185,7 +174,7 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
             foreach (var link in linksToRemap)
             {
-                link.RemapTargetEntry(entry.Id, revision.Id);
+                link.RemapTargetEntry(entry.Id);
             }
 
             foreach (var stub in matchingStubs)

@@ -94,10 +94,10 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
 
         // Context: Bible hiệu lực tại chương (BR-15), nhân vật nói đứng đầu; vài dòng xung quanh để giữ mạch
         var bible = await AiSnapshotBuilder.BuildBibleAsync(_db, chapter, ct) ?? [];
-        bible = bible.OrderByDescending(b => b.EntryId == line.SpeakerCharacterId).ThenBy(b => b.Category != "Character")
+        bible = bible.OrderBy(b => b.Category != "Character")
             .Take(MaxBibleEntries).ToList();
         var sceneLines = await _db.ScriptLines.AsNoTracking().Where(l => l.SceneId == scene.Id).OrderBy(l => l.LineOrder)
-            .Select(l => new BaselineScriptLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection))
+            .Select(l => new BaselineScriptLine(l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection))
             .ToListAsync(ct);
         var index = sceneLines.FindIndex(l => l.LineId == line.Id);
         var neighbors = sceneLines.Where((_, i) => i != index && Math.Abs(i - index) <= 2)
@@ -125,7 +125,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         }
 
         var request = new CopilotRequest(cmd.Task, p.Provider, p.Model, apiKey,
-            new CopilotLine(line.Id, line.SpeakerCharacterId, original, line.StageDirection, neighbors), bible, maxChars, cmd.Instruction?.Trim());
+            new CopilotLine(line.Id, null, original, line.StageDirection, neighbors), bible, maxChars, cmd.Instruction?.Trim());
         var response = await _aiClient.RunCopilotAsync(request, ct);
 
         // Backend kiểm lại output bằng cùng luật tất định (không tin AI service tuyệt đối)

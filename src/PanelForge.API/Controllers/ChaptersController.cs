@@ -26,7 +26,6 @@ using PanelForge.Application.Features.Chapters.Queries.GetChaptersBySeries;
 using PanelForge.Application.Features.Consistency.Commands;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
-using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.ScriptComments;
@@ -246,19 +245,6 @@ public sealed class ChaptersController : ControllerBase
 
         return Ok(new { message = $"Chương {chapterId} đã được xóa thành công." });
     }
-
-    /// <summary>
-    /// GET /api/chapters/{chapterId}/bible-gate
-    /// V2.5: Cổng kiểm tra Series Bible theo Chương (Chapter-Scoped Bible Gate).
-    /// Quét toàn bộ nhân vật và bối cảnh được dùng trong kịch bản chương, xác thực có bản CanonLocked tại chương hay chưa.
-    /// </summary>
-    [HttpGet("api/chapters/{chapterId:guid}/bible-gate")]
-    [RequireWorkspaceRole]
-    [ProducesResponseType(typeof(ChapterBibleGateResultDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> CheckChapterBibleGate(
-        [FromRoute] Guid chapterId,
-        CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new CheckChapterBibleGateQuery(chapterId), cancellationToken));
 
     /// <summary>
     /// GET /api/chapters/{chapterId}/cast

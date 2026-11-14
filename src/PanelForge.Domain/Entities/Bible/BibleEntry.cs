@@ -207,24 +207,11 @@ public class BibleEntry : BaseEntity
     public bool IsVisualDesign
         => Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop;
 
-    /// <summary>Đã có revision khoá bắt đầu đúng ở chương này: một revision mới ở cùng chương sẽ thay bản khoá tại chỗ (không cho phép).</summary>
-    public bool HasLockedRevisionStartingAt(int chapterNumber)
-        => Revisions.Any(r => r.IsLocked && r.EffectiveFromChapterNumber == chapterNumber);
-
     /// <summary>
-    /// Giai đoạn được định danh bằng chương bắt đầu: mọi revision cùng EffectiveFromChapterNumber là các bản sửa của cùng một giai đoạn.
-    /// Trả về bản mới nhất của giai đoạn bắt đầu ở chương này, null nếu chưa có giai đoạn nào ở đó.
-    /// </summary>
-    public BibleEntryRevision? LatestRevisionOfStageStartingAt(int chapterNumber)
-        => Revisions
-            .Where(r => r.EffectiveFromChapterNumber == chapterNumber)
-            .MaxBy(r => r.VersionNumber);
-
-    /// <summary>Bản mới nhất của từng giai đoạn, theo thứ tự chương.</summary>
+    /// <summary>Bản mới nhất của từng biến thể / giai đoạn.</summary>
     public IEnumerable<BibleEntryRevision> LatestRevisionPerStage()
         => Revisions
-            .GroupBy(r => r.EffectiveFromChapterNumber)
-            .OrderBy(g => g.Key)
+            .GroupBy(r => r.StageName ?? string.Empty)
             .Select(g => g.MaxBy(r => r.VersionNumber)!);
 
     public BibleEntryRevision AddRevision(
@@ -233,10 +220,8 @@ public class BibleEntry : BaseEntity
         string contentHash,
         Guid? authorId = null,
         Guid? associatedChapterId = null,
-        int effectiveFromChapterNumber = 1,
         bool isInitialVersion = false,
         string? stageName = null,
-        int? effectiveToChapterNumber = null,
         Guid? artistUserId = null,
         BibleRevisionStatus reviewStatus = BibleRevisionStatus.Draft,
         string? reworkFeedback = null,
@@ -251,10 +236,8 @@ public class BibleEntry : BaseEntity
             contentHash,
             authorId,
             associatedChapterId,
-            effectiveFromChapterNumber,
             isInitialVersion,
             stageName,
-            effectiveToChapterNumber,
             artistUserId,
             reviewStatus,
             reworkFeedback,
@@ -283,28 +266,11 @@ public class BibleEntry : BaseEntity
     }
 
     /// <summary>
-    /// Revision có hiệu lực tại một chương (BR-15): phạm vi [from, to] chứa chương (to null = tới hết truyện);
-    /// nhiều bản cùng phủ thì lấy from lớn nhất (giai đoạn mới hơn) rồi đến VersionNumber lớn nhất (bản sửa mới hơn).
-    /// Hết phạm vi mọi bản (vd. nhân vật đã rời truyện) → null.
-    /// <paramref name="canonOnly"/>: với mục có thiết kế hình chỉ tính revision đã được Producer khoá (nguồn chuẩn cho AI).
-    /// </summary>
-    public BibleEntryRevision? EffectiveRevisionAt(int chapterNumber, bool canonOnly = false)
-        => Revisions
-            .Where(r => r.CoversChapter(chapterNumber))
-            .Where(r => !canonOnly || !IsVisualDesign || r.IsLocked)
-            .OrderByDescending(r => r.EffectiveFromChapterNumber)
-            .ThenByDescending(r => r.VersionNumber)
-            .FirstOrDefault();
-
-    /// <summary>
-    /// Revision đang có hiệu lực ở chương mới nhất (BR-15): EffectiveFromChapterNumber lớn nhất,
-    /// cùng chương thì VersionNumber lớn nhất. Trạng thái hiện tại (Name, Description, ...) của entry
-    /// phải luôn khớp với revision này; một bản sửa hồi tố (effective từ chương cũ hơn) không được ghi đè nó.
+    /// Revision mới nhất của mục Bible theo VersionNumber.
     /// </summary>
     public BibleEntryRevision? GetCurrentRevision()
         => Revisions
-            .OrderByDescending(r => r.EffectiveFromChapterNumber)
-            .ThenByDescending(r => r.VersionNumber)
+            .OrderByDescending(r => r.VersionNumber)
             .FirstOrDefault();
 
     /// <summary>
@@ -331,16 +297,13 @@ public class BibleEntry : BaseEntity
 
         if (defaultVariantRevisions.Count == 0) return firstRev;
 
-        var lockedNonSuperseded = defaultVariantRevisions
-            .Where(r => r.IsLocked && !IsRevisionSuperseded(r))
-            .OrderByDescending(r => r.VersionNumber)
-            .FirstOrDefault();
-
-        if (lockedNonSuperseded != null)
-            return lockedNonSuperseded;
-
         if (canonOnly && IsVisualDesign)
-            return null;
+        {
+            return defaultVariantRevisions
+                .Where(r => r.IsLocked && !IsRevisionSuperseded(r))
+                .OrderByDescending(r => r.VersionNumber)
+                .FirstOrDefault();
+        }
 
         return defaultVariantRevisions
             .OrderByDescending(r => r.VersionNumber)

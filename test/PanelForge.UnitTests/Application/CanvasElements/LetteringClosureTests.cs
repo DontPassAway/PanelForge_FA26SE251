@@ -55,7 +55,7 @@ public class LetteringClosureTests
         var line = await SeedLineAsync();
         var el = await AddAsync(line.Id);
 
-        line.UpdateContent("Đợi tôi một chút!", null, null);
+        line.UpdateContent("Đợi tôi một chút!", null);
         await _db.SaveChangesAsync();
 
         var stale = await AnalyzeAsync();

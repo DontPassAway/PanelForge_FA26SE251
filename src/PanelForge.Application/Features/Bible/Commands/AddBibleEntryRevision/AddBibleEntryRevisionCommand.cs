@@ -24,7 +24,6 @@ public sealed record AddBibleEntryRevisionCommand(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1,
     // UC-04 luồng phụ: version mà người dùng đã mở để sửa. Nếu khác version mới nhất → xung đột (409).
     int? ExpectedVersionNumber = null,
     // V1.2: Producer thay thế một bản đã khoá (route .../supersede, chỉ Producer). Bản mới cùng chương, được khoá luôn;
@@ -32,7 +31,6 @@ public sealed record AddBibleEntryRevisionCommand(
     Guid? SupersedesRevisionId = null,
     string? SupersedeReason = null,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     Guid? ArtistUserId = null,
     BibleRevisionStatus? ReviewStatus = null,
     Guid? ChapterId = null
@@ -97,8 +95,6 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure("Tên và mô tả của mục Bible không được để trống.");
         }
 
-        var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
-        var effectiveTo = command.EffectiveToChapterNumber;
         var stageName = string.IsNullOrWhiteSpace(command.StageName) ? null : command.StageName.Trim();
         var summary = command.Summary;
 
@@ -121,25 +117,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 return Result<BibleEntryRevisionDto>.Failure(
                     "Bản thay thế phải thuộc cùng biến thể với bản được thay thế.", ResultErrorCodes.Conflict);
 
-            effectiveFrom = superseded.EffectiveFromChapterNumber;
-            // Bản thay thế giữ đúng giai đoạn của bản bị thay
-            effectiveTo ??= superseded.EffectiveToChapterNumber;
             stageName = superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
         }
-        // Bản sửa của giai đoạn có sẵn (cùng chương bắt đầu) không gửi tên giai đoạn thì giữ tên cũ,
-        // tránh bản sửa mất tên rồi hiển thị/xoá như một giai đoạn khác.
-        else if (stageName is null && entry.LatestRevisionOfStageStartingAt(effectiveFrom) is { } sameStage)
-        {
-            stageName = sameStage.StageName;
-        }
 
-        if (effectiveTo < effectiveFrom)
-            return Result<BibleEntryRevisionDto>.Failure(
-                $"Chương kết thúc hiệu lực phải ≥ chương bắt đầu ({effectiveFrom}).", ResultErrorCodes.Validation);
-
-        // Snapshot lấy từ nội dung của CHÍNH revision này, không lấy từ current state của entry,
-        // vì bản sửa hồi tố không được thay đổi current state (Append-only BR-01, BR-15).
         var snapshotObj = new
         {
             entry.Id,
@@ -151,9 +132,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             ReferenceImageUrl = command.ReferenceImageUrl?.Trim(),
             command.Priority,
             command.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom,
-            StageName = stageName?.Trim(),
-            EffectiveToChapterNumber = effectiveTo
+            StageName = stageName?.Trim()
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
@@ -168,10 +147,8 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             contentHash: contentHash,
             authorId: command.UserId,
             associatedChapterId: command.ChapterId,
-            effectiveFromChapterNumber: effectiveFrom,
             isInitialVersion: false,
             stageName: stageName,
-            effectiveToChapterNumber: effectiveTo,
             artistUserId: command.ArtistUserId,
             reviewStatus: reviewStatus,
             supersedesRevisionId: command.SupersedesRevisionId

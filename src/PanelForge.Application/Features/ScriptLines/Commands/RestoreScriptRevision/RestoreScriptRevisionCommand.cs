@@ -63,9 +63,7 @@ public sealed class RestoreScriptRevisionCommandHandler
         var live = rows.Where(l => !l.IsDeleted).ToList();
         var before = ScriptLineRules.Snapshot(live);
 
-        // Speaker / Panel mà bản cũ trỏ tới có thể đã bị xoá sau đó: bỏ tham chiếu thay vì trỏ vào bản ghi đã xoá
-        var speakerIds = wanted.Where(w => w.SpeakerId is not null).Select(w => w.SpeakerId!.Value).Distinct().ToList();
-        var liveSpeakers = await _db.BibleEntries.AsNoTracking().Where(e => speakerIds.Contains(e.Id)).Select(e => e.Id).ToListAsync(ct);
+        // Panel mà bản cũ trỏ tới có thể đã bị xoá sau đó: bỏ tham chiếu thay vì trỏ vào bản ghi đã xoá
         var panelIds = rows.Where(l => l.PanelId is not null).Select(l => l.PanelId!.Value).Distinct().ToList();
         var livePanels = await _db.Panels.AsNoTracking().Where(p => panelIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
 
@@ -79,11 +77,10 @@ public sealed class RestoreScriptRevisionCommandHandler
         var after = new List<ScriptLine>();
         foreach (var w in wanted)
         {
-            Guid? speaker = w.SpeakerId is { } sid && liveSpeakers.Contains(sid) ? sid : null;
             var row = rows.FirstOrDefault(l => l.Id == w.LineId);
             if (row is null)
             {
-                row = ScriptLine.Create(cmd.SceneId, w.Order, w.Dialogue, w.StageDirection, speaker, w.LineId);
+                row = ScriptLine.Create(cmd.SceneId, w.Order, w.Dialogue, w.StageDirection, w.LineId);
                 _db.ScriptLines.Add(row);
             }
             else
@@ -95,7 +92,7 @@ public sealed class RestoreScriptRevisionCommandHandler
                     row.DeletedBy = null;
                     if (row.PanelId is { } pid && !livePanels.Contains(pid)) row.AssignToPanel(null);
                 }
-                row.UpdateContent(w.Dialogue, w.StageDirection, speaker);
+                row.UpdateContent(w.Dialogue, w.StageDirection);
                 row.Reorder(w.Order);
             }
             after.Add(row);

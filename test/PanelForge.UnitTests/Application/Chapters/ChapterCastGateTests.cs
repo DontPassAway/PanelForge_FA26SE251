@@ -96,7 +96,7 @@ public class ChapterCastGateTests
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kage", stub.Id, isPrimary: true));
 
         // Script line nhắc tới Kage
-        var line = ScriptLine.Create(scene.Id, 1, "Tôi là Kage", "Kage", stub.Id);
+        var line = ScriptLine.Create(scene.Id, 1, "Tôi là Kage", speakerLabel: "Kage");
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
@@ -122,7 +122,7 @@ public class ChapterCastGateTests
         _db.BibleEntries.Add(stub);
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Dân Làng", stub.Id, isPrimary: true));
 
-        var line = ScriptLine.Create(scene.Id, 1, "Cứu với!", "Dân Làng", stub.Id);
+        var line = ScriptLine.Create(scene.Id, 1, "Cứu với!", speakerLabel: "Dân Làng");
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
@@ -154,7 +154,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(ch2);
         var scene2 = Scene.Create(ch2.Id, 1, "Cảnh 1");
         _db.Scenes.Add(scene2);
-        var line2 = ScriptLine.Create(scene2.Id, 1, "Tôi trở lại!", "Hero", hero.Id);
+        var line2 = ScriptLine.Create(scene2.Id, 1, "Tôi trở lại!", speakerLabel: "Hero");
         _db.ScriptLines.Add(line2);
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Hero", hero.Id, isPrimary: true));
         await _db.SaveChangesAsync();
@@ -188,7 +188,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(ch1);
         var sc1 = Scene.Create(ch1.Id, 1, "Scene 1");
         _db.Scenes.Add(sc1);
-        _db.ScriptLines.Add(ScriptLine.Create(sc1.Id, 1, "Dattebayo!", "Naruto", hero.Id));
+        _db.ScriptLines.Add(ScriptLine.Create(sc1.Id, 1, "Dattebayo!", speakerLabel: "Naruto"));
         await _db.SaveChangesAsync();
 
         var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
@@ -210,7 +210,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(ch2);
         var sc2 = Scene.Create(ch2.Id, 1, "Scene 2");
         _db.Scenes.Add(sc2);
-        _db.ScriptLines.Add(ScriptLine.Create(sc2.Id, 1, "Rasengan!", "Naruto", hero.Id));
+        _db.ScriptLines.Add(ScriptLine.Create(sc2.Id, 1, "Rasengan!", speakerLabel: "Naruto"));
         await _db.SaveChangesAsync();
 
         // Gán v2 cho Ch2 (cần recompute trước để sinh binding kế thừa từ Ch1)
@@ -245,7 +245,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(ch3);
         var sc3 = Scene.Create(ch3.Id, 1, "Scene 3");
         _db.Scenes.Add(sc3);
-        _db.ScriptLines.Add(ScriptLine.Create(sc3.Id, 1, "Chào mọi người!", "Naruto", hero.Id));
+        _db.ScriptLines.Add(ScriptLine.Create(sc3.Id, 1, "Chào mọi người!", speakerLabel: "Naruto"));
         await _db.SaveChangesAsync();
 
         await submitHandler.Handle(new SubmitScriptCommand(ch3.Id, _writerId), default);
@@ -284,7 +284,7 @@ public class ChapterCastGateTests
         var pv = PanelBibleVariant.Create(panel.Id, hero.Id, vChildhood.Id, _writerId);
         _db.PanelBibleVariants.Add(pv);
 
-        var line = ScriptLine.Create(scene.Id, 1, "Hồi tưởng...", "Sasuke", hero.Id);
+        var line = ScriptLine.Create(scene.Id, 1, "Hồi tưởng...", speakerLabel: "Sasuke");
         line.AssignToPanel(panel.Id);
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
@@ -316,7 +316,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(chapter);
         var scene = Scene.Create(chapter.Id, 1, "Cảnh 1");
         _db.Scenes.Add(scene);
-        _db.ScriptLines.Add(ScriptLine.Create(scene.Id, 1, "Chidori!", "Kakashi", hero.Id));
+        _db.ScriptLines.Add(ScriptLine.Create(scene.Id, 1, "Chidori!", speakerLabel: "Kakashi"));
         await _db.SaveChangesAsync();
 
         var submitHandler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
@@ -375,7 +375,7 @@ public class ChapterCastGateTests
         _db.Chapters.Add(ch1);
         var sc1 = Scene.Create(ch1.Id, 1, "Cảnh 1");
         _db.Scenes.Add(sc1);
-        _db.ScriptLines.Add(ScriptLine.Create(sc1.Id, 1, "Bắt đầu", "Tsunade", hero.Id));
+        _db.ScriptLines.Add(ScriptLine.Create(sc1.Id, 1, "Bắt đầu", speakerLabel: "Tsunade"));
         _db.ChapterBibleBindings.Add(ChapterBibleBinding.Create(ch1.Id, hero.Id, v1.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: false));
         ch1.SubmitScript(_writerId);
         ch1.StartProduction(_producerId, "hash-ch1");
@@ -445,7 +445,7 @@ public class ChapterCastGateTests
         var panel = Panel.Create(page.Id, 1, 1);
         _db.Panels.Add(panel);
 
-        var line = ScriptLine.Create(scene.Id, 1, "Thật phiền phức...", "Shikamaru", hero.Id);
+        var line = ScriptLine.Create(scene.Id, 1, "Thật phiền phức...", speakerLabel: "Shikamaru");
         line.AssignToPanel(panel.Id);
         _db.ScriptLines.Add(line);
 
@@ -471,7 +471,7 @@ public class ChapterCastGateTests
         var reopenSince = chapter.ScriptReopenRequestedAt!.Value;
 
         // Writer sửa dòng kịch bản trên panel
-        line.UpdateContent("Chiến lược mới!", null, hero.Id);
+        line.UpdateContent("Chiến lược mới!", null);
         typeof(ScriptLine).GetProperty(nameof(ScriptLine.UpdatedAt))?.SetValue(line, reopenSince.AddSeconds(5));
         await _db.SaveChangesAsync();
 

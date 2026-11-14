@@ -12,15 +12,13 @@ public sealed record BibleEntryRevisionDto(
     string ContentHash,
     Guid? AuthorId,
     Guid? AssociatedChapterId,
-    int EffectiveFromChapterNumber,
     bool IsInitialVersion,
     DateTime CreatedAt,
     bool IsLocked = false,
     DateTime? LockedAt = null,
     Guid? LockedById = null,
-    // Giai đoạn và phạm vi hiệu lực [from, to] (to null = tới hết truyện)
+    // Giai đoạn / biến thể
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     // V2.5: Provenance & 2-tier review
     Guid? ArtistUserId = null,
     BibleRevisionStatus ReviewStatus = BibleRevisionStatus.Draft,
@@ -39,8 +37,8 @@ public sealed record BibleEntryRevisionDto(
         var currentEvt = r.CurrentConceptEventId.HasValue ? r.Events.FirstOrDefault(e => e.Id == r.CurrentConceptEventId.Value) : null;
         return new(
             r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
-            r.EffectiveFromChapterNumber, r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
-            r.EffectiveToChapterNumber, r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
+            r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
+            r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
             r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
             r.SupersedesRevisionId,
             r.CurrentConceptEventId,
@@ -48,7 +46,7 @@ public sealed record BibleEntryRevisionDto(
     }
 }
 
-/// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Endorsed/Locked/Superseded.</summary>
+/// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Locked/Superseded.</summary>
 public sealed record BibleRevisionEventDto(
     Guid Id,
     BibleRevisionEventType Type,
@@ -131,9 +129,7 @@ public sealed record CreateBibleEntryRequest(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     IReadOnlyList<string>? Aliases = null,
     bool IsCrowd = false
 )
@@ -150,9 +146,7 @@ public sealed record AddBibleEntryRevisionRequest(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
     int? ExpectedVersionNumber = null
 )
@@ -161,7 +155,7 @@ public sealed record AddBibleEntryRevisionRequest(
     public string? EffectiveImageUrl => ReferenceImageUrl;
 }
 
-/// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do; chương hiệu lực lấy theo bản bị thay.</summary>
+/// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do.</summary>
 public sealed record SupersedeBibleEntryRevisionRequest(
     string Reason,
     string Name,
@@ -172,18 +166,11 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
     int? ExpectedVersionNumber = null,
-    // null = giữ giai đoạn và chương kết thúc của bản bị thay
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     Guid? ChapterId = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
-}
-
-public sealed record EndorseBibleRevisionRequest(string? Note = null, string? EndorsementNote = null)
-{
-    public string? EffectiveNote => !string.IsNullOrWhiteSpace(Note) ? Note.Trim() : (!string.IsNullOrWhiteSpace(EndorsementNote) ? EndorsementNote.Trim() : null);
 }
 
 public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, string? ReworkReason = null)
@@ -245,10 +232,7 @@ public sealed record SubmitConceptArtRequest(
     string? Subtitle = null,
     string? DetailsJson = null,
     string? StageName = null,
-    int? EffectiveFromChapterNumber = null,
-    int? EffectiveToChapterNumber = null,
     int? ExpectedVersionNumber = null,
-    // Phiên bản (giai đoạn) nhận Concept; bỏ trống = giai đoạn bắt đầu ở EffectiveFromChapterNumber, hoặc giai đoạn hiện hành.
     Guid? RevisionId = null
 )
 {
@@ -264,7 +248,6 @@ public sealed record BibleDesignQueueItemDto(
     BibleEntryCategory Category,
     string Description,
     string? ReferenceImageUrl,
-    int EffectiveFromChapterNumber,
     string? StageName,
     BibleRevisionStatus Status,
     int VersionNumber,
@@ -279,28 +262,7 @@ public sealed record BibleDesignQueueItemDto(
     public BibleRevisionStatus ReviewStatus => Status;
 }
 
-public sealed record ChapterBibleGateItemDto(
-    Guid EntryId,
-    string Code,
-    string Name,
-    BibleEntryCategory Category,
-    BibleRevisionStatus CurrentStatus,
-    bool IsLocked,
-    int? EffectiveFromChapter,
-    int? EffectiveToChapter,
-    string WarningCode,
-    string Message
-);
-
-public sealed record ChapterBibleGateResultDto(
-    bool IsPassed,
-    int TotalReferenced,
-    int LockedCount,
-    int PendingCount,
-    IReadOnlyList<ChapterBibleGateItemDto> Items
-);
-
-/// <summary>Một chương mà mục Bible xuất hiện trong kịch bản (người nói hoặc @Tag).</summary>
+/// <summary>Một chương mà mục Bible xuất hiện trong kịch bản.</summary>
 public sealed record BibleEntryUsageDto(
     Guid ChapterId,
     int ChapterNumber,
