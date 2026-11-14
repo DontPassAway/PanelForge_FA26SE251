@@ -83,7 +83,33 @@ public sealed record BibleEntryDto(
     bool IsStub = false,
     IReadOnlyList<string>? Aliases = null,
     bool IsCrowd = false
-);
+)
+{
+    public static BibleEntryDto From(BibleEntry entry)
+    {
+        var rev = entry.GetCurrentRevision() ?? entry.Revisions.OrderByDescending(r => r.VersionNumber).FirstOrDefault();
+        return new(
+            entry.Id,
+            entry.SeriesBibleId,
+            entry.Category,
+            entry.Code,
+            entry.Name,
+            entry.Subtitle,
+            entry.Description,
+            entry.DetailsJson,
+            entry.ReferenceImageUrl,
+            entry.Priority,
+            entry.StrictCheck,
+            entry.IsActive,
+            rev != null ? BibleEntryRevisionDto.From(rev) : null,
+            entry.CreatedAt,
+            entry.UpdatedAt,
+            entry.IsStub,
+            entry.Aliases,
+            entry.IsCrowd
+        );
+    }
+}
 
 public sealed record SeriesBibleDto(
     Guid Id,
@@ -246,7 +272,8 @@ public sealed record BibleDesignQueueItemDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool IsStub = false,
-    Guid? RevisionId = null
+    Guid? RevisionId = null,
+    IReadOnlyList<decimal>? WaitingChapterNumbers = null
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;
