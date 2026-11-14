@@ -27,6 +27,6 @@ public sealed class GetStageTaskSubmissionsQueryHandler
             .ToListAsync(ct);
         return Result<IReadOnlyList<StageTaskSubmissionDto>>.Success(rows.Select(s => new StageTaskSubmissionDto(
             s.Id, s.AttemptNumber, s.Status.ToString(), s.SubmittedByUserId, s.SubmittedAt, s.ArtworkReferenceIds,
-            s.DecidedByUserId, s.DecidedAt, s.DecisionComment)).ToList());
+            s.DecidedByUserId, s.DecidedAt, s.DecisionComment, s.PanelLayoutJson, s.CanvasVersionsJson, s.ScriptVersionId)).ToList());
     }
 }

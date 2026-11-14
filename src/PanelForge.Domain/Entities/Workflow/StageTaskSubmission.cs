@@ -18,6 +18,12 @@ public class StageTaskSubmission : BaseEntity
     public DateTime SubmittedAt { get; private set; }
     /// <summary>AssetReference mới nhất của từng (Page, Panel) của ô, ở công đoạn của ô, lúc nộp.</summary>
     public List<Guid> ArtworkReferenceIds { get; private set; } = [];
+    /// <summary>Bố cục Panel của các trang của ô lúc nộp (JSON như <see cref="Submission.PanelLayoutJson"/>). "[]" nếu không có Panel.</summary>
+    public string PanelLayoutJson { get; private set; } = "[]";
+    /// <summary>Version event stream canvas của từng trang của ô lúc nộp, <c>{"pageId": version}</c> (lớp chữ của Letterer).</summary>
+    public string CanvasVersionsJson { get; private set; } = "{}";
+    /// <summary>ScriptVersion (bản kịch bản chương đã commit) mới nhất lúc nộp; null nếu chương chưa commit kịch bản.</summary>
+    public Guid? ScriptVersionId { get; private set; }
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -27,7 +33,8 @@ public class StageTaskSubmission : BaseEntity
 
     /// <param name="autoApproved">Công đoạn không có cổng duyệt: lần nộp được duyệt ngay bởi chính người nộp.</param>
     public static StageTaskSubmission Create(Guid stageTaskId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
-        IEnumerable<Guid>? artworkReferenceIds, bool autoApproved)
+        IEnumerable<Guid>? artworkReferenceIds, bool autoApproved,
+        string? panelLayoutJson = null, string? canvasVersionsJson = null, Guid? scriptVersionId = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
         var now = DateTime.UtcNow;
@@ -38,6 +45,9 @@ public class StageTaskSubmission : BaseEntity
             SubmittedByUserId = submittedByUserId,
             AttemptNumber = attemptNumber,
             ArtworkReferenceIds = artworkReferenceIds?.Distinct().ToList() ?? [],
+            PanelLayoutJson = string.IsNullOrWhiteSpace(panelLayoutJson) ? "[]" : panelLayoutJson,
+            CanvasVersionsJson = string.IsNullOrWhiteSpace(canvasVersionsJson) ? "{}" : canvasVersionsJson,
+            ScriptVersionId = scriptVersionId,
             Status = autoApproved ? SubmissionStatus.Approved : SubmissionStatus.Pending,
             DecidedByUserId = autoApproved ? submittedByUserId : null,
             DecidedAt = autoApproved ? now : null,

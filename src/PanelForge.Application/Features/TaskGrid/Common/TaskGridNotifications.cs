@@ -21,6 +21,10 @@ internal static class TaskGridNotifications
             chapterId: lot.ChapterId);
     }
 
+    public static Notification Submitted(Guid reviewerId, Guid chapterId, decimal chapterNumber, int taskCount) => Notification.Create(
+        reviewerId, NotificationType.AssignmentSubmitted, $"Có {Cells(taskCount)} mới nộp chờ duyệt",
+        $"Chương {chapterNumber}: mở lưới giao việc để duyệt.", chapterId: chapterId);
+
     public static Notification Unassigned(Guid userId, Guid chapterId, int taskCount) => Notification.Create(
         userId, NotificationType.AssignmentUnassigned, "Bạn đã được gỡ khỏi việc", $"Producer gỡ bạn khỏi {Cells(taskCount)}.",
         chapterId: chapterId);

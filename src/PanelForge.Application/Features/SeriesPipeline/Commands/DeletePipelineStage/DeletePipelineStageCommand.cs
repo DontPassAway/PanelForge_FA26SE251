@@ -28,6 +28,7 @@ public sealed class DeletePipelineStageCommandHandler : IRequestHandler<DeletePi
         var inUse = await _dbContext.Pages.AnyAsync(p => p.CurrentStageId == cmd.StageId, ct)
                  || await _dbContext.Panels.AnyAsync(p => p.CurrentStageId == cmd.StageId, ct)
                  || await _dbContext.StageProgresses.AnyAsync(s => s.PipelineStageId == cmd.StageId, ct)
+                 || await _dbContext.StageTasks.AnyAsync(t => t.PipelineStageId == cmd.StageId, ct) // FK Restrict: tắt stage thay vì xoá
                  || await _dbContext.Assignments.AnyAsync(
                         a => a.PipelineStageId == cmd.StageId && a.Status != AssignmentStatus.Approved, ct);
         if (inUse)

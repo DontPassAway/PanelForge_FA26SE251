@@ -25,6 +25,11 @@ internal sealed class StageTaskSubmissionConfiguration : IEntityTypeConfiguratio
                .IsRequired();
         builder.Property(s => s.SubmittedAt).HasColumnName("submitted_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(s => s.ArtworkReferenceIds).HasColumnName("artwork_reference_ids").HasColumnType("uuid[]").IsRequired();
+        builder.Property(s => s.PanelLayoutJson).HasColumnName("panel_layout_json").HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb").IsRequired();
+        builder.Property(s => s.CanvasVersionsJson).HasColumnName("canvas_versions_json").HasColumnType("jsonb")
+               .HasDefaultValueSql("'{}'::jsonb").IsRequired();
+        builder.Property(s => s.ScriptVersionId).HasColumnName("script_version_id").HasColumnType("uuid");
         builder.Property(s => s.DecidedByUserId).HasColumnName("decided_by_user_id").HasColumnType("uuid");
         builder.Property(s => s.DecidedAt).HasColumnName("decided_at").HasColumnType("timestamptz");
         builder.Property(s => s.DecisionComment).HasColumnName("decision_comment").HasColumnType("text");

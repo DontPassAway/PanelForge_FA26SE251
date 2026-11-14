@@ -32,7 +32,8 @@ public sealed class GenerateStageTasksCommandHandler : IRequestHandler<GenerateS
 
         await _db.LockChapterAsync(chapter.Id, ct);
 
-        var stages = (await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct)).Where(s => s.IsEnabled).ToList();
+        var allStages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
+        var stages = allStages.Where(s => s.IsEnabled).ToList();
         if (stages.Count == 0) return Fail("Series chưa có công đoạn nào đang bật.", ResultErrorCodes.Conflict);
 
         var pageIds = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
@@ -46,7 +47,12 @@ public sealed class GenerateStageTasksCommandHandler : IRequestHandler<GenerateS
                 : pageIds.Select(id => (Guid?)id);
             foreach (var pageId in targets)
             {
-                if (existing.Any(t => t.PipelineStageId == stage.Id && t.PageId == pageId)) continue;
+                if (existing.FirstOrDefault(t => t.PipelineStageId == stage.Id && t.PageId == pageId) is { } found)
+                {
+                    // Công đoạn được bật lại: ô đã huỷ khi tắt được dùng lại ở trạng thái chưa giao
+                    if (found.Status == StageTaskStatus.Cancelled) { found.Revive(); created++; }
+                    continue;
+                }
                 var task = StageTask.Create(chapter.SeriesId, chapter.Id, stage.Id, pageId);
                 task.CreatedBy = cmd.UserId.ToString();
                 _db.StageTasks.Add(task);
@@ -56,7 +62,10 @@ public sealed class GenerateStageTasksCommandHandler : IRequestHandler<GenerateS
         }
 
         var orphaned = existing
-            .Where(t => t.PageId is { } pid && !pageIds.Contains(pid) && t.Status != StageTaskStatus.Cancelled)
+            // Trang đã xoá, hoặc ô chưa giao của công đoạn vừa tắt (vd. bỏ Thumbnail)
+            .Where(t => t.Status != StageTaskStatus.Cancelled &&
+                        ((t.PageId is { } pid && !pageIds.Contains(pid)) ||
+                         (t.Status == StageTaskStatus.Unassigned && stages.All(s => s.Id != t.PipelineStageId))))
             .ToList();
         foreach (var task in orphaned) task.Cancel();
         await TaskGridRules.RefreshLotsAsync(_db, orphaned.Select(t => t.LotId), orphaned, ct);

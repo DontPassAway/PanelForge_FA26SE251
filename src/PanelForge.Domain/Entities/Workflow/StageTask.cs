@@ -179,6 +179,17 @@ public class StageTask : BaseEntity
         Touch();
     }
 
+    /// <summary>Công đoạn được bật lại (hoặc trang được khôi phục): ô đã huỷ trở về chưa giao, không mang theo lô cũ.</summary>
+    public void Revive()
+    {
+        if (Status != StageTaskStatus.Cancelled) throw Invalid("dùng lại");
+        LotId = null;
+        ReviewerUserId = null;
+        CurrentSubmissionId = null;
+        Status = StageTaskStatus.Unassigned;
+        Touch();
+    }
+
     private void EnsureInputCurrent()
     {
         if (IsInputOutdated)

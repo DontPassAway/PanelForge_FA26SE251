@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.SeriesPipeline.Common;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
@@ -45,6 +46,8 @@ public class TaskGridHandlerTests
         public readonly List<StageTaskSubmission> Submissions = [];
         public readonly List<Notification> Notifications = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
+        public readonly Mock<IPageRepository> PageRepo = new();
+        public readonly List<ScriptVersion> ScriptVersions = [];
         private readonly Guid _workspaceId;
         private readonly List<WorkspaceMember> _members;
 
@@ -97,6 +100,8 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChangeRequest>()));
             Db.Setup(d => d.ConsistencyFindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ConsistencyFinding>()));
             Db.Setup(d => d.AiSuggestions).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiSuggestion>()));
+            Db.Setup(d => d.ScriptVersions).Returns(DbSetMockHelper.CreateDbSetMock(ScriptVersions));
+            PageRepo.Setup(p => p.GetStreamVersionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(7);
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(_members));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
@@ -111,7 +116,7 @@ public class TaskGridHandlerTests
             new StartStageTaskCommandHandler(Db.Object).Handle(new StartStageTaskCommand(Chapter.Id, task.Id, userId), default);
 
         public Task<Result<IReadOnlyList<StageTaskDto>>> Submit(Guid userId, params StageTask[] tasks) =>
-            new SubmitStageTasksCommandHandler(Db.Object).Handle(new SubmitStageTasksCommand(Chapter.Id, tasks.Select(t => t.Id).ToList(), userId), default);
+            new SubmitStageTasksCommandHandler(Db.Object, PageRepo.Object).Handle(new SubmitStageTasksCommand(Chapter.Id, tasks.Select(t => t.Id).ToList(), userId), default);
 
         public Task<Result<StageTaskDto>> Approve(StageTask task, Guid userId) =>
             new ApproveStageTaskCommandHandler(Db.Object).Handle(new ApproveStageTaskCommand(Chapter.Id, task.Id, userId), default);
@@ -463,5 +468,62 @@ public class TaskGridHandlerTests
         gate.Should().Contain(i => i.Code == "TASK_GRID_NOT_APPROVED" && i.Blocking);
         gate.Should().Contain(i => i.Code == "IMPACT_FLAGS" && i.Count == 2);
         gate.Should().NotContain(i => i.Code == "PAGES_WITHOUT_WORK" && i.Count == 2);
+    }
+
+    // ---- Hoàn thiện lưới trước Clean Cutover ----
+
+    [Fact]
+    public async Task Submit_GatedCell_NotifiesEditor_AndSnapshotsCanvasLayoutAndScriptVersion()
+    {
+        var f = new Fixture();
+        var script = ScriptVersion.Create(f.Chapter.Id, 3, "v3", f.ProducerId, "hash", "[]", 0);
+        f.ScriptVersions.Add(script);
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink })
+        {
+            await f.Start(f.Cell(stage, 0), f.ArtistId);
+            await f.Submit(f.ArtistId, f.Cell(stage, 0));
+        }
+        f.Notifications.Should().NotContain(n => n.Type == NotificationType.AssignmentSubmitted, "Pencil/Ink không có cổng duyệt");
+
+        var color = f.Cell(f.Color, 0);
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+
+        f.Notifications.Should().ContainSingle(n => n.Type == NotificationType.AssignmentSubmitted).Which.UserId.Should().Be(f.EditorId);
+        var submission = f.Submissions.Single(s => s.StageTaskId == color.Id);
+        submission.ScriptVersionId.Should().Be(script.Id);
+        submission.CanvasVersionsJson.Should().Contain(f.Pages[0].Id.ToString()).And.Contain("7");
+        submission.CanvasVersionsJson.Should().NotContain(f.Pages[1].Id.ToString());
+    }
+
+    [Fact]
+    public async Task Generate_CancelsUnassignedCellsOfDisabledStage_AndRevivesThemWhenReEnabled()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        f.Ink.SetEnabled(false);
+
+        var off = await f.Generate();
+        off.Value!.Cancelled.Should().Be(1, "chỉ ô Ink trang 2 chưa giao; ô Ink trang 1 đã giao thì giữ");
+        f.Cell(f.Ink, 1).Status.Should().Be(StageTaskStatus.Cancelled);
+        f.Cell(f.Ink, 0).Status.Should().Be(StageTaskStatus.Assigned);
+
+        f.Ink.SetEnabled(true);
+        (await f.Generate()).Value!.Created.Should().Be(1);
+        f.Cell(f.Ink, 1).Status.Should().Be(StageTaskStatus.Unassigned);
+    }
+
+    [Fact]
+    public async Task PipelineEdits_AreBlockedWhileGridHasWorkInFlight()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        await f.Start(f.Cell(f.Pencil, 0), f.ArtistId);
+
+        (await SeriesPipelineStore.StructureLockedReasonAsync(f.Db.Object, f.Chapter.SeriesId, default)).Should().Contain("đang làm dở");
+        (await SeriesPipelineStore.StageInUseOnGridReasonAsync(f.Db.Object, f.Pencil.Id, default)).Should().NotBeNull();
+        (await SeriesPipelineStore.StageInUseOnGridReasonAsync(f.Db.Object, f.Review.Id, default))
+            .Should().BeNull("Review chưa có ô được giao nên tắt được");
     }
 }

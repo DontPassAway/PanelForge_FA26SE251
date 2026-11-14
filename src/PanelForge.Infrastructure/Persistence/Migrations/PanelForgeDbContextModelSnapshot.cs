@@ -5062,6 +5062,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempt_number");
 
+                    b.Property<string>("CanvasVersionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("canvas_versions_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<Guid>("ChapterId")
                         .HasColumnType("uuid")
                         .HasColumnName("chapter_id");
@@ -5097,6 +5104,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("PanelLayoutJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("panel_layout_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid?>("ScriptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("script_version_id");
 
                     b.Property<Guid>("StageTaskId")
                         .HasColumnType("uuid")

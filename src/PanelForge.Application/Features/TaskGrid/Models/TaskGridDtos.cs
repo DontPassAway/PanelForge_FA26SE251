@@ -53,7 +53,8 @@ public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 public sealed record RequestStageTaskChangesRequest(string Comment);
 
 public sealed record StageTaskSubmissionDto(Guid Id, int AttemptNumber, string Status, Guid SubmittedByUserId, DateTime SubmittedAt,
-    IReadOnlyList<Guid> ArtworkReferenceIds, Guid? DecidedByUserId, DateTime? DecidedAt, string? DecisionComment);
+    IReadOnlyList<Guid> ArtworkReferenceIds, Guid? DecidedByUserId, DateTime? DecidedAt, string? DecisionComment,
+    string PanelLayoutJson = "[]", string CanvasVersionsJson = "{}", Guid? ScriptVersionId = null);
 
 public sealed record UnassignStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 

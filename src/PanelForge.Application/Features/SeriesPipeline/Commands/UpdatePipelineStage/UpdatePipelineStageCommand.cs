@@ -37,6 +37,16 @@ public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePi
         if (cmd.EstimatedDurationDays is < 0)
             return Result<SeriesPipelineDto>.Failure("Số ngày ước tính không được âm.");
 
+        // Lưới V3: đổi nhánh / vai trò cần lưới không còn ô dở; tắt stage cần stage đó chưa có ô được giao
+        var trackChanged = cmd.Track is not null &&
+            !string.Equals(string.IsNullOrWhiteSpace(cmd.Track) ? null : cmd.Track.Trim().ToUpperInvariant(), stage.Track);
+        if ((trackChanged || cmd.AllowedRole != stage.AllowedRole) &&
+            await SeriesPipelineStore.StructureLockedReasonAsync(_dbContext, cmd.SeriesId, ct) is { } locked)
+            return Result<SeriesPipelineDto>.Failure(locked, ResultErrorCodes.Conflict);
+        if (cmd.IsEnabled == false && stage.IsEnabled &&
+            await SeriesPipelineStore.StageInUseOnGridReasonAsync(_dbContext, stage.Id, ct) is { } inUse)
+            return Result<SeriesPipelineDto>.Failure(inUse, ResultErrorCodes.Conflict);
+
         try
         {
             stage.UpdateDetails(cmd.Name, cmd.ColorCode, cmd.AllowedRole, cmd.IsApprovalGate, cmd.EstimatedDurationDays);

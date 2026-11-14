@@ -20,6 +20,9 @@ public sealed class ReorderPipelineStagesCommandHandler : IRequestHandler<Reorde
         var pipeline = await SeriesPipelineStore.LoadAsync(_dbContext, cmd.SeriesId, ct);
         if (pipeline is null) return SeriesPipelineStore.NotFound(cmd.SeriesId);
 
+        if (await SeriesPipelineStore.StructureLockedReasonAsync(_dbContext, cmd.SeriesId, ct) is { } locked)
+            return Result<SeriesPipelineDto>.Failure(locked, ResultErrorCodes.Conflict);
+
         try
         {
             pipeline.ReorderStages(cmd.StageIds ?? []);

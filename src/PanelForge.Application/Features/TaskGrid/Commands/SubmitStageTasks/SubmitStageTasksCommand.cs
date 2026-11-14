@@ -1,9 +1,11 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
+using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Domain.Entities.Workflow;
 
@@ -19,8 +21,13 @@ public sealed record SubmitStageTasksCommand(Guid ChapterId, IReadOnlyList<Guid>
 public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStageTasksCommand, Result<IReadOnlyList<StageTaskDto>>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly IPageRepository _pages;
 
-    public SubmitStageTasksCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public SubmitStageTasksCommandHandler(IPanelForgeDbContext db, IPageRepository pages)
+    {
+        _db = db;
+        _pages = pages;
+    }
 
     public async Task<Result<IReadOnlyList<StageTaskDto>>> Handle(SubmitStageTasksCommand cmd, CancellationToken ct)
     {
@@ -49,20 +56,30 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
 
         // Ảnh chụp lúc nộp: ô cấp Trang lấy trang của nó, ô cấp Chương lấy mọi trang còn sống của chương
         var chapterPageIds = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
-        var alivePanelIds = await _db.Panels.AsNoTracking().Where(p => chapterPageIds.Contains(p.PageId)).Select(p => p.Id).ToListAsync(ct);
+        var chapterPanels = await _db.Panels.AsNoTracking().Where(p => chapterPageIds.Contains(p.PageId)).ToListAsync(ct);
+        var alivePanelIds = chapterPanels.Select(p => p.Id).ToList();
         var taskIds = tasks.Select(t => t.Id).ToList();
         var attempts = await _db.StageTaskSubmissions.AsNoTracking().Where(s => taskIds.Contains(s.StageTaskId))
             .GroupBy(s => s.StageTaskId).Select(g => new { g.Key, Max = g.Max(s => s.AttemptNumber) })
             .ToDictionaryAsync(x => x.Key, x => x.Max, ct);
+        // BR-01: lần nộp phải dựng lại được: bố cục Panel, version canvas (lớp chữ) và bản kịch bản chương đã commit
+        var scriptVersionId = await _db.ScriptVersions.AsNoTracking().Where(v => v.ChapterId == chapter.Id)
+            .OrderByDescending(v => v.VersionNumber).Select(v => (Guid?)v.Id).FirstOrDefaultAsync(ct);
+        var canvasVersionByPage = new Dictionary<Guid, long>();
 
         var autoApproved = new List<StageTask>();
         foreach (var task in tasks)
         {
             var gated = gateByStage.GetValueOrDefault(task.PipelineStageId);
-            var artwork = await ChangeRequestRules.LatestArtworkIdsAsync(_db, task.PipelineStageId,
-                task.PageId is { } pageId ? [pageId] : chapterPageIds, alivePanelIds, ct);
+            List<Guid> taskPages = task.PageId is { } pageId ? [pageId] : chapterPageIds;
+            var artwork = await ChangeRequestRules.LatestArtworkIdsAsync(_db, task.PipelineStageId, taskPages, alivePanelIds, ct);
+            foreach (var page in taskPages.Where(p => !canvasVersionByPage.ContainsKey(p)).ToList())
+                canvasVersionByPage[page] = await _pages.GetStreamVersionAsync(page, ct);
             var submission = StageTaskSubmission.Create(task.Id, chapter.Id, cmd.UserId,
-                attempts.GetValueOrDefault(task.Id) + 1, artwork, autoApproved: !gated);
+                attempts.GetValueOrDefault(task.Id) + 1, artwork, autoApproved: !gated,
+                panelLayoutJson: SubmissionPanelDto.Serialize(chapterPanels.Where(p => taskPages.Contains(p.PageId))),
+                canvasVersionsJson: JsonSerializer.Serialize(taskPages.ToDictionary(p => p, p => canvasVersionByPage[p])),
+                scriptVersionId: scriptVersionId);
             try { task.Submit(submission.Id, gated); }
             catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
@@ -73,6 +90,15 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
 
         if (autoApproved.Count > 0)
             await TaskGridNotifications.AddReadyAsync(_db, autoApproved, stages, chapterTasks, chapter.Id, ct);
+
+        // Có ô cần duyệt: báo Editor (không có Editor thì Producer), trừ chính người nộp; một thông báo cho cả lần nộp
+        var waiting = tasks.Count - autoApproved.Count;
+        if (waiting > 0)
+        {
+            var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+            foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, cmd.UserId, ct))
+                _db.Notifications.Add(TaskGridNotifications.Submitted(reviewerId, chapter.Id, chapter.ChapterNumber, waiting));
+        }
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(
