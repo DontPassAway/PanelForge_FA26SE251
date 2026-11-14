@@ -72,7 +72,15 @@ public static class MasterDataSeeder
 
     private static async Task SeedDefaultPipelineTemplateAsync(PanelForgeDbContext dbContext, CancellationToken ct)
     {
-        if (await dbContext.PipelineTemplates.AnyAsync(t => t.Code == "STANDARD_MANGA", ct)) return;
+        if (await dbContext.PipelineTemplates.FirstOrDefaultAsync(t => t.Code == "STANDARD_MANGA", ct) is { } existing)
+        {
+            // DB seed trước khi bỏ Script (D1) và Thumbnail: dọn để series mới clone template không mang lại hai công đoạn này
+            var stale = await dbContext.PipelineTemplateStages
+                .Where(s => s.PipelineTemplateId == existing.Id && (s.Code == "THUMBNAIL" || s.Code == "SCRIPT"))
+                .ToListAsync(ct);
+            dbContext.PipelineTemplateStages.RemoveRange(stale);
+            return;
+        }
 
         var template = PipelineTemplate.Create(
             code: "STANDARD_MANGA",
