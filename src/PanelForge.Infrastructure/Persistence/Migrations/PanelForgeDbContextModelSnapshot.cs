@@ -1297,6 +1297,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("preview_pages_customized");
+
                     b.Property<Guid?>("PreviousSubmittedVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_submitted_version_id");
@@ -4736,6 +4737,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("stage_order");
 
+                    b.Property<string>("Track")
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("track");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
@@ -4835,6 +4840,116 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stage_progress_panel_stage");
 
                     b.ToTable("stage_progress", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignment_id");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CurrentSubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_submission_id");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsInputOutdated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_input_outdated");
+
+                    b.Property<string>("OutdatedReason")
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("outdated_reason");
+
+                    b.Property<Guid?>("PageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("page_id");
+
+                    b.Property<Guid>("PipelineStageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pipeline_stage_id");
+
+                    b.Property<Guid?>("ReviewerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewer_user_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignmentId")
+                        .HasDatabaseName("ix_stage_tasks_assignment_id");
+
+                    b.HasIndex("PageId")
+                        .HasDatabaseName("ix_stage_tasks_page_id");
+
+                    b.HasIndex("PipelineStageId");
+
+                    b.HasIndex("ChapterId", "PipelineStageId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stage_tasks_chapter_stage")
+                        .HasFilter("page_id IS NULL AND is_deleted = false");
+
+                    b.HasIndex("ChapterId", "PipelineStageId", "PageId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stage_tasks_chapter_stage_page")
+                        .HasFilter("page_id IS NOT NULL AND is_deleted = false");
+
+                    b.ToTable("stage_tasks", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTransition", b =>
@@ -5980,6 +6095,31 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PanelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineStageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.StageTask", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Workflow.Assignment", null)
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Page", null)
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", null)
                         .WithMany()
