@@ -97,6 +97,15 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
         {
             revision.ConfirmCanon(cmd.UserId, targetConceptEventId.Value);
 
+            var snapshot = BibleEntrySnapshot.From(entry, entry.GetDisplayRevision());
+            entry.UpdateDetails(
+                snapshot.Description,
+                snapshot.Subtitle,
+                snapshot.DetailsJson,
+                snapshot.ReferenceImageUrl,
+                snapshot.Priority,
+                snapshot.StrictCheck);
+
             // BIB-13 (Q23, Q24): Nếu đây là bản thay thế, đánh dấu bản cũ là Superseded
             // và tính lại kế thừa cho các chương chưa Frozen đang kế thừa
             if (revision.SupersedesRevisionId.HasValue)

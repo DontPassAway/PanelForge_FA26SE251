@@ -167,7 +167,7 @@ public class BibleVariantValidationTests
             UserId: Guid.NewGuid(),
             Summary: "Sửa nội dung đổi nhãn",
             IsNewVariant: false,
-            Name: "Naruto v2",
+            Name: "Naruto Uzumaki",
             StageName: "Timeskip"
         );
 
@@ -187,7 +187,7 @@ public class BibleVariantValidationTests
             UserId: Guid.NewGuid(),
             Summary: "Sửa nội dung giữ nguyên nhãn",
             IsNewVariant: false,
-            Name: "Naruto v2 Updated",
+            Name: "Naruto Uzumaki",
             StageName: "Default"
         );
 
@@ -195,7 +195,7 @@ public class BibleVariantValidationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.StageName.Should().Be("Default");
-        _entry.Name.Should().Be("Naruto v2 Updated");
+        _entry.Name.Should().Be("Naruto Uzumaki");
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public class BibleVariantValidationTests
             UserId: Guid.NewGuid(),
             Summary: "Sửa nội dung không truyền StageName",
             IsNewVariant: false,
-            Name: "Naruto v2 (No Stage sent)",
+            Name: "Naruto Uzumaki",
             StageName: null
         );
 

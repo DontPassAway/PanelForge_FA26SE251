@@ -1,4 +1,6 @@
+using System.Text.Json;
 using FluentAssertions;
+using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -8,6 +10,40 @@ namespace PanelForge.UnitTests.Domain;
 
 public class SeriesBibleTests
 {
+    [Fact]
+    public void BibleEntryDto_WithoutCanon_UsesNewestRevision()
+    {
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Cached");
+        entry.AddRevision("v1", JsonSerializer.Serialize(new { Description = "Draft 1" }), "h1", isInitialVersion: true);
+        entry.AddRevision("v2", JsonSerializer.Serialize(new { Description = "Draft 2" }), "h2");
+
+        var dto = BibleEntryDto.From(entry);
+
+        dto.Description.Should().Be("Draft 2");
+        dto.EffectiveRevision!.VersionNumber.Should().Be(2);
+        dto.LatestDraftVersionNumber.Should().BeNull();
+    }
+
+    [Fact]
+    public void BibleEntryDto_WithCanon_UsesCanonAndReportsNewerDraft()
+    {
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Cached");
+        var canon = entry.AddRevision(
+            "v1", JsonSerializer.Serialize(new { Description = "Canon description", ReferenceImageUrl = "canon.png" }),
+            "h1", isInitialVersion: true);
+        var artistId = Guid.NewGuid();
+        canon.SubmitConcept(artistId, "canon-concept.png", "ready");
+        canon.ConfirmCanon(Guid.NewGuid(), canon.CurrentConceptEventId!.Value);
+        entry.AddRevision("v2", JsonSerializer.Serialize(new { Description = "Draft description" }), "h2");
+
+        var dto = BibleEntryDto.From(entry);
+
+        dto.Description.Should().Be("Canon description");
+        dto.ReferenceImageUrl.Should().Be("canon-concept.png");
+        dto.EffectiveRevision!.VersionNumber.Should().Be(1);
+        dto.LatestDraftVersionNumber.Should().Be(2);
+    }
+
     [Fact]
     public void SeriesBible_Create_ShouldInitializeCorrectly()
     {
@@ -145,10 +181,10 @@ public class SeriesBibleTests
         var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Old Name", "Old Desc");
 
         // Act
-        entry.UpdateDetails("New Name", "New Desc", "New Subtitle", "{\"key\":\"val\"}", "https://img.png", BiblePriority.StrictCheck, true);
+        entry.UpdateDetails("New Desc", "New Subtitle", "{\"key\":\"val\"}", "https://img.png", BiblePriority.StrictCheck, true);
 
         // Assert
-        entry.Name.Should().Be("New Name");
+        entry.Name.Should().Be("Old Name");
         entry.Description.Should().Be("New Desc");
         entry.Subtitle.Should().Be("New Subtitle");
         entry.DetailsJson.Should().Be("{\"key\":\"val\"}");

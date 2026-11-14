@@ -82,9 +82,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ResultErrorCodes.Conflict);
         }
 
-        if (command.Name is not null && string.IsNullOrWhiteSpace(command.Name))
+        if (command.Name is not null && !string.Equals(command.Name.Trim(), entry.Name, StringComparison.Ordinal))
         {
-            return Result<BibleEntryRevisionDto>.Failure("Tên của mục Bible không được để trống.");
+            return Result<BibleEntryRevisionDto>.Failure(
+                "Tên của mục Bible không thể thay đổi sau khi đã được định nghĩa.", ResultErrorCodes.Validation);
         }
 
         if (command.Description is not null && string.IsNullOrWhiteSpace(command.Description))
@@ -92,10 +93,11 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure("Mô tả của mục Bible không được để trống.");
         }
 
-        var name = string.IsNullOrWhiteSpace(command.Name) ? entry.Name : command.Name.Trim();
-        var description = string.IsNullOrWhiteSpace(command.Description) ? entry.Description : command.Description.Trim();
-        var subtitle = command.Subtitle ?? entry.Subtitle;
-        var detailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? entry.DetailsJson : command.DetailsJson.Trim();
+        var displaySnapshot = BibleEntrySnapshot.From(entry, entry.GetDisplayRevision());
+        var name = entry.Name;
+        var description = string.IsNullOrWhiteSpace(command.Description) ? displaySnapshot.Description : command.Description.Trim();
+        var subtitle = command.Subtitle ?? displaySnapshot.Subtitle;
+        var detailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? displaySnapshot.DetailsJson : command.DetailsJson.Trim();
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(description))
         {
@@ -167,7 +169,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ?? (command.ExpectedVersionNumber.HasValue
                     ? entry.Revisions.FirstOrDefault(r => r.VersionNumber == command.ExpectedVersionNumber.Value)
                     : null)
-                ?? entry.GetCurrentRevision();
+                ?? entry.GetDisplayRevision();
 
             var baseStageName = baseRevision?.StageName;
             if (command.EffectiveStageName is not null)
@@ -247,20 +249,6 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             }
         }
 
-        // Chỉ cập nhật current state khi revision mới là bản có hiệu lực ở chương mới nhất.
-        // Bản sửa hồi tố (effective từ chương cũ hơn) chỉ được lưu thành version, current state giữ nguyên.
-        if (entry.GetCurrentRevision() == revision)
-        {
-            entry.UpdateDetails(
-                name: name,
-                description: description,
-                subtitle: subtitle,
-                detailsJson: detailsJson,
-                referenceImageUrl: command.ReferenceImageUrl,
-                priority: command.Priority,
-                strictCheck: command.StrictCheck
-            );
-        }
         entry.UpdatedBy = command.UserId.ToString();
 
         _dbContext.BibleEntryRevisions.Add(revision);

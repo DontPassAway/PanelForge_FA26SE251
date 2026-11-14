@@ -12,8 +12,7 @@ using Xunit;
 namespace PanelForge.UnitTests.Application.Bible;
 
 /// <summary>
-/// BR-15: bản sửa hồi tố (effective từ chương cũ hơn) được lưu thành version mới
-/// nhưng KHÔNG ghi đè current state của entry.
+/// Draft được lưu append-only và không ghi đè cache Canon của entry.
 /// </summary>
 public class BibleRevisionCurrentStateTests
 {
@@ -42,56 +41,60 @@ public class BibleRevisionCurrentStateTests
         => JsonSerializer.Serialize(new { Name = name, Description = description });
 
     private Task<PanelForge.Application.Common.Result<PanelForge.Application.Features.Bible.Models.BibleEntryRevisionDto>> AddRevision(
-        string name, int? expectedVersion = null)
+        string description, int? expectedVersion = null, string? name = null)
         => _handler.Handle(new AddBibleEntryRevisionCommand(
             SeriesId: _seriesId,
             BibleEntryId: _entry.Id,
             UserId: Guid.NewGuid(),
-            Summary: $"Change to {name}",
-            Name: name,
-            Description: $"Desc for {name}",
+            Summary: $"Change to {description}",
+            Name: name ?? _entry.Name,
+            Description: description,
             ExpectedVersionNumber: expectedVersion), CancellationToken.None);
 
     [Fact]
-    public async Task ForwardRevision_ShouldUpdateCurrentState()
+    public async Task DraftRevision_ShouldNotUpdateEntryCache()
     {
-        var result = await AddRevision("Hero v2");
+        var result = await AddRevision("Desc v2");
 
         result.IsSuccess.Should().BeTrue();
-        _entry.Name.Should().Be("Hero v2");
-        _entry.GetCurrentRevision()!.VersionNumber.Should().Be(2);
+        _entry.Name.Should().Be("Hero ch1");
+        _entry.Description.Should().Be("Desc ch1");
+        _entry.ReferenceImageUrl.Should().BeNull();
+        _entry.GetLatestRevision()!.VersionNumber.Should().Be(2);
     }
 
     [Fact]
     public async Task Revision_WithStaleExpectedVersion_ShouldReturnConflict_AndNotSave()
     {
         // Người A và B cùng mở entry ở version 1; A lưu trước → version 2
-        (await AddRevision("Hero by A", expectedVersion: 1)).IsSuccess.Should().BeTrue();
+        (await AddRevision("Desc by A", expectedVersion: 1)).IsSuccess.Should().BeTrue();
 
-        var resultB = await AddRevision("Hero by B", expectedVersion: 1);
+        var resultB = await AddRevision("Desc by B", expectedVersion: 1);
 
         resultB.IsSuccess.Should().BeFalse();
         resultB.ErrorCode.Should().Be(PanelForge.Application.Common.ResultErrorCodes.Conflict);
         resultB.ErrorMessage.Should().Contain("version 2");
         _entry.Revisions.Should().HaveCount(2);
-        _entry.Name.Should().Be("Hero by A");
+        _entry.Description.Should().Be("Desc ch1");
     }
 
     [Fact]
     public async Task Revision_WithCurrentExpectedVersion_ShouldSucceed()
     {
-        var result = await AddRevision("Hero v2", expectedVersion: 1);
+        var result = await AddRevision("Desc v2", expectedVersion: 1);
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.VersionNumber.Should().Be(2);
     }
 
     [Fact]
-    public async Task Revision_WithEmptyName_ShouldFail_AndNotAddVersion()
+    public async Task Revision_WithDifferentName_ShouldFail_AndNotAddVersion()
     {
-        var result = await AddRevision("   ");
+        var result = await AddRevision("Desc v2", name: "Hero renamed");
 
         result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(PanelForge.Application.Common.ResultErrorCodes.Validation);
+        result.ErrorMessage.Should().Contain("không thể thay đổi");
         _entry.Revisions.Should().HaveCount(1);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

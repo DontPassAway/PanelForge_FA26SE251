@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -11,7 +10,7 @@ namespace PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 
 /// <summary>
 /// Artist nộp bản vẽ Concept cho phiên bản hiện hành của mục Bible. Chỉ nộp ảnh → thêm sự kiện ConceptSubmitted vào chính
-/// phiên bản đó (không tăng VersionNumber). Artist sửa cả nội dung (tên/mô tả/đặc tả/giai đoạn/chương hiệu lực) → đó là
+/// phiên bản đó (không tăng VersionNumber). Artist sửa cả nội dung (mô tả/đặc tả/giai đoạn/chương hiệu lực) → đó là
 /// thay đổi nội dung thật, đi đường thêm phiên bản như cũ. Phiên bản đã khoá Canon → 409, phải Supersede.
 /// </summary>
 public sealed record SubmitBibleConceptCommand(
@@ -79,11 +78,10 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
         }
         else
         {
-            target = entry.GetCurrentRevision();
+            target = entry.GetDisplayRevision();
         }
 
-        var isCurrent = target is not null && entry.GetCurrentRevision() == target;
-        if (target is null || ChangesContent(entry, target, isCurrent, body))
+        if (target is null || ChangesContent(entry, target, body))
             return await _sender.Send(new AddBibleEntryRevisionCommand(
                 SeriesId: cmd.SeriesId,
                 BibleEntryId: cmd.BibleEntryId,
@@ -105,10 +103,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 ResultErrorCodes.Conflict);
 
         target.SubmitConcept(cmd.ArtistUserId, body.EffectiveImageUrl, body.EffectiveSummary, body.AssetSha256);
-        // Ảnh hiện hành của mục = Concept mới nhất của phiên bản hiện hành; Concept của giai đoạn cũ không đổi ảnh hiện hành
-        if (isCurrent)
-            entry.UpdateDetails(entry.Name, entry.Description, entry.Subtitle, entry.DetailsJson,
-                body.EffectiveImageUrl, entry.Priority, entry.StrictCheck);
         entry.UpdatedBy = cmd.ArtistUserId.ToString();
         await _db.SaveChangesAsync(ct);
 
@@ -116,35 +110,19 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
     }
 
     /// <summary>
-    /// Artist có gửi kèm nội dung khác phiên bản đích không (trường null/rỗng = giữ nguyên). Đích là giai đoạn hiện hành thì so với
-    /// current state của mục; giai đoạn cũ thì so với snapshot của chính phiên bản đó.
+    /// Artist có gửi kèm nội dung khác snapshot của phiên bản đích không (trường null/rỗng = giữ nguyên).
     /// </summary>
-    private static bool ChangesContent(BibleEntry entry, BibleEntryRevision target, bool isCurrent, SubmitConceptArtRequest b)
+    private static bool ChangesContent(BibleEntry entry, BibleEntryRevision target, SubmitConceptArtRequest b)
     {
         static bool Differs(string? sent, string? current) =>
             !string.IsNullOrWhiteSpace(sent) && sent.Trim() != (current ?? "").Trim();
 
-        var (name, description, subtitle, detailsJson) = isCurrent
-            ? (entry.Name, entry.Description, entry.Subtitle, entry.DetailsJson)
-            : ReadSnapshot(target.SnapshotJson, entry);
+        var snapshot = BibleEntrySnapshot.From(entry, target);
 
-        return Differs(b.Name, name)
-            || Differs(b.Description, description)
-            || Differs(b.Subtitle, subtitle)
-            || Differs(b.DetailsJson, detailsJson)
+        return Differs(b.Name, entry.Name)
+            || Differs(b.Description, snapshot.Description)
+            || Differs(b.Subtitle, snapshot.Subtitle)
+            || Differs(b.DetailsJson, snapshot.DetailsJson)
             || Differs(b.StageName, target.StageName);
-    }
-
-    private static (string? Name, string? Description, string? Subtitle, string? DetailsJson) ReadSnapshot(string snapshotJson, BibleEntry fallback)
-    {
-        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(snapshotJson) ? "{}" : snapshotJson);
-        var root = doc.RootElement;
-        string? Read(string key, string? current) =>
-            root.ValueKind == JsonValueKind.Object && root.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String
-                ? v.GetString()
-                : current;
-
-        return (Read("Name", fallback.Name), Read("Description", fallback.Description),
-            Read("Subtitle", fallback.Subtitle), Read("DetailsJson", fallback.DetailsJson));
     }
 }

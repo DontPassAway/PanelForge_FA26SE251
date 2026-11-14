@@ -141,7 +141,6 @@ public class BibleEntry : BaseEntity
     }
 
     public void UpdateDetails(
-        string name,
         string description,
         string? subtitle,
         string? detailsJson,
@@ -149,10 +148,8 @@ public class BibleEntry : BaseEntity
         BiblePriority priority,
         bool strictCheck)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
-        Name = name.Trim();
         Description = description.Trim();
         Subtitle = subtitle?.Trim();
         DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim();
@@ -266,12 +263,26 @@ public class BibleEntry : BaseEntity
     }
 
     /// <summary>
-    /// Revision mới nhất của mục Bible theo VersionNumber.
+    /// Revision dùng để hiển thị ở cấp mục Bible: ưu tiên CanonLocked mới nhất chưa bị
+    /// Superseded của biến thể mặc định; khi chưa có Canon thì dùng version mới nhất.
     /// </summary>
-    public BibleEntryRevision? GetCurrentRevision()
-        => Revisions
+    public BibleEntryRevision? GetDisplayRevision()
+    {
+        if (Revisions.Count == 0) return null;
+
+        var defaultStageName = GetDefaultVariantStageName();
+        var canon = Revisions
+            .Where(r => string.Equals(r.StageName, defaultStageName, StringComparison.OrdinalIgnoreCase))
+            .Where(r => r.ReviewStatus == BibleRevisionStatus.CanonLocked && !IsRevisionSuperseded(r))
             .OrderByDescending(r => r.VersionNumber)
             .FirstOrDefault();
+
+        return canon ?? GetLatestRevision();
+    }
+
+    /// <summary>Revision mới nhất theo VersionNumber, bất kể trạng thái duyệt.</summary>
+    public BibleEntryRevision? GetLatestRevision()
+        => Revisions.OrderByDescending(r => r.VersionNumber).FirstOrDefault();
 
     /// <summary>
     /// Tên biến thể mặc định của mục = StageName của bản đầu tiên (VersionNumber nhỏ nhất).
