@@ -7,10 +7,8 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
-using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
 using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Pages.Commands.TogglePageContentReady;
-using PanelForge.Application.Features.ScriptLines.Commands.LinkBibleEntries;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
@@ -80,40 +78,12 @@ public class DynamicEntityLinkingAndScriptFlowTests
     }
 
     [Fact]
-    public async Task LinkBibleEntries_WithRawText_CreatesStubEntityAndLinksSuccessfully()
-    {
-        // Arrange
-        var handler = new LinkBibleEntriesCommandHandler(_db, _auth.Object);
-        var mentions = new List<ScriptMentionItemDto>
-        {
-            new(BibleEntryId: null, RawText: "@Kuro", CategoryHint: BibleEntryCategory.Character)
-        };
-
-        // Act
-        var result = await handler.Handle(
-            new LinkBibleEntriesCommand(_writer, _chapter.Id, _line1.Id, mentions), default);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().HaveCount(1);
-        var linkDto = result.Value[0];
-        linkDto.EntryName.Should().Be("Kuro");
-        linkDto.IsStub.Should().BeTrue();
-        linkDto.RawMentionText.Should().Be("@Kuro");
-
-        var createdStub = await _db.BibleEntries.FirstOrDefaultAsync(e => e.Name == "Kuro");
-        createdStub.Should().NotBeNull();
-        createdStub!.IsStub.Should().BeTrue();
-        createdStub.IsActive.Should().BeTrue();
-    }
-
-    [Fact]
     public async Task CreateBibleEntry_AutoMatching_RemapsExistingStubLinks()
     {
         // Arrange: Tạo trước 1 Stub Entity cho "Akira" và liên kết vào dòng 1
         var stub = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Akira");
         _db.BibleEntries.Add(stub);
-        var stubLink = ScriptLineBibleLink.Create(_line1.Id, stub.Id, "@Akira");
+        var stubLink = ScriptLineBibleLink.Create(_line1.Id, stub.Id);
         _db.ScriptLineBibleLinks.Add(stubLink);
         await _db.SaveChangesAsync();
 
@@ -214,7 +184,7 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         // 3. Giả lập Writer sửa thoại dòng 2 (gắn trên Panel 2)
         await Task.Delay(20);
-        _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới", null);
+        _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới");
         await _db.SaveChangesAsync();
 
         // 4. Writer nộp lại, Producer đóng băng lại kịch bản (kích hoạt Targeted Impact Analysis)

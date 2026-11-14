@@ -63,13 +63,14 @@ public class ImageConsistencyServiceTests
             Db.SeriesBibles.Add(bible);
             Character = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero Main", "The protagonist",
                 referenceImageUrl: "data:image/png;base64,iVBORw0KGgo=");
-            Character.AddRevision("v1", "{}", "hash-hero", effectiveFromChapterNumber: 1, isInitialVersion: true)
+            Character.AddRevision("v1", "{}", "hash-hero", isInitialVersion: true)
                 .Lock(Guid.NewGuid());
             Db.SaveChanges();
 
-            var line = ScriptLine.Create(Guid.NewGuid(), 1, "I will protect everyone!", null, Character.Id);
+            var line = ScriptLine.Create(Guid.NewGuid(), 1, "I will protect everyone!", null, null);
             line.AssignToPanel(Panel.Id);
             Db.ScriptLines.Add(line);
+            Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, Character.Id));
 
             var asset = Asset.Create(WorkspaceId, new string('b', 64), 1024, "image/png");
             Db.Assets.Add(asset);

@@ -122,7 +122,6 @@ public class SeriesBibleScenarioTests
             LineOrder: 1,
             DialogueText: "Chào mừng tới Làng Lá!",
             StageDirection: null,
-            SpeakerCharacterId: null,
             Kind: ScriptLineKind.Dialogue,
             SpeakerLabel: "Naruto",
             Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
@@ -148,7 +147,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 1,
                 DialogueText: "Tôi sẽ không bao giờ bỏ cuộc!",
                 StageDirection: null,
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Dialogue,
                 SpeakerLabel: "cửu vĩ"
             ),
@@ -157,7 +155,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 2,
                 DialogueText: "Kẻ yếu đuối...",
                 StageDirection: null,
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Dialogue,
                 SpeakerLabel: "Sasuke"
             ),
@@ -166,7 +163,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 3,
                 DialogueText: "Hai đứa này lại cãi nhau rồi.",
                 StageDirection: null,
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Thought,
                 SpeakerLabel: "Kakashi (nghĩ)"
             ),
@@ -175,7 +171,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 4,
                 DialogueText: null,
                 StageDirection: "Mặt trời mọc trên Làng Lá bình yên.",
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Action,
                 Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
             ),
@@ -184,7 +179,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 5,
                 DialogueText: null,
                 StageDirection: "Năm ấy, Làng Lá bước vào kỷ nguyên mới.",
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Narration,
                 Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
             ),
@@ -193,7 +187,6 @@ public class SeriesBibleScenarioTests
                 LineOrder: 6,
                 DialogueText: null,
                 StageDirection: "BÙM!! Khói bao trùm cổng làng Làng Lá.",
-                SpeakerCharacterId: null,
                 Kind: ScriptLineKind.Sfx,
                 Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
             )
@@ -322,7 +315,7 @@ public class SeriesBibleScenarioTests
     {
         // Setup defined character in Draft status
         var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR02", "Uchiha Itachi", "Thiên tài tộc Uchiha");
-        var rev = entry.AddRevision("v1", "{}", "hash-itachi-v1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        var rev = entry.AddRevision("v1", "{}", "hash-itachi-v1", isInitialVersion: true);
         _db.BibleEntries.Add(entry);
         _db.BibleEntryRevisions.Add(rev);
         await _db.SaveChangesAsync();
@@ -440,7 +433,7 @@ public class SeriesBibleScenarioTests
     {
         // 1. Setup Character with v1 CanonLocked
         var naruto = _bible.AddEntry(BibleEntryCategory.Character, "CHR03", "Naruto", "Ninja Làng Lá");
-        var v1 = naruto.AddRevision("v1 Canon", "{}", "hash-naruto-v1", effectiveFromChapterNumber: 1, isInitialVersion: true, stageName: "Trẻ em");
+        var v1 = naruto.AddRevision("v1 Canon", "{}", "hash-naruto-v1", isInitialVersion: true, stageName: "Trẻ em");
         v1.SubmitConcept(_artistId, "https://storage/v1.png", "concept v1", "hash-v1");
         v1.ConfirmCanon(_editorId, v1.CurrentConceptEventId!.Value); // CanonLocked
         _db.BibleEntries.Add(naruto);
@@ -448,7 +441,7 @@ public class SeriesBibleScenarioTests
         _db.BibleEntryRevisions.Add(v1);
 
         // Flashback variant for per-panel test
-        var kidVariant = naruto.AddRevision("v1 Lúc nhỏ", "{}", "hash-naruto-kid", effectiveFromChapterNumber: 1, isInitialVersion: false, stageName: "Hồi tưởng");
+        var kidVariant = naruto.AddRevision("v1 Lúc nhỏ", "{}", "hash-naruto-kid", isInitialVersion: false, stageName: "Hồi tưởng");
         kidVariant.SubmitConcept(_artistId, "https://storage/kid.png", "concept kid", "hash-kid");
         kidVariant.ConfirmCanon(_editorId, kidVariant.CurrentConceptEventId!.Value); // CanonLocked
         _db.BibleEntryRevisions.Add(kidVariant);
@@ -618,8 +611,9 @@ public class SeriesBibleScenarioTests
         sakuraStubs.Should().ContainSingle();
         sakuraStubs[0].IsStub.Should().BeTrue();
 
-        var reloadedLines = await _db.ScriptLines.Where(l => l.SceneId == scene.Id).ToListAsync();
-        reloadedLines.Should().AllSatisfy(l => l.SpeakerCharacterId.Should().Be(sakuraStubs[0].Id));
+        var chBinding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == chapter.Id && b.BibleEntryId == sakuraStubs[0].Id);
+        chBinding.Should().NotBeNull();
+        chBinding!.Source.Should().Be(ChapterBibleBindingSource.Speaker);
     }
 
     [Fact]
@@ -627,7 +621,7 @@ public class SeriesBibleScenarioTests
     {
         // Setup Canon character
         var kakashi = _bible.AddEntry(BibleEntryCategory.Character, "CHR10", "Kakashi", "Ninja Thượng Đẳng");
-        var v1 = kakashi.AddRevision("v1", "{}", "hash-k1", effectiveFromChapterNumber: 1, isInitialVersion: true, stageName: "Mặc định");
+        var v1 = kakashi.AddRevision("v1", "{}", "hash-k1", isInitialVersion: true, stageName: "Mặc định");
         v1.SubmitConcept(_artistId, "https://storage/k1.png", "c1", "hk1");
         v1.ConfirmCanon(_editorId, v1.CurrentConceptEventId!.Value);
         _db.BibleEntries.Add(kakashi);
@@ -668,11 +662,11 @@ public class SeriesBibleScenarioTests
     public async Task Scenario_DecimalChapterInheritance_10_5_InheritsFrom_10_And_11_InheritsFrom_10_5()
     {
         var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR20", "Gai", "Mãnh thú Làng Lá");
-        var v10 = entry.AddRevision("v10", "{}", "hash-g10", effectiveFromChapterNumber: 10, isInitialVersion: true, stageName: "Thường");
+        var v10 = entry.AddRevision("v10", "{}", "hash-g10", isInitialVersion: true, stageName: "Thường");
         v10.SubmitConcept(_artistId, "https://storage/g10.png", "c10", "hg10");
         v10.ConfirmCanon(_editorId, v10.CurrentConceptEventId!.Value);
 
-        var v105 = entry.AddRevision("v10.5", "{}", "hash-g105", effectiveFromChapterNumber: 10, isInitialVersion: false, stageName: "Mở Bát Môn");
+        var v105 = entry.AddRevision("v10.5", "{}", "hash-g105", isInitialVersion: false, stageName: "Mở Bát Môn");
         v105.SubmitConcept(_artistId, "https://storage/g105.png", "c105", "hg105");
         v105.ConfirmCanon(_editorId, v105.CurrentConceptEventId!.Value);
 
@@ -731,11 +725,11 @@ public class SeriesBibleScenarioTests
     public async Task Scenario_PerPanelVariant_Flashback_Gate1Validation()
     {
         var entry = _bible.AddEntry(BibleEntryCategory.Character, "CHR30", "Sasuke", "Đối thủ");
-        var canonRev = entry.AddRevision("v1", "{}", "h-s1", effectiveFromChapterNumber: 1, isInitialVersion: true, stageName: "Mặc định");
+        var canonRev = entry.AddRevision("v1", "{}", "h-s1", isInitialVersion: true, stageName: "Mặc định");
         canonRev.SubmitConcept(_artistId, "https://storage/s1.png", "c-s1", "hs1");
         canonRev.ConfirmCanon(_editorId, canonRev.CurrentConceptEventId!.Value);
 
-        var flashbackRev = entry.AddRevision("v1-kid", "{}", "h-kid", effectiveFromChapterNumber: 1, isInitialVersion: false, stageName: "Lúc nhỏ");
+        var flashbackRev = entry.AddRevision("v1-kid", "{}", "h-kid", isInitialVersion: false, stageName: "Lúc nhỏ");
         // Flashback is Draft (not yet CanonLocked)
         _db.BibleEntries.Add(entry);
         _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Sasuke", entry.Id, isPrimary: true));

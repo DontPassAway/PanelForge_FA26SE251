@@ -27,18 +27,18 @@ public class BibleReferenceAccessTests
     {
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         var hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Grey coat");
-        hero.AddRevision("v1", Snapshot("Grey coat", "/img/grey", 1), "h1", effectiveFromChapterNumber: 1, isInitialVersion: true)
+        hero.AddRevision("v1", Snapshot("Grey coat", "/img/grey"), "h1", isInitialVersion: true)
             .Lock(Guid.NewGuid());
         // Bản chương 5 chưa khoá: màn hình Producer thấy, task của Artist thì chưa
-        hero.AddRevision("v2", Snapshot("Red coat", "/img/red", 5), "h2", effectiveFromChapterNumber: 5);
+        hero.AddRevision("v2", Snapshot("Red coat", "/img/red"), "h2");
         _villain = bible.AddEntry(BibleEntryCategory.Character, "VILLAIN", "Villain", "Black cape");
-        _villain.AddRevision("v1", Snapshot("Black cape", null, 1), "h3", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        _villain.AddRevision("v1", Snapshot("Black cape", null), "h3", isInitialVersion: true);
 
         _db.Setup(d => d.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible> { bible }));
     }
 
-    private static string Snapshot(string description, string? image, int from)
-        => JsonSerializer.Serialize(new { Name = "n", Description = description, ReferenceImageUrl = image, EffectiveFromChapterNumber = from });
+    private static string Snapshot(string description, string? image)
+        => JsonSerializer.Serialize(new { Name = "n", Description = description, ReferenceImageUrl = image });
 
     private async Task<IReadOnlyList<BibleEntryDto>> AtChapter(int chapter, bool canonOnly, IReadOnlyCollection<Guid>? ids = null)
         => (await new GetBibleEntriesAtChapterQueryHandler(_db.Object)

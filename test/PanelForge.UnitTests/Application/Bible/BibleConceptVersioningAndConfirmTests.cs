@@ -35,10 +35,10 @@ public class BibleConceptVersioningAndConfirmTests
     {
         _bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Master Bible");
         _heroEntry = _bible.AddEntry(BibleEntryCategory.Character, "HERO", "Naruto", "Nhẫn giả Làng Lá");
-        _heroV1 = _heroEntry.AddRevision("v1", "{}", "hash-hero-v1", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        _heroV1 = _heroEntry.AddRevision("v1", "{}", "hash-hero-v1", isInitialVersion: true);
 
         _stubEntry = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Sasuke");
-        var stubV1 = _stubEntry.AddRevision("v1", "{}", "hash-stub", effectiveFromChapterNumber: 1, isInitialVersion: true);
+        var stubV1 = _stubEntry.AddRevision("v1", "{}", "hash-stub", isInitialVersion: true);
 
         var entries = new List<BibleEntry> { _heroEntry, _stubEntry };
         var revisions = new List<BibleEntryRevision> { _heroV1, stubV1 };

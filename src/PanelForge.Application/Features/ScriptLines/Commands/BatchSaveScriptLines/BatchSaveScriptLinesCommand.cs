@@ -77,12 +77,6 @@ public sealed class BatchSaveScriptLinesCommandHandler
 
             if (ScriptBibleRefs.ValidateKind(item.Refs, effectiveKind, $"Dòng {item.LineOrder}") is { } kindError)
                 return Result<BatchSaveScriptLinesResult>.Failure(kindError, ResultErrorCodes.Validation);
-
-            if (await ScriptLineRules.ValidateSpeakerAsync(_db, chapter.SeriesId, item.SpeakerCharacterId, ct) is { } speakerError)
-                return Result<BatchSaveScriptLinesResult>.Failure(speakerError, ResultErrorCodes.Validation);
-
-            if (await ScriptLineRules.ValidateBibleEntriesAsync(_db, chapter.SeriesId, item.BibleEntryIds, ct) is { } linkError)
-                return Result<BatchSaveScriptLinesResult>.Failure(linkError, ResultErrorCodes.Validation);
         }
 
         // 4. SeriesBible của Series
@@ -113,9 +107,8 @@ public sealed class BatchSaveScriptLinesCommandHandler
             if (line is not null)
             {
                 var textBefore = ScriptLineRules.LetteringText(line);
-                var speakerBefore = line.SpeakerCharacterId;
 
-                line.UpdateContent(text, direction, item.SpeakerCharacterId, mode, item.Kind, item.SpeakerLabel, item.Text);
+                line.UpdateContent(text, direction, mode, item.Kind, item.SpeakerLabel, item.Text);
                 line.Reorder(item.LineOrder);
                 if (line.SceneId != cmd.SceneId) line.MoveToScene(cmd.SceneId);
                 if (item.PanelId != line.PanelId)
@@ -123,9 +116,9 @@ public sealed class BatchSaveScriptLinesCommandHandler
                     line.AssignToPanel(item.PanelId);
                 }
 
-                if (ScriptLineRules.LetteringText(line) != textBefore || line.SpeakerCharacterId != speakerBefore)
+                if (ScriptLineRules.LetteringText(line) != textBefore)
                 {
-                    modifiedLinesForLettering.Add((line, textBefore, speakerBefore));
+                    modifiedLinesForLettering.Add((line, textBefore, null));
                 }
             }
             else
@@ -135,7 +128,6 @@ public sealed class BatchSaveScriptLinesCommandHandler
                     item.LineOrder,
                     text,
                     direction,
-                    item.SpeakerCharacterId,
                     targetId,
                     mode,
                     item.Kind,
@@ -152,7 +144,7 @@ public sealed class BatchSaveScriptLinesCommandHandler
             finalLiveLines.Add(line);
 
             // Xử lý tham chiếu Series Bible (BIB-12, 1A, 2A, 5A)
-            if (await ScriptBibleRefs.ApplyAsync(_db, seriesBible, line, $"Dòng {item.LineOrder}", item.Refs, item.BibleEntryIds, warnings, bibleLinksByLine, ct) is { } refError)
+            if (await ScriptBibleRefs.ApplyAsync(_db, seriesBible, line, $"Dòng {item.LineOrder}", item.Refs, warnings, bibleLinksByLine, ct) is { } refError)
                 return Result<BatchSaveScriptLinesResult>.Failure(refError, ResultErrorCodes.Validation);
         }
 

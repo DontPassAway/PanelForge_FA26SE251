@@ -38,7 +38,6 @@ internal static class ScriptBibleRefs
         ScriptLine line,
         string lineLabel,
         IReadOnlyList<ScriptLineRefInput>? refs,
-        IReadOnlyList<Guid>? legacyBibleEntryIds,
         List<string> warnings,
         Dictionary<Guid, IReadOnlyList<Guid>> linksByLine,
         CancellationToken ct)
@@ -147,10 +146,6 @@ internal static class ScriptBibleRefs
                 }
             }
             linksByLine[line.Id] = keptEntryIds;
-        }
-        else if (legacyBibleEntryIds != null)
-        {
-            linksByLine[line.Id] = await ScriptLineRules.SetBibleLinksAsync(db, line.Id, legacyBibleEntryIds, ct);
         }
         else
         {

@@ -168,7 +168,6 @@ public sealed class GetChapterCastQueryHandler
                 l.Id,
                 l.LineOrder,
                 l.PanelId,
-                l.SpeakerCharacterId,
                 l.SpeakerLabel,
                 l.Kind,
                 Text = l.Text ?? l.DialogueText ?? l.StageDirection ?? string.Empty
@@ -285,11 +284,19 @@ public sealed class GetChapterCastQueryHandler
                 })
                 .ToList();
 
+            // Pre-compute speaker labels matching this entry name/aliases
+            var entryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { entry.Name };
+            foreach (var alias in entry.Aliases)
+            {
+                if (!string.IsNullOrWhiteSpace(alias)) entryNames.Add(alias);
+            }
+
             // Mentions
             var entityMentions = new List<ChapterCastMentionDto>();
             foreach (var l in lines)
             {
-                var isSpeaker = l.SpeakerCharacterId == entry.Id;
+                var isSpeaker = !string.IsNullOrWhiteSpace(l.SpeakerLabel) &&
+                    entryNames.Contains(SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel));
                 var hasLink = links.FirstOrDefault(k => k.ScriptLineId == l.Id && k.BibleEntryId == entry.Id);
                 if (isSpeaker || hasLink != null)
                 {

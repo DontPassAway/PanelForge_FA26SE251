@@ -127,11 +127,31 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         List<Guid> panelsFromChangedBindings = [];
         if (modifiedBindingEntryIds.Count > 0)
         {
-            var speakerPanels = await _dbContext.ScriptLines
-                .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId &&
-                            l.SpeakerCharacterId.HasValue && modifiedBindingEntryIds.Contains(l.SpeakerCharacterId.Value))
-                .Select(l => l.PanelId!.Value)
+            var modifiedEntries = await _dbContext.BibleEntries
+                .Where(e => modifiedBindingEntryIds.Contains(e.Id))
+                .Select(e => new { e.Id, e.Name, e.Aliases })
                 .ToListAsync(ct);
+
+            var entryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in modifiedEntries)
+            {
+                entryNames.Add(e.Name);
+                foreach (var alias in e.Aliases)
+                {
+                    if (!string.IsNullOrWhiteSpace(alias)) entryNames.Add(alias);
+                }
+            }
+
+            var chapterLinesWithPanel = await _dbContext.ScriptLines
+                .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.SpeakerLabel != null)
+                .Select(l => new { PanelId = l.PanelId!.Value, l.SpeakerLabel })
+                .ToListAsync(ct);
+
+            var speakerPanels = chapterLinesWithPanel
+                .Where(l => entryNames.Contains(SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel!)))
+                .Select(l => l.PanelId)
+                .Distinct()
+                .ToList();
 
             var linkPanels = await _dbContext.ScriptLineBibleLinks
                 .Where(k => modifiedBindingEntryIds.Contains(k.BibleEntryId) &&

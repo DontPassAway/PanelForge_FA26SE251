@@ -180,9 +180,7 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
 
         // Ghi đè revision v1 Draft hiện có (không tạo v2)
         var rev1 = entry.Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault();
-        var effectiveFrom = rev1?.EffectiveFromChapterNumber ?? 1;
         var stageName = rev1?.StageName;
-        var effectiveTo = rev1?.EffectiveToChapterNumber;
 
         var snapshotObj = new
         {
@@ -195,9 +193,7 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
             entry.ReferenceImageUrl,
             entry.Priority,
             entry.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom,
-            StageName = stageName,
-            EffectiveToChapterNumber = effectiveTo
+            StageName = stageName
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));

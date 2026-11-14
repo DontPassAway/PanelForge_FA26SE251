@@ -45,7 +45,7 @@ public class VisualConsistencyTests
 
             var bible = SeriesBible.Create(seriesId, wsId, "Bible Series");
             Akira = bible.AddEntry(BibleEntryCategory.Character, "AKIRA", "Akira", "Nhân vật chính");
-            Akira.AddRevision("v1", "{}", "hash-akira", effectiveFromChapterNumber: 1, isInitialVersion: true)
+            Akira.AddRevision("v1", "{}", "hash-akira", isInitialVersion: true)
                  .Lock(UserId);
 
             Db.Chapters.Add(Chapter);
@@ -54,8 +54,10 @@ public class VisualConsistencyTests
             Db.Panels.Add(Panel);
             Db.SeriesBibles.Add(bible);
 
-            var line = ScriptLine.Create(Scene.Id, 1, "Chào mọi người", null, Akira.Id, Panel.Id);
+            var line = ScriptLine.Create(Scene.Id, 1, "Chào mọi người", null);
+            line.AssignToPanel(Panel.Id);
             Db.ScriptLines.Add(line);
+            Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, Akira.Id));
 
             var sha = new string('a', 64);
             var asset = Asset.Create(wsId, sha, 1024, "image/png");

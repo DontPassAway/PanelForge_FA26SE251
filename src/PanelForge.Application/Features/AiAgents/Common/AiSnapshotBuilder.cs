@@ -26,11 +26,30 @@ internal static class AiSnapshotBuilder
         var entries = await BuildBibleAsync(db, chapter, ct);
         if (entries is null) return null;
 
-        var lines = await db.ScriptLines.AsNoTracking()
+        var rawLines = await db.ScriptLines.AsNoTracking()
             .Where(l => l.SceneId == scene.Id)
             .OrderBy(l => l.LineOrder)
-            .Select(l => new BaselineScriptLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection))
+            .Select(l => new { l.Id, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerLabel })
             .ToListAsync(ct);
+
+        var bibleNames = await db.BibleEntryNames.AsNoTracking()
+            .Where(n => db.BibleEntries.Any(e => e.Id == n.BibleEntryId && e.SeriesBible.SeriesId == chapter.SeriesId))
+            .ToListAsync(ct);
+        var speakerToEntryMap = bibleNames
+            .GroupBy(n => n.NormalizedName)
+            .ToDictionary(g => g.Key, g => g.First().BibleEntryId);
+
+        var lines = rawLines.Select(l =>
+        {
+            Guid? speakerId = null;
+            if (!string.IsNullOrWhiteSpace(l.SpeakerLabel))
+            {
+                var norm = PanelForge.Application.Features.Chapters.Services.SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel);
+                if (speakerToEntryMap.TryGetValue(norm, out var sid))
+                    speakerId = sid;
+            }
+            return new BaselineScriptLine(l.Id, l.LineOrder, speakerId, l.DialogueText, l.StageDirection);
+        }).ToList();
 
         var storyArc = await db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.StoryArc).FirstOrDefaultAsync(ct);
@@ -91,8 +110,7 @@ internal static class AiSnapshotBuilder
             else
             {
                 // Chương trước Gate 1 / chưa gắn: dùng bản tự gắn hiện tại
-                rev = entry.GetDefaultVariantRevision(canonOnly: true)
-                    ?? entry.EffectiveRevisionAt(chapterInt, canonOnly: true);
+                rev = entry.GetDefaultVariantRevision(canonOnly: true);
             }
 
             if (rev is null) continue;
@@ -114,7 +132,7 @@ internal static class AiSnapshotBuilder
 
             entries.Add(new BibleEntryContext(
                 entry.Id, entry.Code, entry.Category.ToString(), name, description,
-                rev.Id, rev.VersionNumber, rev.EffectiveFromChapterNumber, details));
+                rev.Id, rev.VersionNumber, 1, details));
         }
         return entries;
     }

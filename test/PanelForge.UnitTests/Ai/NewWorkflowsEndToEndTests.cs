@@ -118,7 +118,7 @@ public class NewWorkflowsEndToEndTests
     {
         var h = await AiHarness.CreateAsync();
         var an = (await h.Db.BibleEntries.SingleAsync(e => e.Code == "AN")).Id;
-        h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, an));
+        h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, speakerLabel: "An"));
         await h.Db.SaveChangesAsync();
 
         var runId = await h.RunMockAsync(AiWorkflowType.Storyboard, AiHarness.Writer);

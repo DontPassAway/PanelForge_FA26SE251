@@ -84,16 +84,10 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                     effectiveRev = null;
                 }
             }
-            else if (chapter != null)
-            {
-                // Chương trước Gate 1 hoặc chưa có dòng binding: dùng bản tự gắn hiện tại
-                effectiveRev = entry.GetDefaultVariantRevision(canonOnly: request.CanonOnly)
-                    ?? entry.EffectiveRevisionAt(request.ChapterNumber, request.CanonOnly);
-            }
             else
             {
-                // Fallback khi không có Chapter trong DB (legacy mock tests)
-                effectiveRev = entry.EffectiveRevisionAt(request.ChapterNumber, request.CanonOnly);
+                // Chương trước Gate 1 hoặc chưa có dòng binding (hoặc mock tests không có Chapter): dùng bản tự gắn hiện tại
+                effectiveRev = entry.GetDefaultVariantRevision(canonOnly: request.CanonOnly);
             }
 
             if (effectiveRev == null)

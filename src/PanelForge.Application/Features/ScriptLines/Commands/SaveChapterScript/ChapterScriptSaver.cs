@@ -102,7 +102,7 @@ internal static class ChapterScriptSaver
                     var line = UpsertLine(db, existingMap, scene, panel.Id, order, wantedLine, label, modifiedLines);
                     liveLineIds.Add(line.Id);
 
-                    if (await ScriptBibleRefs.ApplyAsync(db, bible, line, label, wantedLine.Refs, null, warnings, linksByLine, ct) is { } refError)
+                    if (await ScriptBibleRefs.ApplyAsync(db, bible, line, label, wantedLine.Refs, warnings, linksByLine, ct) is { } refError)
                         throw new ScriptSaveAbortException(refError, ResultErrorCodes.Validation);
                 }
             }
@@ -169,8 +169,7 @@ internal static class ChapterScriptSaver
                 var textBefore = ScriptLineRules.LetteringText(line);
                 if (line.Text != text || line.Kind != wanted.Kind || line.SpeakerLabel != speakerLabel)
                 {
-                    var keepSpeaker = line.Kind == wanted.Kind && line.SpeakerLabel == speakerLabel ? line.SpeakerCharacterId : null;
-                    line.UpdateContent(null, null, keepSpeaker, line.NarrationMode, wanted.Kind, speakerLabel, text);
+                    line.UpdateContent(null, null, line.NarrationMode, wanted.Kind, speakerLabel, text);
                 }
                 line.Reorder(order);
                 if (line.SceneId != scene.Id) line.MoveToScene(scene.Id);
@@ -180,7 +179,7 @@ internal static class ChapterScriptSaver
             }
 
             var created = ScriptLine.Create(
-                scene.Id, order, null, null, null, wanted.Id, scene.DefaultNarrationMode, wanted.Kind, speakerLabel, text);
+                scene.Id, order, null, null, wanted.Id, scene.DefaultNarrationMode, wanted.Kind, speakerLabel, text);
             created.AssignToPanel(panelId);
             db.ScriptLines.Add(created);
             return created;

@@ -71,6 +71,7 @@ public class PanelBibleBindingAndVariantTests
 
         _db.SeriesBibles.Add(_bible);
         _db.BibleEntries.Add(_hero);
+        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Akira", _hero.Id, isPrimary: true));
         _db.BibleEntryRevisions.AddRange(_heroV1, _heroV2Replacement, _heroYoungVariant);
         _db.SaveChanges();
     }
@@ -155,9 +156,9 @@ public class PanelBibleBindingAndVariantTests
         _db.PanelBibleVariants.Add(panel1Variant);
 
         // Cả 2 panel đều có dòng thoại của Akira
-        var line1 = ScriptLine.Create(scene.Id, 1, "Hồi đó tôi còn nhỏ...", null, speakerCharacterId: _hero.Id);
+        var line1 = ScriptLine.Create(scene.Id, 1, "Hồi đó tôi còn nhỏ...", null, speakerLabel: "Akira");
         line1.AssignToPanel(panel1Flashback.Id);
-        var line2 = ScriptLine.Create(scene.Id, 2, "Bây giờ tôi đã lớn!", null, speakerCharacterId: _hero.Id);
+        var line2 = ScriptLine.Create(scene.Id, 2, "Bây giờ tôi đã lớn!", null, speakerLabel: "Akira");
         line2.AssignToPanel(panel2Present.Id);
         _db.ScriptLines.AddRange(line1, line2);
 
@@ -215,7 +216,7 @@ public class PanelBibleBindingAndVariantTests
         _db.ChapterBibleBindings.Add(crowdBinding);
 
         // Panel có người nói là Dân làng A
-        var line = ScriptLine.Create(scene.Id, 1, "Cứu với!", null, speakerCharacterId: crowdEntry.Id);
+        var line = ScriptLine.Create(scene.Id, 1, "Cứu với!", null, speakerLabel: "Dân làng A");
         line.AssignToPanel(panel.Id);
         _db.ScriptLines.Add(line);
 
@@ -265,7 +266,7 @@ public class PanelBibleBindingAndVariantTests
         actionLine.AssignToPanel(panel.Id);
         _db.ScriptLines.Add(actionLine);
 
-        var link = ScriptLineBibleLink.Create(actionLine.Id, tower.Id, "Tháp Cổ", towerRev.Id);
+        var link = ScriptLineBibleLink.Create(actionLine.Id, tower.Id, "Tháp Cổ");
         _db.ScriptLineBibleLinks.Add(link);
 
         await _db.SaveChangesAsync();

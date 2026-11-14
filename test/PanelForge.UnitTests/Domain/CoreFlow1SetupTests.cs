@@ -69,56 +69,37 @@ public class CoreFlow1SetupTests
     }
 
     [Fact]
-    public void BR15_BibleEntryRevision_ChapterVersioned_ShouldStoreEffectiveFromChapter()
+    public void BR15_BibleEntryRevision_Versioned_ShouldStoreRevisions()
     {
         // Arrange
         var bible = SeriesBible.Create(Guid.NewGuid(), Guid.NewGuid(), "Main Bible");
         var entry = bible.AddEntry(BibleEntryCategory.Character, "CHR-01", "Kira", "Cyber blade wielder");
 
-        // Act 1: Initial Version effective from Chapter 1 (BR-18)
+        // Act 1: Initial Version
         var rev1 = entry.AddRevision(
             summary: "Initial creation",
             snapshotJson: "{\"arm\":\"flesh\"}",
             contentHash: "hash-v1",
             authorId: Guid.NewGuid(),
-            effectiveFromChapterNumber: 1,
             isInitialVersion: true
         );
 
-        // Act 2: Revision effective from Chapter 5 (BR-15 - Fact legitimately changes later in the series)
+        // Act 2: Revision (BR-15 - Fact legitimately changes later in the series)
         var rev2 = entry.AddRevision(
             summary: "Upgraded cybernetic arm in chapter 5 battle",
             snapshotJson: "{\"arm\":\"cybernetic titanium\"}",
             contentHash: "hash-v2",
             authorId: Guid.NewGuid(),
-            effectiveFromChapterNumber: 5,
             isInitialVersion: false
         );
 
         // Assert
         entry.Revisions.Should().HaveCount(2);
         rev1.VersionNumber.Should().Be(1);
-        rev1.EffectiveFromChapterNumber.Should().Be(1);
         rev1.IsInitialVersion.Should().BeTrue();
 
         rev2.VersionNumber.Should().Be(2);
-        rev2.EffectiveFromChapterNumber.Should().Be(5);
         rev2.IsInitialVersion.Should().BeFalse();
-
-        // Kiểm tra logic lọc theo chương: Tại Chương 3, version có hiệu lực là rev1 (v1); Tại Chương 5, version có hiệu lực là rev2 (v2)
-        var effectiveAtChapter3 = entry.Revisions
-            .Where(r => r.EffectiveFromChapterNumber <= 3)
-            .OrderByDescending(r => r.EffectiveFromChapterNumber)
-            .ThenByDescending(r => r.VersionNumber)
-            .First();
-        effectiveAtChapter3.VersionNumber.Should().Be(1);
-
-        var effectiveAtChapter6 = entry.Revisions
-            .Where(r => r.EffectiveFromChapterNumber <= 6)
-            .OrderByDescending(r => r.EffectiveFromChapterNumber)
-            .ThenByDescending(r => r.VersionNumber)
-            .First();
-        effectiveAtChapter6.VersionNumber.Should().Be(2);
     }
 
     [Fact]

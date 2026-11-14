@@ -48,10 +48,10 @@ public class ManualScriptLineTests
     }
 
     private Task<Result<PanelForge.Application.Features.ScriptLines.Models.ScriptLineDto>> Create(
-        string? dialogue = "Xin chào", string? direction = null, int? order = null, long? expected = null, Guid? speaker = null,
+        string? dialogue = "Xin chào", string? direction = null, int? order = null, long? expected = null,
         Guid? chapterId = null, Guid? sceneId = null) =>
         new CreateScriptLineCommandHandler(_db, _auth.Object).Handle(
-            new CreateScriptLineCommand(chapterId ?? _chapter.Id, sceneId ?? _scene.Id, _writer, dialogue, direction, speaker, order, expected), default);
+            new CreateScriptLineCommand(chapterId ?? _chapter.Id, sceneId ?? _scene.Id, _writer, dialogue, direction, order, expected), default);
 
     [Fact]
     public async Task Create_AppendsLine_RecordsRevision_AndBumpsChapterVersion()
@@ -95,10 +95,9 @@ public class ManualScriptLineTests
     }
 
     [Fact]
-    public async Task Create_RejectsEmptyContent_AndUnknownSpeaker()
+    public async Task Create_RejectsEmptyContent()
     {
         (await Create("  ", null)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        (await Create("Có thoại", speaker: Guid.NewGuid())).ErrorCode.Should().Be(ResultErrorCodes.Validation);
         _db.ScriptLines.Should().BeEmpty();
     }
 
@@ -160,7 +159,7 @@ public class ManualScriptLineTests
         var created = await Create("Bản đầu");
 
         var updated = await new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
-            new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Bản sửa", null, null, created.Value.ChapterVersion), default);
+            new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Bản sửa", null, created.Value.ChapterVersion), default);
 
         updated.IsSuccess.Should().BeTrue();
         updated.Value!.DialogueText.Should().Be("Bản sửa");
@@ -176,7 +175,7 @@ public class ManualScriptLineTests
         var revisionsBefore = _db.ContentRevisions.Count();
 
         var same = await new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
-            new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Giữ nguyên", null, null, created.Value.ChapterVersion), default);
+            new UpdateScriptLineCommand(_chapter.Id, created.Value!.Id, _writer, "Giữ nguyên", null, created.Value.ChapterVersion), default);
 
         same.IsSuccess.Should().BeTrue();
         same.Value!.ChapterVersion.Should().Be(created.Value.ChapterVersion);
@@ -228,60 +227,7 @@ public class ManualScriptLineTests
         return entry;
     }
 
-    private Task<Result<PanelForge.Application.Features.ScriptLines.Models.ScriptLineDto>> Update(Guid lineId, IReadOnlyList<Guid>? links) =>
-        new UpdateScriptLineCommandHandler(_db, _auth.Object, Mock.Of<IPageRepository>()).Handle(
-            new UpdateScriptLineCommand(_chapter.Id, lineId, _writer, "Sửa", null, null, null, links), default);
 
-    [Fact]
-    public async Task BibleLinks_CreateUpdateKeepAndClear()
-    {
-        var key = AddBibleEntry(_series.Id, BibleEntryCategory.Prop, "KEY");
-        var bar = AddBibleEntry(_series.Id, BibleEntryCategory.Location, "BAR");
-
-        var created = await new CreateScriptLineCommandHandler(_db, _auth.Object).Handle(
-            new CreateScriptLineCommand(_chapter.Id, _scene.Id, _writer, "An cầm chìa khoá", null, null, null, null, [key.Id, key.Id]), default);
-        created.Value!.BibleEntryIds.Should().Equal(key.Id);
-
-        (await Update(created.Value.Id, [bar.Id])).Value!.BibleEntryIds.Should().Equal(bar.Id);
-        (await Update(created.Value.Id, null)).Value!.BibleEntryIds.Should().Equal([bar.Id], "null = giữ liên kết hiện có");
-        (await Update(created.Value.Id, [])).Value!.BibleEntryIds.Should().BeEmpty();
-
-        _db.ScriptLineBibleLinks.Should().BeEmpty("liên kết đã gỡ bị xoá mềm, không còn hoạt động");
-        _db.ScriptLineBibleLinks.IgnoreQueryFilters().Should().HaveCount(2, "lịch sử liên kết được giữ");
-    }
-
-    [Fact]
-    public async Task Create_ReplayedWithSameClientLineId_ReturnsExisting_WithoutNewRevision()
-    {
-        var clientId = Guid.NewGuid();
-        Task<Result<PanelForge.Application.Features.ScriptLines.Models.ScriptLineDto>> Send(long? expected) =>
-            new CreateScriptLineCommandHandler(_db, _auth.Object).Handle(
-                new CreateScriptLineCommand(_chapter.Id, _scene.Id, _writer, "Offline", null, null, null, expected, null, clientId), default);
-
-        var first = await Send(0);
-        var replay = await Send(0); // cùng expectedChapterVersion cũ: lần đầu đã tăng version nhưng gửi lại vẫn thành công
-
-        first.Value!.Id.Should().Be(clientId);
-        replay.IsSuccess.Should().BeTrue(replay.ErrorMessage);
-        replay.Value!.Replayed.Should().BeTrue();
-        replay.Value.RevisionId.Should().Be(first.Value.RevisionId);
-        _db.ScriptLines.Should().ContainSingle();
-        _db.ContentRevisions.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task BibleLinks_ToEntryOfAnotherSeries_AreRejected()
-    {
-        var otherSeries = DomainSeries.Create(_studio.Id, "Khác", ReadingDirection.RightToLeft);
-        _db.Series.Add(otherSeries);
-        var foreign = AddBibleEntry(otherSeries.Id, BibleEntryCategory.Prop, "X");
-
-        var r = await new CreateScriptLineCommandHandler(_db, _auth.Object).Handle(
-            new CreateScriptLineCommand(_chapter.Id, _scene.Id, _writer, "A", null, null, null, null, [foreign.Id]), default);
-
-        r.ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        _db.ScriptLines.Should().BeEmpty();
-    }
 
     [Fact]
     public async Task ReorderScriptLines_SuccessfullyUpdatesOrderAndRecordsRevision()

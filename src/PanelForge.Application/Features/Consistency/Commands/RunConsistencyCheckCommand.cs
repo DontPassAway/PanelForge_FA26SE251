@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Domain.Entities.Content;
@@ -36,7 +37,7 @@ public sealed class RunConsistencyCheckCommandHandler
         var sceneNumber = scenes.ToDictionary(s => s.Id, s => s.SceneNumber);
 
         var rawLines = await _db.ScriptLines.AsNoTracking().Where(l => sceneIds.Contains(l.SceneId))
-            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.PanelId, l.NarrationMode })
+            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.PanelId, l.NarrationMode, l.SpeakerLabel })
             .ToListAsync(ct);
         var lineIds = rawLines.Select(l => l.Id).ToList();
         var links = (await _db.ScriptLineBibleLinks.AsNoTracking().Where(k => lineIds.Contains(k.ScriptLineId))
@@ -48,6 +49,13 @@ public sealed class RunConsistencyCheckCommandHandler
             .Select(p => new { p.Id, p.ReadingOrder, PageNumber = p.Page.PageNumber })
             .ToDictionaryAsync(p => p.Id, ct);
 
+        var bibleNames = await _db.BibleEntryNames.AsNoTracking()
+            .Where(n => _db.BibleEntries.Any(e => e.Id == n.BibleEntryId && e.SeriesBible.SeriesId == chapter.SeriesId))
+            .ToListAsync(ct);
+        var speakerToEntryMap = bibleNames
+            .GroupBy(n => n.NormalizedName)
+            .ToDictionary(g => g.Key, g => g.First().BibleEntryId);
+
         var lines = rawLines.Select(l =>
         {
             int? readingOrder = null;
@@ -57,9 +65,18 @@ public sealed class RunConsistencyCheckCommandHandler
                 readingOrder = p.ReadingOrder;
                 pageNumber = p.PageNumber;
             }
+
+            Guid? speakerId = null;
+            if (!string.IsNullOrWhiteSpace(l.SpeakerLabel))
+            {
+                var norm = SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel);
+                if (speakerToEntryMap.TryGetValue(norm, out var sid))
+                    speakerId = sid;
+            }
+
             return new CheckLine(
                 l.Id, l.SceneId, sceneNumber[l.SceneId], l.LineOrder, l.DialogueText, l.StageDirection,
-                l.SpeakerCharacterId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
+                speakerId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
         }).ToList();
 
         var bibleIds = await _db.SeriesBibles.AsNoTracking().Where(b => b.SeriesId == chapter.SeriesId)
@@ -117,8 +134,10 @@ public sealed class RunConsistencyCheckCommandHandler
             else
             {
                 // Fallback tương thích cho các unit test cũ chưa nạp ChapterBibleBindings
-                firstEffective = e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min();
-                firstLocked = e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min();
+                // Nếu mục Bible có detailsJson chỉ định availableFromChapter/firstEffective thì tôn trọng
+                var checkEntryTemp = new CheckEntry(e.Id, e.Name, e.Category, e.IsActive, 1, null, detailsJson: e.DetailsJson);
+                firstEffective = checkEntryTemp.AvailableFromChapter ?? 1;
+                firstLocked = e.Revisions.Any(r => r.LockedAt != null) ? 1 : null;
             }
 
             entries[e.Id] = new CheckEntry(
