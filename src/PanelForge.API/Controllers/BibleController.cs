@@ -167,7 +167,56 @@ public sealed class BibleController : ControllerBase
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
             StageName: body.StageName,
-            ExpectedVersionNumber: body.ExpectedVersionNumber
+            ExpectedVersionNumber: body.ExpectedVersionNumber,
+            IsNewVariant: body.IsNewVariant,
+            TargetRevisionId: body.TargetRevisionId,
+            VariantLabel: body.VariantLabel
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/variants
+    /// Tạo biến thể tạo hình mới cho BibleEntry (BIB-02, Q16).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/variants")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateBibleVariant(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromBody] CreateBibleVariantRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new AddBibleEntryRevisionCommand(
+            SeriesId: seriesId,
+            BibleEntryId: entryId,
+            UserId: GetCurrentUserId(),
+            Summary: body.Summary,
+            Name: body.Name,
+            Description: body.Description,
+            Subtitle: body.Subtitle,
+            DetailsJson: body.DetailsJson,
+            ReferenceImageUrl: body.ReferenceImageUrl,
+            Priority: body.Priority,
+            StrictCheck: body.StrictCheck,
+            StageName: body.VariantLabel,
+            IsNewVariant: true
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -339,7 +388,8 @@ public sealed class BibleController : ControllerBase
             SupersedesRevisionId: revisionId,
             SupersedeReason: body.Reason,
             StageName: body.StageName,
-            ChapterId: body.ChapterId
+            ChapterId: body.ChapterId,
+            VariantLabel: body.VariantLabel
         );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)

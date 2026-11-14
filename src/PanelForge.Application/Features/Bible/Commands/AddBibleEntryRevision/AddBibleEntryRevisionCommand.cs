@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -33,8 +34,14 @@ public sealed record AddBibleEntryRevisionCommand(
     string? StageName = null,
     Guid? ArtistUserId = null,
     BibleRevisionStatus? ReviewStatus = null,
-    Guid? ChapterId = null
-) : IRequest<Result<BibleEntryRevisionDto>>;
+    Guid? ChapterId = null,
+    bool IsNewVariant = false,
+    Guid? TargetRevisionId = null,
+    string? VariantLabel = null
+) : IRequest<Result<BibleEntryRevisionDto>>
+{
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+}
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
 {
@@ -95,10 +102,34 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure("Tên và mô tả của mục Bible không được để trống.");
         }
 
-        var stageName = string.IsNullOrWhiteSpace(command.StageName) ? null : command.StageName.Trim();
+        string? stageName;
         var summary = command.Summary;
 
-        if (command.SupersedesRevisionId is { } supersededId)
+        if (command.IsNewVariant)
+        {
+            var variantLabel = command.EffectiveStageName;
+            if (string.IsNullOrWhiteSpace(variantLabel) || string.IsNullOrEmpty(BibleNameNormalizer.Normalize(variantLabel)))
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Tên biến thể (variant_label) không được để trống.", ResultErrorCodes.Validation);
+            }
+
+            var trimmedLabel = variantLabel.Trim();
+            if (trimmedLabel.Length > 100)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Tên biến thể tối đa 100 ký tự.", ResultErrorCodes.Validation);
+            }
+
+            if (entry.HasActiveVariant(trimmedLabel))
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    $"Biến thể '{trimmedLabel}' đã tồn tại và đang hoạt động.", ResultErrorCodes.Conflict);
+            }
+
+            stageName = trimmedLabel;
+        }
+        else if (command.SupersedesRevisionId is { } supersededId)
         {
             var superseded = entry.Revisions.FirstOrDefault(r => r.Id == supersededId);
             if (superseded is null)
@@ -112,13 +143,46 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 return Result<BibleEntryRevisionDto>.Failure(
                     $"Phải nhập lý do thay thế bản đã khoá (tối đa {MaxSupersedeReasonLength} ký tự).", ResultErrorCodes.Validation);
 
-            // BIB-09, Q23: supersede chỉ thay bản cùng biến thể
-            if (!string.IsNullOrWhiteSpace(stageName) && !string.Equals(stageName, superseded.StageName, StringComparison.OrdinalIgnoreCase))
-                return Result<BibleEntryRevisionDto>.Failure(
-                    "Bản thay thế phải thuộc cùng biến thể với bản được thay thế.", ResultErrorCodes.Conflict);
+            // BIB-02, Q23: supersede chỉ thay bản cùng biến thể, cấm đổi variant_label
+            if (command.EffectiveStageName is not null)
+            {
+                var normalizedSent = BibleNameNormalizer.Normalize(command.EffectiveStageName);
+                var normalizedSuperseded = BibleNameNormalizer.Normalize(superseded.StageName);
+                if (!string.Equals(normalizedSent, normalizedSuperseded, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<BibleEntryRevisionDto>.Failure(
+                        "Bản thay thế phải thuộc cùng biến thể với bản được thay thế.", ResultErrorCodes.Conflict);
+                }
+            }
 
             stageName = superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
+        }
+        else
+        {
+            // Sửa nội dung (Content Edit): không được đổi variant_label (tránh tách biến thể)
+            var baseRevision = (command.TargetRevisionId.HasValue
+                ? entry.Revisions.FirstOrDefault(r => r.Id == command.TargetRevisionId.Value)
+                : null)
+                ?? (command.ExpectedVersionNumber.HasValue
+                    ? entry.Revisions.FirstOrDefault(r => r.VersionNumber == command.ExpectedVersionNumber.Value)
+                    : null)
+                ?? entry.GetCurrentRevision();
+
+            var baseStageName = baseRevision?.StageName;
+            if (command.EffectiveStageName is not null)
+            {
+                var normalizedSent = BibleNameNormalizer.Normalize(command.EffectiveStageName);
+                var normalizedBase = BibleNameNormalizer.Normalize(baseStageName);
+                if (!string.Equals(normalizedSent, normalizedBase, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<BibleEntryRevisionDto>.Failure(
+                        "Không thể thay đổi tên biến thể (variant_label) khi sửa nội dung. Để tạo biến thể mới, vui lòng dùng thao tác tạo biến thể.",
+                        ResultErrorCodes.Conflict);
+                }
+            }
+
+            stageName = baseStageName;
         }
 
         var snapshotObj = new

@@ -338,4 +338,21 @@ public class BibleEntry : BaseEntity
         return rev.Events.Any(e => e.Type == BibleRevisionEventType.Superseded)
             || Revisions.Any(other => other.SupersedesRevisionId == rev.Id && other.IsLocked);
     }
+
+    /// <summary>
+    /// Kiểm tra xem mục đã có biến thể mang nhãn này (so sánh sau khi chuẩn hoá BibleNameNormalizer)
+    /// và đang hoạt động (có ít nhất một revision chưa bị supersede) hay không.
+    /// </summary>
+    public bool HasActiveVariant(string variantLabel)
+    {
+        if (string.IsNullOrWhiteSpace(variantLabel)) return false;
+        var normalized = BibleNameNormalizer.Normalize(variantLabel);
+        if (string.IsNullOrEmpty(normalized)) return false;
+
+        return Revisions
+            .GroupBy(r => BibleNameNormalizer.Normalize(r.StageName))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
+            .Where(g => g.Any(r => !IsRevisionSuperseded(r)))
+            .Any(g => g.Key == normalized);
+    }
 }
