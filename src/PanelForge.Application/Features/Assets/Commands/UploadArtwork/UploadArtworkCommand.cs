@@ -142,12 +142,14 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
             }
         }
 
-        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp khi không có assignment xung đột
+        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp khi stage này chưa giao cho ai ở phần đó.
+        // Việc cả chương cũng tính là đã giao, nếu không thành viên khác ghi đè được stage người khác đang giữ.
         if (!holdsTheWork && cmd.UserId != Guid.Empty)
         {
             var hasSpecificAssignment = await _db.Assignments.AnyAsync(a =>
                 a.ChapterId == chapter.Id && a.PipelineStageId == stageId &&
-                ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
+                (a.EntityType == WorkflowEntityType.Chapter ||
+                 (a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
                  (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
 
             if (!hasSpecificAssignment)
@@ -156,10 +158,11 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
                     (_db.StudioWorkspaces != null && await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w =>
                         w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct))
                     || (_db.WorkspaceMembers != null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
-                        m.WorkspaceId == workspaceId && m.UserId == cmd.UserId &&
+                        m.WorkspaceId == workspaceId && m.UserId == cmd.UserId && m.Status == WorkspaceMemberStatus.Active &&
                         (m.Role == WorkspaceRole.Artist || m.Role == WorkspaceRole.Producer), ct))
                     || (_db.SeriesMembers != null && await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
-                        sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId, ct));
+                        sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId &&
+                        (sm.Role == WorkspaceRole.Artist || sm.Role == WorkspaceRole.Producer), ct));
 
                 if (isOwnerOrAuthorizedRole)
                 {

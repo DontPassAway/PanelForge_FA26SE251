@@ -636,6 +636,44 @@ public class ArtworkUploadTests
         f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(all));
     }
 
+    // ── Đường dự phòng "chưa có việc thì thành viên Artist/Producer tải trực tiếp" ──
+
+    private static void Members(Fixture f, IEnumerable<WorkspaceMember> workspace, IEnumerable<SeriesMember>? series = null)
+    {
+        f.Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(workspace.ToList()));
+        f.Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock((series ?? []).ToList()));
+    }
+
+    [Fact]
+    public async Task Upload_StageHeldByWholeChapterAssignment_OtherArtistMemberIsForbidden()
+    {
+        var f = new Fixture();
+        HoldWholeChapter(f);
+        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist)]);
+
+        var result = await f.Upload(Png(), userId: f.OtherId);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        f.References.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_NoAssignment_ActiveArtistMemberCanUpload_ButNotPendingMemberOrNonArtSeriesMember()
+    {
+        var f = new Fixture();
+        f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+        var writerId = Guid.NewGuid();
+        Members(f,
+            [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending)],
+            [SeriesMember.Create(f.Chapter.SeriesId, writerId, WorkspaceRole.Writer)]);
+
+        (await f.Upload(Png(1), userId: f.OtherId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await f.Upload(Png(2), userId: writerId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+
+        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist)]);
+        (await f.Upload(Png(3), userId: f.OtherId)).IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Upload_WholeChapterHolder_CanUploadPageInScope()
     {
