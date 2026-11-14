@@ -49,6 +49,16 @@ public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotReques
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
+public sealed record UnassignStageTasksRequest(IReadOnlyList<Guid> TaskIds);
+
+/// <summary>Reason bắt buộc; ghi vào OutdatedReason của các ô hạ nguồn bị gắn cờ.</summary>
+public sealed record ReopenStageTaskRequest(string Reason);
+
+/// <summary>Keep = giữ bài hiện tại; false = đưa ô về ReworkRequired.</summary>
+public sealed record ResolveStageTaskImpactRequest(bool Keep);
+
+public sealed record ReopenStageTaskResultDto(StageTaskDto Task, IReadOnlyList<Guid> OutdatedTaskIds);
+
 /// <param name="Lots">Lô đã tạo; rỗng khi DryRun.</param>
 public sealed record AssignStageTaskLotsResultDto(bool DryRun, int TaskCount, IReadOnlyList<StageTaskLotDto> Lots);
 

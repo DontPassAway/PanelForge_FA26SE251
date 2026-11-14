@@ -5,7 +5,11 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
+using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
@@ -236,5 +240,102 @@ public class TaskGridHandlerTests
 
         color.Status.Should().Be(StageTaskStatus.Approved);
         f.Lots.Single(l => l.PipelineStageId == f.Color.Id).Status.Should().Be(StageTaskLotStatus.Completed);
+    }
+
+    // ---- Lát cắt 2: yêu cầu sửa, mở lại + Impact Review, bỏ gán ----
+
+    private static async Task<(StageTask Pencil, StageTask Ink, StageTask Lettering)> PencilDoneInkAndLetteringStarted(Fixture f)
+    {
+        await f.AssignPageOne();
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        await f.Submit(f.ArtistId, pencil);
+        var ink = f.Cell(f.Ink, 0);
+        var lettering = f.Cell(f.Lettering, 0);
+        (await f.Start(ink, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await f.Start(lettering, f.LettererId)).IsSuccess.Should().BeTrue();
+        return (pencil, ink, lettering);
+    }
+
+    [Fact]
+    public async Task RequestChanges_BySelfForbidden_ByEditorReturnsToRework_ThenRestartable()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink })
+        {
+            await f.Start(f.Cell(stage, 0), f.ArtistId);
+            await f.Submit(f.ArtistId, f.Cell(stage, 0));
+        }
+        var color = f.Cell(f.Color, 0);
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+
+        var handler = new RequestStageTaskChangesCommandHandler(f.Db.Object);
+        (await handler.Handle(new(f.Chapter.Id, color.Id, f.ArtistId), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId), default)).IsSuccess.Should().BeTrue();
+
+        color.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        (await f.Start(color, f.ArtistId)).IsSuccess.Should().BeTrue();
+    }
+
+    /// <summary>Mở lại Pencil: Ink và Lettering (đã bắt đầu, cả hai nhánh) bị gắn cờ; Color chưa bắt đầu thì không.</summary>
+    [Fact]
+    public async Task Reopen_MarksStartedDownstreamOnBothTracks_ImpactReviewNeedsReapprovedPrerequisite()
+    {
+        var f = new Fixture();
+        var (pencil, ink, lettering) = await PencilDoneInkAndLetteringStarted(f);
+        var otherPageInk = f.Cell(f.Ink, 1);
+
+        var reopen = await new ReopenStageTaskCommandHandler(f.Db.Object)
+            .Handle(new(f.Chapter.Id, pencil.Id, f.ProducerId, "Sai bố cục"), default);
+
+        reopen.IsSuccess.Should().BeTrue(reopen.ErrorMessage);
+        reopen.Value!.OutdatedTaskIds.Should().BeEquivalentTo([ink.Id, lettering.Id]);
+        pencil.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        ink.IsInputOutdated.Should().BeTrue();
+        ink.OutdatedReason.Should().Contain("Pencil").And.Contain("Sai bố cục");
+        f.Cell(f.Color, 0).IsInputOutdated.Should().BeFalse();
+        otherPageInk.IsInputOutdated.Should().BeFalse();
+        (await f.Submit(f.ArtistId, ink)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        var resolve = new ResolveStageTaskImpactCommandHandler(f.Db.Object);
+        (await resolve.Handle(new(f.Chapter.Id, ink.Id, f.ProducerId, Keep: true), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        await f.Start(pencil, f.ArtistId);
+        await f.Submit(f.ArtistId, pencil);
+
+        (await resolve.Handle(new(f.Chapter.Id, ink.Id, f.ProducerId, Keep: true), default)).IsSuccess.Should().BeTrue();
+        ink.Status.Should().Be(StageTaskStatus.InProgress);
+        (await resolve.Handle(new(f.Chapter.Id, lettering.Id, f.ProducerId, Keep: false), default)).IsSuccess.Should().BeTrue();
+        lettering.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        lettering.IsInputOutdated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reopen_WithoutReason_IsValidationError()
+    {
+        var f = new Fixture();
+        var (pencil, _, _) = await PencilDoneInkAndLetteringStarted(f);
+        (await new ReopenStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, pencil.Id, f.ProducerId, " "), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    [Fact]
+    public async Task Unassign_ReturnsCellsToUnassigned_ClosesEmptyLot_AndRejectsApprovedCell()
+    {
+        var f = new Fixture();
+        var (pencil, ink, _) = await PencilDoneInkAndLetteringStarted(f);
+        var handler = new UnassignStageTasksCommandHandler(f.Db.Object);
+
+        (await handler.Handle(new(f.Chapter.Id, [ink.Id, pencil.Id], f.ProducerId), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        ink.LotId.Should().NotBeNull();
+
+        (await handler.Handle(new(f.Chapter.Id, [ink.Id], f.ProducerId), default)).IsSuccess.Should().BeTrue();
+        ink.Status.Should().Be(StageTaskStatus.Unassigned);
+        f.Lots.Single(l => l.PipelineStageId == f.Ink.Id).Status.Should().Be(StageTaskLotStatus.Closed);
+        (await f.Assign(false, f.Lot(f.Ink, f.ArtistId, ink))).IsSuccess.Should().BeTrue();
     }
 }

@@ -38,6 +38,29 @@ internal static class TaskGridRules
         return true;
     }
 
+    /// <summary>
+    /// Ô hạ nguồn (bắc cầu theo BR-19) của <paramref name="task"/>, chưa huỷ: cùng trang, hoặc một bên là ô cấp Chương.
+    /// Dùng khi mở lại ô để gắn cờ đầu vào lỗi thời.
+    /// </summary>
+    public static List<StageTask> Downstream(StageTask task, IReadOnlyList<PipelineStage> stages, IReadOnlyList<StageTask> chapterTasks)
+    {
+        var reached = new HashSet<Guid> { task.PipelineStageId };
+        var queue = new Queue<Guid>(reached);
+        while (queue.TryDequeue(out var current))
+            foreach (var s in stages.Where(s => s.IsEnabled && !reached.Contains(s.Id)
+                         && StageDependencies.DirectPrerequisites(s, stages).Any(p => p.Id == current)).ToList())
+            {
+                reached.Add(s.Id);
+                queue.Enqueue(s.Id);
+            }
+        reached.Remove(task.PipelineStageId);
+
+        return chapterTasks.Where(t => t.Id != task.Id && t.Status != StageTaskStatus.Cancelled
+                && reached.Contains(t.PipelineStageId)
+                && (task.PageId is null || t.PageId is null || t.PageId == task.PageId))
+            .ToList();
+    }
+
     public static async Task RefreshLotsAsync(IPanelForgeDbContext db, IEnumerable<Guid?> lotIds, IReadOnlyList<StageTask> changed, CancellationToken ct)
     {
         var ids = lotIds.OfType<Guid>().Distinct().ToList();

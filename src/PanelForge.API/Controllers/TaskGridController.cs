@@ -7,7 +7,11 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
+using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
@@ -69,6 +73,34 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Approve(Guid chapterId, Guid taskId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ApproveStageTaskCommand(chapterId, taskId, CurrentUserId), ct));
+
+    /// <summary>POST /tasks/{taskId}/request-changes — Editor/Producer trả ô về ReworkRequired (BR-06).</summary>
+    [HttpPost("tasks/{taskId:guid}/request-changes")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RequestChanges(Guid chapterId, Guid taskId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new RequestStageTaskChangesCommand(chapterId, taskId, CurrentUserId), ct));
+
+    /// <summary>POST /tasks/{taskId}/reopen — Producer mở lại ô đã duyệt; ô hạ nguồn đã bắt đầu bị gắn cờ lỗi thời.</summary>
+    [HttpPost("tasks/{taskId:guid}/reopen")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reopen(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new ReopenStageTaskCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
+
+    /// <summary>POST /tasks/{taskId}/resolve-impact — Producer xử lý Impact Review (keep / rework).</summary>
+    [HttpPost("tasks/{taskId:guid}/resolve-impact")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResolveImpact(Guid chapterId, Guid taskId, [FromBody] ResolveStageTaskImpactRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new ResolveStageTaskImpactCommand(chapterId, taskId, CurrentUserId, body.Keep), ct));
+
+    /// <summary>POST /tasks/unassign — Producer gỡ người khỏi danh sách ô, tất cả hoặc không.</summary>
+    [HttpPost("tasks/unassign")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<StageTaskDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Unassign(Guid chapterId, [FromBody] UnassignStageTasksRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new UnassignStageTasksCommand(chapterId, body.TaskIds, CurrentUserId), ct));
 
     private IActionResult ToResult<T>(Result<T> result) => result.IsSuccess
         ? Ok(result.Value)
