@@ -35,7 +35,7 @@ namespace PanelForge.UnitTests.Application.Bible;
 
 /// <summary>
 /// End-to-end integration-style handler scenario tests for Series Bible (Q16-Q24):
-/// - Speaker auto-match with alias & auto-create stub (Dialogue + Thought)
+/// - Speaker auto-match with name & auto-create stub (Dialogue + Thought)
 /// - Highlight restrictions (only on Action/Caption/Sfx; reject Dialogue)
 /// - Crowd flag synchronization
 /// - Define draft entry promoting stub
@@ -95,18 +95,13 @@ public class SeriesBibleScenarioTests
     [Fact]
     public async Task Scenario_ScriptAuthoring_SpeakerAutoMatchAndCreate_And_HighlightRestrictions()
     {
-        // 1. Setup existing Canon Character with alias
-        var naruto = _bible.AddEntry(BibleEntryCategory.Character, "CHR01", "Uzumaki Naruto", "Hokage tương lai");
-        naruto.SetAliases(["Cửu Vĩ", "Naruto"]);
+        // 1. Setup existing Canon Character
+        var naruto = _bible.AddEntry(BibleEntryCategory.Character, "CHR01", "Cửu Vĩ", "Hokage tương lai");
         _db.BibleEntries.Add(naruto);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Uzumaki Naruto", naruto.Id, isPrimary: true));
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Cửu Vĩ", naruto.Id, isPrimary: false));
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Naruto", naruto.Id, isPrimary: false));
 
         // Location entry for highlight reference
         var leafVillage = _bible.AddEntry(BibleEntryCategory.Location, "LOC01", "Làng Lá", "Ngôi làng ninja");
         _db.BibleEntries.Add(leafVillage);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Làng Lá", leafVillage.Id, isPrimary: true));
 
         var chapter = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(chapter);
@@ -145,7 +140,7 @@ public class SeriesBibleScenarioTests
         invalidResult.ErrorMessage.Should().Contain("Chỉ cho phép gắn tham chiếu Series Bible trên dòng Action, Narration hoặc Sfx");
 
         // 3. Save valid lines:
-        // - Dialogue with alias "cửu vĩ" -> speaker auto-match
+        // - Dialogue with normalized name "cửu vĩ" -> speaker auto-match
         // - Dialogue with unknown "Sasuke" -> speaker auto-create stub
         // - Thought with unknown "Kakashi (nghĩ)" -> speaker auto-create stub stripped of "(nghĩ)"
         // - Action, Narration, Sfx with highlight refs -> valid!
@@ -188,7 +183,7 @@ public class SeriesBibleScenarioTests
             .Where(b => b.ChapterId == chapter.Id)
             .ToListAsync();
 
-        // Naruto matched via alias, not duplicated
+        // Character matched via normalized name, not duplicated
         var narutoBinding = bindings.FirstOrDefault(b => b.BibleEntryId == naruto.Id);
         narutoBinding.Should().NotBeNull();
         narutoBinding!.Source.Should().Be(ChapterBibleBindingSource.Speaker);
@@ -260,9 +255,8 @@ public class SeriesBibleScenarioTests
             SeriesId: _series.Id,
             BibleEntryId: sasukeStub.Id,
             UserId: _writerId,
-            Name: "Sasuke Uchiha",
+            Name: "Sasuke",
             Description: "Hậu duệ cuối cùng của gia tộc Uchiha",
-            Aliases: ["Sasuke", "Uchiha Sasuke"],
             Subtitle: "Thiên tài Làng Lá"
         );
 
@@ -420,7 +414,6 @@ public class SeriesBibleScenarioTests
         v1.SubmitConcept(_artistId, "https://storage/v1.png", "concept v1", "hash-v1");
         v1.ConfirmCanon(_editorId, v1.CurrentConceptEventId!.Value); // CanonLocked
         _db.BibleEntries.Add(naruto);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Naruto", naruto.Id, isPrimary: true));
         _db.BibleEntryRevisions.Add(v1);
 
         // Flashback variant for per-panel test
@@ -608,7 +601,6 @@ public class SeriesBibleScenarioTests
         v1.SubmitConcept(_artistId, "https://storage/k1.png", "c1", "hk1");
         v1.ConfirmCanon(_editorId, v1.CurrentConceptEventId!.Value);
         _db.BibleEntries.Add(kakashi);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kakashi", kakashi.Id, isPrimary: true));
         _db.BibleEntryRevisions.Add(v1);
 
         // Ch1 with Kakashi bound to v1
@@ -655,7 +647,6 @@ public class SeriesBibleScenarioTests
         v105.ConfirmCanon(_editorId, v105.CurrentConceptEventId!.Value);
 
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Gai", entry.Id, isPrimary: true));
         _db.BibleEntryRevisions.AddRange(v10, v105);
 
         // Chapter 10, 10.5, 11
@@ -716,7 +707,6 @@ public class SeriesBibleScenarioTests
         var flashbackRev = entry.AddRevision("v1-kid", "{}", "h-kid", isInitialVersion: false, stageName: "Lúc nhỏ");
         // Flashback is Draft (not yet CanonLocked)
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Sasuke", entry.Id, isPrimary: true));
         _db.BibleEntryRevisions.AddRange(canonRev, flashbackRev);
 
         var chapter = Chapter.Create(_series.Id, 301, "Chương Hồi Tưởng");
@@ -761,7 +751,6 @@ public class SeriesBibleScenarioTests
         var rev = entry.AddRevision("v1", "{}", "h-prop", isInitialVersion: true);
         rev.SubmitConcept(_artistId, "https://storage/sword.png", "Kiếm bản 1", "h-sw");
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kiếm Kusanagi", entry.Id, isPrimary: true));
         _db.BibleEntryRevisions.Add(rev);
         await _db.SaveChangesAsync();
 
@@ -791,7 +780,6 @@ public class SeriesBibleScenarioTests
         var rev = entry.AddRevision("v1", "{}", "h-j1", isInitialVersion: true);
         rev.SubmitConcept(_artistId, "https://storage/j1.png", "Jiraiya v1", "hj1");
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Jiraiya", entry.Id, isPrimary: true));
         _db.BibleEntryRevisions.Add(rev);
         await _db.SaveChangesAsync();
 
@@ -811,7 +799,6 @@ public class SeriesBibleScenarioTests
         var rev = entry.AddRevision("v1", "{}", "h-tsu", isInitialVersion: true);
         rev.SubmitConcept(_artistId, "https://storage/tsu.png", "Bản vẽ Tsunade", "htsu");
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Tsunade", entry.Id, isPrimary: true));
         _db.BibleEntryRevisions.Add(rev);
         await _db.SaveChangesAsync();
 

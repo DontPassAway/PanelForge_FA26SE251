@@ -65,19 +65,13 @@ public class ChapterCastRecomputeTests
     }
 
     [Fact]
-    public async Task SpeakerResolver_MatchesAliasAndCaseInsensitive()
+    public async Task SpeakerResolver_MatchesNormalizedName_CaseInsensitive()
     {
-        // 1. Khớp bí danh & tên có dấu viết hoa khác nhau
         var naruto = BibleEntry.Create(_bible.Id, BibleEntryCategory.Character, "CHR01", "Uzumaki Naruto", "Nhân vật chính");
-        naruto.SetAliases(["Cửu Vĩ", "Naruto"]);
         _db.BibleEntries.Add(naruto);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Uzumaki Naruto", naruto.Id, isPrimary: true));
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Cửu Vĩ", naruto.Id, isPrimary: false));
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Naruto", naruto.Id, isPrimary: false));
 
-        var line1 = ScriptLine.Create(_scene.Id, 1, text: "Tôi sẽ trở thành Hokage!", kind: ScriptLineKind.Dialogue, speakerLabel: "cửu vĩ");
-        var line2 = ScriptLine.Create(_scene.Id, 2, text: "Tin tôi đi!", kind: ScriptLineKind.Dialogue, speakerLabel: "NARUTO");
-        _db.ScriptLines.AddRange(line1, line2);
+        var line = ScriptLine.Create(_scene.Id, 1, text: "Tôi sẽ trở thành Hokage!", kind: ScriptLineKind.Dialogue, speakerLabel: "  UZUMAKI   NARUTO  ");
+        _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
 
         var service = new ChapterCastService(_db, _mockInheritance.Object);
@@ -90,12 +84,28 @@ public class ChapterCastRecomputeTests
     }
 
     [Fact]
+    public async Task SpeakerResolver_DifferentNickname_CreatesNewDraft()
+    {
+        var naruto = BibleEntry.Create(_bible.Id, BibleEntryCategory.Character, "CHR01", "Uzumaki Naruto", "Nhân vật chính");
+        _db.BibleEntries.Add(naruto);
+        _db.ScriptLines.Add(ScriptLine.Create(_scene.Id, 1, text: "Tin tôi đi!", kind: ScriptLineKind.Dialogue, speakerLabel: "Naruto"));
+        await _db.SaveChangesAsync();
+
+        var service = new ChapterCastService(_db, _mockInheritance.Object);
+        await service.RecomputeAsync(_chapter.Id, _writerId);
+        await _db.SaveChangesAsync();
+
+        var nickname = await _db.BibleEntries.SingleAsync(e => e.SeriesBibleId == _bible.Id && e.NormalizedName == "naruto");
+        nickname.Id.Should().NotBe(naruto.Id);
+        nickname.IsStub.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task SpeakerResolver_StripsThoughtAndNghiSuffix_AndHandlesThoughtKind()
     {
         // 2 & 3. Minh (nghĩ) và dòng Thought
         var minh = BibleEntry.Create(_bible.Id, BibleEntryCategory.Character, "CHR02", "Minh", "Nhân vật Minh");
         _db.BibleEntries.Add(minh);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Minh", minh.Id, isPrimary: true));
 
         var line1 = ScriptLine.Create(_scene.Id, 1, text: "Kẻ địch ở đâu?", kind: ScriptLineKind.Dialogue, speakerLabel: "Minh (nghĩ)");
         var line2 = ScriptLine.Create(_scene.Id, 2, text: "Có tiếng động lạ...", kind: ScriptLineKind.Thought, speakerLabel: "Minh (nghi)");
@@ -146,7 +156,6 @@ public class ChapterCastRecomputeTests
         // 6. Dọn mục thừa: IsStub, hệ thống tạo, không còn binding và tham chiếu nào, chỉ có sự kiện Created -> xoá
         var stub = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Kẻ Qua Đường", description: "");
         _db.BibleEntries.Add(stub);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kẻ Qua Đường", stub.Id, isPrimary: true));
 
         var line = ScriptLine.Create(_scene.Id, 1, text: "Xin chào!", kind: ScriptLineKind.Dialogue, speakerLabel: "Kẻ Qua Đường");
         _db.ScriptLines.Add(line);
@@ -168,7 +177,6 @@ public class ChapterCastRecomputeTests
 
         // Stub "Kẻ Qua Đường" phải bị dọn sạch
         _db.BibleEntries.Any(e => e.Id == stub.Id).Should().BeFalse();
-        _db.BibleEntryNames.Any(n => n.BibleEntryId == stub.Id).Should().BeFalse();
     }
 
     [Fact]
@@ -179,7 +187,6 @@ public class ChapterCastRecomputeTests
         var rev1 = entry.AddRevision("v1", "{}", "hash1");
         var rev2 = entry.AddRevision("v2", "{}", "hash2");
         _db.BibleEntries.Add(entry);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Sakura", entry.Id, isPrimary: true));
 
         var line = ScriptLine.Create(_scene.Id, 1, text: "Chào mọi người!", kind: ScriptLineKind.Dialogue, speakerLabel: "Sakura");
         _db.ScriptLines.Add(line);

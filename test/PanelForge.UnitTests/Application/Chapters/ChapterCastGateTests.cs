@@ -93,7 +93,6 @@ public class ChapterCastGateTests
         // Tạo mục stub chưa định nghĩa
         var stub = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Kage");
         _db.BibleEntries.Add(stub);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kage", stub.Id, isPrimary: true));
 
         // Script line nhắc tới Kage
         var line = ScriptLine.Create(scene.Id, 1, "Tôi là Kage", speakerLabel: "Kage");
@@ -120,7 +119,6 @@ public class ChapterCastGateTests
         var stub = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Dân Làng");
         stub.SetCrowd(true);
         _db.BibleEntries.Add(stub);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Dân Làng", stub.Id, isPrimary: true));
 
         var line = ScriptLine.Create(scene.Id, 1, "Cứu với!", speakerLabel: "Dân Làng");
         _db.ScriptLines.Add(line);
@@ -156,7 +154,6 @@ public class ChapterCastGateTests
         _db.Scenes.Add(scene2);
         var line2 = ScriptLine.Create(scene2.Id, 1, "Tôi trở lại!", speakerLabel: "Hero");
         _db.ScriptLines.Add(line2);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Hero", hero.Id, isPrimary: true));
         await _db.SaveChangesAsync();
 
         var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
@@ -182,7 +179,6 @@ public class ChapterCastGateTests
         v1.Lock(_editorId);
         _db.BibleEntries.Add(hero);
         _db.BibleEntryRevisions.Add(v1);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Naruto", hero.Id, isPrimary: true));
 
         var ch1 = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(ch1);
@@ -268,7 +264,6 @@ public class ChapterCastGateTests
         var vChildhood = hero.AddRevision("v-child", "{}", "hash-child", authorId: _writerId, stageName: "Lúc nhỏ", reviewStatus: BibleRevisionStatus.Draft);
         _db.BibleEntries.Add(hero);
         _db.BibleEntryRevisions.AddRange(vMain, vChildhood);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Sasuke", hero.Id, isPrimary: true));
 
         var chapter = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(chapter);
@@ -310,7 +305,6 @@ public class ChapterCastGateTests
         v1.Lock(_editorId);
         _db.BibleEntries.Add(hero);
         _db.BibleEntryRevisions.Add(v1);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Kakashi", hero.Id, isPrimary: true));
 
         var chapter = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(chapter);
@@ -433,7 +427,6 @@ public class ChapterCastGateTests
         v1.Lock(_editorId);
         _db.BibleEntries.Add(hero);
         _db.BibleEntryRevisions.Add(v1);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Shikamaru", hero.Id, isPrimary: true));
 
         var chapter = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(chapter);

@@ -39,15 +39,6 @@ public sealed class GetBibleEntryUsagesQueryHandler : IRequestHandler<GetBibleEn
             return Result<IReadOnlyList<BibleEntryUsageDto>>.Failure(
                 $"Mục BibleEntry {request.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        var entryNormNames = await _dbContext.BibleEntryNames
-            .Where(n => n.BibleEntryId == entry.Id)
-            .Select(n => n.NormalizedName)
-            .ToListAsync(ct);
-        if (entryNormNames.Count == 0)
-        {
-            entryNormNames.Add(BibleNameNormalizer.Normalize(entry.Name));
-        }
-
         var linkedLineIds = await _dbContext.ScriptLineBibleLinks
             .Where(l => l.BibleEntryId == entry.Id && !l.IsDeleted)
             .Select(l => l.ScriptLineId)
@@ -59,7 +50,7 @@ public sealed class GetBibleEntryUsagesQueryHandler : IRequestHandler<GetBibleEn
             .ToListAsync(ct);
 
         var lines = candidateLines
-            .Where(l => linkedLineIds.Contains(l.Id) || (l.SpeakerLabel != null && entryNormNames.Contains(SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel))))
+            .Where(l => linkedLineIds.Contains(l.Id) || (l.SpeakerLabel != null && entry.NormalizedName == SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel)))
             .Select(l => new { l.Id, l.SceneId })
             .ToList();
 

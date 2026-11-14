@@ -32,12 +32,11 @@ internal static class AiSnapshotBuilder
             .Select(l => new { l.Id, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerLabel })
             .ToListAsync(ct);
 
-        var bibleNames = await db.BibleEntryNames.AsNoTracking()
-            .Where(n => db.BibleEntries.Any(e => e.Id == n.BibleEntryId && e.SeriesBible.SeriesId == chapter.SeriesId))
+        var bibleNames = await db.BibleEntries.AsNoTracking()
+            .Where(e => e.SeriesBible.SeriesId == chapter.SeriesId && e.Category == BibleEntryCategory.Character)
             .ToListAsync(ct);
         var speakerToEntryMap = bibleNames
-            .GroupBy(n => n.NormalizedName)
-            .ToDictionary(g => g.Key, g => g.First().BibleEntryId);
+            .ToDictionary(e => e.NormalizedName, e => e.Id);
 
         var lines = rawLines.Select(l =>
         {

@@ -12,6 +12,7 @@ public class BibleEntry : BaseEntity
     public BibleEntryCategory Category { get; private set; }
     public string Code { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string NormalizedName { get; private set; } = default!;
     public string? Subtitle { get; private set; }
     public string Description { get; private set; } = default!;
     public string DetailsJson { get; private set; } = "{}";
@@ -22,7 +23,6 @@ public class BibleEntry : BaseEntity
     /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ cú pháp @-mention trong kịch bản (Write First, Bible Later).</summary>
     public bool IsStub { get; private set; } = false;
     /// <summary>BIB-09 & 9A: Danh sách bí danh của mục (tối đa 20 bí danh, mỗi bí danh <= 100 ký tự).</summary>
-    public List<string> Aliases { get; private set; } = [];
     /// <summary>BIB-11 & 7A: Cờ Quần chúng; mục quần chúng không bắt buộc khoá Canon ở Gate 1.</summary>
     public bool IsCrowd { get; private set; } = false;
 
@@ -53,6 +53,7 @@ public class BibleEntry : BaseEntity
             Category = category,
             Code = code.Trim().ToUpperInvariant(),
             Name = name.Trim(),
+            NormalizedName = BibleNameNormalizer.Normalize(name),
             Subtitle = subtitle?.Trim(),
             Description = description.Trim(),
             DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim(),
@@ -86,6 +87,7 @@ public class BibleEntry : BaseEntity
             Category = category,
             Code = code,
             Name = trimmedName,
+            NormalizedName = BibleNameNormalizer.Normalize(trimmedName),
             Description = description?.Trim() ?? string.Empty,
             DetailsJson = "{}",
             Priority = BiblePriority.Standard,
@@ -95,43 +97,6 @@ public class BibleEntry : BaseEntity
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
-    }
-
-    public void SetAliases(IEnumerable<string>? aliases)
-    {
-        Aliases.Clear();
-        if (aliases == null)
-        {
-            UpdatedAt = DateTime.UtcNow;
-            return;
-        }
-
-        var normalizedPrimary = BibleNameNormalizer.Normalize(Name);
-        var seenNormalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var alias in aliases)
-        {
-            if (string.IsNullOrWhiteSpace(alias))
-                throw new ArgumentException("Bí danh không được để trống.", nameof(aliases));
-
-            var trimmed = alias.Trim();
-            if (trimmed.Length > 100)
-                throw new ArgumentException($"Bí danh '{trimmed}' vượt quá độ dài tối đa 100 ký tự.", nameof(aliases));
-
-            var normalized = BibleNameNormalizer.Normalize(trimmed);
-            if (string.Equals(normalized, normalizedPrimary, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException($"Bí danh '{trimmed}' trùng với tên chính của thực thể.", nameof(aliases));
-
-            if (!seenNormalized.Add(normalized))
-                continue; // Bỏ trùng theo normalized
-
-            Aliases.Add(trimmed);
-        }
-
-        if (Aliases.Count > 20)
-            throw new ArgumentException("Số lượng bí danh tối đa là 20.", nameof(aliases));
-
-        UpdatedAt = DateTime.UtcNow;
     }
 
     public void SetCrowd(bool isCrowd)
@@ -181,6 +146,7 @@ public class BibleEntry : BaseEntity
 
         Code = code.Trim().ToUpperInvariant();
         Name = name.Trim();
+        NormalizedName = BibleNameNormalizer.Normalize(name);
         Description = description.Trim();
         Subtitle = subtitle?.Trim();
         DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim();

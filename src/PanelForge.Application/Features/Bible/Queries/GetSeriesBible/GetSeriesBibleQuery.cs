@@ -38,7 +38,7 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
         var entryDtos = bible.Entries
             .OrderBy(e => e.Category)
             .ThenBy(e => e.Name)
-            .Select(e => BibleEntryDto.From(e) with { Aliases = null, IsCrowd = false })
+            .Select(e => BibleEntryDto.From(e) with { IsCrowd = false })
             .ToList();
 
         return Result<SeriesBibleDto>.Success(new SeriesBibleDto(

@@ -45,10 +45,6 @@ public class GetBibleEntryUsagesTests
 
         _db.Setup(d => d.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible> { bible }));
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { _hero, _term }));
-        _db.Setup(d => d.BibleEntryNames).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntryName>
-        {
-            BibleEntryName.Create(bible.Id, "Hero", _hero.Id, true)
-        }));
         _db.Setup(d => d.ChapterBibleBindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChapterBibleBinding>
         {
             ChapterBibleBinding.Create(_ch1.Id, _hero.Id, heroV1.Id, ChapterBibleBindingSource.Speaker, false, false, Guid.NewGuid())
