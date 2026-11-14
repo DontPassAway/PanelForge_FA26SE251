@@ -7,8 +7,6 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
-using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
-using PanelForge.Application.Features.ScriptLines.Commands.BatchSaveScriptLines;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Bible;
@@ -174,154 +172,6 @@ public class ChapterCastRecomputeTests
     }
 
     [Fact]
-    public async Task BatchSaveScriptLines_RefsOnDialogue_Returns400()
-    {
-        // 7. refs trên dòng thoại -> 400
-        var handler = new BatchSaveScriptLinesCommandHandler(_db, _auth.Object, _pageRepo.Object);
-        var command = new BatchSaveScriptLinesCommand(
-            _chapter.Id,
-            _scene.Id,
-            _writerId,
-            [
-                new BatchScriptLineItem(
-                    Id: null,
-                    LineOrder: 1,
-                    DialogueText: "Đợi đã!",
-                    StageDirection: null,
-                    Kind: ScriptLineKind.Dialogue,
-                    Refs: [new ScriptLineRefInput("Đợi đã")])
-            ]);
-
-        var result = await handler.Handle(command, default);
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
-    }
-
-    [Fact]
-    public async Task BatchSaveScriptLines_DropsRefAndWarns_WhenTextChangesWithoutRefs()
-    {
-        // 8. Tham chiếu bị gỡ khi sửa chữ
-        var sword = BibleEntry.Create(_bible.Id, BibleEntryCategory.Prop, "PRP01", "Hắc Kiếm", "Thanh kiếm cổ");
-        _db.BibleEntries.Add(sword);
-        _db.BibleEntryNames.Add(BibleEntryName.Create(_bible.Id, "Hắc Kiếm", sword.Id, isPrimary: true));
-        await _db.SaveChangesAsync();
-
-        var handler = new BatchSaveScriptLinesCommandHandler(_db, _auth.Object, _pageRepo.Object);
-
-        // Lưu lần 1: dòng Action có tham chiếu "Hắc Kiếm"
-        var save1 = await handler.Handle(new BatchSaveScriptLinesCommand(
-            _chapter.Id,
-            _scene.Id,
-            _writerId,
-            [
-                new BatchScriptLineItem(
-                    Id: null,
-                    LineOrder: 1,
-                    DialogueText: null,
-                    StageDirection: "Minh rút Hắc Kiếm lao tới.",
-                    Kind: ScriptLineKind.Action,
-                    Refs: [new ScriptLineRefInput("Hắc Kiếm", sword.Id)])
-            ]), default);
-
-        save1.IsSuccess.Should().BeTrue();
-        var lineId = save1.Value!.Lines.Single().Id;
-
-        var links1 = await _db.ScriptLineBibleLinks.Where(k => k.ScriptLineId == lineId).ToListAsync();
-        links1.Should().HaveCount(1);
-        links1.Single().BibleEntryId.Should().Be(sword.Id);
-
-        // Lưu lần 2: sửa nội dung dòng thành chữ khác không còn chứa "Hắc Kiếm", không gửi lại Refs
-        var save2 = await handler.Handle(new BatchSaveScriptLinesCommand(
-            _chapter.Id,
-            _scene.Id,
-            _writerId,
-            [
-                new BatchScriptLineItem(
-                    Id: lineId,
-                    LineOrder: 1,
-                    DialogueText: null,
-                    StageDirection: "Minh quay người bỏ chạy.",
-                    Kind: ScriptLineKind.Action,
-                    Refs: null)
-            ]), default);
-
-        save2.IsSuccess.Should().BeTrue();
-        save2.Value!.Warnings.Should().NotBeNull();
-        save2.Value.Warnings.Should().Contain(w => w.Contains("gỡ tham chiếu 'Hắc Kiếm'"));
-
-        var links2 = await _db.ScriptLineBibleLinks.Where(k => k.ScriptLineId == lineId).ToListAsync();
-        links2.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task SyncScriptStructure_InsertingPanel_RetainsPanelCastRevisions()
-    {
-        // 9. Chèn Panel giữa chừng giữ đúng giai đoạn theo Panel
-        var character = BibleEntry.Create(_bible.Id, BibleEntryCategory.Character, "CHR03", "Sasuke", "Mô tả Sasuke");
-        var rev1 = character.AddRevision("v1", "{}", "hash1");
-        _db.BibleEntries.Add(character);
-        await _db.SaveChangesAsync();
-
-        var unitOfWork = new PassThroughUnitOfWork();
-        var handler = new SyncScriptStructureCommandHandler(_db, _pageRepo.Object, unitOfWork, _auth.Object);
-
-        // Lần 1: Page 1 có Panel 1 với castRevision rev1
-        var sync1 = await handler.Handle(new SyncScriptStructureCommand(
-            _chapter.Id,
-            _writerId,
-            [
-                new ScriptStructurePage(1, [
-                    new ScriptStructurePanel(1, [], [new PanelCastRevisionItem(character.Id, rev1.Id)])
-                ])
-            ]), default);
-        sync1.IsSuccess.Should().BeTrue();
-
-        var originalPanel = await _db.Panels.SingleAsync(p => p.Page.ChapterId == _chapter.Id && p.PanelNumber == 1);
-        var variants1 = await _db.PanelBibleVariants.Where(v => v.PanelId == originalPanel.Id).ToListAsync();
-        variants1.Should().HaveCount(1);
-        variants1.Single().RevisionId.Should().Be(rev1.Id);
-
-        // Lần 2: Chèn một Panel mới lên đầu (Panel 1 mới), Panel cũ thành Panel 2 vẫn mang castRevision rev1
-        var sync2 = await handler.Handle(new SyncScriptStructureCommand(
-            _chapter.Id,
-            _writerId,
-            [
-                new ScriptStructurePage(1, [
-                    new ScriptStructurePanel(1, []),
-                    new ScriptStructurePanel(2, [], [new PanelCastRevisionItem(character.Id, rev1.Id)])
-                ])
-            ]), default);
-        sync2.IsSuccess.Should().BeTrue();
-
-        var panel2 = await _db.Panels.SingleAsync(p => p.Page.ChapterId == _chapter.Id && p.PanelNumber == 2);
-        var variants2 = await _db.PanelBibleVariants.Where(v => v.PanelId == panel2.Id).ToListAsync();
-        variants2.Should().HaveCount(1);
-        variants2.Single().RevisionId.Should().Be(rev1.Id);
-    }
-
-    [Fact]
-    public async Task ScriptSnapshotBuilder_WithoutRefsOrChoices_HashMatchesLegacyFormula()
-    {
-        // 10. Hash chương không có tham chiếu/lựa chọn không đổi so với trước
-        var page = Page.CreateNew(_chapter.Id, 1, LayoutFormat.StandardPage, 1200, 1800, 300);
-        _db.Pages.Add(page);
-        var panel = Panel.Create(page.Id, 1, 1, "Direction");
-        _db.Panels.Add(panel);
-        var line = ScriptLine.Create(_scene.Id, 1, stageDirection: "Minh đứng nhìn ra biển.");
-        line.AssignToPanel(panel.Id);
-        _db.ScriptLines.Add(line);
-        await _db.SaveChangesAsync();
-
-        var (rows, computedHash, _) = await ScriptSnapshotBuilder.BuildAsync(_db, _chapter.Id, default);
-
-        // Tính theo công thức cũ (Type|Page|Panel|Label|Text)
-        var legacyPayload = string.Join('\n', rows.Select(r => $"{r.Type}|{r.Page}|{r.Panel}|{r.Label}|{r.Text}"));
-        var legacyHash = AiContentValidator.Sha256(legacyPayload);
-
-        computedHash.Should().Be(legacyHash);
-    }
-
-    [Fact]
     public async Task WriterChoiceChange_ChangesContentHash_WorkingCopyDiffersFromSubmitted()
     {
         // 11. Đổi bản Writer chọn sau khi gửi -> bản hiện tại ≠ bản đã gửi
@@ -350,20 +200,6 @@ public class ChapterCastRecomputeTests
         var (newRows, workingCopyHash, _) = await ScriptSnapshotBuilder.BuildAsync(_db, _chapter.Id, default);
 
         workingCopyHash.Should().NotBe(submittedHash);
-    }
-
-    [Fact]
-    public async Task CommitScriptVersion_ProducerReturnsForbidden_WriterSucceeds()
-    {
-        // 13. Commit chỉ Writer
-        var handler = new CommitScriptVersionCommandHandler(_db, _auth.Object, _castService);
-
-        var prodResult = await handler.Handle(new CommitScriptVersionCommand(_chapter.Id, _producerId, "Producer commit"), default);
-        prodResult.IsSuccess.Should().BeFalse();
-        prodResult.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
-
-        var writerResult = await handler.Handle(new CommitScriptVersionCommand(_chapter.Id, _writerId, "Writer commit"), default);
-        writerResult.IsSuccess.Should().BeTrue();
     }
 
     [Fact]

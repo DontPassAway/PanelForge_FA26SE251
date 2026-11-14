@@ -74,7 +74,7 @@ public static class ScriptSnapshotBuilder
             .Select(l => new
             {
                 l.Id, l.PanelId, l.LineOrder, l.Kind, l.SpeakerLabel,
-                Text = l.Text ?? l.DialogueText ?? l.StageDirection ?? string.Empty
+                Text = l.Text ?? string.Empty
             })
             .ToListAsync(ct);
 
@@ -172,38 +172,14 @@ public static class ScriptSnapshotBuilder
         return (rows, hash, lineCount);
     }
 
-    public static string Serialize(IReadOnlyList<ScriptVersionRow> rows, IReadOnlyList<ScriptCastChoiceItem>? castChoices = null)
-    {
-        if (castChoices is { Count: > 0 })
-        {
-            return JsonSerializer.Serialize(new ScriptVersionSnapshot(rows, castChoices), Json);
-        }
-        return JsonSerializer.Serialize(rows, Json);
-    }
+    public static string Serialize(IReadOnlyList<ScriptVersionRow> rows, IReadOnlyList<ScriptCastChoiceItem>? castChoices = null) =>
+        JsonSerializer.Serialize(new ScriptVersionSnapshot(rows, castChoices), Json);
 
-    public static IReadOnlyList<ScriptVersionRow> Deserialize(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        var trimmed = json.TrimStart();
-        if (trimmed.StartsWith('['))
-        {
-            return JsonSerializer.Deserialize<List<ScriptVersionRow>>(json, Json) ?? [];
-        }
-        var snapshot = JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json);
-        return snapshot?.Rows ?? [];
-    }
+    public static IReadOnlyList<ScriptVersionRow> Deserialize(string json) =>
+        string.IsNullOrWhiteSpace(json) ? [] : (JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json)?.Rows ?? []);
 
-    public static ScriptVersionSnapshot DeserializeSnapshot(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return new ScriptVersionSnapshot([]);
-        var trimmed = json.TrimStart();
-        if (trimmed.StartsWith('['))
-        {
-            var rows = JsonSerializer.Deserialize<List<ScriptVersionRow>>(json, Json) ?? [];
-            return new ScriptVersionSnapshot(rows);
-        }
-        return JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json) ?? new ScriptVersionSnapshot([]);
-    }
+    public static ScriptVersionSnapshot DeserializeSnapshot(string json) =>
+        string.IsNullOrWhiteSpace(json) ? new ScriptVersionSnapshot([]) : (JsonSerializer.Deserialize<ScriptVersionSnapshot>(json, Json) ?? new ScriptVersionSnapshot([]));
 
     /// <summary>
     /// Commit kịch bản hiện tại thành phiên bản mới (số tăng dần). Nội dung trùng phiên bản gần nhất thì trả lại
@@ -309,47 +285,4 @@ public sealed class ScriptVersionQueryHandlers :
     private static ScriptVersionSummaryDto Summary(ScriptVersion v, IReadOnlyDictionary<Guid, string> names) => new(
         v.Id, v.VersionNumber, v.Message, v.AuthorUserId, names.GetValueOrDefault(v.AuthorUserId),
         v.CreatedAt, v.LineCount, v.ContentHash, v.SubmittedAt);
-}
-
-/// <summary>Lưu = commit: Writer lưu kịch bản thì chụp lại thành phiên bản (trùng nội dung thì không tạo mới).</summary>
-public sealed record CommitScriptVersionCommand(Guid ChapterId, Guid UserId, string? Message)
-    : IRequest<Result<ScriptVersionSummaryDto>>;
-
-public sealed class CommitScriptVersionCommandHandler
-    : IRequestHandler<CommitScriptVersionCommand, Result<ScriptVersionSummaryDto>>
-{
-    private readonly IPanelForgeDbContext _db;
-    private readonly IWorkspaceAuthorizationService _auth;
-    private readonly Chapters.Services.IChapterCastService _castService;
-
-    public CommitScriptVersionCommandHandler(
-        IPanelForgeDbContext db,
-        IWorkspaceAuthorizationService auth,
-        Chapters.Services.IChapterCastService castService)
-    {
-        _db = db;
-        _auth = auth;
-        _castService = castService;
-    }
-
-    public async Task<Result<ScriptVersionSummaryDto>> Handle(CommitScriptVersionCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-        if (chapter is null)
-            return Result<ScriptVersionSummaryDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-        var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId, ct);
-        if (role is not Domain.Enums.WorkspaceRole.Writer)
-            return Result<ScriptVersionSummaryDto>.Failure("Chỉ Writer lưu phiên bản kịch bản.", ResultErrorCodes.Forbidden);
-        if (chapter.ScriptLockReason is { } locked)
-            return Result<ScriptVersionSummaryDto>.Failure(locked, ResultErrorCodes.Conflict);
-
-        var version = await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId, cmd.Message, ct, _castService);
-        await _db.SaveChangesAsync(ct);
-
-        var name = await _db.Users.AsNoTracking().Where(u => u.Id == version.AuthorUserId).Select(u => u.FullName).FirstOrDefaultAsync(ct);
-        return Result<ScriptVersionSummaryDto>.Success(new ScriptVersionSummaryDto(
-            version.Id, version.VersionNumber, version.Message, version.AuthorUserId, name,
-            version.CreatedAt, version.LineCount, version.ContentHash, version.SubmittedAt));
-    }
 }

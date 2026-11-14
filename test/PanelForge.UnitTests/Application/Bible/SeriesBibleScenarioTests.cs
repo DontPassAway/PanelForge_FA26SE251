@@ -17,7 +17,7 @@ using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
-using PanelForge.Application.Features.ScriptLines.Commands.BatchSaveScriptLines;
+using PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Bible;
@@ -114,86 +114,69 @@ public class SeriesBibleScenarioTests
         _db.Scenes.Add(scene);
         await _db.SaveChangesAsync();
 
-        var batchHandler = new BatchSaveScriptLinesCommandHandler(_db, _auth.Object, _pageRepo.Object);
+        var saveHandler = new SaveChapterScriptCommandHandler(_db, _auth.Object, _pageRepo.Object, _castService, new PassThroughUnitOfWork());
 
         // 2. Validate highlight restriction: Passing refs on a Dialogue line MUST fail with 400 Validation
-        var invalidDialogueLine = new BatchScriptLineItem(
-            Id: null,
-            LineOrder: 1,
-            DialogueText: "Chào mừng tới Làng Lá!",
-            StageDirection: null,
-            Kind: ScriptLineKind.Dialogue,
-            SpeakerLabel: "Naruto",
-            Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
-        );
+        var invalidBody = new ChapterScriptBody(
+            ExpectedRevisionId: null,
+            Pages:
+            [
+                new ScriptTreePage(
+                    Id: null,
+                    Number: 1,
+                    Panels:
+                    [
+                        new ScriptTreePanel(
+                            Id: null,
+                            Number: 1,
+                            Direction: "Toàn cảnh.",
+                            CastRevisions: null,
+                            Lines:
+                            [
+                                new ScriptTreeLine(null, ScriptLineKind.Dialogue, "Naruto", "Chào mừng tới Làng Lá!", [new ScriptLineRefInput("Làng Lá", leafVillage.Id)])
+                            ])
+                    ])
+            ]);
 
-        var invalidCmd = new BatchSaveScriptLinesCommand(
-            chapter.Id, scene.Id, _writerId, [invalidDialogueLine]);
-
-        var invalidResult = await batchHandler.Handle(invalidCmd, CancellationToken.None);
+        var invalidCmd = new SaveChapterScriptCommand(chapter.Id, _writerId, invalidBody);
+        var invalidResult = await saveHandler.Handle(invalidCmd, CancellationToken.None);
         invalidResult.IsSuccess.Should().BeFalse();
         invalidResult.ErrorCode.Should().Be(ResultErrorCodes.Validation);
         invalidResult.ErrorMessage.Should().Contain("Chỉ cho phép gắn tham chiếu Series Bible trên dòng Action, Narration hoặc Sfx");
 
-        // 3. Batch save valid lines:
+        // 3. Save valid lines:
         // - Dialogue with alias "cửu vĩ" -> speaker auto-match
         // - Dialogue with unknown "Sasuke" -> speaker auto-create stub
         // - Thought with unknown "Kakashi (nghĩ)" -> speaker auto-create stub stripped of "(nghĩ)"
         // - Action, Narration, Sfx with highlight refs -> valid!
-        var validLines = new List<BatchScriptLineItem>
-        {
-            new(
-                Id: null,
-                LineOrder: 1,
-                DialogueText: "Tôi sẽ không bao giờ bỏ cuộc!",
-                StageDirection: null,
-                Kind: ScriptLineKind.Dialogue,
-                SpeakerLabel: "cửu vĩ"
-            ),
-            new(
-                Id: null,
-                LineOrder: 2,
-                DialogueText: "Kẻ yếu đuối...",
-                StageDirection: null,
-                Kind: ScriptLineKind.Dialogue,
-                SpeakerLabel: "Sasuke"
-            ),
-            new(
-                Id: null,
-                LineOrder: 3,
-                DialogueText: "Hai đứa này lại cãi nhau rồi.",
-                StageDirection: null,
-                Kind: ScriptLineKind.Thought,
-                SpeakerLabel: "Kakashi (nghĩ)"
-            ),
-            new(
-                Id: null,
-                LineOrder: 4,
-                DialogueText: null,
-                StageDirection: "Mặt trời mọc trên Làng Lá bình yên.",
-                Kind: ScriptLineKind.Action,
-                Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
-            ),
-            new(
-                Id: null,
-                LineOrder: 5,
-                DialogueText: null,
-                StageDirection: "Năm ấy, Làng Lá bước vào kỷ nguyên mới.",
-                Kind: ScriptLineKind.Narration,
-                Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
-            ),
-            new(
-                Id: null,
-                LineOrder: 6,
-                DialogueText: null,
-                StageDirection: "BÙM!! Khói bao trùm cổng làng Làng Lá.",
-                Kind: ScriptLineKind.Sfx,
-                Refs: [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]
-            )
-        };
+        var validBody = new ChapterScriptBody(
+            ExpectedRevisionId: null,
+            Pages:
+            [
+                new ScriptTreePage(
+                    Id: null,
+                    Number: 1,
+                    Panels:
+                    [
+                        new ScriptTreePanel(
+                            Id: null,
+                            Number: 1,
+                            Direction: "Toàn cảnh.",
+                            CastRevisions: null,
+                            Lines:
+                            [
+                                new ScriptTreeLine(null, ScriptLineKind.Dialogue, "cửu vĩ", "Tôi sẽ không bao giờ bỏ cuộc!"),
+                                new ScriptTreeLine(null, ScriptLineKind.Dialogue, "Sasuke", "Kẻ yếu đuối..."),
+                                new ScriptTreeLine(null, ScriptLineKind.Thought, "Kakashi (nghĩ)", "Hai đứa này lại cãi nhau rồi."),
+                                new ScriptTreeLine(null, ScriptLineKind.Action, null, "Mặt trời mọc trên Làng Lá bình yên.", [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]),
+                                new ScriptTreeLine(null, ScriptLineKind.Narration, null, "Năm ấy, Làng Lá bước vào kỷ nguyên mới.", [new ScriptLineRefInput("Làng Lá", leafVillage.Id)]),
+                                new ScriptTreeLine(null, ScriptLineKind.Sfx, null, "BÙM!! Khói bao trùm cổng làng Làng Lá.", [new ScriptLineRefInput("Làng Lá", leafVillage.Id)])
+                            ])
+                    ])
+            ]);
 
-        var saveCmd = new BatchSaveScriptLinesCommand(chapter.Id, scene.Id, _writerId, validLines);
-        var saveResult = await batchHandler.Handle(saveCmd, CancellationToken.None);
+        var saveCmd = new SaveChapterScriptCommand(chapter.Id, _writerId, validBody);
+        var saveResult = await saveHandler.Handle(saveCmd, CancellationToken.None);
         saveResult.IsSuccess.Should().BeTrue();
 
         // 4. Run cast recompute to verify speaker matching, stub creation, and highlight bindings
@@ -645,11 +628,12 @@ public class SeriesBibleScenarioTests
         _db.ScriptLines.Add(lineCh2);
         await _db.SaveChangesAsync();
 
-        // Real handler invocation for CommitScriptVersionCommand on Ch2
-        var handler = new CommitScriptVersionCommandHandler(_db, _auth.Object, _castService);
-        var commitResult = await handler.Handle(new CommitScriptVersionCommand(ch2.Id, _writerId, "Writer commit ch2"), CancellationToken.None);
+        // Real invocation for committing script version on Ch2
+        var commitResult = await ScriptSnapshotBuilder.CommitAsync(
+            _db, ch2.Id, _writerId, "Writer commit ch2", CancellationToken.None, _castService);
+        await _db.SaveChangesAsync();
 
-        commitResult.IsSuccess.Should().BeTrue();
+        commitResult.Should().NotBeNull();
 
         // Chapter 2 binding should exist and inherit v1 from Chapter 1!
         var ch2Binding = await _db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == ch2.Id && b.BibleEntryId == kakashi.Id);

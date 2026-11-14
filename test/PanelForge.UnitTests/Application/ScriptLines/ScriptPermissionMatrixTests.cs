@@ -6,7 +6,6 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Services;
-using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -266,24 +265,5 @@ public class ScriptPermissionMatrixTests
         unfreezeResult.IsSuccess.Should().BeTrue(unfreezeResult.ErrorMessage);
         _chapter.ScriptStatus.Should().Be(ScriptStatus.Draft);
         _chapter.Status.Should().Be(ChapterStatus.InProduction);
-    }
-
-    [Fact]
-    public async Task Producer_CannotSyncScriptStructure_Returns403_Forbidden()
-    {
-        SetScriptStatus(ScriptStatus.Draft);
-
-        var handler = new SyncScriptStructureCommandHandler(
-            _db,
-            _pages.Object,
-            new PassThroughUnitOfWork(),
-            _auth.Object);
-
-        var result = await handler.Handle(
-            new SyncScriptStructureCommand(_chapter.Id, _producerId, [new ScriptStructurePage(1, [])]),
-            default);
-
-        result.IsSuccess.Should().BeFalse("Producer không được phép tạo/sửa khung trang kịch bản");
-        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
     }
 }

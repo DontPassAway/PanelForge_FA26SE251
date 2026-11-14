@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
-using PanelForge.Application.Features.Pages.Commands.SyncScriptStructure;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.ScriptLines.Common;
 
-/// <summary>Khung Trang → Panel của kịch bản: tạo, xoá mềm, hướng panel, phiên bản Bible của panel. Dùng chung cho SyncScriptStructure và lưu cả chương.</summary>
+public sealed record PanelCastRevisionItem(Guid BibleEntryId, Guid RevisionId);
+
+/// <summary>Khung Trang → Panel của kịch bản: tạo, xoá mềm, hướng panel, phiên bản Bible của panel. Dùng cho lưu kịch bản cả chương.</summary>
 internal static class ScriptStructureRules
 {
     /// <summary>Revision của cast phải tồn tại, đúng mục Bible, thuộc Series của chương và chưa Superseded (BIB-11, Q23, Q24). Trả lỗi hoặc null.</summary>
