@@ -7,11 +7,14 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CancelReplacementRevision;
+using PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.ConceptComments;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.DeleteBibleEntryEra;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Commands.LockBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
+using PanelForge.Application.Features.Bible.Queries.GetBibleConceptComments;
 using PanelForge.Application.Features.Bible.Queries.GetBibleReferenceImage;
 using PanelForge.Application.Features.Bible.Queries.GetPanelBible;
 using PanelForge.Application.Features.Bible.Models;
@@ -89,10 +92,10 @@ public sealed class BibleController : ControllerBase
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries
     /// Thêm mục mới vào Series Bible (Tự động khởi tạo Version 1 - BR-18, CF1 Step 8).
-    /// Chỉ Writer và Producer mới có quyền tạo mục Bible; Artist nhận việc qua Design Queue.
+    /// V2.6 (Q19/Q20): Chỉ Writer mới có quyền tạo mục Bible; Producer chỉ đọc Bible.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -138,9 +141,10 @@ public sealed class BibleController : ControllerBase
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions
     /// Tạo phiên bản sửa đổi mới cho BibleEntry có hiệu lực từ một Chapter (Append-only BR-01, BR-15).
+    /// V2.6 (Q19/Q20): Chỉ Writer mới có quyền tạo revision text; Producer chỉ đọc.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)] // Chỉ Writer và Producer tạo revision text, Artist nộp qua /concept
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -184,29 +188,33 @@ public sealed class BibleController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/lock
-    /// Producer khoá Canon một revision đã được Editor duyệt (Nhân vật, Địa điểm, Đạo cụ). Không mở khoá được:
-    /// muốn thay thì thêm revision mới có hiệu lực từ chương khác, hoặc thay thế tại chương đó qua /supersede.
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/confirm
+    /// V2.6 (Q20): Editor xác nhận bản vẽ Concept = khoá Canon (chỉ Editor; Editor khác Artist đã nộp).
     /// </summary>
-    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/lock")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/confirm")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> LockBibleEntryRevision(
+    public async Task<IActionResult> ConfirmBibleEntryRevision(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid entryId,
         [FromRoute] Guid revisionId,
+        [FromBody] ConfirmBibleRevisionRequest? body,
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new LockBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId()), cancellationToken);
+            new ConfirmBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body?.ConceptEventId),
+            cancellationToken);
+
         if (!result.IsSuccess)
         {
             return result.ErrorCode switch
             {
                 ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
                 ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
                 _ => BadRequest(new { error = result.ErrorMessage })
             };
@@ -230,40 +238,6 @@ public sealed class BibleController : ControllerBase
         var result = await _mediator.Send(new GetBibleDesignQueueQuery(seriesId), cancellationToken);
         if (!result.IsSuccess)
             return NotFound(new { error = result.ErrorMessage });
-
-        return Ok(result.Value);
-    }
-
-    /// <summary>
-    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/endorse
-    /// Writer hoặc Editor duyệt thiết kế của Artist (-> WriterEndorsed), rồi chuyển Producer khoá Canon.
-    /// </summary>
-    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/endorse")]
-    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Editor)] // Spec V2.6 §5.1: Writer và Editor xác nhận thiết kế
-    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> EndorseBibleEntryRevision(
-        [FromRoute] Guid seriesId,
-        [FromRoute] Guid entryId,
-        [FromRoute] Guid revisionId,
-        [FromBody] EndorseBibleRevisionRequest? body,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(
-            new EndorseBibleEntryRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body?.EffectiveNote),
-            cancellationToken);
-
-        if (!result.IsSuccess)
-        {
-            return result.ErrorCode switch
-            {
-                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
-                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
-                _ => BadRequest(new { error = result.ErrorMessage })
-            };
-        }
 
         return Ok(result.Value);
     }
@@ -336,11 +310,11 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/supersede
-    /// Producer thay thế một bản character sheet đã khoá (V1.2): tạo revision mới cùng chương, khoá luôn, ghi lý do.
-    /// Bản cũ giữ nguyên trong lịch sử, không mở khoá (BR-01).
+    /// Writer thay thế một bản character sheet đã khoá: tạo revision mới cùng chương, ghi lý do.
+    /// V2.6 (Q19/Q20): Chỉ Writer mới có quyền supersede.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/supersede")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -572,5 +546,125 @@ public sealed class BibleController : ControllerBase
             return BadRequest(new { error = result.ErrorMessage });
         }
         return NoContent();
+    }
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/comments
+    /// Lấy danh sách góp ý và thảo luận của một revision.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/comments")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<BibleConceptCommentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConceptComments(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetBibleConceptCommentsQuery(seriesId, entryId, revisionId), cancellationToken);
+
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/comments
+    /// Thêm góp ý gốc cho một phiên bản ConceptArt (chỉ Writer và Editor).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/comments")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(BibleConceptCommentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateConceptComment(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        [FromBody] CreateConceptCommentRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CreateBibleConceptCommentCommand(seriesId, entryId, revisionId, GetCurrentUserId(), body), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/comments/{commentId}/replies
+    /// Trả lời góp ý (chỉ Writer, Editor, Artist).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/comments/{commentId:guid}/replies")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Editor, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(BibleConceptCommentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReplyConceptComment(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        [FromRoute] Guid commentId,
+        [FromBody] ReplyConceptCommentRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ReplyBibleConceptCommentCommand(seriesId, entryId, revisionId, commentId, GetCurrentUserId(), body), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/entries/{entryId}/revisions/{revisionId}/comments/{commentId}/resolve
+    /// Đánh dấu góp ý đã được xử lý (chỉ Writer và Editor).
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/revisions/{revisionId:guid}/comments/{commentId:guid}/resolve")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(BibleConceptCommentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResolveConceptComment(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid entryId,
+        [FromRoute] Guid revisionId,
+        [FromRoute] Guid commentId,
+        [FromQuery] bool resolve = true,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new ResolveBibleConceptCommentCommand(seriesId, entryId, revisionId, commentId, GetCurrentUserId(), resolve), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
     }
 }

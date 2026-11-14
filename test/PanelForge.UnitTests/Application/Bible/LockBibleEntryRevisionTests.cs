@@ -29,13 +29,12 @@ public class LockBibleEntryRevisionTests
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
         _heroV1 = _hero.AddRevision("v1", "{}", "hash-1", effectiveFromChapterNumber: 1, isInitialVersion: true);
-        // Nhân vật cần Artist nộp Concept rồi mới được xác nhận; chỉ revision đã xác nhận mới khoá được
+        // Nhân vật cần Artist nộp Concept; nộp concept xong ở trạng thái ConceptSubmitted
         _heroV1.SubmitConcept(Guid.NewGuid(), "https://r2.example/hero-v1.png", null);
-        _heroV1.Endorse(Guid.NewGuid());
         _location = bible.AddEntry(BibleEntryCategory.Location, "SHOP", "Tiệm", "Tiệm đồng hồ");
-        _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+        _locationV1 = _location.AddRevision("v1", "{}", "hash-2", isInitialVersion: true, reviewStatus: BibleRevisionStatus.ConceptSubmitted);
         _term = bible.AddEntry(BibleEntryCategory.Terminology, "AURA", "Aura", "Năng lượng");
-        _termV1 = _term.AddRevision("v1", "{}", "hash-3", isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+        _termV1 = _term.AddRevision("v1", "{}", "hash-3", isInitialVersion: true, reviewStatus: BibleRevisionStatus.ConceptSubmitted);
 
         _db.Setup(d => d.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible> { bible }));
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { _hero, _location, _term }));
@@ -85,19 +84,6 @@ public class LockBibleEntryRevisionTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         _locationV1.IsLocked.Should().BeTrue();
         _location.EffectiveRevisionAt(1, canonOnly: true).Should().BeSameAs(_locationV1);
-    }
-
-    [Fact]
-    public async Task Lock_ByTheSameUserWhoEndorsed_ReturnsConflict()
-    {
-        var revision = _hero.AddRevision("v2", "{}", "hash-v2", effectiveFromChapterNumber: 3);
-        revision.SubmitConcept(Guid.NewGuid(), "/img/v2.png", null);
-        revision.Endorse(_producerId);
-
-        var result = await Lock(_hero, revision);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        revision.IsLocked.Should().BeFalse();
     }
 
     [Fact]
@@ -198,15 +184,14 @@ public class LockBibleEntryRevisionTests
     }
 
     [Fact]
-    public async Task Lock_WhenNotWriterEndorsed_ReturnsConflict()
+    public async Task Lock_WhenNotConceptSubmitted_ReturnsConflict()
     {
-        var unendorsed = _hero.AddRevision("v-draft", "{}", "hash-draft", effectiveFromChapterNumber: 2, reviewStatus: BibleRevisionStatus.Draft);
-        var result = await Lock(_hero, unendorsed);
+        var draft = _hero.AddRevision("v-draft", "{}", "hash-draft", effectiveFromChapterNumber: 2, reviewStatus: BibleRevisionStatus.Draft);
+        var result = await Lock(_hero, draft);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Editor");
-        unendorsed.IsLocked.Should().BeFalse();
+        draft.IsLocked.Should().BeFalse();
     }
 
     [Fact]
@@ -216,29 +201,5 @@ public class LockBibleEntryRevisionTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         _hero.Revisions.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task Lock_RevisionNotEndorsed_ReturnsConflict_AndNotSaved()
-    {
-        var v2 = _hero.AddRevision("v2", "{}", "hash-3", effectiveFromChapterNumber: 3);
-        v2.SubmitConcept(Guid.NewGuid(), "https://img/v2.png", null);
-
-        var result = await Lock(_hero, v2);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        v2.IsLocked.Should().BeFalse();
-        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Lock_AfterConceptResubmitted_OldEndorsementDoesNotCount()
-    {
-        _heroV1.SubmitConcept(Guid.NewGuid(), "https://img/v1b.png", "vẽ lại");
-
-        var result = await Lock(_hero, _heroV1);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        _heroV1.IsLocked.Should().BeFalse();
     }
 }

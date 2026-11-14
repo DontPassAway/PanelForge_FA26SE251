@@ -26,7 +26,7 @@ public class GetBibleEntryUsagesTests
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
         // Chỉ khoá giai đoạn từ chương 1 đến 2; chương 3 trở đi chưa có bản Canon
         var heroV1 = _hero.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, effectiveToChapterNumber: 2,
-            isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+            isInitialVersion: true, reviewStatus: BibleRevisionStatus.ConceptSubmitted);
         heroV1.Lock(Guid.NewGuid());
         _term = bible.AddEntry(BibleEntryCategory.Terminology, "AURA", "Aura", "Năng lượng");
         _term.AddRevision("v1", "{}", "h2", isInitialVersion: true);

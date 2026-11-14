@@ -28,16 +28,24 @@ public sealed record BibleEntryRevisionDto(
     // Ảnh Concept hiện hành của phiên bản (nộp Concept không tạo phiên bản mới) và dòng thời gian duyệt, cũ → mới
     string? ConceptImageUrl = null,
     IReadOnlyList<BibleRevisionEventDto>? Events = null,
-    Guid? SupersedesRevisionId = null
+    Guid? SupersedesRevisionId = null,
+    Guid? CurrentConceptEventId = null,
+    int? CurrentConceptVersionNumber = null
 )
 {
     /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
-    public static BibleEntryRevisionDto From(BibleEntryRevision r) => new(
-        r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
-        r.EffectiveFromChapterNumber, r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
-        r.EffectiveToChapterNumber, r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
-        r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
-        r.SupersedesRevisionId);
+    public static BibleEntryRevisionDto From(BibleEntryRevision r)
+    {
+        var currentEvt = r.CurrentConceptEventId.HasValue ? r.Events.FirstOrDefault(e => e.Id == r.CurrentConceptEventId.Value) : null;
+        return new(
+            r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
+            r.EffectiveFromChapterNumber, r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
+            r.EffectiveToChapterNumber, r.ArtistUserId, r.ReviewStatus, r.ReworkFeedback, r.ConceptImageUrl,
+            r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
+            r.SupersedesRevisionId,
+            r.CurrentConceptEventId,
+            currentEvt?.ConceptVersionNumber);
+    }
 }
 
 /// <summary>Một bước duyệt: type Created/ConceptSubmitted/ReworkRequested/Endorsed/Locked/Superseded.</summary>
@@ -48,10 +56,12 @@ public sealed record BibleRevisionEventDto(
     string? Comment,
     string? ImageUrl,
     string EventHash,
-    DateTime CreatedAt)
+    DateTime CreatedAt,
+    int? ConceptVersionNumber = null,
+    string? AssetSha256 = null)
 {
     public static BibleRevisionEventDto From(BibleRevisionEvent e) =>
-        new(e.Id, e.Type, e.ActorId, e.Comment, e.ImageUrl, e.EventHash, e.CreatedAt);
+        new(e.Id, e.Type, e.ActorId, e.Comment, e.ImageUrl, e.EventHash, e.CreatedAt, e.ConceptVersionNumber, e.AssetSha256);
 }
 
 public sealed record BibleEntryDto(
@@ -155,12 +165,56 @@ public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, st
     public string EffectiveReason => (!string.IsNullOrWhiteSpace(Reason) ? Reason : ReworkReason)?.Trim() ?? string.Empty;
 }
 
+public sealed record ConfirmBibleRevisionRequest(Guid? ConceptEventId = null);
+
+public sealed record BibleConceptCommentDto(
+    Guid Id,
+    Guid RevisionId,
+    Guid ConceptEventId,
+    Guid? ParentCommentId,
+    Guid AuthorId,
+    string Body,
+    string? Region,
+    DateTime? ResolvedAt,
+    Guid? ResolvedBy,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    IReadOnlyList<BibleConceptCommentDto> Replies
+)
+{
+    public static BibleConceptCommentDto From(BibleConceptComment c) => new(
+        c.Id,
+        c.RevisionId,
+        c.ConceptEventId,
+        c.ParentCommentId,
+        c.AuthorId,
+        c.Body,
+        c.Region,
+        c.ResolvedAt,
+        c.ResolvedBy,
+        c.CreatedAt,
+        c.UpdatedAt,
+        c.Replies.Where(r => !r.IsDeleted).OrderBy(r => r.CreatedAt).Select(From).ToList()
+    );
+}
+
+public sealed record CreateConceptCommentRequest(
+    string Body,
+    Guid? ConceptEventId = null,
+    string? Region = null
+);
+
+public sealed record ReplyConceptCommentRequest(
+    string Body
+);
+
 public sealed record SubmitConceptArtRequest(
     string? Summary = null,
     string? Name = null,
     string? Description = null,
     string? ReferenceImageUrl = null,
     string? ImageAssetUrl = null,
+    string? AssetSha256 = null,
     string? Note = null,
     string? Subtitle = null,
     string? DetailsJson = null,

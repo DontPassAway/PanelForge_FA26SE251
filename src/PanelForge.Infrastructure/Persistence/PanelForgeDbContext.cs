@@ -62,6 +62,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<BibleEntryName> BibleEntryNames => Set<BibleEntryName>();
     public DbSet<ChapterBibleBinding> ChapterBibleBindings => Set<ChapterBibleBinding>();
     public DbSet<PanelBibleVariant> PanelBibleVariants => Set<PanelBibleVariant>();
+    public DbSet<BibleConceptComment> BibleConceptComments => Set<BibleConceptComment>();
     public DbSet<PipelineDefinition> PipelineDefinitions => Set<PipelineDefinition>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
