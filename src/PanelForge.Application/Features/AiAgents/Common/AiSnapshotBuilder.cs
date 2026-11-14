@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -56,16 +57,44 @@ internal static class AiSnapshotBuilder
     internal static async Task<List<BibleEntryContext>?> BuildBibleAsync(IPanelForgeDbContext db, Chapter chapter, CancellationToken ct)
     {
         var bible = await db.SeriesBibles.AsNoTracking()
-            .Include(b => b.Entries).ThenInclude(e => e.Revisions)
+            .Include(b => b.Entries)
+                .ThenInclude(e => e.Revisions)
+                    .ThenInclude(r => r.Events)
             .FirstOrDefaultAsync(b => b.SeriesId == chapter.SeriesId, ct);
         if (bible is null) return null;
+
+        var bindings = await db.ChapterBibleBindings.AsNoTracking()
+            .Where(b => b.ChapterId == chapter.Id)
+            .ToDictionaryAsync(b => b.BibleEntryId, ct);
 
         var chapterInt = (int)Math.Floor(chapter.ChapterNumber);
         var entries = new List<BibleEntryContext>();
         foreach (var entry in bible.Entries.Where(e => e.IsActive).OrderBy(e => e.Category).ThenBy(e => e.Code))
         {
-            // V1.2: AI chỉ dựa trên character sheet đã được Producer khoá; nhân vật chưa khoá bị bỏ khỏi context.
-            var rev = entry.EffectiveRevisionAt(chapterInt, canonOnly: true);
+            // BIB-15, Q16, Q23: Context AI đọc theo binding của chương; chương chưa qua Gate 1 dùng bản tự gắn.
+            // Ẩn thực thể quần chúng (is_crowd_at_bind).
+            if (bindings.TryGetValue(entry.Id, out var binding) && binding.IsCrowdAtBind)
+                continue;
+            if (!bindings.ContainsKey(entry.Id) && entry.IsCrowd)
+                continue;
+
+            BibleEntryRevision? rev = null;
+            if (binding?.BoundRevisionId != null)
+            {
+                rev = entry.Revisions.FirstOrDefault(r => r.Id == binding.BoundRevisionId.Value);
+                // AI chỉ dựa trên character sheet đã được khoá (V1.2 / BIB-15)
+                if (rev != null && entry.IsVisualDesign && !rev.IsLocked)
+                {
+                    rev = null;
+                }
+            }
+            else
+            {
+                // Chương trước Gate 1 / chưa gắn: dùng bản tự gắn hiện tại
+                rev = entry.GetDefaultVariantRevision(canonOnly: true)
+                    ?? entry.EffectiveRevisionAt(chapterInt, canonOnly: true);
+            }
+
             if (rev is null) continue;
 
             var (name, description, details) = (entry.Name, entry.Description, entry.DetailsJson);
