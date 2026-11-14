@@ -3,6 +3,7 @@ using MediatR;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Commands.ConceptComments;
 using PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
@@ -19,6 +20,7 @@ public class BibleConceptVersioningAndConfirmTests
 {
     private readonly Mock<IPanelForgeDbContext> _db = new();
     private readonly Mock<ISender> _sender = new();
+    private readonly Mock<IChapterCastInheritanceResolver> _inheritanceResolver = new();
     private readonly Guid _seriesId = Guid.NewGuid();
     private readonly Guid _editorId = Guid.NewGuid();
     private readonly Guid _artistId = Guid.NewGuid();
@@ -120,7 +122,7 @@ public class BibleConceptVersioningAndConfirmTests
         // Artist nộp concept
         _heroV1.SubmitConcept(_artistId, "https://r2/hero.png", "Bản hoàn chỉnh", "sha-concept-1");
 
-        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object, _inheritanceResolver.Object);
         var cmd = new ConfirmBibleEntryRevisionCommand(_seriesId, _heroEntry.Id, _heroV1.Id, _editorId, _heroV1.CurrentConceptEventId);
 
         var result = await handler.Handle(cmd, CancellationToken.None);
@@ -147,7 +149,7 @@ public class BibleConceptVersioningAndConfirmTests
         _heroV1.SubmitConcept(_artistId, "https://r2/hero-v2.png", "v2");
 
         // Editor gửi xác nhận nhưng nhắm vào oldEventId
-        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object, _inheritanceResolver.Object);
         var cmd = new ConfirmBibleEntryRevisionCommand(_seriesId, _heroEntry.Id, _heroV1.Id, _editorId, oldEventId);
 
         var result = await handler.Handle(cmd, CancellationToken.None);
@@ -164,7 +166,7 @@ public class BibleConceptVersioningAndConfirmTests
         // Artist tự mình là Editor và nộp concept
         _heroV1.SubmitConcept(_artistId, "https://r2/hero.png", "v1");
 
-        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object, _inheritanceResolver.Object);
         var cmd = new ConfirmBibleEntryRevisionCommand(_seriesId, _heroEntry.Id, _heroV1.Id, _artistId, _heroV1.CurrentConceptEventId);
 
         var result = await handler.Handle(cmd, CancellationToken.None);
@@ -179,7 +181,7 @@ public class BibleConceptVersioningAndConfirmTests
     public async Task ConfirmCanon_WhenRevisionNotConceptSubmitted_ReturnsConflict()
     {
         // Revision đang ở Draft
-        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db.Object, _inheritanceResolver.Object);
         var cmd = new ConfirmBibleEntryRevisionCommand(_seriesId, _heroEntry.Id, _heroV1.Id, _editorId);
 
         var result = await handler.Handle(cmd, CancellationToken.None);
