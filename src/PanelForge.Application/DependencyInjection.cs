@@ -14,6 +14,7 @@ public static class DependencyInjection
 
         services.AddScoped<Features.Chapters.Services.IChapterCastService, Features.Chapters.Services.ChapterCastService>();
         services.AddScoped<Features.Chapters.Services.IChapterCastGate, Features.Chapters.Services.ChapterCastGate>();
+        services.AddScoped<Features.Panels.Services.PageLayoutReplacer>();
 
         return services;
     }

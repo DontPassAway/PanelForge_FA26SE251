@@ -15,6 +15,11 @@ public sealed record PanelDto(
     string? Direction = null
 );
 
+public sealed record PageLayoutDto(
+    IReadOnlyList<PanelDto> Panels,
+    int UnassignedArtworkCount
+);
+
 public sealed record PanelDetailDto(
     Guid Id,
     Guid PageId,

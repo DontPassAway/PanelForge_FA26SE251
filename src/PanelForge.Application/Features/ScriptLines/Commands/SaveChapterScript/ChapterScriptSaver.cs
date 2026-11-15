@@ -124,7 +124,7 @@ internal static class ChapterScriptSaver
 
         await RemoveDroppedStructureAsync(db, pageRepository, pages, panels, payloadPages, touchedPanelIds, userId, warnings, ct);
 
-        var variants = await db.PanelBibleVariants.Where(v => touchedPanelIds.Contains(v.PanelId)).ToListAsync(ct);
+        var variants = await db.PanelBibleVariants.Where(v => v.PanelId.HasValue && touchedPanelIds.Contains(v.PanelId.Value)).ToListAsync(ct);
         foreach (var (panel, wanted) in placedPanels)
         {
             if (ScriptStructureRules.ApplyDirection(panel, wanted.Direction, userId) is { } directionError)

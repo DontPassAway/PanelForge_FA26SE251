@@ -107,7 +107,7 @@ internal static class ScriptStructureRules
         var removedPanelIds = removedPanels.Select(p => p.Id).ToList();
         if (removedPanelIds.Count > 0)
         {
-            var orphanVariants = await db.PanelBibleVariants.Where(v => removedPanelIds.Contains(v.PanelId)).ToListAsync(ct);
+            var orphanVariants = await db.PanelBibleVariants.Where(v => v.PanelId.HasValue && removedPanelIds.Contains(v.PanelId.Value)).ToListAsync(ct);
             db.PanelBibleVariants.RemoveRange(orphanVariants);
         }
     }

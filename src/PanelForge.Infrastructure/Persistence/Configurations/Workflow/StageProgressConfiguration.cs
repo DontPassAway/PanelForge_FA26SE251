@@ -20,8 +20,7 @@ internal sealed class StageProgressConfiguration : IEntityTypeConfiguration<Stag
 
         builder.Property(s => s.PanelId)
                .HasColumnName("panel_id")
-               .HasColumnType("uuid")
-               .IsRequired();
+               .HasColumnType("uuid");
 
         builder.Property(s => s.PipelineStageId)
                .HasColumnName("pipeline_stage_id")
@@ -72,7 +71,7 @@ internal sealed class StageProgressConfiguration : IEntityTypeConfiguration<Stag
         builder.HasOne<Panel>()
                .WithMany()
                .HasForeignKey(s => s.PanelId)
-               .OnDelete(DeleteBehavior.Cascade);
+               .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne<PipelineStage>()
                .WithMany()

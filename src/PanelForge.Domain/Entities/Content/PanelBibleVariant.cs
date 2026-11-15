@@ -10,7 +10,8 @@ namespace PanelForge.Domain.Entities.Content;
 /// </summary>
 public class PanelBibleVariant
 {
-    public Guid PanelId { get; private set; }
+    public Guid Id { get; private set; } = Guid.NewGuid();
+    public Guid? PanelId { get; private set; }
     public Guid BibleEntryId { get; private set; }
     public Guid RevisionId { get; private set; }
     public Guid SetById { get; private set; }
@@ -45,4 +46,6 @@ public class PanelBibleVariant
         SetById = setById;
         SetAt = DateTime.UtcNow;
     }
+
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 }

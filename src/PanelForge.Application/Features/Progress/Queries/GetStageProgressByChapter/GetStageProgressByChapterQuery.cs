@@ -44,10 +44,10 @@ public sealed class GetStageProgressByChapterQueryHandler
 
         var panelIds = panelPage.Keys.ToList();
         var rows = await _db.StageProgresses.AsNoTracking()
-            .Where(s => panelIds.Contains(s.PanelId)).ToListAsync(ct);
+            .Where(s => s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
 
         var items = rows
-            .Select(s => new StageProgressDto(s.Id, panelPage[s.PanelId], s.PanelId, s.PipelineStageId,
+            .Select(s => new StageProgressDto(s.Id, panelPage[s.PanelId!.Value], s.PanelId.Value, s.PipelineStageId,
                 s.Status, s.SubmittedAt, s.SubmittedByUserId, s.UpdatedAt))
             .OrderBy(s => s.PageId).ThenBy(s => s.PanelId)
             .ToList();

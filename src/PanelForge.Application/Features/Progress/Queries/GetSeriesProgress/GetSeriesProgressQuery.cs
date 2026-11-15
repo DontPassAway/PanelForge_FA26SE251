@@ -74,7 +74,7 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var panels = await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId))
             .Select(p => new { p.Id, p.PageId }).ToListAsync(ct);
         var panelIds = panels.Select(p => p.Id).ToList();
-        var progress = await _db.StageProgresses.AsNoTracking().Where(s => panelIds.Contains(s.PanelId)).ToListAsync(ct);
+        var progress = await _db.StageProgresses.AsNoTracking().Where(s => s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
         var assignments = await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct);
         var changeRequests = await _db.ChangeRequests.AsNoTracking()
             .Where(cr => chapterIds.Contains(cr.ChapterId))
@@ -89,7 +89,7 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var chapterDtos = chapters.Select(c =>
         {
             var chapterPanels = panels.Where(p => panelChapter[p.Id] == c.Id).Select(p => p.Id).ToHashSet();
-            var rows = progress.Where(r => chapterPanels.Contains(r.PanelId)).ToList();
+            var rows = progress.Where(r => r.PanelId.HasValue && chapterPanels.Contains(r.PanelId.Value)).ToList();
             var breakdown = stages.Select(s =>
             {
                 int Count(StageProgressStatus st) => rows.Count(r => r.PipelineStageId == s.Id && r.Status == st);

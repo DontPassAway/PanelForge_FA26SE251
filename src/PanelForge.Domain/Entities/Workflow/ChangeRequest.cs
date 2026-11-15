@@ -123,6 +123,8 @@ public class ChangeRequest : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
+
     /// <summary>Còn mở thì chặn nộp lại / duyệt: Open và Resolved (chưa xác minh) đều chưa đóng.</summary>
     public bool IsClosed => Status is ChangeRequestStatus.Verified or ChangeRequestStatus.Rejected;
 

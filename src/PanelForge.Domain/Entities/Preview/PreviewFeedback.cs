@@ -86,4 +86,6 @@ public class PreviewFeedback : BaseEntity
         ChangeRequestId = changeRequestId;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 }
