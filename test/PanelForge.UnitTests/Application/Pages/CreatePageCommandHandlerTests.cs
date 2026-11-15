@@ -18,6 +18,8 @@ public class CreatePageCommandHandlerTests
     public CreatePageCommandHandlerTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        // Chương chưa dùng lưới: không sinh ô cho trang mới
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workflow.StageTask>()));
         _pageRepositoryMock = new Mock<IPageRepository>();
         _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork(), Mock.Of<IWorkspaceAuthorizationService>());
     }

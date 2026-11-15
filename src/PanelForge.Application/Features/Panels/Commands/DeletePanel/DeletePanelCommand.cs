@@ -28,7 +28,7 @@ public sealed class DeletePanelCommandHandler : IRequestHandler<DeletePanelComma
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
             return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
         // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
-        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, panel.PageId, panel.Id, cancellationToken) is { } outOfScope)
+        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, panel.PageId, panel.Id, cancellationToken, layout: true) is { } outOfScope)
             return Result<bool>.Failure(outOfScope, ResultErrorCodes.Forbidden);
 
         // Còn việc đang giao cho Panel thì không xoá: tránh Assignment mồ côi

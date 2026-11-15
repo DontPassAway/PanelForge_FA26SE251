@@ -15,7 +15,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 /// Người nhận phải là thành viên Active của Workspace, đúng vai trò của công đoạn. <c>DryRun</c> chỉ kiểm tra.
 /// </summary>
 public sealed record AssignStageTaskLotsCommand(
-    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun) : IRequest<Result<AssignStageTaskLotsResultDto>>;
+    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun) : IRequest<Result<AssignStageTaskLotsResultDto>>, ITransactionalCommand;
 
 public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignStageTaskLotsCommand, Result<AssignStageTaskLotsResultDto>>
 {

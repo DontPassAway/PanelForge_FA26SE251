@@ -478,6 +478,8 @@ public class TaskGridHandlerTests
         var pencil = f.Cell(f.Pencil, 0);
         await f.Start(pencil, f.ArtistId);
         (await Deny(f.ArtistId)).Should().BeNull();
+        (await WorkScopeGuard.DenyReasonAsync(f.Db.Object, f.ArtistId, page, null, default, layout: true))
+            .Should().BeNull("Pencil là công đoạn vẽ đầu tiên nên được sửa khung");
         (await Deny(otherArtist)).Should().Contain("người khác");
         (await Deny(f.LettererId)).Should().Contain("Bắt đầu");        // Letterer giữ ô Lettering chưa bắt đầu
 
@@ -489,6 +491,9 @@ public class TaskGridHandlerTests
         // Ink và Color xong → Pencil/Ink/Color của trang 1 đều Approved: Artist không còn sửa được trang đã duyệt
         var ink = f.Cell(f.Ink, 0);
         await f.Start(ink, f.ArtistId);
+        (await Deny(f.ArtistId)).Should().BeNull("Ink vẫn vẽ được lên trang");
+        (await WorkScopeGuard.DenyReasonAsync(f.Db.Object, f.ArtistId, page, null, default, layout: true))
+            .Should().Contain("Bố cục khung", "Ink không được đổi khung Pencil đã duyệt");
         await f.Submit(f.ArtistId, ink);
         var color = f.Cell(f.Color, 0);
         if (color.Status != StageTaskStatus.Unassigned)

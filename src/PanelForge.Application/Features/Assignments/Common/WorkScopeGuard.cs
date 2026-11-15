@@ -26,7 +26,7 @@ internal static class WorkScopeGuard
 
     /// <summary>Lý do chặn (trả 403), hoặc null nếu được ghi. <paramref name="panelId"/> null = ghi cả trang.</summary>
     public static async Task<string?> DenyReasonAsync(
-        IPanelForgeDbContext db, Guid userId, Guid pageId, Guid? panelId, CancellationToken ct)
+        IPanelForgeDbContext db, Guid userId, Guid pageId, Guid? panelId, CancellationToken ct, bool layout = false)
     {
         var chapterId = await db.Pages.AsNoTracking().Where(p => p.Id == pageId).Select(p => (Guid?)p.ChapterId).FirstOrDefaultAsync(ct);
         if (chapterId is null) return null; // handler tự báo không tồn tại
@@ -40,7 +40,7 @@ internal static class WorkScopeGuard
 
         // Lưới V3: trang có ô đang mở (đã giao, chưa duyệt) của vai trò này thì chỉ người giữ ô, ở trạng thái làm việc và đầu vào
         // còn hiệu lực, mới ghi được. Ô lưới là cấp Trang nên ghi panel hay cả trang đều xét theo trang.
-        if (await GridDenyReasonAsync(db, userId, r, chapterId.Value, pageId, ct) is { } grid)
+        if (await GridDenyReasonAsync(db, userId, r, chapterId.Value, pageId, layout, ct) is { } grid)
             return grid.Length == 0 ? null : grid;
 
         var targetPanels = panelId is { } pid
@@ -71,26 +71,44 @@ internal static class WorkScopeGuard
             : "Khung này thuộc việc của người khác; bạn không có quyền sửa.";
     }
 
+    /// <summary>Chương đã sinh ô lưới (ô chưa huỷ, kể cả chưa giao lô) thì luật lưới thay cho luật V2.</summary>
+    public static Task<bool> UsesGridAsync(IPanelForgeDbContext db, Guid chapterId, CancellationToken ct)
+        => db.StageTasks.AsNoTracking().AnyAsync(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled, ct);
+
     /// <summary>null = lưới không phủ trang này (xét luật cũ); "" = cho ghi; còn lại = lý do chặn.</summary>
     private static async Task<string?> GridDenyReasonAsync(
-        IPanelForgeDbContext db, Guid userId, WorkspaceRole role, Guid chapterId, Guid pageId, CancellationToken ct)
+        IPanelForgeDbContext db, Guid userId, WorkspaceRole role, Guid chapterId, Guid pageId, bool layout, CancellationToken ct)
     {
         var cells = await (from t in db.StageTasks.AsNoTracking()
                            join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
                            where t.ChapterId == chapterId && l.AssignedRole == role
                                  && (t.PageId == pageId || t.PageId == null) && GridOpen.Contains(t.Status)
-                           select new { t.Status, t.IsInputOutdated, l.AssigneeUserId }).ToListAsync(ct);
+                           select new { t.Status, t.IsInputOutdated, t.PipelineStageId, l.AssigneeUserId }).ToListAsync(ct);
         if (cells.Count == 0)
         {
-            // Chương đã dùng lưới: không còn ô mở của vai trò này trên trang (chưa giao hoặc đã duyệt) thì từ chối, không rơi
-            // về luật V2 (bảng Assignments rỗng → mở cho mọi Artist/Letterer sửa trang đã duyệt).
-            var usesGrid = await db.StageTasks.AsNoTracking()
-                .AnyAsync(t => t.ChapterId == chapterId && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
-            return usesGrid ? "Trang này không có ô việc đang mở của bạn trên lưới giao việc (chưa giao hoặc đã duyệt); không sửa được." : null;
+            // Chương đã dùng lưới (kể cả mới sinh ô, chưa giao lô): không có ô mở của vai trò này trên trang thì từ chối,
+            // không rơi về luật V2 (bảng Assignments rỗng → mở cho mọi Artist/Letterer sửa).
+            return await UsesGridAsync(db, chapterId, ct)
+                ? "Trang này không có ô việc đang mở của bạn trên lưới giao việc (chưa giao hoặc đã duyệt); không sửa được."
+                : null;
         }
 
         var mine = cells.Where(c => c.AssigneeUserId == userId).ToList();
-        if (mine.Any(c => GridWorking.Contains(c.Status) && !c.IsInputOutdated)) return "";
+        var working = mine.Where(c => GridWorking.Contains(c.Status) && !c.IsInputOutdated).ToList();
+        if (working.Count > 0)
+        {
+            if (!layout) return "";
+            // Bố cục khung do công đoạn vẽ đầu tiên (thường Pencil) chốt; Ink/Color chỉ vẽ lên khung đó.
+            var firstArtStage = await (from t in db.StageTasks.AsNoTracking()
+                                       join s in db.PipelineStages.AsNoTracking() on t.PipelineStageId equals s.Id
+                                       where t.ChapterId == chapterId && t.PageId == pageId && t.Status != StageTaskStatus.Cancelled
+                                             && s.AllowedRole == WorkspaceRole.Artist
+                                       orderby s.StageOrder
+                                       select (Guid?)s.Id).FirstOrDefaultAsync(ct);
+            return firstArtStage is null || working.Any(c => c.PipelineStageId == firstArtStage)
+                ? ""
+                : "Bố cục khung do công đoạn vẽ đầu tiên chốt; công đoạn này chỉ vẽ lên khung. Muốn đổi khung cần Producer mở lại ô đó.";
+        }
         if (mine.Count == 0) return "Trang này đang giao cho người khác trên lưới giao việc; bạn không có quyền sửa.";
         if (mine.Any(c => c.IsInputOutdated)) return "Đầu vào của ô việc đã lỗi thời, chờ Producer xử lý Impact Review trước khi sửa tiếp.";
         if (mine.Any(c => c.Status == StageTaskStatus.Assigned)) return "Ô việc chưa bắt đầu: bấm Bắt đầu khi công đoạn trước đã được duyệt.";

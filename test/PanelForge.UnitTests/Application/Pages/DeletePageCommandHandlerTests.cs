@@ -56,16 +56,16 @@ public class DeletePageCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPageHasTaskGridCell_ShouldConflictAndDeleteNothing()
+    public async Task Handle_WhenPageHasStartedTaskGridCell_ShouldConflictAndDeleteNothing()
     {
         var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
         page.ClearUncommittedEvents();
         var efPages = new List<Page> { page };
         _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(efPages));
-        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>
-        {
-            StageTask.Create(Guid.NewGuid(), page.ChapterId, Guid.NewGuid(), page.Id)
-        }));
+        var started = StageTask.Create(Guid.NewGuid(), page.ChapterId, Guid.NewGuid(), page.Id);
+        started.AssignTo(Guid.NewGuid());
+        started.Start(prerequisitesApproved: true);
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask> { started }));
         _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
 
         var result = await _handler.Handle(new DeletePageCommand(page.Id), CancellationToken.None);
@@ -73,6 +73,23 @@ public class DeletePageCommandHandlerTests
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         page.IsDeleted.Should().BeFalse();
         efPages.Should().ContainSingle();
+    }
+
+    /// <summary>G03: ô chưa bắt đầu không giữ trang lại, nó bị huỷ cùng trang (trước đây không ai xoá được trang).</summary>
+    [Fact]
+    public async Task Handle_WhenPageHasOnlyUnstartedCells_DeletesPageAndCancelsCells()
+    {
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
+        page.ClearUncommittedEvents();
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page> { page }));
+        var free = StageTask.Create(Guid.NewGuid(), page.ChapterId, Guid.NewGuid(), page.Id);
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask> { free }));
+        _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        var result = await _handler.Handle(new DeletePageCommand(page.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        free.Status.Should().Be(StageTaskStatus.Cancelled);
     }
 
     [Theory]

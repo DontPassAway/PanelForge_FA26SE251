@@ -124,7 +124,7 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         // Lưới V3: chương đã giao việc qua lưới thì quyền xét theo ô (trang × công đoạn), không rơi về luật V2 (bảng Assignments
         // rỗng → mọi Artist ghi đè được trang người khác hoặc trang đã duyệt). Ô chưa giao: chỉ Producer tải được.
         var usesGrid = await _db.StageTasks.AnyAsync(
-            t => t.ChapterId == chapter.Id && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
+            t => t.ChapterId == chapter.Id && t.Status != StageTaskStatus.Cancelled, ct);
         if (usesGrid)
         {
             var cell = await (from t in _db.StageTasks.AsNoTracking()

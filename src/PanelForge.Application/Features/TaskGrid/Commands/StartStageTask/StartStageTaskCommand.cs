@@ -9,7 +9,7 @@ using PanelForge.Application.Features.TaskGrid.Models;
 namespace PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 
 /// <summary>Người nhận lô bắt đầu một ô. BR-19: chỉ khi mọi ô tiền đề (theo nhánh) đã duyệt và ô không mang cờ lỗi thời.</summary>
-public sealed record StartStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId) : IRequest<Result<StageTaskDto>>;
+public sealed record StartStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId) : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
 
 public sealed class StartStageTaskCommandHandler : IRequestHandler<StartStageTaskCommand, Result<StageTaskDto>>
 {

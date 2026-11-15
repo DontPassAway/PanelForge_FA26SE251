@@ -17,7 +17,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsTo
 /// Việc đã chuyển được xoá mềm (giữ lịch sử, BR-01). Việc không chuyển được (công đoạn tắt, ô đã có người) giữ nguyên và báo lại.
 /// Submitted/UnderReview về InProgress vì V2 không có ảnh chụp lần nộp theo ô: người làm nộp lại. Gọi lại an toàn.
 /// </summary>
-public sealed record MigrateAssignmentsToGridCommand(Guid SeriesId, Guid UserId) : IRequest<Result<MigrateAssignmentsResultDto>>;
+public sealed record MigrateAssignmentsToGridCommand(Guid SeriesId, Guid UserId) : IRequest<Result<MigrateAssignmentsResultDto>>, ITransactionalCommand;
 
 public sealed class MigrateAssignmentsToGridCommandHandler
     : IRequestHandler<MigrateAssignmentsToGridCommand, Result<MigrateAssignmentsResultDto>>

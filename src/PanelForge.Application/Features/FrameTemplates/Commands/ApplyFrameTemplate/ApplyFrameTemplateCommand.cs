@@ -53,7 +53,7 @@ public sealed class ApplyFrameTemplateCommandHandler
 
         if (page.Status != ChapterStatus.InProduction)
             return Fail("Chương không còn ở trạng thái sản xuất, không dựng lại bố cục được (BR-12).", ResultErrorCodes.Conflict);
-        if (await WorkScopeGuard.DenyReasonAsync(_db, cmd.UserId, cmd.PageId, null, ct) is { } outOfScope)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, cmd.UserId, cmd.PageId, null, ct, layout: true) is { } outOfScope)
             return Fail(outOfScope, ResultErrorCodes.Forbidden);
         if (template.LayoutFormat == LayoutFormat.SpreadDouble && page.LayoutFormat != LayoutFormat.SpreadDouble)
             return Fail($"Template dành cho trang đôi (SpreadDouble), không thể áp dụng cho trang đơn ({page.LayoutFormat}).", ResultErrorCodes.Validation);

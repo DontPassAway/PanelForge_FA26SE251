@@ -17,7 +17,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 /// không có → tự duyệt. Mỗi ô ghi một <see cref="StageTaskSubmission"/> chụp các AssetReference mới nhất của ô (BR-01).
 /// </summary>
 public sealed record SubmitStageTasksCommand(Guid ChapterId, IReadOnlyList<Guid> TaskIds, Guid UserId)
-    : IRequest<Result<IReadOnlyList<StageTaskDto>>>;
+    : IRequest<Result<IReadOnlyList<StageTaskDto>>>, ITransactionalCommand;
 
 public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStageTasksCommand, Result<IReadOnlyList<StageTaskDto>>>
 {

@@ -13,7 +13,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
 /// và phải qua Impact Review. Ô hạ nguồn chưa bắt đầu tự bị chặn Start vì tiền đề không còn Approved.
 /// </summary>
 public sealed record ReopenStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Reason)
-    : IRequest<Result<ReopenStageTaskResultDto>>;
+    : IRequest<Result<ReopenStageTaskResultDto>>, ITransactionalCommand;
 
 public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageTaskCommand, Result<ReopenStageTaskResultDto>>
 {

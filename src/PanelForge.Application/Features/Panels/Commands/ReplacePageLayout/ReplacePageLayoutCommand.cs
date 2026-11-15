@@ -37,7 +37,7 @@ public sealed class ReplacePageLayoutCommandHandler : IRequestHandler<ReplacePag
             return Result<PageLayoutDto>.Failure($"Page {command.PageId} không tồn tại.", ResultErrorCodes.NotFound);
         if (status != ChapterStatus.InProduction)
             return Result<PageLayoutDto>.Failure("Chương không còn ở trạng thái sản xuất, không dựng lại bố cục được (BR-12).", ResultErrorCodes.Conflict);
-        if (await WorkScopeGuard.DenyReasonAsync(_db, command.UserId, command.PageId, null, ct) is { } outOfScope)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, command.UserId, command.PageId, null, ct, layout: true) is { } outOfScope)
             return Result<PageLayoutDto>.Failure(outOfScope, ResultErrorCodes.Forbidden);
         if (command.Panels.Count == 0)
             return Result<PageLayoutDto>.Failure("Bố cục phải có ít nhất một Panel.", ResultErrorCodes.Validation);

@@ -13,7 +13,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 /// qua POST /lots (Transfer = bỏ gán + giao lô mới). Lô không còn ô nào thì Closed.
 /// </summary>
 public sealed record UnassignStageTasksCommand(Guid ChapterId, IReadOnlyList<Guid> TaskIds, Guid UserId)
-    : IRequest<Result<IReadOnlyList<StageTaskDto>>>;
+    : IRequest<Result<IReadOnlyList<StageTaskDto>>>, ITransactionalCommand;
 
 public sealed class UnassignStageTasksCommandHandler : IRequestHandler<UnassignStageTasksCommand, Result<IReadOnlyList<StageTaskDto>>>
 {

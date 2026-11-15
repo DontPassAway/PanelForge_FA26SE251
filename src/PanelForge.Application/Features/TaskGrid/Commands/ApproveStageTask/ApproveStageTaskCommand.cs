@@ -13,7 +13,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 /// Editor/Producer duyệt một ô đã nộp (tự mở duyệt nếu ô còn Submitted). BR-06: người duyệt khác người làm ô;
 /// ô đang do người khác mở duyệt thì không duyệt chồng.
 /// </summary>
-public sealed record ApproveStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId) : IRequest<Result<StageTaskDto>>;
+public sealed record ApproveStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId) : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
 
 public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStageTaskCommand, Result<StageTaskDto>>
 {
@@ -36,7 +36,9 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         if (task is null) return Fail($"Ô {cmd.TaskId} không thuộc chương này.", ResultErrorCodes.NotFound);
 
         var lot = task.LotId is { } lotId ? await _db.StageTaskLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct) : null;
-        if (lot?.AssigneeUserId == cmd.UserId)
+        // BR-06: người duyệt khác cả người đang giữ lô lẫn người đã nộp bản đang chờ (ô có thể đã đổi người sau khi nộp)
+        if (lot?.AssigneeUserId == cmd.UserId ||
+            (await TaskGridRules.PendingSubmissionAsync(_db, task, ct))?.SubmittedByUserId == cmd.UserId)
             return Fail("Không được tự duyệt ô mình làm (BR-06).", ResultErrorCodes.Forbidden);
         if (task.Status == StageTaskStatus.UnderReview && task.ReviewerUserId is { } reviewer && reviewer != cmd.UserId)
             return Fail("Ô này đang do người khác duyệt.", ResultErrorCodes.Conflict);

@@ -9,7 +9,7 @@ using PanelForge.Application.Features.TaskGrid.Models;
 namespace PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 
 /// <summary>Producer xử lý Impact Review cho ô mang cờ lỗi thời: Keep giữ bài, Rework đưa ô về ReworkRequired. Cần tiền đề đã duyệt lại.</summary>
-public sealed record ResolveStageTaskImpactCommand(Guid ChapterId, Guid TaskId, Guid UserId, bool Keep) : IRequest<Result<StageTaskDto>>;
+public sealed record ResolveStageTaskImpactCommand(Guid ChapterId, Guid TaskId, Guid UserId, bool Keep) : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
 
 public sealed class ResolveStageTaskImpactCommandHandler : IRequestHandler<ResolveStageTaskImpactCommand, Result<StageTaskDto>>
 {

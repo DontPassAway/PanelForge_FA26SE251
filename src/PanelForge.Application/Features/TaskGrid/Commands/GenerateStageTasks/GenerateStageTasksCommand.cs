@@ -14,7 +14,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 /// Producer sinh các ô còn thiếu của lưới: mỗi công đoạn đang bật cấp Chương một ô, cấp Trang mỗi trang một ô.
 /// Gọi lại nhiều lần an toàn: ô đã có giữ nguyên (theo Page.Id, không theo số trang), ô của trang đã xoá chuyển Cancelled.
 /// </summary>
-public sealed record GenerateStageTasksCommand(Guid ChapterId, Guid UserId) : IRequest<Result<GenerateStageTasksResultDto>>;
+public sealed record GenerateStageTasksCommand(Guid ChapterId, Guid UserId) : IRequest<Result<GenerateStageTasksResultDto>>, ITransactionalCommand;
 
 public sealed class GenerateStageTasksCommandHandler : IRequestHandler<GenerateStageTasksCommand, Result<GenerateStageTasksResultDto>>
 {
