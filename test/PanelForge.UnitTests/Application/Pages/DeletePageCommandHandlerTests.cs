@@ -26,6 +26,7 @@ public class DeletePageCommandHandlerTests
         _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
         _dbContextMock.Setup(db => db.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
         _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>()));
         _handler = new DeletePageCommandHandler(
             _dbContextMock.Object, _pageRepositoryMock.Object, _unitOfWork, _currentUserMock.Object);
     }
@@ -52,6 +53,26 @@ public class DeletePageCommandHandlerTests
         _unitOfWork.ExecutionCount.Should().Be(1);
         _pageRepositoryMock.Verify(r => r.SaveAsync(streamPage, It.IsAny<CancellationToken>()), Times.Once);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_WhenPageHasTaskGridCell_ShouldConflictAndDeleteNothing()
+    {
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
+        page.ClearUncommittedEvents();
+        var efPages = new List<Page> { page };
+        _dbContextMock.Setup(db => db.Pages).Returns(DbSetMockHelper.CreateDbSetMock(efPages));
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>
+        {
+            StageTask.Create(Guid.NewGuid(), page.ChapterId, Guid.NewGuid(), page.Id)
+        }));
+        _pageRepositoryMock.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        var result = await _handler.Handle(new DeletePageCommand(page.Id), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        page.IsDeleted.Should().BeFalse();
+        efPages.Should().ContainSingle();
     }
 
     [Theory]

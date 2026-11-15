@@ -32,6 +32,11 @@ internal static class AssignmentRules
         var statuses = await db.Assignments.AsNoTracking()
             .Where(a => a.EntityType != WorkflowEntityType.Chapter && targetIds.Contains(a.TargetEntityId))
             .Select(a => a.Status).ToListAsync(ct);
+        // Lưới V3: ô cấp Trang chưa huỷ cũng chặn xoá (ô không cấp Panel nên chỉ khớp id trang).
+        var gridCells = await db.StageTasks.AsNoTracking()
+            .CountAsync(t => t.PageId != null && targetIds.Contains(t.PageId.Value) && t.Status != StageTaskStatus.Cancelled, ct);
+        if (gridCells > 0)
+            return $"Không thể xoá {what}: đang có {gridCells} ô trên lưới giao việc. Producer cần bỏ gán hoặc huỷ các ô này trước.";
         if (statuses.Count == 0) return null;
 
         return statuses.Any(s => s == AssignmentStatus.Approved)

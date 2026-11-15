@@ -66,6 +66,9 @@ public sealed class StartChapterProductionCommandHandler
                     .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, tct);
                 if (chapter is null)
                     return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
+                // ponytail: Clean Cutover chặn Gate 1 tạo Assignment V2 trên chương đã dùng lưới; sinh ô lưới theo khoảng trang khi cần.
+                if (await AssignmentRules.GridActiveReasonAsync(_db, chapter.Id, tct) is { } grid)
+                    return Fail(grid, ResultErrorCodes.Conflict);
 
                 // Gate 1 starts with the single authoritative Bible check. Script comments are deliberately not queried.
                 var bibleGate = await _castGate.EvaluateStartAsync(chapter.Id, tct);

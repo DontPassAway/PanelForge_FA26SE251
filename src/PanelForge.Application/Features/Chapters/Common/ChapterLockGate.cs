@@ -84,6 +84,12 @@ public static class ChapterLockGate
         var panelTargets = work.Where(a => a.EntityType == WorkflowEntityType.Panel).Select(a => a.TargetEntityId).ToList();
         var covered = work.Where(a => a.EntityType == WorkflowEntityType.Page).Select(a => a.TargetEntityId).ToHashSet();
         covered.UnionWith(await db.Panels.AsNoTracking().Where(p => panelTargets.Contains(p.Id)).Select(p => p.PageId).ToListAsync(ct));
+        // Lưới V3: ô cấp Trang đã giao (theo lô) cho Artist/Letterer cũng tính là trang đã có việc.
+        covered.UnionWith(await (from t in db.StageTasks.AsNoTracking()
+                                 join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                                 where t.ChapterId == chapterId && t.PageId != null && t.Status != StageTaskStatus.Cancelled &&
+                                       (l.AssignedRole == WorkspaceRole.Artist || l.AssignedRole == WorkspaceRole.Letterer)
+                                 select t.PageId!.Value).ToListAsync(ct));
         // Ô lưới V3 cấp Trang đã có người nhận ở công đoạn của Artist/Letterer cũng tính là trang đã được giao
         covered.UnionWith(await (from t in db.StageTasks.AsNoTracking()
                                  join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id

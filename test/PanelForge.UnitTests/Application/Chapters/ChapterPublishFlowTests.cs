@@ -145,6 +145,23 @@ public class ChapterPublishFlowTests
     }
 
     [Fact]
+    public async Task LockGate_PageAssignedOnTaskGrid_CountsAsHavingWork()
+    {
+        var stageId = Guid.NewGuid();
+        var lot = StageTaskLot.Create(_chapter.SeriesId, _chapter.Id, stageId, Guid.NewGuid(), WorkspaceRole.Artist,
+            Guid.NewGuid(), null, null);
+        var task = StageTask.Create(_chapter.SeriesId, _chapter.Id, stageId, _page.Id);
+        task.AssignTo(lot.Id);
+        _db.AddRange(lot, task);
+        await _db.SaveChangesAsync();
+
+        var gate = await new PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate.GetChapterLockGateQueryHandler(_db)
+            .Handle(new(_chapter.Id), default);
+
+        gate.Value!.Items.Should().NotContain(i => i.Code == "PAGES_WITHOUT_WORK");
+    }
+
+    [Fact]
     public async Task Approve_WhenChangeRequestStillOpen_ShouldConflict()
     {
         _db.ChangeRequests.Add(ChangeRequest.Create(

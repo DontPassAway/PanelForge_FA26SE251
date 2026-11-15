@@ -93,6 +93,20 @@ public sealed class StartChapterProductionTests
     }
 
     [Fact]
+    public async Task ChapterOnTaskGrid_Returns409_AndCreatesNoAssignments()
+    {
+        var f = new Fixture();
+        f.Db.StageTasks.Add(StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, Guid.NewGuid(), null));
+        f.Db.SaveChanges();
+
+        var result = await f.Handler.Handle(f.Command(), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.Db.Assignments.Should().BeEmpty();
+        f.Chapter.Status.Should().Be(ChapterStatus.PreProduction);
+    }
+
+    [Fact]
     public async Task OverlappingRanges_Return409NamingBothRanges()
     {
         var f = new Fixture();
