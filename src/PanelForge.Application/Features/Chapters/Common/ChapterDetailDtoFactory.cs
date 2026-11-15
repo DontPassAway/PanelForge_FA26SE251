@@ -40,7 +40,10 @@ internal static class ChapterDetailDtoFactory
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,
-            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
+            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId,
+            IsHandedOff: chapter.IsHandedOff,
+            HandedOffAt: chapter.HandedOffAt,
+            HandedOffById: chapter.HandedOffById
         );
     }
 }

@@ -50,11 +50,11 @@ public sealed class GetPublisherSeriesQueryHandler
         var utcNow = DateTime.UtcNow;
         if (string.Equals(query.Filter, "needs_review", StringComparison.OrdinalIgnoreCase))
         {
-            baseQuery = baseQuery.Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.Approved));
+            baseQuery = baseQuery.Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.ChapterApproved));
         }
         else if (string.Equals(query.Filter, "scheduled", StringComparison.OrdinalIgnoreCase))
         {
-            baseQuery = baseQuery.Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.Published && c.PublishedAt > utcNow));
+            baseQuery = baseQuery.Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt > utcNow));
         }
 
         if (string.Equals(query.SortBy, "az", StringComparison.OrdinalIgnoreCase))
@@ -65,7 +65,7 @@ public sealed class GetPublisherSeriesQueryHandler
         {
             // Default or "latest": Series with Approved chapters first, then by updated date / created date descending
             baseQuery = baseQuery
-                .OrderByDescending(s => s.Chapters.Count(c => c.Status == ChapterStatus.Approved))
+                .OrderByDescending(s => s.Chapters.Count(c => c.Status == ChapterStatus.ChapterApproved))
                 .ThenByDescending(s => s.UpdatedAt ?? s.CreatedAt);
         }
 
@@ -82,8 +82,8 @@ public sealed class GetPublisherSeriesQueryHandler
                 s.ReadingDirection,
                 s.CoverImageSha256,
                 TotalChaptersCount = s.Chapters.Count,
-                ApprovedChaptersCount = s.Chapters.Count(c => c.Status == ChapterStatus.Approved),
-                PublishedChaptersCount = s.Chapters.Count(c => c.Status == ChapterStatus.Published),
+                ApprovedChaptersCount = s.Chapters.Count(c => c.Status == ChapterStatus.ChapterApproved),
+                PublishedChaptersCount = s.Chapters.Count(c => c.Status == ChapterStatus.HandedOffAndPublished),
                 LatestChapter = s.Chapters
                     .OrderByDescending(c => c.ChapterNumber)
                     .Select(c => new

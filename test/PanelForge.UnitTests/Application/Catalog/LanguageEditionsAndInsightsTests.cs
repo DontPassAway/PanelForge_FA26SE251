@@ -36,7 +36,7 @@ public class LanguageEditionsAndInsightsTests
         _db.Series.Add(_series);
 
         _chapter = Chapter.Create(_series.Id, 1, "Khởi đầu");
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_chapter, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_chapter, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_chapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_chapter);
 

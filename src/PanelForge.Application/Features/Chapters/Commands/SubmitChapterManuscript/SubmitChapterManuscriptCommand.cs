@@ -37,7 +37,7 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
         if (chapter is null)
             return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        if (chapter.Status == ChapterStatus.Approved || chapter.Status == ChapterStatus.Published)
+        if (chapter.Status == ChapterStatus.ChapterApproved || chapter.Status == ChapterStatus.HandedOffAndPublished)
             return Fail("Chương này đã được duyệt hoặc xuất bản, không thể nộp lại.", ResultErrorCodes.Conflict);
 
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);

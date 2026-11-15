@@ -324,7 +324,7 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
         if (!chapter.IsScriptFrozen)
             return Result<ChapterDetailDto>.Failure("Kịch bản của chương này chưa bị đóng băng.", ResultErrorCodes.Conflict);
 
-        chapter.UnfreezeScript(cmd.UserId);
+        chapter.UnfreezeScript(cmd.UserId, reason);
         chapter.UpdatedBy = cmd.UserId.ToString();
 
         await ScriptNotifications.NotifyWritersAsync(_dbContext, chapter, cmd.UserId,
@@ -342,120 +342,6 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
             details: $"Mở lại kịch bản Chương {chapter.ChapterNumber}. Lý do: {reason}"));
 
         await _dbContext.SaveChangesAsync(ct);
-
-        return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
-    }
-}
-
-/// <summary>
-/// V2.5 & WF04: Writer gửi yêu cầu mở lại kịch bản có lý do.
-/// </summary>
-public sealed record RequestScriptReopenCommand(Guid ChapterId, Guid UserId, string Reason) : IRequest<Result<ChapterDetailDto>>;
-
-public sealed class RequestScriptReopenCommandHandler : IRequestHandler<RequestScriptReopenCommand, Result<ChapterDetailDto>>
-{
-    private readonly IPanelForgeDbContext _dbContext;
-
-    public RequestScriptReopenCommandHandler(IPanelForgeDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
-    public async Task<Result<ChapterDetailDto>> Handle(RequestScriptReopenCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _dbContext.Chapters
-            .Include(c => c.Scenes)
-            .Include(c => c.Pages)
-            .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-
-        if (chapter is null)
-            return Result<ChapterDetailDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-
-        try
-        {
-            chapter.RequestScriptReopen(cmd.UserId, cmd.Reason);
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Result<ChapterDetailDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
-        }
-
-        return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
-    }
-}
-
-/// <summary>
-/// V2.5 & WF04: Producer duyệt mở lại kịch bản.
-/// </summary>
-public sealed record ApproveScriptReopenCommand(Guid ChapterId, Guid ProducerUserId) : IRequest<Result<ChapterDetailDto>>;
-
-public sealed class ApproveScriptReopenCommandHandler : IRequestHandler<ApproveScriptReopenCommand, Result<ChapterDetailDto>>
-{
-    private readonly IPanelForgeDbContext _dbContext;
-
-    public ApproveScriptReopenCommandHandler(IPanelForgeDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
-    public async Task<Result<ChapterDetailDto>> Handle(ApproveScriptReopenCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _dbContext.Chapters
-            .Include(c => c.Scenes)
-            .Include(c => c.Pages)
-            .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-
-        if (chapter is null)
-            return Result<ChapterDetailDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-
-        try
-        {
-            chapter.ApproveScriptReopen(cmd.ProducerUserId);
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Result<ChapterDetailDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
-        }
-
-        return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
-    }
-}
-
-/// <summary>
-/// V2.5 & WF04: Producer từ chối mở lại kịch bản.
-/// </summary>
-public sealed record RejectScriptReopenCommand(Guid ChapterId, Guid ProducerUserId) : IRequest<Result<ChapterDetailDto>>;
-
-public sealed class RejectScriptReopenCommandHandler : IRequestHandler<RejectScriptReopenCommand, Result<ChapterDetailDto>>
-{
-    private readonly IPanelForgeDbContext _dbContext;
-
-    public RejectScriptReopenCommandHandler(IPanelForgeDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
-    public async Task<Result<ChapterDetailDto>> Handle(RejectScriptReopenCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _dbContext.Chapters
-            .Include(c => c.Scenes)
-            .Include(c => c.Pages)
-            .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-
-        if (chapter is null)
-            return Result<ChapterDetailDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-
-        try
-        {
-            chapter.RejectScriptReopen(cmd.ProducerUserId);
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Result<ChapterDetailDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
-        }
 
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
     }

@@ -44,7 +44,7 @@ public sealed class GetPublisherSeriesDetailQueryHandler
         var chapters = await _db.Chapters
             .AsNoTracking()
             .Where(c => c.SeriesId == query.SeriesId &&
-                (c.Status == ChapterStatus.Approved || c.Status == ChapterStatus.Published))
+                (c.Status == ChapterStatus.ChapterApproved || c.Status == ChapterStatus.HandedOffAndPublished))
             .OrderByDescending(c => c.ChapterNumber)
             .Select(c => new
             {
@@ -90,12 +90,12 @@ public sealed class GetPublisherSeriesDetailQueryHandler
                 approvedAt = review.CreatedAt;
                 approvedBy = userDict.GetValueOrDefault(review.ActorUserId) ?? producerName;
             }
-            else if (c.Status == ChapterStatus.Approved)
+            else if (c.Status == ChapterStatus.ChapterApproved)
             {
                 approvedAt = c.UpdatedAt ?? c.CreatedAt;
                 approvedBy = producerName;
             }
-            else if (c.Status == ChapterStatus.Published)
+            else if (c.Status == ChapterStatus.HandedOffAndPublished)
             {
                 approvedAt = c.PublishedAt ?? c.UpdatedAt ?? c.CreatedAt;
                 approvedBy = producerName;

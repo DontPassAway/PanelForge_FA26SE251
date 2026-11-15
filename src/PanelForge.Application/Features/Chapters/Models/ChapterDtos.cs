@@ -34,7 +34,10 @@ public sealed record ChapterDto(
     DateTime? ScriptSubmittedAt = null,
     // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
     Guid? LastSubmittedVersionId = null,
-    Guid? PreviousSubmittedVersionId = null
+    Guid? PreviousSubmittedVersionId = null,
+    bool IsHandedOff = false,
+    DateTime? HandedOffAt = null,
+    Guid? HandedOffById = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -85,7 +88,10 @@ public sealed record ChapterDetailDto(
     DateTime? ScriptSubmittedAt = null,
     // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
     Guid? LastSubmittedVersionId = null,
-    Guid? PreviousSubmittedVersionId = null
+    Guid? PreviousSubmittedVersionId = null,
+    bool IsHandedOff = false,
+    DateTime? HandedOffAt = null,
+    Guid? HandedOffById = null
 );
 
 public sealed record CreateChapterRequest(

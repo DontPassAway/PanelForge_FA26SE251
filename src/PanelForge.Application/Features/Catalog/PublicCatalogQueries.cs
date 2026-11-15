@@ -80,7 +80,7 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
         var now = DateTime.UtcNow; // chương lên lịch (PublishedAt tương lai) chưa lộ ra cho Reader
 
         var query = _dbContext.Series.AsNoTracking()
-            .Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now));
+            .Where(s => s.Chapters.Any(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now));
 
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
@@ -102,7 +102,7 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
         // Sắp xếp + phân trang trên entity TRƯỚC khi projection vào positional record:
         // EF Core không dịch được OrderBy theo member của record (LatestPublishedAt) sau khi đã Select.
         var rows = await query
-            .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt))
+            .OrderByDescending(s => s.Chapters.Where(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now).Max(c => c.PublishedAt))
             .ThenBy(s => s.Title)
             .Skip((pageIndex - 1) * pageSize)
             .Take(pageSize)
@@ -116,8 +116,8 @@ public sealed class GetPublicCatalogQueryHandler : IRequestHandler<GetPublicCata
                     s.Format,
                     s.ReadingDirection,
                     s.Workspace.Name,
-                    s.Chapters.Count(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now),
-                    s.Chapters.Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now).Max(c => c.PublishedAt),
+                    s.Chapters.Count(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now),
+                    s.Chapters.Where(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now).Max(c => c.PublishedAt),
                     null,
                     s.IsCompleted,
                     s.CreatedAt,
@@ -172,7 +172,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 s.IsCompleted,
                 s.CreatedAt,
                 Chapters = s.Chapters
-                    .Where(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+                    .Where(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
                     .OrderBy(c => c.ChapterNumber)
                     .Select(c => new
                     {

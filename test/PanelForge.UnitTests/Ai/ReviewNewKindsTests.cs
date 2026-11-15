@@ -31,7 +31,7 @@ public class ReviewNewKindsTests
 
     private static async Task LockAsync(AiHarness h)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await h.Db.Chapters.SingleAsync(), ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await h.Db.Chapters.SingleAsync(), ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
     }
 
@@ -203,7 +203,7 @@ public class ReviewNewKindsTests
         var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Artist, ReadyVersion);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Locked");
+        result.ErrorMessage.Should().Contain("ChapterApproved");
         h.Db.ContentRevisions.Count(r => r.Kind == ContentRevisionKind.ImagePrompt).Should().Be(0);
     }
 

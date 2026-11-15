@@ -80,7 +80,7 @@ public static class ChapterManageReader
             .Select(c => new
             {
                 c.Id, c.SeriesId, c.ChapterNumber, c.Title, c.IsLocked, c.PriceVnd, c.PreviewPagesCustomized,
-                IsPublished = c.Status == ChapterStatus.Published && c.PublishedAt <= now,
+                IsPublished = c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now,
                 c.Series.DefaultPreviewPageCount
             })
             .FirstOrDefaultAsync(ct);

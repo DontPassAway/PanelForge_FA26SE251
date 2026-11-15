@@ -62,6 +62,7 @@ public class WorkspacePaymentsController : ControllerBase
     /// Publisher đối soát và duyệt giao dịch VietQR đã nhận tiền.
     /// </summary>
     [HttpPost("{transactionId:guid}/approve")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ApprovePayment(
         [FromRoute] Guid workspaceId,
@@ -81,6 +82,7 @@ public class WorkspacePaymentsController : ControllerBase
     /// Publisher từ chối giao dịch kèm lý do.
     /// </summary>
     [HttpPost("{transactionId:guid}/reject")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> RejectPayment(
         [FromRoute] Guid workspaceId,

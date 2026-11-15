@@ -85,13 +85,13 @@ public class ReviewSuggestionCommandTests
         var runId = await h.CompleteDemoRunAsync();
         var script = await h.SuggestionAsync(runId, AiSuggestionKind.Script);
         var chapter = await h.Db.Chapters.SingleAsync();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
 
         var result = await h.ReviewAsync(script.Id, AiSuggestionStatus.Accepted);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Locked");
+        result.ErrorMessage.Should().Contain("ChapterApproved");
         h.Db.ContentRevisions.Count().Should().Be(0);
         h.Db.ScriptLines.Count().Should().Be(0);
     }

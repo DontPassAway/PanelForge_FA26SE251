@@ -32,7 +32,7 @@ public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChap
     {
         var now = DateTime.UtcNow;
         var chapter = await _db.Chapters.AsNoTracking()
-            .Where(c => c.Id == cmd.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Where(c => c.Id == cmd.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
             .Select(c => new { c.Id, c.SeriesId, c.IsLocked, c.Series.WorkspaceId })
             .FirstOrDefaultAsync(ct);
         if (chapter is null)

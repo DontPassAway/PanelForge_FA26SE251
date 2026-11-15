@@ -53,8 +53,8 @@ public sealed class GetPublisherChaptersQueryHandler
         {
             // Default "all" for Publisher Portal: Approved, Published, or InProduction
             baseQuery = baseQuery.Where(c =>
-                c.Status == ChapterStatus.Approved ||
-                c.Status == ChapterStatus.Published ||
+                c.Status == ChapterStatus.ChapterApproved ||
+                c.Status == ChapterStatus.HandedOffAndPublished ||
                 c.Status == ChapterStatus.InProduction);
         }
 
@@ -84,7 +84,7 @@ public sealed class GetPublisherChaptersQueryHandler
 
         // Sorting: Approved first (needs action), then by updated date / created date descending
         var rawItems = await baseQuery
-            .OrderByDescending(c => c.Status == ChapterStatus.Approved)
+            .OrderByDescending(c => c.Status == ChapterStatus.ChapterApproved)
             .ThenByDescending(c => c.UpdatedAt ?? c.CreatedAt)
             .Skip((pageIndex - 1) * pageSize)
             .Take(pageSize)

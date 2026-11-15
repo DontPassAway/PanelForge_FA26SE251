@@ -381,8 +381,7 @@ public class ChapterCastGateTests
         _db.BibleEntryRevisions.Add(v2);
 
         // Producer mở lại Ch1
-        ch1.RequestScriptReopen(_producerId, "Producer xin mở lại để sửa kịch bản");
-        ch1.ApproveScriptReopen(_producerId);
+        ch1.UnfreezeScript(_producerId);
         await _db.SaveChangesAsync();
 
         // Chạy lại ResolveInheritedAsync
@@ -457,8 +456,7 @@ public class ChapterCastGateTests
         await freezeHandler.Handle(new FreezeChapterScriptCommand(chapter.Id, _producerId), default);
 
         // Producer mở lại kịch bản
-        chapter.RequestScriptReopen(_producerId, "Cần sửa lại thoại");
-        chapter.ApproveScriptReopen(_producerId);
+        chapter.UnfreezeScript(_producerId);
         await _db.SaveChangesAsync();
 
         var reopenSince = chapter.ScriptReopenRequestedAt!.Value;

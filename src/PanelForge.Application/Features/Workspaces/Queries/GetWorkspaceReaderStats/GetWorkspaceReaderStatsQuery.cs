@@ -55,7 +55,7 @@ public sealed class GetWorkspaceReaderStatsQueryHandler
             .Select(c => new
             {
                 c.Id, c.SeriesId, c.ChapterNumber, c.Title,
-                IsPublished = c.Status == ChapterStatus.Published && c.PublishedAt <= now
+                IsPublished = c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now
             })
             .ToListAsync(ct);
 

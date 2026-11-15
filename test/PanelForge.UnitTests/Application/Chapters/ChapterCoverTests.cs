@@ -102,7 +102,7 @@ public class ChapterCoverTests
 
     private static void Publish(Chapter c, DateTime at)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(c, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(c, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(c, at);
     }
 
