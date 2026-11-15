@@ -61,6 +61,31 @@ internal static class TaskGridRules
             .ToList();
     }
 
+    /// <summary>Ô chưa xong (chưa duyệt, chưa huỷ) thuộc lô của người dùng; <paramref name="seriesIds"/> null = mọi Series.</summary>
+    public static IQueryable<StageTask> UnfinishedCellsOf(
+        IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid>? seriesIds, WorkspaceRole? role = null) =>
+        from t in db.StageTasks
+        join l in db.StageTaskLots on t.LotId equals (Guid?)l.Id
+        where l.AssigneeUserId == userId && (role == null || l.AssignedRole == role)
+              && (seriesIds == null || seriesIds.Contains(t.SeriesId))
+              && t.Status != StageTaskStatus.Approved && t.Status != StageTaskStatus.Cancelled
+        select t;
+
+    /// <summary>
+    /// Thành viên rời Workspace: ô chưa nộp của họ về Unassigned để Producer giao lại; ô đã nộp/đang duyệt giữ nguyên
+    /// để Editor vẫn chấm được bài (BR-01: không bỏ thành quả).
+    /// </summary>
+    public static async Task ReleaseMemberCellsAsync(IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
+    {
+        var cells = await UnfinishedCellsOf(db, userId, seriesIds)
+            .Where(t => t.Status == StageTaskStatus.Assigned || t.Status == StageTaskStatus.InProgress ||
+                        t.Status == StageTaskStatus.ReworkRequired)
+            .ToListAsync(ct);
+        var lotIds = cells.Select(c => c.LotId).ToList();
+        foreach (var c in cells) c.Unassign();
+        await RefreshLotsAsync(db, lotIds, cells, ct);
+    }
+
     /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>
     public static Task<StageTaskSubmission?> PendingSubmissionAsync(IPanelForgeDbContext db, StageTask task, CancellationToken ct) =>
         task.CurrentSubmissionId is { } id

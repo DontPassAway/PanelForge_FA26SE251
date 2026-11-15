@@ -65,7 +65,9 @@ public sealed class RemoveSeriesMemberCommandHandler
         var hasActiveAssignments = await _dbContext.Assignments
             .AnyAsync(a => a.SeriesId == command.SeriesId &&
                            a.AssigneeUserId == command.TargetUserId &&
-                           a.Status != AssignmentStatus.Approved, cancellationToken);
+                           a.Status != AssignmentStatus.Approved, cancellationToken)
+            || await TaskGrid.Common.TaskGridRules.UnfinishedCellsOf(_dbContext, command.TargetUserId, [command.SeriesId])
+                .AnyAsync(cancellationToken);
 
         if (hasActiveAssignments)
         {

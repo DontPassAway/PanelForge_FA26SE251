@@ -61,6 +61,9 @@ public sealed class RemoveWorkspaceMemberCommandHandler : IRequestHandler<Remove
             {
                 _dbContext.SeriesMembers.RemoveRange(seriesMembers);
             }
+
+            // Lưới V3: không để lô mồ côi đứng tên người đã rời Studio
+            await TaskGrid.Common.TaskGridRules.ReleaseMemberCellsAsync(_dbContext, command.TargetUserId, seriesIds, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

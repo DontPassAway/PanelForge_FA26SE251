@@ -58,6 +58,14 @@ public sealed class UpdateSeriesMemberRoleCommandHandler
         if (member is null)
             return Result<SeriesMemberDto>.Failure("Thành viên này không có trong đội ngũ của Series.", ResultErrorCodes.NotFound);
 
+        // Lưới V3: đang giữ ô chưa xong của vai trò cũ thì không đổi vai trò (ô sẽ thuộc vai trò không còn đúng)
+        if (member.Role != command.NewRole &&
+            await TaskGrid.Common.TaskGridRules.UnfinishedCellsOf(_dbContext, command.TargetUserId, [command.SeriesId], member.Role)
+                .AnyAsync(cancellationToken))
+            return Result<SeriesMemberDto>.Failure(
+                "Thành viên đang giữ ô chưa xong trên lưới giao việc với vai trò hiện tại. Bỏ gán hoặc chờ duyệt xong trước khi đổi vai trò.",
+                ResultErrorCodes.Conflict);
+
         member.ChangeRole(command.NewRole);
         await _dbContext.SaveChangesAsync(cancellationToken);
 

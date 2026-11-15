@@ -251,4 +251,41 @@ public class WorkspaceHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain("Chủ sở hữu");
     }
+
+    /// <summary>G06: rời Studio thì ô đang làm về Unassigned (Producer giao lại), ô đã nộp giữ nguyên để Editor chấm.</summary>
+    [Fact]
+    public async Task RemoveMember_ReleasesUnsubmittedGridCells_KeepsSubmittedOnes()
+    {
+        await using var db = InMemoryDb.Create();
+        var ownerId = Guid.NewGuid();
+        var artistId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Studio", ownerId);
+        var series = Series.Create(workspace.Id, "S", ReadingDirection.RightToLeft);
+        var chapterId = Guid.NewGuid();
+        var stageId = Guid.NewGuid();
+        var lot = StageTaskLot.Create(series.Id, chapterId, stageId, artistId, WorkspaceRole.Artist, ownerId, null, null);
+        var working = StageTask.Create(series.Id, chapterId, stageId, Guid.NewGuid());
+        working.AssignTo(lot.Id);
+        working.Start(prerequisitesApproved: true);
+        var submitted = StageTask.Create(series.Id, chapterId, stageId, Guid.NewGuid());
+        submitted.AssignTo(lot.Id);
+        submitted.Start(prerequisitesApproved: true);
+        submitted.Submit(null, isApprovalGate: true);
+        db.StudioWorkspaces.Add(workspace);
+        db.WorkspaceMembers.Add(WorkspaceMember.Create(workspace.Id, artistId, WorkspaceRole.Artist));
+        db.Series.Add(series);
+        db.StageTaskLots.Add(lot);
+        db.StageTasks.AddRange(working, submitted);
+        await db.SaveChangesAsync();
+        _authorizationServiceMock.Setup(a => a.IsOwnerOrProducerAsync(ownerId, workspace.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await new RemoveWorkspaceMemberCommandHandler(db, _authorizationServiceMock.Object)
+            .Handle(new RemoveWorkspaceMemberCommand(ownerId, workspace.Id, artistId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        working.Status.Should().Be(StageTaskStatus.Unassigned);
+        working.LotId.Should().BeNull();
+        submitted.Status.Should().Be(StageTaskStatus.Submitted);
+    }
 }

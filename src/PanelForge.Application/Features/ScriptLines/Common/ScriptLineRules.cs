@@ -28,9 +28,16 @@ internal static class ScriptLineRules
     public static async Task<string?> ReworkApprovedLetteringAsync(
         IPanelForgeDbContext db, IPageRepository pages, Guid chapterId, ScriptLine line, string reason, CancellationToken ct)
     {
+        // Lưới V3: ô của công đoạn Letterer đã duyệt (sẽ mở lại ô nằm trên trang có bóng gắn dòng này)
+        var gridLettering = await (from t in db.StageTasks
+                                   join s in db.PipelineStages.AsNoTracking() on t.PipelineStageId equals s.Id
+                                   where t.ChapterId == chapterId && t.Status == StageTaskStatus.Approved && !t.IsInputOutdated
+                                         && s.AllowedRole == WorkspaceRole.Letterer
+                                   select t).ToListAsync(ct);
+        var v2Approved = await db.Assignments.AnyAsync(a => a.ChapterId == chapterId && a.Status == AssignmentStatus.Approved
+                                                            && a.AssignedRole == WorkspaceRole.Letterer, ct);
         // Không có việc Lettering nào đã duyệt thì khỏi dựng lại canvas
-        if (!await db.Assignments.AnyAsync(a => a.ChapterId == chapterId && a.Status == AssignmentStatus.Approved
-                                                && a.AssignedRole == WorkspaceRole.Letterer, ct))
+        if (!v2Approved && gridLettering.Count == 0)
             return null;
 
         var pageIds = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapterId).Select(p => p.Id).ToListAsync(ct);
@@ -41,6 +48,8 @@ internal static class ScriptLineRules
             var bound = page?.Elements.Values.Where(e => !e.IsRemoved && e.ScriptLineId == line.Id).ToList() ?? [];
             if (bound.Count == 0) continue;
 
+            foreach (var cell in gridLettering.Where(t => t.PageId == pageId)) cell.Reopen();
+
             var pagePanels = await db.Panels.AsNoTracking().Where(p => p.PageId == pageId).Select(p => p.Id).ToListAsync(ct);
             foreach (var element in bound)
             {
@@ -50,6 +59,7 @@ internal static class ScriptLineRules
             }
         }
 
+        if (!v2Approved) return null;
         var (_, error) = await StageProgressRules.ReworkForSourceChangeAsync(
             db, chapterId, panelIds, [WorkspaceRole.Letterer], reason, ct);
         return error;
@@ -113,6 +123,12 @@ internal static class ScriptLineRules
         var writerIds = await db.Assignments.AsNoTracking()
             .Where(a => a.ChapterId == chapter.Id && a.AssignedRole == WorkspaceRole.Writer && a.CancelReason == null)
             .Select(a => a.AssigneeUserId).ToListAsync(ct);
+        // Lưới V3: lô Writer còn hiệu lực của chương cũng là "đã giao kịch bản"
+        writerIds.AddRange(await (from t in db.StageTasks.AsNoTracking()
+                                  join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                                  where t.ChapterId == chapter.Id && l.AssignedRole == WorkspaceRole.Writer
+                                        && t.Status != StageTaskStatus.Cancelled
+                                  select l.AssigneeUserId).Distinct().ToListAsync(ct));
         if (writerIds.Count > 0 && !writerIds.Contains(userId))
             return Result<(Chapter, Guid)>.Failure(
                 "Kịch bản chương này đã được giao cho Writer khác. Chỉ Writer được giao mới có quyền chỉnh sửa (BR-07).",
