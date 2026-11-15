@@ -32,6 +32,7 @@ using PanelForge.Application.Features.ScriptComments;
 using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 using PanelForge.Application.Features.Assignments.Models;
+using PanelForge.Application.Features.Assignments.Commands.StartChapterProduction;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript;
 using PanelForge.Application.Features.ScriptLines.Models;
@@ -368,16 +369,27 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new ResolveScriptCommentCommand(chapterId, commentId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/freeze-script — Gate 1 "Start Production" (D12):
-    /// Producer đóng băng kịch bản đang InReview (→ Frozen) và chuyển chương PreProduction → InProduction.
+    /// POST /api/chapters/{chapterId}/start-production — Gate 1 one action:
+    /// kiểm Bible, đóng băng script, giao trang và chuyển chương sang InProduction trong một transaction.
     /// </summary>
-    [HttpPost("api/chapters/{chapterId:guid}/freeze-script")]
+    [HttpPost("api/chapters/{chapterId:guid}/start-production")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    [ProducesResponseType(typeof(ChapterDetailDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> FreezeChapterScript(
+    [ProducesResponseType(typeof(StartChapterProductionResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> StartChapterProduction(
         [FromRoute] Guid chapterId,
-        CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new FreezeChapterScriptCommand(chapterId, GetCurrentUserId()), cancellationToken));
+        [FromBody] StartChapterProductionRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new StartChapterProductionCommand(
+            chapterId, GetCurrentUserId(), body.PageAssignments, body.LettererAssignments), cancellationToken);
+        if (!result.IsSuccess && result.ErrorCode == ResultErrorCodes.Conflict &&
+            result.ErrorDetails is IReadOnlyList<ChapterCastBlockerDto> blockers)
+            return Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, blockers });
+
+        return ToActionResult(result);
+    }
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/unfreeze-script

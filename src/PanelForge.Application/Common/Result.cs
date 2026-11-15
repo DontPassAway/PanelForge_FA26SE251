@@ -12,11 +12,20 @@ public sealed class Result<T>
     /// <summary>Mã lỗi máy đọc được (xem <see cref="ResultErrorCodes"/>), null nếu là lỗi nghiệp vụ chung.</summary>
     public string? ErrorCode { get; }
 
+    /// <summary>Optional structured business-error payload for endpoints that need more than a message.</summary>
+    public object? ErrorDetails { get; }
+
     private Result(T value)       { IsSuccess = true;  Value = value; }
-    private Result(string error, string? errorCode)  { IsSuccess = false; ErrorMessage = error; ErrorCode = errorCode; }
+    private Result(string error, string? errorCode, object? errorDetails)
+    {
+        IsSuccess = false;
+        ErrorMessage = error;
+        ErrorCode = errorCode;
+        ErrorDetails = errorDetails;
+    }
 
     public static Result<T> Success(T value)       => new(value);
-    public static Result<T> Failure(string error, string? errorCode = null)  => new(error, errorCode);
+    public static Result<T> Failure(string error, string? errorCode = null, object? errorDetails = null)  => new(error, errorCode, errorDetails);
 }
 
 public static class ResultErrorCodes
