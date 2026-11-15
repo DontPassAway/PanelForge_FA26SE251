@@ -121,6 +121,35 @@ public class SeriesPipelineHandlerTests
         outgoing.RequiredRole.Should().Be(WorkspaceRole.Producer);
     }
 
+    /// <summary>
+    /// Tắt stage: ô đã duyệt của chương cũ không chặn, và ô chưa giao bị huỷ (nếu không cổng duyệt chương kẹt vì đếm chúng).
+    /// </summary>
+    [Fact]
+    public async Task Disable_StageWithOnlyApprovedAndUnassignedCells_CancelsUnassignedCells()
+    {
+        var pencil = _stageIds[1];
+        Guid freeCellId;
+        await using (var db = NewDb())
+        {
+            var oldChapterCell = StageTask.Create(_seriesId, Guid.NewGuid(), pencil, Guid.NewGuid());
+            oldChapterCell.AssignTo(Guid.NewGuid());
+            oldChapterCell.Start(prerequisitesApproved: true);
+            oldChapterCell.Submit(null, isApprovalGate: false);   // Approved
+            var freeCell = StageTask.Create(_seriesId, Guid.NewGuid(), pencil, Guid.NewGuid());
+            freeCellId = freeCell.Id;
+            db.StageTasks.AddRange(oldChapterCell, freeCell);
+            await db.SaveChangesAsync();
+
+            var result = await new UpdatePipelineStageCommandHandler(db).Handle(new UpdatePipelineStageCommand(
+                _seriesId, pencil, "Pencil", null, WorkspaceRole.Artist, false, null, IsEnabled: false), default);
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        }
+
+        await using var verify = NewDb();
+        (await verify.StageTasks.SingleAsync(t => t.Id == freeCellId)).Status.Should().Be(StageTaskStatus.Cancelled);
+        (await verify.PipelineStages.SingleAsync(s => s.Id == pencil)).IsEnabled.Should().BeFalse();
+    }
+
     [Fact]
     public async Task Update_StageOfAnotherPipeline_ShouldReturnNotFound()
     {

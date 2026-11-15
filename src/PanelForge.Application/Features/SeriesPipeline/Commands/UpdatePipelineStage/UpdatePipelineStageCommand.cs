@@ -58,6 +58,13 @@ public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePi
             return Result<SeriesPipelineDto>.Failure(ex.Message);
         }
 
+        // Tắt stage: huỷ luôn các ô chưa giao của nó, nếu không cổng duyệt chương đếm chúng là "chưa duyệt" và kẹt mãi.
+        // Bật lại thì lần "Sinh / Đồng bộ ô" sau hồi sinh các ô này.
+        if (cmd.IsEnabled == false)
+            foreach (var cell in await _dbContext.StageTasks
+                         .Where(t => t.PipelineStageId == stage.Id && t.Status == StageTaskStatus.Unassigned).ToListAsync(ct))
+                cell.Cancel();
+
         // Vai trò / cổng duyệt thay đổi thì RequiredRole và nhánh reject của transition cũng đổi theo
         SeriesPipelineStore.RebuildTransitions(_dbContext, pipeline);
         await _dbContext.SaveChangesAsync(ct);

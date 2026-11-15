@@ -158,6 +158,12 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
                 _ => null
             });
 
+        // F-02 / RF-11: Manga trắng đen → Color tắt mặc định (template chuẩn vẫn có Color); Webtoon/Comic giữ bật.
+        // Producer bật lại được trong cấu hình pipeline.
+        if (formatUpper.Contains("MANGA"))
+            foreach (var stage in pipeline.Stages.Where(s => string.Equals(s.Slug, "color", StringComparison.OrdinalIgnoreCase)))
+                stage.SetEnabled(false);
+
         // Sinh transition mặc định
         pipeline.RebuildDefaultTransitions();
 

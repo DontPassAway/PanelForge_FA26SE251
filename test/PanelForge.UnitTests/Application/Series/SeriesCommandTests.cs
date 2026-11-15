@@ -70,6 +70,42 @@ public class SeriesCommandTests
         result.Value.WorkspaceId.Should().Be(workspaceId);
     }
 
+    /// <summary>F-02 / RF-11: Manga là trắng đen, nên template chuẩn có Color vẫn tạo pipeline với Color tắt.</summary>
+    [Theory]
+    [InlineData("MANGA", false)]
+    [InlineData("WEBTOON", true)]
+    public async Task CreateSeries_FromTemplate_ColorEnabledFollowsFormat(string format, bool colorEnabled)
+    {
+        var workspaceId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());
+        typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, workspaceId);
+        var template = PanelForge.Domain.Entities.MasterData.PipelineTemplate.Create("STANDARD_MANGA", "Standard Manga", isDefault: true);
+        foreach (var (code, name, order, role) in new[]
+                 {
+                     ("PENCIL", "Pencil", 1, WorkspaceRole.Artist), ("COLOR", "Color", 2, WorkspaceRole.Artist),
+                     ("LETTER", "Letter", 3, WorkspaceRole.Letterer)
+                 })
+            template.Stages.Add(PanelForge.Domain.Entities.MasterData.PipelineTemplateStage.Create(template.Id, code, name, order, role));
+        var pipelines = new List<PanelForge.Domain.Entities.Workflow.PipelineDefinition>();
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<WorkspaceMember> { WorkspaceMember.Create(workspaceId, userId, WorkspaceRole.Producer) }));
+        _dbContextMock.Setup(db => db.PipelineTemplates).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<PanelForge.Domain.Entities.MasterData.PipelineTemplate> { template }));
+        _dbContextMock.Setup(db => db.PipelineDefinitions).Returns(DbSetMockHelper.CreateDbSetMock(pipelines));
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series>()));
+        _dbContextMock.Setup(db => db.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible>()));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var result = await new CreateSeriesCommandHandler(_dbContextMock.Object).Handle(
+            new CreateSeriesCommand(WorkspaceId: workspaceId, UserId: userId, Title: "Series", Format: format), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        pipelines.Should().ContainSingle().Which.Stages.Single(s => s.Slug == "color").IsEnabled.Should().Be(colorEnabled);
+    }
+
     [Fact]
     public async Task CreateSeries_WithoutTemplate_FallbackPipelineAssignsReviewAndApprovedToEditor()
     {

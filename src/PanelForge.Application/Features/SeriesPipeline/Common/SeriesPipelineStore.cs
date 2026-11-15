@@ -43,12 +43,16 @@ internal static class SeriesPipelineStore
             : $"Còn {active} ô trên lưới giao việc đang làm dở; không đổi thứ tự, nhánh, vai trò hay thêm công đoạn được cho tới khi các ô này được duyệt hoặc bỏ gán.";
     }
 
-    /// <summary>Tắt / xoá một stage chỉ an toàn khi stage đó chưa có ô nào đang được giao (ô chưa giao bị huỷ ở lần sinh ô sau).</summary>
+    /// <summary>
+    /// Tắt một stage chỉ bị chặn khi stage đó còn ô đang chạy (đã giao, chưa duyệt). Ô đã duyệt (vd. của chương cũ) là kết quả
+    /// đã xong, không chặn; ô chưa giao được huỷ khi tắt.
+    /// </summary>
     public static async Task<string?> StageInUseOnGridReasonAsync(IPanelForgeDbContext db, Guid stageId, CancellationToken ct)
     {
         var used = await db.StageTasks.AnyAsync(t => t.PipelineStageId == stageId &&
-            t.Status != StageTaskStatus.Unassigned && t.Status != StageTaskStatus.Cancelled, ct);
-        return used ? "Công đoạn này đã có ô được giao trên lưới; bỏ gán các ô đó trước khi tắt công đoạn." : null;
+            t.Status != StageTaskStatus.Unassigned && t.Status != StageTaskStatus.Cancelled &&
+            t.Status != StageTaskStatus.Approved, ct);
+        return used ? "Công đoạn này còn ô đang làm hoặc chờ duyệt trên lưới; bỏ gán hoặc xử lý xong các ô đó trước khi tắt công đoạn." : null;
     }
 
     /// <summary>Dựng lại transition theo thứ tự stage mới và đồng bộ sang DbContext.</summary>
