@@ -49,6 +49,7 @@ public class TaskGridHandlerTests
         public readonly List<StageTaskSubmission> Submissions = [];
         public readonly List<Notification> Notifications = [];
         public readonly List<SeriesMember> SeriesMembers = [];
+        public readonly List<AssetReference> Artwork;
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IPageRepository> PageRepo = new();
         public readonly List<ScriptVersion> ScriptVersions = [];
@@ -99,8 +100,17 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
             Db.Setup(d => d.StageTaskSubmissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
-            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(new List<Panel>()));
-            Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(new List<AssetReference>()));
+            // Mỗi trang một panel và ảnh cả trang ở mọi công đoạn, để điều kiện nộp (CF2) của ô cấp Trang được thoả.
+            // CreatedAt ở tương lai: vẫn tính là "bản mới" sau lần bị trả về.
+            var panels = Pages.Select(p => Panel.Create(p.Id, 1, 1, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}")).ToList();
+            Artwork = Pages.SelectMany(p => new[] { Pencil, Ink, Color, Lettering, Review }.Select(s =>
+            {
+                var r = AssetReference.Create(Guid.NewGuid(), workspaceId, Chapter.Id, p.Id, s.Id, 1, null, "art.png", Guid.NewGuid());
+                r.CreatedAt = DateTime.UtcNow.AddYears(1);
+                return r;
+            })).ToList();
+            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(panels));
+            Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(Artwork));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChangeRequest>()));
@@ -250,6 +260,23 @@ public class TaskGridHandlerTests
         (await f.Start(pencil, f.LettererId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         await f.Start(pencil, f.ArtistId);
         (await f.Submit(f.LettererId, pencil)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+    }
+
+    /// <summary>CF2: ô cấp Trang của Artist không nộp được khi trang chưa có artwork ở công đoạn đó (như V2).</summary>
+    [Fact]
+    public async Task Submit_ArtistCellWithoutArtwork_IsBlocked_AndCellStaysInProgress()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        f.Artwork.RemoveAll(r => r.PipelineStageId == f.Pencil.Id);
+
+        var result = await f.Submit(f.ArtistId, pencil);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("Trang 1").And.Contain("artwork");
+        pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
     /// <summary>BR-06: người làm không tự duyệt; Editor duyệt được và lô hoàn tất.</summary>
@@ -457,7 +484,20 @@ public class TaskGridHandlerTests
         await f.Submit(f.ArtistId, pencil);                                // Pencil không cổng → Approved; Ink còn Assigned
         (await Deny(f.ArtistId)).Should().Contain("Bắt đầu");
         (await WorkScopeGuard.DenyReasonAsync(f.Db.Object, otherArtist, f.Pages[1].Id, null, default))
-            .Should().BeNull("trang 2 chưa giao ô nào qua lưới nên giữ luật cũ");
+            .Should().Contain("không có ô việc", "chương đã dùng lưới: trang chưa giao thì không ai ngoài Producer sửa");
+
+        // Ink và Color xong → Pencil/Ink/Color của trang 1 đều Approved: Artist không còn sửa được trang đã duyệt
+        var ink = f.Cell(f.Ink, 0);
+        await f.Start(ink, f.ArtistId);
+        await f.Submit(f.ArtistId, ink);
+        var color = f.Cell(f.Color, 0);
+        if (color.Status != StageTaskStatus.Unassigned)
+        {
+            await f.Start(color, f.ArtistId);
+            await f.Submit(f.ArtistId, color);
+            await new ApproveStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId), default);
+            (await Deny(f.ArtistId)).Should().Contain("không có ô việc");
+        }
     }
 
     [Fact]

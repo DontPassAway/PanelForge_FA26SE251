@@ -80,7 +80,14 @@ internal static class WorkScopeGuard
                            where t.ChapterId == chapterId && l.AssignedRole == role
                                  && (t.PageId == pageId || t.PageId == null) && GridOpen.Contains(t.Status)
                            select new { t.Status, t.IsInputOutdated, l.AssigneeUserId }).ToListAsync(ct);
-        if (cells.Count == 0) return null;
+        if (cells.Count == 0)
+        {
+            // Chương đã dùng lưới: không còn ô mở của vai trò này trên trang (chưa giao hoặc đã duyệt) thì từ chối, không rơi
+            // về luật V2 (bảng Assignments rỗng → mở cho mọi Artist/Letterer sửa trang đã duyệt).
+            var usesGrid = await db.StageTasks.AsNoTracking()
+                .AnyAsync(t => t.ChapterId == chapterId && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
+            return usesGrid ? "Trang này không có ô việc đang mở của bạn trên lưới giao việc (chưa giao hoặc đã duyệt); không sửa được." : null;
+        }
 
         var mine = cells.Where(c => c.AssigneeUserId == userId).ToList();
         if (mine.Any(c => GridWorking.Contains(c.Status) && !c.IsInputOutdated)) return "";

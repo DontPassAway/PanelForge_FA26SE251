@@ -8,6 +8,7 @@ using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 
@@ -59,6 +60,26 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
         var chapterPanels = await _db.Panels.AsNoTracking().Where(p => chapterPageIds.Contains(p.PageId)).ToListAsync(ct);
         var alivePanelIds = chapterPanels.Select(p => p.Id).ToList();
         var taskIds = tasks.Select(t => t.Id).ToList();
+
+        // Điều kiện nộp như V2 (CF2, BR-05, BR-20): ô cấp Trang của Artist cần panel + artwork đủ, của Letterer cần chữ hợp lệ.
+        var lotIds = tasks.Select(t => t.LotId!.Value).Distinct().ToList();
+        var roleByLot = await _db.StageTaskLots.AsNoTracking().Where(l => lotIds.Contains(l.Id))
+            .ToDictionaryAsync(l => l.Id, l => l.AssignedRole, ct);
+        foreach (var task in tasks.Where(t => t.PageId != null))
+        {
+            var pageNumber = await _db.Pages.AsNoTracking().Where(p => p.Id == task.PageId).Select(p => p.PageNumber).FirstOrDefaultAsync(ct);
+            var rejectedAt = await _db.StageTaskSubmissions.AsNoTracking()
+                .Where(s => s.StageTaskId == task.Id && s.Status == SubmissionStatus.Rejected)
+                .OrderByDescending(s => s.AttemptNumber).Select(s => s.DecidedAt).FirstOrDefaultAsync(ct);
+            var reason = roleByLot.GetValueOrDefault(task.LotId!.Value) switch
+            {
+                WorkspaceRole.Artist => await StageProgressRules.ArtworkBlockReasonAsync(
+                    _db, task.PipelineStageId, chapterPanels.Where(p => p.PageId == task.PageId).ToList(), rejectedAt, ct),
+                WorkspaceRole.Letterer => await StageProgressRules.LetteringPagesBlockReasonAsync(_db, _pages, [task.PageId!.Value], ct),
+                _ => null
+            };
+            if (reason is not null) return Fail($"Trang {pageNumber}: {reason}", ResultErrorCodes.Conflict);
+        }
         var attempts = await _db.StageTaskSubmissions.AsNoTracking().Where(s => taskIds.Contains(s.StageTaskId))
             .GroupBy(s => s.StageTaskId).Select(g => new { g.Key, Max = g.Max(s => s.AttemptNumber) })
             .ToDictionaryAsync(x => x.Key, x => x.Max, ct);

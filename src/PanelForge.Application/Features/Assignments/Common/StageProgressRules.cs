@@ -160,32 +160,42 @@ internal static class StageProgressRules
         }
         else if (a.AssignedRole == WorkspaceRole.Artist)
         {
-            if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
-
-            if (panels.Any(p => p.ReadingOrder <= 0))
-                return "Các panel cần có thứ tự đọc (reading order) hợp lệ trước khi nộp.";
-
-            // CF2 mục "Điều kiện nộp": artwork đã tải lên. Sau khi bị trả về, phải có bản MỚI hơn lần từ chối (BR-01).
-            var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
             var rejectedAt = await db.Submissions.AsNoTracking()
                 .Where(s => s.AssignmentId == a.Id && s.Status == SubmissionStatus.Rejected)
                 .OrderByDescending(s => s.AttemptNumber)
                 .Select(s => s.DecidedAt).FirstOrDefaultAsync(ct);
-
-            var uploads = await db.AssetReferences.AsNoTracking()
-                .Where(r => r.PipelineStageId == a.PipelineStageId && pageIds.Contains(r.PageId) &&
-                            (rejectedAt == null || r.CreatedAt >= rejectedAt))
-                .Select(r => new { r.PageId, r.PanelId }).Distinct().ToListAsync(ct);
-
-            // Trang đủ artwork khi có ảnh cả trang, hoặc mọi Panel (việc bao phủ) của trang đều có ảnh riêng
-            var missing = pageIds.Count(pageId =>
-                !uploads.Any(u => u.PageId == pageId && u.PanelId == null) &&
-                panels.Where(p => p.PageId == pageId).Any(p => !uploads.Any(u => u.PanelId == p.Id)));
-            if (missing > 0)
-                return $"{missing} trang chưa có artwork ở stage này: cần ảnh cả trang hoặc ảnh cho mọi Panel (sau lần bị trả về cần bản tải lên mới).";
+            return await ArtworkBlockReasonAsync(db, a.PipelineStageId, panels, rejectedAt, ct);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Điều kiện nộp của Artist (CF2): có Panel, thứ tự đọc hợp lệ, và mỗi trang có ảnh cả trang hoặc ảnh cho mọi Panel ở
+    /// <paramref name="stageId"/>. Sau lần bị trả về (<paramref name="rejectedAt"/>) phải có bản tải lên MỚI hơn (BR-01).
+    /// Dùng chung cho Assignment V2 và ô Lưới V3.
+    /// </summary>
+    public static async Task<string?> ArtworkBlockReasonAsync(
+        IPanelForgeDbContext db, Guid stageId, IReadOnlyList<Panel> panels, DateTime? rejectedAt, CancellationToken ct)
+    {
+        if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
+
+        if (panels.Any(p => p.ReadingOrder <= 0))
+            return "Các panel cần có thứ tự đọc (reading order) hợp lệ trước khi nộp.";
+
+        var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
+        var uploads = await db.AssetReferences.AsNoTracking()
+            .Where(r => r.PipelineStageId == stageId && pageIds.Contains(r.PageId) &&
+                        (rejectedAt == null || r.CreatedAt >= rejectedAt))
+            .Select(r => new { r.PageId, r.PanelId }).Distinct().ToListAsync(ct);
+
+        // Trang đủ artwork khi có ảnh cả trang, hoặc mọi Panel (việc bao phủ) của trang đều có ảnh riêng
+        var missing = pageIds.Count(pageId =>
+            !uploads.Any(u => u.PageId == pageId && u.PanelId == null) &&
+            panels.Where(p => p.PageId == pageId).Any(p => !uploads.Any(u => u.PanelId == p.Id)));
+        return missing > 0
+            ? $"{missing} trang chưa có artwork ở stage này: cần ảnh cả trang hoặc ảnh cho mọi Panel (sau lần bị trả về cần bản tải lên mới)."
+            : null;
     }
 
     /// <summary>
@@ -203,7 +213,13 @@ internal static class StageProgressRules
             // Panel, hoặc cả chương: chỉ các trang còn trong phạm vi thực tế
             _ => panels.Select(p => p.PageId).Distinct().ToList()
         };
+        return await LetteringPagesBlockReasonAsync(db, pages, pageIds, ct);
+    }
 
+    /// <summary>Cổng nộp Lettering theo danh sách trang (dùng chung V2 và ô Lưới V3 cấp Trang).</summary>
+    public static async Task<string?> LetteringPagesBlockReasonAsync(
+        IPanelForgeDbContext db, IPageRepository pages, IReadOnlyList<Guid> pageIds, CancellationToken ct)
+    {
         foreach (var pageId in pageIds)
         {
             var page = await pages.GetAsync(pageId, ct);

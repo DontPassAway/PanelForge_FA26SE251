@@ -121,8 +121,29 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 
         // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage. Việc cấp Page: ảnh cả trang hoặc khung bất kỳ của trang.
         //    Việc cấp Panel: chỉ ảnh của đúng khung đó (không được ghi ảnh cả trang, vì sẽ đè phần người khác làm) ──
-        var holdsTheWork = false;
-        if (stageId != Guid.Empty)
+        // Lưới V3: chương đã giao việc qua lưới thì quyền xét theo ô (trang × công đoạn), không rơi về luật V2 (bảng Assignments
+        // rỗng → mọi Artist ghi đè được trang người khác hoặc trang đã duyệt). Ô chưa giao: chỉ Producer tải được.
+        var usesGrid = await _db.StageTasks.AnyAsync(
+            t => t.ChapterId == chapter.Id && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
+        if (usesGrid)
+        {
+            var cell = await (from t in _db.StageTasks.AsNoTracking()
+                              join l in _db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                              where t.ChapterId == chapter.Id && t.PipelineStageId == stageId && t.PageId == cmd.PageId &&
+                                    t.Status != StageTaskStatus.Cancelled
+                              select new { t.Status, t.IsInputOutdated, l.AssigneeUserId }).FirstOrDefaultAsync(ct);
+            var holdsCell = cell is not null && cell.AssigneeUserId == cmd.UserId && !cell.IsInputOutdated &&
+                            (cell.Status == StageTaskStatus.InProgress || cell.Status == StageTaskStatus.ReworkRequired);
+            var producerOnFreeCell = cell is null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
+                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId && m.Status == WorkspaceMemberStatus.Active &&
+                m.Role == WorkspaceRole.Producer, ct);
+            if (!holdsCell && !producerOnFreeCell)
+                return Fail("Chỉ người đang làm ô (trang × công đoạn) này trên lưới giao việc mới tải được artwork.",
+                    ResultErrorCodes.Forbidden);
+        }
+
+        var holdsTheWork = usesGrid;
+        if (!holdsTheWork && stageId != Guid.Empty)
         {
             holdsTheWork = await _db.Assignments.AnyAsync(a =>
                 a.ChapterId == chapter.Id && a.PipelineStageId == stageId && a.AssigneeUserId == cmd.UserId &&
