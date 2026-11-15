@@ -4614,9 +4614,18 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("due_date");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("Layer")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("layer");
 
                     b.Property<Guid?>("PanelId")
                         .HasColumnType("uuid")
@@ -4678,6 +4687,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AssignmentId")
                         .HasDatabaseName("ix_change_requests_assignment_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_change_requests_group_id");
 
                     b.HasIndex("ScriptLineId")
                         .HasDatabaseName("ix_change_requests_script_line_id");

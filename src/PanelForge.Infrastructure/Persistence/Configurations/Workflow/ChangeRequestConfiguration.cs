@@ -41,6 +41,20 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
                .HasColumnName("panel_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.GroupId)
+               .HasColumnName("group_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(c => c.GroupId)
+               .HasDatabaseName("ix_change_requests_group_id");
+
+        builder.Property(c => c.Layer)
+               .HasColumnName("layer")
+               .HasColumnType("varchar(20)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<ChangeRequestLayer>(v))
+               .IsRequired();
+
         // Không khóa ngoại tới scene/script_line: Writer có thể xoá dòng khi sửa, yêu cầu sửa vẫn phải giữ làm lịch sử
         // (BR-01); quoted_text lưu nguyên văn tại lần nộp.
         builder.Property(c => c.SceneId)
