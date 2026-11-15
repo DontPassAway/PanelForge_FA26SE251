@@ -153,7 +153,7 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
 
             chapterDtos.Add(new ChapterInsightDto(
                 c.Id, c.ChapterNumber, c.Title, c.Status.ToString(),
-                c.Status == ChapterStatus.Published && c.PublishedAt <= now,
+                c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now,
                 c.IsLocked, c.PriceVnd, pageCount, previews.Count(p => p.IsPreview), langs,
                 Stats(c.Id, filter, includeRatings: false)));
         }

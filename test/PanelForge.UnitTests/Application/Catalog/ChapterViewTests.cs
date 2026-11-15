@@ -40,7 +40,7 @@ public class ChapterViewTests
 
     private static void Publish(Chapter c)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(c, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(c, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(c, DateTime.UtcNow.AddDays(-2));
     }
 

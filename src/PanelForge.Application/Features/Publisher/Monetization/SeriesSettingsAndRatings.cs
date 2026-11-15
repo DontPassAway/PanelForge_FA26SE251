@@ -73,7 +73,7 @@ public sealed class RateSeriesCommandHandler : IRequestHandler<RateSeriesCommand
 
         var now = DateTime.UtcNow;
         var published = await _db.Chapters.AsNoTracking()
-            .AnyAsync(c => c.SeriesId == cmd.SeriesId && c.Status == ChapterStatus.Published && c.PublishedAt <= now, ct);
+            .AnyAsync(c => c.SeriesId == cmd.SeriesId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now, ct);
         if (!published)
             return Result<SeriesRatingSummaryDto>.Failure("Không tìm thấy bộ truyện đã phát hành.", ResultErrorCodes.NotFound);
 

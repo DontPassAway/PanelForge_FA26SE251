@@ -157,7 +157,7 @@ public partial class AssignmentTests
         }
 
         public void LockChapter() =>
-            typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(Chapter, ChapterStatus.Approved);
+            typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(Chapter, ChapterStatus.ChapterApproved);
 
         public CreateAssignmentCommand CreateCmd(
             Guid? stageId = null, Guid? assignee = null, WorkflowEntityType type = WorkflowEntityType.Page, Guid? target = null) =>

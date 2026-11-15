@@ -5,6 +5,11 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
+using PanelForge.Application.Features.Chapters.Commands.HandOffChapter;
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using PanelForge.API.Common.Attributes;
+using PanelForge.API.Controllers;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Models;
@@ -58,6 +63,8 @@ public class ChapterPublishFlowTests
 
     private Task<Result<ChapterReviewDto>> Approve() =>
         new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
+    private Task<Result<ChapterReviewDto>> HandOff(Guid? userId = null) =>
+        new HandOffChapterCommandHandler(_db).Handle(new HandOffChapterCommand(_chapter.Id, userId ?? _producerId), default);
 
     private Task<Result<ChapterReviewDto>> Publish(DateTime? at = null) =>
         new PublishChapterCommandHandler(_db).Handle(new PublishChapterCommand(_chapter.Id, _publisherId, at), default);
@@ -72,7 +79,7 @@ public class ChapterPublishFlowTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Action.Should().Be(ChapterReviewAction.ProducerApproved);
-        _chapter.Status.Should().Be(ChapterStatus.Approved);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
         _db.Notifications.Should().ContainSingle(n =>
             n.UserId == _publisherId && n.Type == NotificationType.ChapterReadyForPublication && n.ChapterId == _chapter.Id);
     }
@@ -178,17 +185,19 @@ public class ChapterPublishFlowTests
     public async Task Publish_InThePast_ShouldFailValidation()
     {
         await Approve();
+        await HandOff();
 
         var result = await Publish(DateTime.UtcNow.AddDays(-1));
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        _chapter.Status.Should().Be(ChapterStatus.Approved);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
     }
 
     [Fact]
     public async Task Publish_Scheduled_ShouldHideFromReaderUntilDue()
     {
         await Approve();
+        await HandOff();
         var due = DateTime.UtcNow.AddDays(3);
 
         var result = await Publish(due);
@@ -196,7 +205,7 @@ public class ChapterPublishFlowTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.Action.Should().Be(ChapterReviewAction.PublisherPublished);
         result.Value.ScheduledAt.Should().BeCloseTo(due, TimeSpan.FromSeconds(1));
-        _chapter.Status.Should().Be(ChapterStatus.Published);
+        _chapter.Status.Should().Be(ChapterStatus.HandedOffAndPublished);
         _db.Notifications.Should().Contain(n => n.UserId == _producerId && n.Type == NotificationType.ChapterPublished);
 
         // Chưa đến giờ: Reader không thấy chương, không thấy Series trong catalog
@@ -212,6 +221,7 @@ public class ChapterPublishFlowTests
     public async Task Publish_Now_ShouldLetReaderReadPagesInSeriesReadingDirection()
     {
         await Approve();
+        await HandOff();
         (await Publish()).IsSuccess.Should().BeTrue();
 
         var read = await new GetPublicChapterQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicChapterQuery(_chapter.Id), default);
@@ -230,22 +240,20 @@ public class ChapterPublishFlowTests
     {
         await Approve();
 
-        (await Reopen(_publisherId, "  ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        _chapter.Status.Should().Be(ChapterStatus.Approved);
+        (await Reopen(_producerId, "  ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
     }
 
     [Fact]
-    public async Task Reopen_ByPublisher_ShouldRejectBackToProduction_AndNotifyProducer()
+    public async Task Reopen_ByPublisher_ShouldReturnForbidden()
     {
         await Approve();
 
         var result = await Reopen(_publisherId, "Trang 3 thiếu chữ");
 
-        result.Value!.Action.Should().Be(ChapterReviewAction.PublisherRejected);
-        result.Value.Comment.Should().Be("Trang 3 thiếu chữ");
-        _chapter.Status.Should().Be(ChapterStatus.InProduction);
-        _db.Notifications.Should().Contain(n =>
-            n.UserId == _producerId && n.Type == NotificationType.ChapterReopened && n.Message.Contains("Trang 3 thiếu chữ"));
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        result.ErrorMessage.Should().Contain("Chỉ Producer");
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
     }
 
     [Fact]
@@ -260,26 +268,29 @@ public class ChapterPublishFlowTests
     public async Task Reopen_AfterPublished_ShouldConflict()
     {
         await Approve();
+        await HandOff();
         await Publish();
 
         (await Reopen(_producerId, "Muốn sửa")).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        _chapter.Status.Should().Be(ChapterStatus.Published);
+        _chapter.Status.Should().Be(ChapterStatus.HandedOffAndPublished);
     }
 
     [Fact]
     public async Task History_ShouldKeepEveryDecisionInOrder()
     {
         await Approve();
-        await Reopen(_publisherId, "Chưa đạt");
+        await Reopen(_producerId, "Chưa đạt");
         await Approve();
+        await HandOff();
         await Publish();
 
         var history = await new GetChapterReviewsQueryHandler(_db).Handle(new GetChapterReviewsQuery(_chapter.Id), default);
 
         history.Value!.Select(r => r.Action).Should().Equal(
             ChapterReviewAction.ProducerApproved,
-            ChapterReviewAction.PublisherRejected,
+            ChapterReviewAction.ProducerReopened,
             ChapterReviewAction.ProducerApproved,
+            ChapterReviewAction.ProducerHandedOff,
             ChapterReviewAction.PublisherPublished);
     }
 
@@ -346,5 +357,100 @@ public class ChapterPublishFlowTests
         var result = await new GetChapterSnapshotQueryHandler(_db).Handle(new GetChapterSnapshotQuery(other.Id, snapshot.Id), default);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task HandOff_HappyPath_ShouldSetIsHandedOff_RecordHistory_AndNotifyPublisher()
+    {
+        await Approve();
+
+        var result = await HandOff();
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Action.Should().Be(ChapterReviewAction.ProducerHandedOff);
+        _chapter.IsHandedOff.Should().BeTrue();
+        _chapter.HandedOffAt.Should().NotBeNull();
+        _chapter.HandedOffById.Should().Be(_producerId);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
+
+        _db.Notifications.Should().Contain(n =>
+            n.UserId == _publisherId && n.Type == NotificationType.ChapterHandedOff && n.ChapterId == _chapter.Id);
+    }
+
+    [Fact]
+    public async Task HandOff_WhenNotInChapterApprovedState_ShouldConflict()
+    {
+        // Chạy khi chapter đang InProduction
+        var result = await HandOff();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _chapter.IsHandedOff.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Publish_BeforeHandOff_ShouldConflict()
+    {
+        await Approve();
+
+        var result = await Publish();
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("chưa được Producer bàn giao");
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
+    }
+
+    [Fact]
+    public async Task Reopen_ByProducer_AfterHandOff_ShouldResetHandOff_AndReturnToInProduction()
+    {
+        await Approve();
+        await HandOff();
+        _chapter.IsHandedOff.Should().BeTrue();
+
+        var result = await Reopen(_producerId, "Producer cần sửa lại trang 1");
+
+        result.IsSuccess.Should().BeTrue();
+        _chapter.Status.Should().Be(ChapterStatus.InProduction);
+        _chapter.IsHandedOff.Should().BeFalse();
+        _chapter.HandedOffAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Controller_RoleAuthorizationRules_EnforceProducerAndPublisherBoundaries()
+    {
+        // 1. ChaptersController.HandOffChapter must require Producer
+        var handOffMethod = typeof(ChaptersController).GetMethod(nameof(ChaptersController.HandOffChapter));
+        var handOffAttr = handOffMethod!.GetCustomAttribute<RequireWorkspaceRoleAttribute>();
+        handOffAttr.Should().NotBeNull();
+
+        // 2. ChaptersController.ReopenChapter must require Producer only
+        var reopenMethod = typeof(ChaptersController).GetMethod(nameof(ChaptersController.ReopenChapter));
+        var reopenAttr = reopenMethod!.GetCustomAttribute<RequireWorkspaceRoleAttribute>();
+        reopenAttr.Should().NotBeNull();
+
+        // 3. ChaptersController.PublishChapter and ScheduleChapter must require Publisher
+        var publishMethod = typeof(ChaptersController).GetMethod(nameof(ChaptersController.PublishChapter));
+        var publishAttr = publishMethod!.GetCustomAttribute<RequireWorkspaceRoleAttribute>();
+        publishAttr.Should().NotBeNull();
+
+        var scheduleMethod = typeof(ChaptersController).GetMethod(nameof(ChaptersController.ScheduleChapter));
+        var scheduleAttr = scheduleMethod!.GetCustomAttribute<RequireWorkspaceRoleAttribute>();
+        scheduleAttr.Should().NotBeNull();
+
+        // 4. WorkspacePaymentsController role rules
+        var payCtrlAttr = typeof(WorkspacePaymentsController).GetCustomAttribute<AuthorizeAttribute>();
+        payCtrlAttr.Should().NotBeNull();
+        payCtrlAttr!.Roles.Should().Be("Publisher,Admin");
+
+        var approveMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.ApprovePayment));
+        var approveAttr = approveMethod!.GetCustomAttribute<AuthorizeAttribute>();
+        approveAttr.Should().NotBeNull();
+        approveAttr!.Roles.Should().Be("Admin");
+
+        var rejectMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.RejectPayment));
+        var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
+        rejectAttr.Should().NotBeNull();
+        rejectAttr!.Roles.Should().Be("Admin");
     }
 }

@@ -299,7 +299,7 @@ public class WorkflowRoutingTests
     private static async Task LockChapterAsync(AiHarness h)
     {
         var chapter = await h.Db.Chapters.SingleAsync();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
     }
 

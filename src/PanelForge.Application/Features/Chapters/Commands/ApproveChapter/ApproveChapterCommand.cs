@@ -10,7 +10,7 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 
 /// <summary>
-/// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → Approved, chuyển cho Publisher.
+/// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → ChapterApproved, sẵn sàng bàn giao cho Publisher.
 /// Kèm theo: tạo ChapterSnapshot (CF4 / 4.1).
 /// Điều kiện: có ít nhất một Page, mọi việc giao đã Approved, không còn yêu cầu sửa Open/Resolved, không còn lỗi nhất quán Blocking đang mở. Từ đây việc/tiến độ bị khoá (BR-12).
 /// </summary>

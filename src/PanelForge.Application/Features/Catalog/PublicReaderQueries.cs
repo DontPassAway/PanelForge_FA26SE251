@@ -79,7 +79,7 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
 
         var now = DateTime.UtcNow;
         var chapter = await _db.Chapters.AsNoTracking()
-            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
             .Select(c => new
             {
                 c.Id, c.SeriesId, SeriesTitle = c.Series.Title, c.Series.ReadingDirection,
@@ -172,7 +172,7 @@ public sealed class GetPublicChapterCoverQueryHandler : IRequestHandler<GetPubli
     {
         var now = DateTime.UtcNow;
         var sha = await _db.Chapters.AsNoTracking()
-            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
             .Select(c => c.CoverImageSha256).FirstOrDefaultAsync(ct);
         if (sha is null) return NotFound();
 
@@ -215,7 +215,7 @@ public sealed class GetPublicSeriesCoverQueryHandler : IRequestHandler<GetPublic
         var now = DateTime.UtcNow;
         var sha = await _db.Series.AsNoTracking()
             .Where(s => s.Id == q.SeriesId
-                        && s.Chapters.Any(c => c.Status == ChapterStatus.Published && c.PublishedAt <= now))
+                        && s.Chapters.Any(c => c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now))
             .Select(s => s.CoverImageSha256).FirstOrDefaultAsync(ct);
         if (sha is null) return NotFound();
 
@@ -269,7 +269,7 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
     {
         var now = DateTime.UtcNow;
         var chapter = await _db.Chapters.AsNoTracking()
-            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.Published && c.PublishedAt <= now)
+            .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
             .Select(c => new { c.Id, c.IsLocked, c.Series.WorkspaceId })
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();

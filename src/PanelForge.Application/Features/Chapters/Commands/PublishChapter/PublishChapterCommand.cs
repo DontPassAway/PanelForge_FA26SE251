@@ -9,8 +9,8 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 
 /// <summary>
-/// Họp tuần 5: Publisher kiểm tra và duyệt xuất bản chương đã được Producer duyệt, rồi lên lịch. Chapter Approved → Published;
-/// <c>PublishedAt</c> = giờ lên lịch (bỏ trống = ngay), Reader chỉ thấy từ lúc đó. Published là bản cuối (BR-24).
+/// Họp tuần 5 / V2.6: Publisher kiểm tra và phát hành chương đã được Producer bàn giao (ChapterApproved + IsHandedOff → HandedOffAndPublished);
+/// <c>PublishedAt</c> = giờ lên lịch (bỏ trống = ngay), Reader chỉ thấy từ lúc đó. HandedOffAndPublished là bản cuối (BR-24).
 /// </summary>
 public sealed record PublishChapterCommand(Guid ChapterId, Guid UserId, DateTime? PublishAt) : IRequest<Result<ChapterReviewDto>>;
 
@@ -29,11 +29,14 @@ public sealed class PublishChapterCommandHandler : IRequestHandler<PublishChapte
         if (publishAt < now - ClockSkew)
             return Result<ChapterReviewDto>.Failure("Thời điểm phát hành không được ở quá khứ.", ResultErrorCodes.Validation);
 
-        var loaded = await ChapterReviewRules.LoadAsync(_db, cmd.ChapterId, ChapterStatus.Approved, ct);
+        var loaded = await ChapterReviewRules.LoadAsync(_db, cmd.ChapterId, ChapterStatus.ChapterApproved, ct);
         if (!loaded.IsSuccess)
             return Result<ChapterReviewDto>.Failure(loaded.ErrorMessage!, loaded.ErrorCode);
 
         var (chapter, workspaceId) = loaded.Value;
+
+        if (!chapter.IsHandedOff)
+            return Result<ChapterReviewDto>.Failure("Chương chưa được Producer bàn giao cho Publisher.", ResultErrorCodes.Conflict);
 
         chapter.Publish(publishAt);
         chapter.UpdatedBy = cmd.UserId.ToString();

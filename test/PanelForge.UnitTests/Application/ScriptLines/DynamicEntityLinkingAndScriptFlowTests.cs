@@ -166,25 +166,14 @@ public class DynamicEntityLinkingAndScriptFlowTests
         _chapter.StartProduction(_producer, null);
         await _db.SaveChangesAsync();
 
-        // 1. Writer gửi yêu cầu mở lại kịch bản
-        var requestHandler = new RequestScriptReopenCommandHandler(_db);
-        var reqResult = await requestHandler.Handle(
-            new RequestScriptReopenCommand(_chapter.Id, _writer, "Cần sửa thoại Panel 2 do đổi twist"), default);
+        // Producer mở lại kịch bản (UnfreezeScript)
+        var unfreezeHandler = new UnfreezeChapterScriptCommandHandler(_db);
+        var unfreezeResult = await unfreezeHandler.Handle(
+            new UnfreezeChapterScriptCommand(_chapter.Id, _producer, "Cần sửa thoại Panel 2 do đổi twist"), default);
 
-        reqResult.IsSuccess.Should().BeTrue();
-        reqResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Requested);
-        reqResult.Value!.ScriptReopenReason.Should().Be("Cần sửa thoại Panel 2 do đổi twist");
-
-        // 2. Producer duyệt mở kịch bản
-        var approveHandler = new ApproveScriptReopenCommandHandler(_db);
-        var approveResult = await approveHandler.Handle(
-            new ApproveScriptReopenCommand(_chapter.Id, _producer), default);
-
-        approveResult.IsSuccess.Should().BeTrue();
-        approveResult.Value!.IsScriptFrozen.Should().BeFalse();
-        approveResult.Value!.ScriptContentHash.Should().BeNull();
-        approveResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Approved);
-
+        unfreezeResult.IsSuccess.Should().BeTrue();
+        unfreezeResult.Value!.IsScriptFrozen.Should().BeFalse();
+        unfreezeResult.Value!.ScriptContentHash.Should().BeNull();
         // 3. Giả lập Writer sửa thoại dòng 2 (gắn trên Panel 2)
         await Task.Delay(20);
         _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới");

@@ -84,7 +84,7 @@ public sealed class ThumbnailTests
         (await RunAsync(c, AiHarness.Writer)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         (await RunAsync(c)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden, "Artist chưa giữ việc cho panel");
 
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await c.H.Db.Chapters.SingleAsync(), ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await c.H.Db.Chapters.SingleAsync(), ChapterStatus.ChapterApproved);
         await c.H.Db.SaveChangesAsync();
         (await RunAsync(c)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 

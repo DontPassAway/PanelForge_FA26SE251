@@ -31,7 +31,7 @@ public class ReviewNewKindsTests
 
     private static async Task LockAsync(AiHarness h)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await h.Db.Chapters.SingleAsync(), ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(await h.Db.Chapters.SingleAsync(), ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
     }
 

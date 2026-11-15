@@ -20,6 +20,11 @@ public class Chapter : BaseEntity
     public ChapterStatus Status { get; private set; } = ChapterStatus.PreProduction;
     public DateTime? PublishedAt { get; private set; }
 
+    /// <summary>Producer đã nghiệm thu Gate 3 và kích hoạt bàn giao cho Publisher.</summary>
+    public bool IsHandedOff { get; private set; } = false;
+    public DateTime? HandedOffAt { get; private set; }
+    public Guid? HandedOffById { get; private set; }
+
     /// <summary>Khóa chương trả phí (false = miễn phí, true = chương trả phí cần mở khóa/VIP).</summary>
     public bool IsLocked { get; private set; } = false;
 
@@ -184,45 +189,6 @@ public class Chapter : BaseEntity
         ScriptSubmittedById = null;
     }
 
-    /// <summary>V2.5: Mở lại kịch bản cho Writer sửa (sẽ đánh cờ Stage Impact Flag nếu đã có thumbnail/artwork).</summary>
-    /// <summary>V2.5 & WF04: Writer gửi yêu cầu mở lại kịch bản có lý do chính đáng.</summary>
-    public void RequestScriptReopen(Guid userId, string reason)
-    {
-        RequireStatus(ChapterStatus.InProduction, "yêu cầu mở lại kịch bản");
-        if (!IsScriptFrozen)
-            throw new InvalidOperationException("Kịch bản hiện tại chưa bị đóng băng, không cần yêu cầu mở lại.");
-        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
-
-        ScriptReopenStatus = ScriptReopenStatus.Requested;
-        ScriptReopenReason = reason.Trim();
-        ScriptReopenRequestedById = userId;
-        ScriptReopenRequestedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>V2.5 & WF04: Producer duyệt yêu cầu mở lại kịch bản.</summary>
-    public void ApproveScriptReopen(Guid producerUserId)
-    {
-        RequireStatus(ChapterStatus.InProduction, "chấp thuận mở lại kịch bản");
-        if (!IsScriptFrozen)
-            throw new InvalidOperationException("Kịch bản hiện tại chưa bị đóng băng.");
-        if (ScriptReopenStatus != ScriptReopenStatus.Requested)
-            throw new InvalidOperationException("Không có yêu cầu mở lại kịch bản nào đang chờ duyệt.");
-
-        ReturnScriptToDraft();
-        ScriptReopenStatus = ScriptReopenStatus.Approved;
-        IncrementVersion();
-    }
-
-    /// <summary>V2.5 & WF04: Producer từ chối yêu cầu mở lại kịch bản.</summary>
-    public void RejectScriptReopen(Guid producerUserId)
-    {
-        RequireStatus(ChapterStatus.InProduction, "từ chối mở lại kịch bản");
-        if (ScriptReopenStatus != ScriptReopenStatus.Requested)
-            throw new InvalidOperationException("Không có yêu cầu mở lại kịch bản nào đang chờ duyệt.");
-
-        ScriptReopenStatus = ScriptReopenStatus.Rejected;
-    }
-
     /// <summary>D12: Producer mở lại kịch bản đã đóng băng (Frozen → Draft); lý do ghi ở Audit Log của handler.</summary>
     public void UnfreezeScript(Guid userId)
     {
@@ -232,30 +198,50 @@ public class Chapter : BaseEntity
         IncrementVersion();
     }
 
-    /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → Approved), chờ Publisher.</summary>
+    /// <summary>Producer duyệt bản hoàn chỉnh (InProduction → ChapterApproved), sẵn sàng bàn giao cho Publisher.</summary>
     public void Approve()
     {
         RequireStatus(ChapterStatus.InProduction, "duyệt");
-        Status = ChapterStatus.Approved;
+        Status = ChapterStatus.ChapterApproved;
+        IsHandedOff = false;
+        HandedOffAt = null;
+        HandedOffById = null;
     }
 
-    /// <summary>Mở lại để sửa (Approved → InProduction). Chương đã Published là bản cuối nên không mở lại.</summary>
+    /// <summary>Producer kích hoạt bàn giao chương đã nghiệm thu cho Publisher phát hành.</summary>
+    public void HandOff(Guid producerUserId)
+    {
+        RequireStatus(ChapterStatus.ChapterApproved, "bàn giao");
+        IsHandedOff = true;
+        HandedOffAt = DateTime.UtcNow;
+        HandedOffById = producerUserId;
+        IncrementVersion();
+    }
+
+    /// <summary>Mở lại để sản xuất (ChapterApproved → InProduction). Chương đã HandedOffAndPublished là bản cuối nên không mở lại.</summary>
     public void Reopen()
     {
-        RequireStatus(ChapterStatus.Approved, "mở lại");
+        RequireStatus(ChapterStatus.ChapterApproved, "mở lại");
         Status = ChapterStatus.InProduction;
+        IsHandedOff = false;
+        HandedOffAt = null;
+        HandedOffById = null;
+        IncrementVersion();
     }
 
-    /// <summary>Publisher duyệt xuất bản (Approved → Published). <paramref name="publishAt"/> ở tương lai = lên lịch; Reader chỉ thấy từ lúc đó.</summary>
+    /// <summary>Publisher duyệt xuất bản (ChapterApproved → HandedOffAndPublished sau khi bàn giao). <paramref name="publishAt"/> ở tương lai = lên lịch; Reader chỉ thấy từ lúc đó.</summary>
     public void Publish(DateTime publishAt)
     {
-        RequireStatus(ChapterStatus.Approved, "phát hành");
-        Status = ChapterStatus.Published;
+        RequireStatus(ChapterStatus.ChapterApproved, "phát hành");
+        if (!IsHandedOff)
+            throw new InvalidOperationException("Chương chưa được Producer bàn giao cho Publisher.");
+        Status = ChapterStatus.HandedOffAndPublished;
         PublishedAt = publishAt;
+        IncrementVersion();
     }
 
-    /// <summary>Reader chỉ thấy chương Published đã đến giờ phát hành.</summary>
-    public bool IsVisibleToReaders(DateTime utcNow) => Status == ChapterStatus.Published && PublishedAt <= utcNow;
+    /// <summary>Reader chỉ thấy chương HandedOffAndPublished đã đến giờ phát hành.</summary>
+    public bool IsVisibleToReaders(DateTime utcNow) => Status == ChapterStatus.HandedOffAndPublished && PublishedAt <= utcNow;
 
     private void RequireStatus(ChapterStatus expected, string action)
     {

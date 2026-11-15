@@ -1376,9 +1376,23 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("frozen_script_version_id");
 
+                    b.Property<DateTime?>("HandedOffAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("handed_off_at");
+
+                    b.Property<Guid?>("HandedOffById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handed_off_by_id");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsHandedOff")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_handed_off");
 
                     b.Property<bool>("IsLocked")
                         .ValueGeneratedOnAdd()
@@ -1473,7 +1487,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("varchar(20)")
+                        .HasColumnType("varchar(30)")
                         .HasDefaultValue("PreProduction")
                         .HasColumnName("status");
 
