@@ -42,6 +42,19 @@ internal static class TaskGridNotifications
         userId, NotificationType.AssignmentReady, $"Đến lượt bạn: {Cells(taskCount)} đã sẵn sàng", "Công đoạn trước đã được duyệt.",
         chapterId: chapterId);
 
+    /// <summary>Nhắc hạn lô (UC-14). Nội dung chứa mã lô + hạn để chống gửi trùng; đổi hạn thì nhắc lại.</summary>
+    public static Notification LotDue(Guid userId, StageTaskLot lot, int openCount, bool overdue) => Notification.Create(
+        userId, overdue ? NotificationType.AssignmentOverdue : NotificationType.AssignmentDueSoon,
+        overdue ? $"Lô việc đã quá hạn: còn {Cells(openCount)} chưa xong" : $"Lô việc sắp đến hạn: còn {Cells(openCount)} chưa xong",
+        $"Hạn {lot.DueDate:yyyy-MM-dd HH:mm} UTC · lô {lot.Id}", chapterId: lot.ChapterId);
+
+    /// <summary>Producer xử lý Impact Review: giữ bài (làm tiếp/duyệt tiếp được) hoặc bắt làm lại.</summary>
+    public static Notification ImpactResolved(Guid userId, Guid chapterId, string stageName, bool keep) => Notification.Create(
+        userId, NotificationType.AssignmentUpdated,
+        keep ? $"Ô {stageName}: giữ nguyên bài, làm tiếp được" : $"Ô {stageName} cần làm lại theo đầu vào mới",
+        keep ? "Producer xác nhận thay đổi đầu vào không ảnh hưởng bài của bạn." : "Đầu vào đã đổi; mở lưới để làm lại ô này.",
+        chapterId: chapterId);
+
     /// <summary>
     /// Sau khi <paramref name="approved"/> được duyệt: ô hạ nguồn trực tiếp đang Assigned và giờ đủ tiền đề → báo người nhận
     /// (một thông báo cho mỗi người). Truyền <paramref name="chapterTasks"/> đã phản ánh trạng thái mới.

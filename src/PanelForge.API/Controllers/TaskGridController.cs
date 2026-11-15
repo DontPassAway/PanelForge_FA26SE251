@@ -13,6 +13,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.WithdrawStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.UpdateStageTaskLot;
 using PanelForge.Application.Features.TaskGrid.Commands.ClaimStageTaskReview;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
@@ -57,7 +58,7 @@ public sealed class TaskGridController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(AssignStageTaskLotsResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> AssignLots(Guid chapterId, [FromBody] AssignStageTaskLotsRequest body, CancellationToken ct) =>
-        ToResult(await _mediator.Send(new AssignStageTaskLotsCommand(chapterId, CurrentUserId, body.Lots, body.DryRun), ct));
+        ToResult(await _mediator.Send(new AssignStageTaskLotsCommand(chapterId, CurrentUserId, body.Lots, body.DryRun, body.Reassign), ct));
 
     /// <summary>POST /tasks/{taskId}/start — người nhận bắt đầu ô.</summary>
     [HttpPost("tasks/{taskId:guid}/start")]
@@ -107,6 +108,13 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResolveImpact(Guid chapterId, Guid taskId, [FromBody] ResolveStageTaskImpactRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ResolveStageTaskImpactCommand(chapterId, taskId, CurrentUserId, body.Keep), ct));
+
+    /// <summary>PATCH /lots/{lotId} — Producer sửa brief / hạn của lô.</summary>
+    [HttpPatch("lots/{lotId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(StageTaskLotDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateLot(Guid chapterId, Guid lotId, [FromBody] UpdateStageTaskLotRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new UpdateStageTaskLotCommand(chapterId, lotId, CurrentUserId, body.Brief, body.DueDate, body.ClearDueDate), ct));
 
     /// <summary>POST /tasks/{taskId}/withdraw — người giữ ô rút bài đã nộp (chỉ khi còn Submitted).</summary>
     [HttpPost("tasks/{taskId:guid}/withdraw")]

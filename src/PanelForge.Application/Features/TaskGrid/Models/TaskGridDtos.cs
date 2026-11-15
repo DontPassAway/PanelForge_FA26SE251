@@ -48,7 +48,11 @@ public sealed record StageTaskLotRequest(
     Guid PipelineStageId, Guid AssigneeUserId, IReadOnlyList<Guid> TaskIds, string? Brief = null, DateTime? DueDate = null);
 
 /// <param name="DryRun">true = chỉ kiểm tra, không lưu.</param>
-public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun = false);
+/// <param name="Reassign">true = cho chuyển cả ô Assigned/InProgress/ReworkRequired (không lỗi thời) sang lô mới.</param>
+public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun = false, bool Reassign = false);
+
+/// <summary>Sửa hạn / brief của lô (Producer). Trường null = giữ nguyên; ClearDueDate = true để bỏ hạn.</summary>
+public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate, bool ClearDueDate = false);
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 

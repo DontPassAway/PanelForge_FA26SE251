@@ -6,6 +6,7 @@ using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.SeriesPipeline.Common;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Application.Features.TaskGrid.Commands.UpdateStageTaskLot;
 using PanelForge.Application.Features.TaskGrid.Commands.WithdrawStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.ClaimStageTaskReview;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
@@ -346,6 +347,35 @@ public class TaskGridHandlerTests
             s.AttemptNumber == 1 && s.Status == SubmissionStatus.Rejected && s.DecisionComment == "Màu da lệch");
         f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentChangesRequested);
         (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId, " "), default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    /// <summary>Người cứu viện: chuyển ô đang làm sang người khác trong 1 bước (cần cờ reassign); Producer gia hạn lô.</summary>
+    [Fact]
+    public async Task Reassign_MovesWorkingCellToHelper_AndLotCanBeExtended()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        var helper = Guid.NewGuid();
+        f.AddMember(helper, WorkspaceRole.Artist);
+        var handler = new AssignStageTaskLotsCommandHandler(f.Db.Object);
+        StageTaskLotRequest Lot() => new(f.Pencil.Id, helper, [pencil.Id]);
+
+        (await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict, "không có cờ reassign thì chỉ giao được ô chưa giao");
+        var moved = await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false, Reassign: true), default);
+
+        moved.IsSuccess.Should().BeTrue(moved.ErrorMessage);
+        pencil.Status.Should().Be(StageTaskStatus.Assigned, "người mới bấm Bắt đầu lại");
+        pencil.LotId.Should().Be(moved.Value!.Lots.Single().Id);
+        f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentUnassigned);
+
+        var due = DateTime.UtcNow.AddDays(3);
+        var updated = await new UpdateStageTaskLotCommandHandler(f.Db.Object)
+            .Handle(new(f.Chapter.Id, pencil.LotId!.Value, f.ProducerId, "Vẽ gấp", due, false), default);
+        updated.Value!.DueDate.Should().Be(due);
+        updated.Value.Brief.Should().Be("Vẽ gấp");
     }
 
     /// <summary>Lát cắt 3: rút bài khi chưa ai duyệt, khoá duyệt chống Editor dẫm nhau, lưới trả nhận xét lần sửa gần nhất.</summary>

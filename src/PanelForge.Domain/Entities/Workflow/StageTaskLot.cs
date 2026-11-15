@@ -68,6 +68,18 @@ public class StageTaskLot : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Producer sửa brief / gia hạn lô. Lô Closed (đã gỡ hết ô) không sửa.</summary>
+    public void UpdateDetails(string? brief, DateTime? dueDate)
+    {
+        if (Status == StageTaskLotStatus.Closed) throw new InvalidOperationException("Lô đã đóng, không sửa được.");
+        var trimmed = string.IsNullOrWhiteSpace(brief) ? null : brief.Trim();
+        if (trimmed?.Length > MaxBriefLength)
+            throw new ArgumentException($"Brief tối đa {MaxBriefLength} ký tự.", nameof(brief));
+        Brief = trimmed;
+        DueDate = dueDate;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>Quá hạn chỉ khi còn ô chưa xong; lô Completed/Closed không bao giờ quá hạn.</summary>
     public bool IsOverdue(DateTime nowUtc) => Status == StageTaskLotStatus.Active && DueDate is { } due && due < nowUtc;
 }

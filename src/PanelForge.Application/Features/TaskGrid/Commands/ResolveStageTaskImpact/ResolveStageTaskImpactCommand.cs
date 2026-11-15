@@ -38,9 +38,15 @@ public sealed class ResolveStageTaskImpactCommandHandler : IRequestHandler<Resol
         task.UpdatedBy = cmd.UserId.ToString();
         if (!cmd.Keep && await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } pending) pending.Supersede();
         await TaskGridRules.RefreshLotsAsync(_db, [task.LotId], [task], ct);
+
+        // BR-14: báo người giữ ô kết quả Impact Review; giữ bài trên ô đã duyệt thì hạ nguồn có thể đến lượt
+        var lot = task.LotId is { } lotId ? await _db.StageTaskLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct) : null;
+        var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
+        if (lot is not null) _db.Notifications.Add(TaskGridNotifications.ImpactResolved(lot.AssigneeUserId, chapter.Id, stageName, cmd.Keep));
+        if (cmd.Keep && task.Status == Domain.Enums.StageTaskStatus.Approved)
+            await TaskGridNotifications.AddReadyAsync(_db, [task], stages, chapterTasks, chapter.Id, ct);
         await _db.SaveChangesAsync(ct);
 
-        var lot = task.LotId is { } lotId ? await _db.StageTaskLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct) : null;
         return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false));
     }
 }

@@ -74,6 +74,29 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
             created++;
         }
 
+        // Lưới V3: lô còn ô chưa xong (chưa nộp) sắp/đã quá hạn. Quá hạn thì báo cả Producer đã giao để gia hạn hoặc chia lại.
+        var lots = await _db.StageTaskLots.AsNoTracking()
+            .Where(l => l.Status == StageTaskLotStatus.Active && l.DueDate != null && l.DueDate <= upper && l.DueDate >= lower &&
+                        chapterIds.Contains(l.ChapterId))
+            .ToListAsync(ct);
+        foreach (var lot in lots)
+        {
+            var open = await _db.StageTasks.CountAsync(t => t.LotId == lot.Id && (t.Status == StageTaskStatus.Assigned ||
+                t.Status == StageTaskStatus.InProgress || t.Status == StageTaskStatus.ReworkRequired), ct);
+            if (open == 0) continue;
+            var overdue = lot.DueDate < now;
+            Guid[] recipients = overdue ? [.. new[] { lot.AssigneeUserId, lot.AssignedByUserId }.Distinct()] : [lot.AssigneeUserId];
+            foreach (var userId in recipients)
+            {
+                var note = TaskGrid.Common.TaskGridNotifications.LotDue(userId, lot, open, overdue);
+                if (await _db.Notifications.AnyAsync(n => n.UserId == userId && n.Type == note.Type && n.ChapterId == lot.ChapterId
+                                                          && n.Message == note.Message, ct))
+                    continue;
+                _db.Notifications.Add(note);
+                created++;
+            }
+        }
+
         // ponytail: hai instance Backend chạy cùng lúc có thể gửi trùng một lần ở cùng chu kỳ; chấp nhận được, cần thì thêm cột reminded_at + unique index
         if (created > 0) await _db.SaveChangesAsync(ct);
         return created;

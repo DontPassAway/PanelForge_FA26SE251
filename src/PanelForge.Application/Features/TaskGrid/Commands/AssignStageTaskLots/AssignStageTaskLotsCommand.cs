@@ -15,7 +15,7 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 /// Người nhận phải là thành viên Active của Workspace, đúng vai trò của công đoạn. <c>DryRun</c> chỉ kiểm tra.
 /// </summary>
 public sealed record AssignStageTaskLotsCommand(
-    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun) : IRequest<Result<AssignStageTaskLotsResultDto>>, ITransactionalCommand;
+    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun, bool Reassign = false) : IRequest<Result<AssignStageTaskLotsResultDto>>, ITransactionalCommand;
 
 public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignStageTaskLotsCommand, Result<AssignStageTaskLotsResultDto>>
 {
@@ -64,8 +64,15 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
             var lotTasks = tasks.Where(t => request.TaskIds.Contains(t.Id)).ToList();
             if (lotTasks.Any(t => t.PipelineStageId != stage.Id))
                 return Fail($"Lô của công đoạn '{stage.Name}' chứa ô của công đoạn khác.");
-            if (lotTasks.FirstOrDefault(t => t.Status != StageTaskStatus.Unassigned) is { } taken)
-                return Fail($"Ô {taken.Id} đang ở trạng thái {taken.Status}, chỉ giao được ô chưa giao.", ResultErrorCodes.Conflict);
+            // Reassign ("người cứu viện"): chuyển ô chưa nộp sang người khác trong 1 bước; ô đã nộp/duyệt không đổi người được,
+            // ô lỗi thời phải qua Impact Review trước (AssignTo xoá cờ lỗi thời).
+            if (lotTasks.FirstOrDefault(t => cmd.Reassign
+                    ? t.Status is not (StageTaskStatus.Unassigned or StageTaskStatus.Assigned or StageTaskStatus.InProgress
+                        or StageTaskStatus.ReworkRequired) || t.IsInputOutdated
+                    : t.Status != StageTaskStatus.Unassigned) is { } taken)
+                return Fail(cmd.Reassign
+                    ? $"Ô {taken.Id} đang {taken.Status}{(taken.IsInputOutdated ? " (lỗi thời)" : "")}, không đổi người được."
+                    : $"Ô {taken.Id} đang ở trạng thái {taken.Status}, chỉ giao được ô chưa giao.", ResultErrorCodes.Conflict);
 
             StageTaskLot lot;
             try
@@ -81,6 +88,12 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
         if (cmd.DryRun)
             return Result<AssignStageTaskLotsResultDto>.Success(new AssignStageTaskLotsResultDto(true, tasks.Count, []));
 
+        var oldLotIds = tasks.Select(t => t.LotId).Where(id => id != null).Distinct().ToList();
+        if (oldLotIds.Count > 0)
+            foreach (var old in await _db.StageTaskLots.AsNoTracking().Where(l => oldLotIds.Contains(l.Id)).ToListAsync(ct))
+                _db.Notifications.Add(TaskGridNotifications.Unassigned(old.AssigneeUserId, chapter.Id,
+                    tasks.Count(t => t.LotId == old.Id)));
+
         foreach (var (lot, lotTasks) in lots)
         {
             lot.CreatedBy = cmd.UserId.ToString();
@@ -91,6 +104,7 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
         // Người nhận phải có trong SeriesMembers, nếu không vào trang/chương sẽ bị RequireWorkspaceRole chặn 403 (như V2).
         foreach (var (lot, _) in lots.DistinctBy(x => (x.Lot.AssigneeUserId, x.Lot.AssignedRole)))
             await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, lot.AssigneeUserId, lot.AssignedRole, ct);
+        await TaskGridRules.RefreshLotsAsync(_db, oldLotIds, tasks, ct);
 
         await _db.SaveChangesAsync(ct);
         return Result<AssignStageTaskLotsResultDto>.Success(new AssignStageTaskLotsResultDto(
