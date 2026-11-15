@@ -1,9 +1,20 @@
 using System.Text.Json;
+using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Assignments.Models;
+
+public sealed record ProductionPageAssignmentRequest(Guid ArtistId, int PageFrom, int PageTo);
+
+public sealed record StartChapterProductionRequest(
+    IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
+    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null);
+
+public sealed record StartChapterProductionResultDto(
+    ChapterDetailDto Chapter,
+    IReadOnlyList<AssignmentDto> Assignments);
 
 public sealed record AssignmentDto(
     Guid Id,

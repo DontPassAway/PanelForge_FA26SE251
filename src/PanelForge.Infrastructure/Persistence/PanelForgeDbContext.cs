@@ -100,7 +100,9 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
 
     public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
-        Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken);
+        Database.IsRelational()
+            ? Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken)
+            : Task.CompletedTask;
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
