@@ -268,7 +268,7 @@ public sealed class AssignmentsController : ControllerBase
     {
         var result = await _mediator.Send(new ReturnWorkFromReviewCommand(
             chapterId, reviewAssignmentId, body.TargetAssignmentId, GetCurrentUserId(), body.Description ?? "",
-            body.RegionJson, body.PanelId, body.AssetReferenceId, body.DueDate), ct);
+            body.RegionJson, body.PanelId, body.AssetReferenceId, body.DueDate, body.GroupId, body.Layer), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -374,7 +374,8 @@ public sealed class AssignmentsController : ControllerBase
 /// <summary>Body trả việc từ màn duyệt cả chương.</summary>
 public sealed record ReturnWorkFromReviewRequest(
     Guid TargetAssignmentId, string? Description, string? RegionJson = null, Guid? PanelId = null,
-    Guid? AssetReferenceId = null, DateTime? DueDate = null);
+    Guid? AssetReferenceId = null, DateTime? DueDate = null, Guid? GroupId = null,
+    ChangeRequestLayer Layer = ChangeRequestLayer.Artwork);
 
 /// <summary>Body chuyển giao trang/khung: <c>targetType</c> = Page | Panel.</summary>
 public sealed record TransferAssignmentScopeRequest(

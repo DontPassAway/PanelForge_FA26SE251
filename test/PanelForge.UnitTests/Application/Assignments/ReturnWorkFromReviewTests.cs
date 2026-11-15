@@ -118,4 +118,50 @@ public class ReturnWorkFromReviewTests
         _db.SaveChanges();
         (await Return(_letter.Id)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
+
+    [Fact]
+    public async Task RegionAcrossTwoPanels_CreatesGroupedChangeRequestPerPanel()
+    {
+        _panel.UpdateBoundingBox("""{"x":0,"y":0,"w":0.5,"h":1}""");
+        var right = Panel.Create(_panel.PageId, 2, 2, """{"x":0.5,"y":0,"w":0.5,"h":1}""");
+        _db.Panels.Add(right);
+        await _db.SaveChangesAsync();
+
+        var result = await new ReturnWorkFromReviewCommandHandler(_db).Handle(new ReturnWorkFromReviewCommand(
+            _chapter.Id, _review.Id, _letter.Id, _editor, "Two panels",
+            """{"x":0.4,"y":0.2,"w":0.2,"h":0.2}""", Layer: ChangeRequestLayer.Lettering), default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        var requests = _db.ChangeRequests.ToList();
+        requests.Should().HaveCount(2);
+        requests.Select(c => c.PanelId).Should().BeEquivalentTo([_panel.Id, right.Id]);
+        requests.Select(c => c.GroupId).Should().OnlyContain(id => id.HasValue);
+        requests.Select(c => c.GroupId).Distinct().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task LayerRoutesToPanelArtistOrPageLetterer()
+    {
+        var artistId = Guid.NewGuid();
+        var artist = Assignment.Create(_letter.SeriesId, _chapter.Id, WorkflowEntityType.Panel, _panel.Id,
+            _letter.PipelineStageId, artistId, WorkspaceRole.Artist, "Panel artist");
+        _db.Assignments.Add(artist);
+        await _db.SaveChangesAsync();
+        var handler = new ReturnWorkFromReviewCommandHandler(_db);
+
+        var lettering = await handler.Handle(new ReturnWorkFromReviewCommand(
+            _chapter.Id, _review.Id, artist.Id, _editor, "Lettering", PanelId: _panel.Id,
+            Layer: ChangeRequestLayer.Lettering), default);
+        var artwork = await handler.Handle(new ReturnWorkFromReviewCommand(
+            _chapter.Id, _review.Id, artist.Id, _editor, "Artwork", PanelId: _panel.Id,
+            Layer: ChangeRequestLayer.Artwork), default);
+
+        lettering.IsSuccess.Should().BeTrue(lettering.ErrorMessage);
+        artwork.IsSuccess.Should().BeTrue(artwork.ErrorMessage);
+        _db.ChangeRequests.Single(c => c.Layer == ChangeRequestLayer.Lettering).ResponsibleUserId
+            .Should().Be(_letter.AssigneeUserId);
+        _db.ChangeRequests.Single(c => c.Layer == ChangeRequestLayer.Artwork).ResponsibleUserId
+            .Should().Be(artistId);
+        artist.Status.Should().Be(AssignmentStatus.Assigned);
+    }
 }

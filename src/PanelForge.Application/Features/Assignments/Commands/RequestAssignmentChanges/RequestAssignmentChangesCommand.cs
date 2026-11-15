@@ -73,17 +73,43 @@ public sealed class RequestAssignmentChangesCommandHandler : IRequestHandler<Req
         if (await ChangeRequestRules.SubmissionMismatchAsync(_db, assignment.Id, cmd.ExpectedSubmissionId, ct) is { } stale)
             return Result<AssignmentDto>.Failure(stale, ResultErrorCodes.Conflict);
 
-        if (await StageProgressRules.TransitionAsync(_db, assignment, r => r.RequestChanges(), ct) is { } error)
+        IReadOnlyList<ChangeRequestItemRequest> requested = cmd.Changes is { Count: > 0 }
+            ? cmd.Changes
+            : [new ChangeRequestItemRequest(cmd.Comment)];
+        var expanded = await ChangeRequestRules.ExpandPanelRegionsAsync(_db, assignment, requested, ct);
+        var routes = new List<PanelForge.Domain.Entities.Workflow.Assignment>();
+        foreach (var item in expanded)
+            routes.Add(await ChangeRequestRules.ResolveLayerAssignmentAsync(_db, assignment, item.PanelId, item.Layer, ct));
+        var returnsReviewedAssignment = routes.All(route => route.Id == assignment.Id);
+
+        if (returnsReviewedAssignment &&
+            await StageProgressRules.TransitionAsync(_db, assignment, r => r.RequestChanges(), ct) is { } error)
             return Result<AssignmentDto>.Failure(error, ResultErrorCodes.Conflict);
 
         // Lần nộp bị từ chối kèm comment; mỗi yêu cầu sửa gắn đúng lần nộp đó (CF3 bước 7)
         var submission = await ChangeRequestRules.LatestPendingSubmissionAsync(_db, assignment.Id, ct);
         submission?.Reject(cmd.UserId, cmd.Comment);
 
-        assignment.RequestRework(cmd.Comment);
-        ChangeRequestRules.AddChangeRequests(_db, assignment, submission?.Id, cmd.UserId, cmd.Changes, cmd.Comment);
-        assignment.UpdatedBy = cmd.UserId.ToString();
-        _db.Notifications.Add(AssignmentNotifications.ChangesRequested(assignment));
+        if (returnsReviewedAssignment)
+        {
+            assignment.RequestRework(cmd.Comment);
+            assignment.UpdatedBy = cmd.UserId.ToString();
+        }
+
+        await ChangeRequestRules.AddChangeRequestsAsync(
+            _db, assignment, submission?.Id, cmd.UserId, expanded, cmd.Comment, ct);
+        foreach (var route in routes.DistinctBy(a => a.Id))
+        {
+            if (route.Id != assignment.Id && route.Status == AssignmentStatus.Approved)
+            {
+                if (await StageProgressRules.TransitionAsync(_db, route, r => r.ReopenForRework(), ct) is { } routeError)
+                    return Result<AssignmentDto>.Failure(routeError, ResultErrorCodes.Conflict);
+                route.RequestRework(cmd.Comment);
+                route.UpdatedBy = cmd.UserId.ToString();
+            }
+
+            _db.Notifications.Add(AssignmentNotifications.ChangesRequested(route));
+        }
 
         // Khi Editor trả lại việc cho Writer viết lại -> tăng version của Chapter
         if (assignment.AssignedRole == WorkspaceRole.Writer)

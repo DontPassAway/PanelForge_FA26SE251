@@ -23,6 +23,8 @@ public class ChangeRequest : BaseEntity
     public Guid? AssetReferenceId { get; private set; }
     /// <summary>Panel mà vùng khoanh thuộc về (FE suy từ vùng giao lớn nhất); null = không xác định.</summary>
     public Guid? PanelId { get; private set; }
+    public Guid? GroupId { get; private set; }
+    public ChangeRequestLayer Layer { get; private set; }
     /// <summary>Phân cảnh kịch bản bị nhận xét (cổng Script); null với yêu cầu sửa trên tranh.</summary>
     public Guid? SceneId { get; private set; }
     /// <summary>Dòng kịch bản bị nhận xét; null = nhận xét cả phân cảnh hoặc cả bài nộp.</summary>
@@ -47,7 +49,8 @@ public class ChangeRequest : BaseEntity
     public static ChangeRequest Create(
         Guid assignmentId, Guid chapterId, Guid? submissionId, Guid responsibleUserId, Guid createdByUserId,
         string description, string? regionJson = null, DateTime? dueDate = null, Guid? assetReferenceId = null, Guid? panelId = null,
-        Guid? sceneId = null, Guid? scriptLineId = null, string? quotedText = null)
+        Guid? sceneId = null, Guid? scriptLineId = null, string? quotedText = null,
+        Guid? groupId = null, ChangeRequestLayer layer = ChangeRequestLayer.Artwork)
     {
         if (scriptLineId is not null && sceneId is null)
             throw new ArgumentException("Nhận xét dòng kịch bản phải kèm phân cảnh chứa dòng đó.", nameof(sceneId));
@@ -66,6 +69,8 @@ public class ChangeRequest : BaseEntity
             RegionJson = string.IsNullOrWhiteSpace(regionJson) ? null : regionJson.Trim(),
             AssetReferenceId = assetReferenceId,
             PanelId = panelId,
+            GroupId = groupId,
+            Layer = layer,
             SceneId = sceneId,
             ScriptLineId = scriptLineId,
             QuotedText = string.IsNullOrWhiteSpace(quotedText) ? null : quotedText.Trim(),

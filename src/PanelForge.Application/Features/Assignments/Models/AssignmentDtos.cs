@@ -133,7 +133,8 @@ public sealed record BulkAssignmentResultDto(
 /// <summary>SceneId/ScriptLineId/QuotedText: neo của nhận xét kịch bản (cổng Script); dòng phải thuộc phân cảnh, phân cảnh thuộc Chapter.</summary>
 public sealed record ChangeRequestItemRequest(
     string Description, string? RegionJson = null, DateTime? DueDate = null, Guid? AssetReferenceId = null,
-    Guid? PanelId = null, Guid? SceneId = null, Guid? ScriptLineId = null, string? QuotedText = null);
+    Guid? PanelId = null, Guid? GroupId = null, ChangeRequestLayer Layer = ChangeRequestLayer.Artwork,
+    Guid? SceneId = null, Guid? ScriptLineId = null, string? QuotedText = null);
 
 /// <summary>
 /// Trả về bắt buộc có comment (BR-06). Changes bỏ trống = tạo một ChangeRequest từ chính comment.
@@ -224,10 +225,14 @@ public sealed record ChangeRequestDto(
     Guid? PageId = null,            // Trang của yêu cầu (suy ra từ khung / việc bị trả về); chỉ có ở danh sách theo chương
     Guid? PipelineStageId = null)   // Công đoạn của việc bị trả về; chỉ có ở danh sách theo chương
 {
+    public Guid? GroupId { get; init; }
+    public ChangeRequestLayer Layer { get; init; }
+
     public static ChangeRequestDto From(ChangeRequest c) => new(
         c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,
         c.RegionJson, c.DueDate, c.Status, c.ResolutionNote, c.ResolvedAt, c.ReviewerComment, c.ClosedByUserId,
-        c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId, c.SceneId, c.ScriptLineId, c.QuotedText);
+        c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId, c.SceneId, c.ScriptLineId, c.QuotedText)
+        { GroupId = c.GroupId, Layer = c.Layer };
 }
 
 /// <summary>PUT thay toàn bộ: DependsOnAssignmentId null = bỏ dependency; ReferenceNotes/DueDate null = xoá.</summary>
