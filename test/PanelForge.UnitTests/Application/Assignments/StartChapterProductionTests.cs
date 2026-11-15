@@ -77,7 +77,7 @@ public sealed class StartChapterProductionTests
     }
 
     [Fact]
-    public async Task HappyPath_FreezesScript_CreatesAssignments_AndStartsProduction()
+    public async Task HappyPath_FreezesScript_BuildsGridLots_AndStartsProduction()
     {
         var f = new Fixture();
 
@@ -86,24 +86,53 @@ public sealed class StartChapterProductionTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         result.Value!.Chapter.ScriptStatus.Should().Be(ScriptStatus.Frozen);
         result.Value.Chapter.Status.Should().Be(ChapterStatus.InProduction);
-        result.Value.Assignments.Should().HaveCount(4);
-        result.Value.Assignments.Should().OnlyContain(a => a.EntityType == WorkflowEntityType.Page);
+        // Gate 1 giao trên Lưới V3, không tạo Assignment V2.
+        result.Value.Assignments.Should().BeEmpty();
+        f.Db.Assignments.Should().BeEmpty();
+        result.Value.Lots.Should().HaveCount(2);
+        result.Value.Lots.Select(l => (l.AssigneeUserId, l.TaskCount))
+            .Should().BeEquivalentTo([(f.Artist1Id, 2), (f.Artist2Id, 2)]);
+        f.Db.StageTasks.Count(t => t.Status == StageTaskStatus.Assigned).Should().Be(4);
+        // Người nhận lô vào SeriesMembers, nếu không mở chương sẽ bị 403.
+        f.Db.SeriesMembers.Select(m => m.UserId).Should().Contain([f.Artist1Id, f.Artist2Id]);
         f.Db.AuditLogs.Should().ContainSingle(a => a.Action == "START_CHAPTER_PRODUCTION");
         f.UnitOfWork.ExecutionCount.Should().Be(1);
     }
 
     [Fact]
-    public async Task ChapterOnTaskGrid_Returns409_AndCreatesNoAssignments()
+    public async Task ChapterWithGridGeneratedBeforeGate1_StillStartsProduction()
     {
         var f = new Fixture();
-        f.Db.StageTasks.Add(StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, Guid.NewGuid(), null));
-        f.Db.SaveChanges();
+        // Producer sinh lưới trước khi bấm Start Production (trước đây làm chương kẹt ở PreProduction).
+        (await new PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks.GenerateStageTasksCommandHandler(f.Db)
+            .Handle(new(f.Chapter.Id, f.ProducerId), default)).IsSuccess.Should().BeTrue();
 
         var result = await f.Handler.Handle(f.Command(), default);
 
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        f.Chapter.Status.Should().Be(ChapterStatus.InProduction);
+        result.Value!.Lots.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task RangeAlreadyAssignedToSomeoneElseOnGrid_Returns409()
+    {
+        var f = new Fixture();
+        (await new PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks.GenerateStageTasksCommandHandler(f.Db)
+            .Handle(new(f.Chapter.Id, f.ProducerId), default)).IsSuccess.Should().BeTrue();
+        var pencilId = f.Db.PipelineStages.Single(s => s.Slug == "pencil").Id;
+        var page1 = f.Db.Pages.Single(p => p.PageNumber == 1).Id;
+        var cell = f.Db.StageTasks.Single(t => t.PipelineStageId == pencilId && t.PageId == page1);
+        var lot = StageTaskLot.Create(f.Chapter.SeriesId, f.Chapter.Id, pencilId, f.Artist2Id, WorkspaceRole.Artist,
+            f.ProducerId, null, null);
+        f.Db.StageTaskLots.Add(lot);
+        cell.AssignTo(lot.Id);
+        f.Db.SaveChanges();
+
+        var result = await f.Handler.Handle(f.Command([new(f.Artist1Id, 1, 4)]), default);
+
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        f.Db.Assignments.Should().BeEmpty();
-        f.Chapter.Status.Should().Be(ChapterStatus.PreProduction);
+        result.ErrorMessage.Should().Contain("1-4");
     }
 
     [Fact]

@@ -48,6 +48,7 @@ public class TaskGridHandlerTests
         public readonly List<StageTaskLot> Lots = [];
         public readonly List<StageTaskSubmission> Submissions = [];
         public readonly List<Notification> Notifications = [];
+        public readonly List<SeriesMember> SeriesMembers = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IPageRepository> PageRepo = new();
         public readonly List<ScriptVersion> ScriptVersions = [];
@@ -108,6 +109,7 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.ScriptVersions).Returns(DbSetMockHelper.CreateDbSetMock(ScriptVersions));
             PageRepo.Setup(p => p.GetStreamVersionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(7);
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(_members));
+            Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 

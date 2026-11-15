@@ -88,6 +88,9 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
             foreach (var task in lotTasks) task.AssignTo(lot.Id);
             _db.Notifications.Add(TaskGridNotifications.Assigned(lot, lotTasks.Count, stages[lot.PipelineStageId].Name));
         }
+        // Người nhận phải có trong SeriesMembers, nếu không vào trang/chương sẽ bị RequireWorkspaceRole chặn 403 (như V2).
+        foreach (var (lot, _) in lots.DistinctBy(x => (x.Lot.AssigneeUserId, x.Lot.AssignedRole)))
+            await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, lot.AssigneeUserId, lot.AssignedRole, ct);
 
         await _db.SaveChangesAsync(ct);
         return Result<AssignStageTaskLotsResultDto>.Success(new AssignStageTaskLotsResultDto(

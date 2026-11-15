@@ -33,7 +33,8 @@ public sealed class GenerateStageTasksCommandHandler : IRequestHandler<GenerateS
         await _db.LockChapterAsync(chapter.Id, ct);
 
         var allStages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
-        var stages = allStages.Where(s => s.IsEnabled).ToList();
+        // Công đoạn cuối không có cổng duyệt (vd. "Approved") là trạng thái đích, không phải việc: không sinh ô (ô thừa kẹt duyệt chương).
+        var stages = allStages.Where(s => s.IsEnabled && !(s.IsTerminal && !s.IsApprovalGate)).ToList();
         if (stages.Count == 0) return Fail("Series chưa có công đoạn nào đang bật.", ResultErrorCodes.Conflict);
 
         var pageIds = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
