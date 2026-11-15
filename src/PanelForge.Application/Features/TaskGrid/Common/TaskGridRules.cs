@@ -61,6 +61,19 @@ internal static class TaskGridRules
             .ToList();
     }
 
+    /// <summary>Theo ô: nhận xét của lần bị yêu cầu sửa gần nhất và số lần đã nộp (để người làm thấy ngay cần sửa gì).</summary>
+    public static async Task<Dictionary<Guid, (string? Comment, int Attempts)>> SubmissionSummaryAsync(
+        IPanelForgeDbContext db, IReadOnlyCollection<Guid> taskIds, CancellationToken ct)
+    {
+        var rows = await db.StageTaskSubmissions.AsNoTracking()
+            .Where(s => taskIds.Contains(s.StageTaskId))
+            .Select(s => new { s.StageTaskId, s.AttemptNumber, s.Status, s.DecisionComment })
+            .ToListAsync(ct);
+        return rows.GroupBy(r => r.StageTaskId).ToDictionary(g => g.Key, g => (
+            g.Where(r => r.Status == SubmissionStatus.Rejected).OrderByDescending(r => r.AttemptNumber).FirstOrDefault()?.DecisionComment,
+            g.Max(r => r.AttemptNumber)));
+    }
+
     /// <summary>Ô chưa xong (chưa duyệt, chưa huỷ) thuộc lô của người dùng; <paramref name="seriesIds"/> null = mọi Series.</summary>
     public static IQueryable<StageTask> UnfinishedCellsOf(
         IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid>? seriesIds, WorkspaceRole? role = null) =>

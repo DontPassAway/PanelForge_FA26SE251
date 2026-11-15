@@ -12,6 +12,8 @@ using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.WithdrawStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.ClaimStageTaskReview;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
@@ -105,6 +107,27 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResolveImpact(Guid chapterId, Guid taskId, [FromBody] ResolveStageTaskImpactRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ResolveStageTaskImpactCommand(chapterId, taskId, CurrentUserId, body.Keep), ct));
+
+    /// <summary>POST /tasks/{taskId}/withdraw — người giữ ô rút bài đã nộp (chỉ khi còn Submitted).</summary>
+    [HttpPost("tasks/{taskId:guid}/withdraw")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist, WorkspaceRole.Letterer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Withdraw(Guid chapterId, Guid taskId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new WithdrawStageTaskCommand(chapterId, taskId, CurrentUserId), ct));
+
+    /// <summary>POST /tasks/{taskId}/open-review — Editor/Producer nhận duyệt ô (Submitted → UnderReview, BR-06).</summary>
+    [HttpPost("tasks/{taskId:guid}/open-review")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> OpenReview(Guid chapterId, Guid taskId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new ClaimStageTaskReviewCommand(chapterId, taskId, CurrentUserId, Open: true), ct));
+
+    /// <summary>POST /tasks/{taskId}/release-review — người đang duyệt hoặc Producer trả ô về hàng đợi (UnderReview → Submitted).</summary>
+    [HttpPost("tasks/{taskId:guid}/release-review")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReleaseReview(Guid chapterId, Guid taskId, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new ClaimStageTaskReviewCommand(chapterId, taskId, CurrentUserId, Open: false), ct));
 
     /// <summary>POST /tasks/unassign — Producer gỡ người khỏi danh sách ô, tất cả hoặc không.</summary>
     [HttpPost("tasks/unassign")]

@@ -45,6 +45,9 @@ public sealed class GetMyTaskLotsQueryHandler : IRequestHandler<GetMyTaskLotsQue
         foreach (var seriesId in lots.Select(l => l.SeriesId).Distinct())
             stagesBySeries[seriesId] = await TaskGridRules.LoadStagesAsync(_db, seriesId, ct);
 
+        var lotIds = lots.Select(l => (Guid?)l.Id).ToHashSet();
+        var summary = await TaskGridRules.SubmissionSummaryAsync(
+            _db, tasks.Where(t => lotIds.Contains(t.LotId)).Select(t => t.Id).ToList(), ct);
         var now = DateTime.UtcNow;
         var result = lots.Select(l =>
         {
@@ -57,7 +60,9 @@ public sealed class GetMyTaskLotsQueryHandler : IRequestHandler<GetMyTaskLotsQue
                     t.Id, t.PageId, t.PageId is { } pid && pageNumbers.TryGetValue(pid, out var no) ? no : null, t.Status,
                     t.Status is StageTaskStatus.Assigned or StageTaskStatus.ReworkRequired && !t.IsInputOutdated
                         && TaskGridRules.PrerequisitesApproved(t, stages, chapterTasks),
-                    t.IsInputOutdated, t.OutdatedReason))
+                    t.IsInputOutdated, t.OutdatedReason,
+                    summary.TryGetValue(t.Id, out var s) ? s.Comment : null,
+                    summary.TryGetValue(t.Id, out var a) ? a.Attempts : 0))
                 .OrderBy(c => c.PageNumber ?? 0).ToList();
             return new MyTaskLotDto(
                 l.Id, l.SeriesId, series.First(s => s.Id == l.SeriesId).Title, l.ChapterId, chapter.ChapterNumber, chapter.Title,

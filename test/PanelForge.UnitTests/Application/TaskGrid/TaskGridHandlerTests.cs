@@ -6,6 +6,8 @@ using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.SeriesPipeline.Common;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Application.Features.TaskGrid.Commands.WithdrawStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.ClaimStageTaskReview;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
@@ -344,6 +346,43 @@ public class TaskGridHandlerTests
             s.AttemptNumber == 1 && s.Status == SubmissionStatus.Rejected && s.DecisionComment == "Màu da lệch");
         f.Notifications.Should().Contain(n => n.UserId == f.ArtistId && n.Type == NotificationType.AssignmentChangesRequested);
         (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId, " "), default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    /// <summary>Lát cắt 3: rút bài khi chưa ai duyệt, khoá duyệt chống Editor dẫm nhau, lưới trả nhận xét lần sửa gần nhất.</summary>
+    [Fact]
+    public async Task Withdraw_ClaimReview_AndGridShowsLastDecisionComment()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink })
+        {
+            await f.Start(f.Cell(stage, 0), f.ArtistId);
+            await f.Submit(f.ArtistId, f.Cell(stage, 0));
+        }
+        var color = f.Cell(f.Color, 0);
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+        var withdraw = new WithdrawStageTaskCommandHandler(f.Db.Object);
+        var claim = new ClaimStageTaskReviewCommandHandler(f.Db.Object);
+
+        (await withdraw.Handle(new(f.Chapter.Id, color.Id, f.EditorId), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await withdraw.Handle(new(f.Chapter.Id, color.Id, f.ArtistId), default)).IsSuccess.Should().BeTrue();
+        color.Status.Should().Be(StageTaskStatus.InProgress);
+        f.Submissions.Single(s => s.StageTaskId == color.Id).Status.Should().Be(SubmissionStatus.Superseded);
+
+        await f.Submit(f.ArtistId, color);
+        (await claim.Handle(new(f.Chapter.Id, color.Id, f.ArtistId, Open: true), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await claim.Handle(new(f.Chapter.Id, color.Id, f.EditorId, Open: true), default)).IsSuccess.Should().BeTrue();
+        color.Status.Should().Be(StageTaskStatus.UnderReview);
+        (await withdraw.Handle(new(f.Chapter.Id, color.Id, f.ArtistId), default)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        (await claim.Handle(new(f.Chapter.Id, color.Id, f.EditorId, Open: false), default)).IsSuccess.Should().BeTrue();
+        color.Status.Should().Be(StageTaskStatus.Submitted);
+
+        await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default);
+        var grid = await new GetChapterTaskGridQueryHandler(f.Db.Object).Handle(new GetChapterTaskGridQuery(f.Chapter.Id), default);
+        var cell = grid.Value!.Tasks.Single(t => t.Id == color.Id);
+        cell.LastDecisionComment.Should().Be("Màu da lệch");
+        cell.AttemptCount.Should().Be(2);
     }
 
     /// <summary>Mở lại Pencil: Ink và Lettering (đã bắt đầu, cả hai nhánh) bị gắn cờ; Color chưa bắt đầu thì không.</summary>

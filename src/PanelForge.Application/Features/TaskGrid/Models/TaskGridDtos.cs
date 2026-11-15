@@ -20,9 +20,12 @@ public sealed record TaskGridPageDto(Guid Id, int PageNumber);
 /// <param name="PageId">null = ô cấp Chương.</param>
 /// <param name="IsStartable">Người nhận bấm Start được ngay (đã giao, tiền đề đã duyệt, không lỗi thời).</param>
 /// <param name="RowVersion">Gửi lại khi sửa để chống ghi đè (xmin).</param>
+/// <param name="LastDecisionComment">Nhận xét của lần bị yêu cầu sửa gần nhất (chỉ trả ở GET lưới).</param>
+/// <param name="AttemptCount">Số lần đã nộp (chỉ trả ở GET lưới).</param>
 public sealed record StageTaskDto(
     Guid Id, Guid PipelineStageId, Guid? PageId, StageTaskStatus Status, Guid? LotId, Guid? AssigneeUserId,
-    bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion)
+    bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion,
+    string? LastDecisionComment = null, int AttemptCount = 0)
 {
     public static StageTaskDto From(StageTask t, Guid? assigneeUserId, bool isStartable) => new(
         t.Id, t.PipelineStageId, t.PageId, t.Status, t.LotId, assigneeUserId,
@@ -88,7 +91,8 @@ public sealed record MyTaskLotDto(
 
 /// <param name="PageNumber">null = ô cấp Chương.</param>
 public sealed record MyTaskCellDto(
-    Guid Id, Guid? PageId, int? PageNumber, StageTaskStatus Status, bool IsStartable, bool IsInputOutdated, string? OutdatedReason);
+    Guid Id, Guid? PageId, int? PageNumber, StageTaskStatus Status, bool IsStartable, bool IsInputOutdated, string? OutdatedReason,
+    string? LastDecisionComment = null, int AttemptCount = 0);
 
 /// <summary>Ô đang chờ duyệt (Submitted) hoặc đang được duyệt (UnderReview).</summary>
 public sealed record TaskGridReviewItemDto(

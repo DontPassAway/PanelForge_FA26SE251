@@ -35,11 +35,16 @@ public sealed class GetChapterTaskGridQueryHandler : IRequestHandler<GetChapterT
             s.Id, s.Name, s.StageOrder, s.Track, s.AllowedRole, s.IsApprovalGate, s.AssignmentGranularity, s.IsEnabled,
             s.IsEnabled ? StageDependencies.DirectPrerequisites(s, stages).Select(p => p.Id).ToList() : [])).ToList();
 
+        var summary = await TaskGridRules.SubmissionSummaryAsync(_db, tasks.Select(t => t.Id).ToList(), ct);
         var taskDtos = tasks.Select(t => StageTaskDto.From(
             t,
             t.LotId is { } lotId && assigneeByLot.TryGetValue(lotId, out var assignee) ? assignee : null,
             t.Status is StageTaskStatus.Assigned or StageTaskStatus.ReworkRequired && !t.IsInputOutdated
-                && TaskGridRules.PrerequisitesApproved(t, stages, tasks))).ToList();
+                && TaskGridRules.PrerequisitesApproved(t, stages, tasks)) with
+            {
+                LastDecisionComment = summary.TryGetValue(t.Id, out var s) ? s.Comment : null,
+                AttemptCount = summary.TryGetValue(t.Id, out var a) ? a.Attempts : 0,
+            }).ToList();
 
         var now = DateTime.UtcNow;
         var lotDtos = lots.Select(l => StageTaskLotDto.From(l, tasks.Where(t => t.LotId == l.Id).ToList(), now)).ToList();
