@@ -12,6 +12,7 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Domain.Entities.Content;
@@ -113,10 +114,16 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         if (artworkBytes is null || artworkBytes.Length == 0)
             return Skipped(panel.Id, targetThreshold, "Panel chưa có ảnh artwork để kiểm.", revisionRef);
 
-        // 3. Tìm nhân vật xuất hiện trong Panel qua ScriptLines
-        var speakerIds = await _db.ScriptLines.AsNoTracking()
-            .Where(l => l.PanelId == panel.Id && l.SpeakerCharacterId.HasValue)
-            .Select(l => l.SpeakerCharacterId!.Value)
+        // 3. Tìm nhân vật xuất hiện trong Panel qua Bible Links và Speaker Labels
+        var panelLines = await _db.ScriptLines.AsNoTracking()
+            .Where(l => l.PanelId == panel.Id)
+            .Select(l => new { l.Id, l.SpeakerLabel })
+            .ToListAsync(cancellationToken);
+
+        var panelLineIds = panelLines.Select(l => l.Id).ToList();
+        var linkedEntryIds = await _db.ScriptLineBibleLinks.AsNoTracking()
+            .Where(k => panelLineIds.Contains(k.ScriptLineId))
+            .Select(k => k.BibleEntryId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -130,9 +137,13 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             .Where(e => bibleIds.Contains(e.SeriesBibleId) && e.Category == BibleEntryCategory.Character)
             .ToListAsync(cancellationToken);
 
+        var speakerNames = panelLines
+            .Where(l => !string.IsNullOrWhiteSpace(l.SpeakerLabel))
+            .Select(l => SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         // Chỉ nhân vật thật sự có mặt trong Panel; ưu tiên nhân vật đã có character sheet.
-        // ponytail: kiểm 1 nhân vật/panel; nhiều nhân vật thì lặp theo từng nhân vật khi cần.
-        var targetCharacter = characterEntries.Where(c => speakerIds.Contains(c.Id))
+        var targetCharacter = characterEntries.Where(c => linkedEntryIds.Contains(c.Id) || speakerNames.Contains(c.NormalizedName))
             .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.ReferenceImageUrl))
             .FirstOrDefault();
 
@@ -154,9 +165,9 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             );
         }
 
-        // Tìm Character Sheet đã khoá hiệu lực tại chương này (BR-15)
+        // Tìm Character Sheet đã khoá (hoặc bản default variant)
         var lockedRev = targetCharacter.Revisions
-            .Where(r => r.LockedAt != null && r.EffectiveFromChapterNumber <= chapter.ChapterNumber)
+            .Where(r => r.LockedAt != null)
             .OrderByDescending(r => r.VersionNumber)
             .FirstOrDefault();
 

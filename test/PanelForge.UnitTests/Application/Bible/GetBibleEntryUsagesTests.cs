@@ -24,9 +24,8 @@ public class GetBibleEntryUsagesTests
     {
         var bible = SeriesBible.Create(_seriesId, Guid.NewGuid(), "Bible");
         _hero = bible.AddEntry(BibleEntryCategory.Character, "HERO", "Hero", "Anh hùng");
-        // Chỉ khoá giai đoạn từ chương 1 đến 2; chương 3 trở đi chưa có bản Canon
-        var heroV1 = _hero.AddRevision("v1", "{}", "h1", effectiveFromChapterNumber: 1, effectiveToChapterNumber: 2,
-            isInitialVersion: true, reviewStatus: BibleRevisionStatus.WriterEndorsed);
+        var heroV1 = _hero.AddRevision("v1", "{}", "h1",
+            isInitialVersion: true, reviewStatus: BibleRevisionStatus.ConceptSubmitted);
         heroV1.Lock(Guid.NewGuid());
         _term = bible.AddEntry(BibleEntryCategory.Terminology, "AURA", "Aura", "Năng lượng");
         _term.AddRevision("v1", "{}", "h2", isInitialVersion: true);
@@ -38,18 +37,22 @@ public class GetBibleEntryUsagesTests
         var s3 = Scene.Create(_ch3.Id, 1);
         var sOther = Scene.Create(otherSeriesChapter.Id, 1);
 
-        var speakerLine = ScriptLine.Create(s1.Id, 1, "Xin chào", speakerCharacterId: _hero.Id);
+        var speakerLine = ScriptLine.Create(s1.Id, 1, "Xin chào", speakerLabel: "Hero");
         var taggedLine = ScriptLine.Create(s1.Id, 2, stageDirection: "@Hero bước vào");
         var ch3Line = ScriptLine.Create(s3.Id, 1, stageDirection: "@Hero nhìn xa");
-        var otherLine = ScriptLine.Create(sOther.Id, 1, "Series khác", speakerCharacterId: _hero.Id);
+        var otherLine = ScriptLine.Create(sOther.Id, 1, "Series khác", speakerLabel: "Hero");
         var unrelatedLine = ScriptLine.Create(s1.Id, 3, "Không liên quan");
 
         _db.Setup(d => d.SeriesBibles).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesBible> { bible }));
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { _hero, _term }));
+        _db.Setup(d => d.ChapterBibleBindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChapterBibleBinding>
+        {
+            ChapterBibleBinding.Create(_ch1.Id, _hero.Id, heroV1.Id, ChapterBibleBindingSource.Speaker, false, false, Guid.NewGuid())
+        }));
         _db.Setup(d => d.ScriptLineBibleLinks).Returns(DbSetMockHelper.CreateDbSetMock(new List<ScriptLineBibleLink>
         {
-            ScriptLineBibleLink.Create(taggedLine.Id, _hero.Id, "@Hero"),
-            ScriptLineBibleLink.Create(ch3Line.Id, _hero.Id, "@Hero"),
+            ScriptLineBibleLink.Create(taggedLine.Id, _hero.Id),
+            ScriptLineBibleLink.Create(ch3Line.Id, _hero.Id),
         }));
         _db.Setup(d => d.ScriptLines).Returns(DbSetMockHelper.CreateDbSetMock(
             new List<ScriptLine> { speakerLine, taggedLine, ch3Line, otherLine, unrelatedLine }));

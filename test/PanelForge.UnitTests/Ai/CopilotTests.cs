@@ -86,7 +86,7 @@ public sealed class CopilotTests
         h.Db.Assignments.Remove(a);
 
         var chapter = await h.Db.Chapters.SingleAsync();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
         (await Handler(h).Handle(Shorten(lineId), default)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 

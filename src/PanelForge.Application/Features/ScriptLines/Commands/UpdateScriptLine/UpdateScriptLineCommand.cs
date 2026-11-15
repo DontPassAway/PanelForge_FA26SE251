@@ -14,8 +14,7 @@ namespace PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 /// </summary>
 public sealed record UpdateScriptLineCommand(
     Guid ChapterId, Guid LineId, Guid UserId, string? DialogueText, string? StageDirection,
-    Guid? SpeakerCharacterId, long? ExpectedChapterVersion,
-    IReadOnlyList<Guid>? BibleEntryIds = null,
+    long? ExpectedChapterVersion,
     PanelForge.Domain.Enums.NarrationMode? NarrationMode = null,
     PanelForge.Domain.Enums.ScriptLineKind? Kind = null,
     string? SpeakerLabel = null,
@@ -50,35 +49,28 @@ public sealed class UpdateScriptLineCommandHandler : IRequestHandler<UpdateScrip
         if (line is null)
             return Result<ScriptLineDto>.Failure($"ScriptLine {cmd.LineId} không tồn tại trong Chapter này.", ResultErrorCodes.NotFound);
 
-        if (await ScriptLineRules.ValidateSpeakerAsync(_db, chapter.SeriesId, cmd.SpeakerCharacterId, ct) is { } speakerError)
-            return Result<ScriptLineDto>.Failure(speakerError, ResultErrorCodes.Validation);
-        if (await ScriptLineRules.ValidateBibleEntriesAsync(_db, chapter.SeriesId, cmd.BibleEntryIds, ct) is { } linkError)
-            return Result<ScriptLineDto>.Failure(linkError, ResultErrorCodes.Validation);
-
         var lines = await _db.ScriptLines.Where(l => l.SceneId == line.SceneId).ToListAsync(ct);
         var before = ScriptLineRules.Snapshot(lines);
-        var (textBefore, speakerBefore) = (ScriptLineRules.LetteringText(line), line.SpeakerCharacterId);
+        var textBefore = ScriptLineRules.LetteringText(line);
 
         line.UpdateContent(
             string.IsNullOrWhiteSpace(cmd.DialogueText) ? null : cmd.DialogueText,
             string.IsNullOrWhiteSpace(cmd.StageDirection) ? null : cmd.StageDirection,
-            cmd.SpeakerCharacterId,
             cmd.NarrationMode ?? line.NarrationMode,
             cmd.Kind,
             cmd.SpeakerLabel,
             cmd.Text);
-        var bibleEntryIds = await ScriptLineRules.SetBibleLinksAsync(_db, line.Id, cmd.BibleEntryIds, ct);
 
         var revision = await ScriptLineRules.RecordRevisionAsync(
             _db, chapter, line.SceneId, "Sửa dòng script thủ công", before, ScriptLineRules.Snapshot(lines), ct);
 
-        // CF4: thoại/speaker đổi thật → Lettering đã duyệt của bóng gắn dòng này phải làm lại
-        var sourceChanged = ScriptLineRules.LetteringText(line) != textBefore || line.SpeakerCharacterId != speakerBefore;
+        // CF4: thoại đổi thật → Lettering đã duyệt của bóng gắn dòng này phải làm lại
+        var sourceChanged = ScriptLineRules.LetteringText(line) != textBefore;
         if (sourceChanged && await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, chapter.Id, line,
                 "Writer đã sửa thoại đã được đặt chữ; cần cập nhật bóng thoại theo script mới.", ct) is { } reworkError)
             return Result<ScriptLineDto>.Failure(reworkError, ResultErrorCodes.Conflict);
 
         await _db.SaveChangesAsync(ct);
-        return Result<ScriptLineDto>.Success(ScriptLineDto.From(line, chapter.VersionVector, revision.Id, bibleEntryIds));
+        return Result<ScriptLineDto>.Success(ScriptLineDto.From(line, chapter.VersionVector, revision.Id, []));
     }
 }

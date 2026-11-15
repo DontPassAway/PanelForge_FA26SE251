@@ -10,5 +10,7 @@ public enum ChapterReviewAction
     /// <summary>Publisher từ chối xuất bản, trả chương về sản xuất kèm lý do.</summary>
     PublisherRejected = 3,
     /// <summary>Publisher duyệt xuất bản và lên lịch (hoặc phát hành ngay).</summary>
-    PublisherPublished = 4
+    PublisherPublished = 4,
+    /// <summary>Producer bàn giao chương đã nghiệm thu cho Publisher để phát hành.</summary>
+    ProducerHandedOff = 5
 }

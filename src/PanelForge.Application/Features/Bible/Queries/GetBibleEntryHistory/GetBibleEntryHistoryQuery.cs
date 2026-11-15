@@ -34,35 +34,12 @@ public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleE
         }
 
         var revisions = await _dbContext.BibleEntryRevisions
+            .Include(r => r.Events)
             .Where(r => r.BibleEntryId == request.BibleEntryId)
             .OrderByDescending(r => r.VersionNumber)
-            .Select(r => new BibleEntryRevisionDto(
-                r.Id,
-                r.BibleEntryId,
-                r.VersionNumber,
-                r.Summary,
-                r.SnapshotJson,
-                r.ContentHash,
-                r.AuthorId,
-                r.AssociatedChapterId,
-                r.EffectiveFromChapterNumber,
-                r.IsInitialVersion,
-                r.CreatedAt,
-                r.LockedAt != null,
-                r.LockedAt,
-                r.LockedById,
-                r.StageName,
-                r.EffectiveToChapterNumber,
-                r.ArtistUserId,
-                r.ReviewStatus,
-                r.ReworkFeedback,
-                r.ConceptImageUrl,
-                r.Events.OrderBy(e => e.CreatedAt)
-                    .Select(e => new BibleRevisionEventDto(e.Id, e.Type, e.ActorId, e.Comment, e.ImageUrl, e.EventHash, e.CreatedAt))
-                    .ToList()
-            ))
             .ToListAsync(cancellationToken);
 
-        return Result<IReadOnlyList<BibleEntryRevisionDto>>.Success(revisions);
+        var dtos = revisions.Select(BibleEntryRevisionDto.From).ToList();
+        return Result<IReadOnlyList<BibleEntryRevisionDto>>.Success(dtos);
     }
 }

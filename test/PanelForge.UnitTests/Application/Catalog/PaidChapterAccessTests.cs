@@ -33,7 +33,7 @@ public class PaidChapterAccessTests
 
         _paid = Chapter.Create(_series.Id, 2, "Trả phí");
         _paid.SetPricing(true, 10000m);
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_paid, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_paid, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_paid, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_paid);
         _db.SaveChanges();

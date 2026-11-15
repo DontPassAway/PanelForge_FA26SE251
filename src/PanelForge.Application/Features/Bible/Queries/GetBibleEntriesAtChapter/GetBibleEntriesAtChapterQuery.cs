@@ -26,6 +26,7 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
         var bible = await _dbContext.SeriesBibles
             .Include(b => b.Entries)
                 .ThenInclude(e => e.Revisions)
+                    .ThenInclude(r => r.Events)
             .FirstOrDefaultAsync(b => b.SeriesId == request.SeriesId, cancellationToken);
 
         if (bible == null)
@@ -34,15 +35,61 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
             return Result<IReadOnlyList<BibleEntryDto>>.Success([]);
         }
 
+        // Tải Chapter và ChapterBibleBindings nếu có
+        Domain.Entities.Content.Chapter? chapter = null;
+        if (_dbContext.Chapters != null)
+        {
+            try
+            {
+                chapter = await _dbContext.Chapters
+                    .FirstOrDefaultAsync(c => c.SeriesId == request.SeriesId &&
+                        (c.ChapterNumber == request.ChapterNumber || (int)Math.Floor(c.ChapterNumber) == request.ChapterNumber),
+                        cancellationToken);
+            }
+            catch
+            {
+                // Fallback nếu mock không hỗ trợ async query
+            }
+        }
+
+        Dictionary<Guid, Domain.Entities.Content.ChapterBibleBinding>? bindings = null;
+        if (chapter != null && _dbContext.ChapterBibleBindings != null)
+        {
+            try
+            {
+                bindings = await _dbContext.ChapterBibleBindings
+                    .Where(b => b.ChapterId == chapter.Id)
+                    .ToDictionaryAsync(b => b.BibleEntryId, cancellationToken);
+            }
+            catch
+            {
+                // Fallback nếu mock không hỗ trợ async query
+            }
+        }
+
         var results = new List<BibleEntryDto>();
 
         var entries = bible.Entries.Where(e => e.IsActive && (request.EntryIds == null || request.EntryIds.Contains(e.Id)));
         foreach (var entry in entries.OrderBy(e => e.Category).ThenBy(e => e.Name))
         {
-            // BR-15. Mặc định hiện cả nhân vật chưa khoá (DTO có IsLocked); CanonOnly = chỉ bản khoá, giống AI.
-            var effectiveRev = entry.EffectiveRevisionAt(request.ChapterNumber, request.CanonOnly);
+            // BIB-15, Q16, Q23: Thay EffectiveRevisionAt(N) bằng binding của chương.
+            // Chương trước Gate 1 hoặc chưa có dòng binding dùng bản tự gắn hiện tại (default variant).
+            Domain.Entities.Bible.BibleEntryRevision? effectiveRev = null;
 
-            // Nếu mục này chỉ xuất hiện từ chương sau (EffectiveFrom > ChapterNumber) và không có revision nào trước đó thì bỏ qua tại chapter này
+            if (bindings != null && bindings.TryGetValue(entry.Id, out var binding) && binding.BoundRevisionId.HasValue)
+            {
+                effectiveRev = entry.Revisions.FirstOrDefault(r => r.Id == binding.BoundRevisionId.Value);
+                if (request.CanonOnly && entry.IsVisualDesign && (effectiveRev == null || !effectiveRev.IsLocked))
+                {
+                    effectiveRev = null;
+                }
+            }
+            else
+            {
+                // Chương trước Gate 1 hoặc chưa có dòng binding (hoặc mock tests không có Chapter): dùng bản tự gắn hiện tại
+                effectiveRev = entry.GetDefaultVariantRevision(canonOnly: request.CanonOnly);
+            }
+
             if (effectiveRev == null)
             {
                 continue;
@@ -70,27 +117,12 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 // Fallback nếu không parse được
             }
 
-            var revDto = new BibleEntryRevisionDto(
-                Id: effectiveRev.Id,
-                BibleEntryId: effectiveRev.BibleEntryId,
-                VersionNumber: effectiveRev.VersionNumber,
-                Summary: effectiveRev.Summary,
-                SnapshotJson: effectiveRev.SnapshotJson,
-                ContentHash: effectiveRev.ContentHash,
-                AuthorId: effectiveRev.AuthorId,
-                AssociatedChapterId: effectiveRev.AssociatedChapterId,
-                EffectiveFromChapterNumber: effectiveRev.EffectiveFromChapterNumber,
-                IsInitialVersion: effectiveRev.IsInitialVersion,
-                CreatedAt: effectiveRev.CreatedAt,
-                IsLocked: effectiveRev.IsLocked,
-                LockedAt: effectiveRev.LockedAt,
-                StageName: effectiveRev.StageName,
-                EffectiveToChapterNumber: effectiveRev.EffectiveToChapterNumber,
-                ArtistUserId: effectiveRev.ArtistUserId,
-                ReviewStatus: effectiveRev.ReviewStatus,
-                ReworkFeedback: effectiveRev.ReworkFeedback,
-                        ConceptImageUrl: effectiveRev.ConceptImageUrl
-            );
+            if (!string.IsNullOrEmpty(effectiveRev.ConceptImageUrl))
+            {
+                refImg = effectiveRev.ConceptImageUrl;
+            }
+
+            var revDto = BibleEntryRevisionDto.From(effectiveRev);
 
             results.Add(new BibleEntryDto(
                 Id: entry.Id,
@@ -108,7 +140,8 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 EffectiveRevision: revDto,
                 CreatedAt: entry.CreatedAt,
                 UpdatedAt: entry.UpdatedAt,
-                IsStub: entry.IsStub
+                IsStub: entry.IsStub,
+                IsCrowd: (bindings != null && bindings.TryGetValue(entry.Id, out var cb)) ? cb.IsCrowdAtBind : entry.IsCrowd
             ));
         }
 

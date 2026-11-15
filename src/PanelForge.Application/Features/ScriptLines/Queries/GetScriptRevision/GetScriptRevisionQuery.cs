@@ -42,6 +42,6 @@ public sealed class GetScriptRevisionQueryHandler : IRequestHandler<GetScriptRev
         return Result<ScriptRevisionDetailDto>.Success(new ScriptRevisionDetailDto(
             revision.Id, revision.SceneId, revision.VersionNumber, revision.Summary, revision.PreviousRevisionId,
             revision.SourceSuggestionId, revision.VersionNumber == latestVersion, revision.CreatedAt, revision.CreatedBy,
-            lines.Select(l => new ScriptRevisionLineDto(l.LineId, l.Order, l.SpeakerId, l.Dialogue, l.StageDirection)).ToList()));
+            lines.Select(l => new ScriptRevisionLineDto(l.LineId, l.Order, l.Dialogue, l.StageDirection)).ToList()));
     }
 }

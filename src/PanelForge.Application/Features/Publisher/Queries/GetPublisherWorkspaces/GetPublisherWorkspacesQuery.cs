@@ -31,7 +31,7 @@ public sealed class GetPublisherWorkspacesQueryHandler
                 w.Id,
                 w.Name,
                 w.Series.Count,
-                w.Series.SelectMany(s => s.Chapters).Count(c => c.Status == ChapterStatus.Approved)
+                w.Series.SelectMany(s => s.Chapters).Count(c => c.Status == ChapterStatus.ChapterApproved)
             ))
             .ToListAsync(ct);
 

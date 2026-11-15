@@ -56,18 +56,6 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("associated_chapter_id")
                .HasColumnType("uuid");
 
-        builder.Property(r => r.EffectiveFromChapterNumber)
-               .HasColumnName("effective_from_chapter_number")
-               .HasColumnType("integer")
-               .HasDefaultValue(1)
-               .IsRequired();
-        builder.HasIndex(r => r.EffectiveFromChapterNumber)
-               .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
-
-        builder.Property(r => r.EffectiveToChapterNumber)
-               .HasColumnName("effective_to_chapter_number")
-               .HasColumnType("integer");
-
         builder.Property(r => r.StageName)
                .HasColumnName("stage_name")
                .HasColumnType("varchar(100)");
@@ -93,6 +81,15 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("concept_image_url")
                .HasColumnType("text");
 
+        builder.Property(r => r.CurrentConceptEventId)
+               .HasColumnName("current_concept_event_id")
+               .HasColumnType("uuid");
+
+        builder.HasOne(r => r.CurrentConceptEvent)
+               .WithMany()
+               .HasForeignKey(r => r.CurrentConceptEventId)
+               .OnDelete(DeleteBehavior.SetNull);
+
         builder.Property(r => r.ReworkFeedback)
                .HasColumnName("rework_feedback")
                .HasColumnType("varchar(1000)");
@@ -105,9 +102,20 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("locked_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(r => r.SupersedesRevisionId)
+               .HasColumnName("supersedes_revision_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(r => r.SupersedesRevisionId)
+               .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
+
         builder.Property(r => r.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
                .IsRequired();
+
+        builder.HasOne(r => r.SupersedesRevision)
+               .WithMany()
+               .HasForeignKey(r => r.SupersedesRevisionId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }

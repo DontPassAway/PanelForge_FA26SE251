@@ -36,7 +36,7 @@ public sealed class CreatePreviewLinkCommandHandler : IRequestHandler<CreatePrev
 
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-        if (chapter.Status != ChapterStatus.Approved)
+        if (chapter.Status != ChapterStatus.ChapterApproved)
             return Fail("Chỉ tạo link xem thử cho chương đã duyệt (Approved) và chưa phát hành (BR-17).", ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId)

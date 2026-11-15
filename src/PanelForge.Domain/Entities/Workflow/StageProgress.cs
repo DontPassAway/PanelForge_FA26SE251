@@ -9,7 +9,7 @@ namespace PanelForge.Domain.Entities.Workflow;
 /// </summary>
 public class StageProgress : BaseEntity
 {
-    public Guid PanelId { get; private set; }
+    public Guid? PanelId { get; private set; }
     public Guid PipelineStageId { get; private set; }
     public StageProgressStatus Status { get; private set; }
     public DateTime? SubmittedAt { get; private set; }
@@ -81,6 +81,8 @@ public class StageProgress : BaseEntity
         ImpactedScriptLineId = null;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 
     private void Move(StageProgressStatus from, StageProgressStatus to)
     {

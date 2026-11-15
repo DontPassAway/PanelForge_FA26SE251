@@ -7,9 +7,8 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Commands.CreateBibleEntry;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
-using PanelForge.Application.Features.Chapters.Queries.CheckChapterBibleGate;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Pages.Commands.TogglePageContentReady;
-using PanelForge.Application.Features.ScriptLines.Commands.LinkBibleEntries;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
@@ -17,6 +16,7 @@ using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -78,40 +78,12 @@ public class DynamicEntityLinkingAndScriptFlowTests
     }
 
     [Fact]
-    public async Task LinkBibleEntries_WithRawText_CreatesStubEntityAndLinksSuccessfully()
-    {
-        // Arrange
-        var handler = new LinkBibleEntriesCommandHandler(_db, _auth.Object);
-        var mentions = new List<ScriptMentionItemDto>
-        {
-            new(BibleEntryId: null, RawText: "@Kuro", CategoryHint: BibleEntryCategory.Character)
-        };
-
-        // Act
-        var result = await handler.Handle(
-            new LinkBibleEntriesCommand(_writer, _chapter.Id, _line1.Id, mentions), default);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().HaveCount(1);
-        var linkDto = result.Value[0];
-        linkDto.EntryName.Should().Be("Kuro");
-        linkDto.IsStub.Should().BeTrue();
-        linkDto.RawMentionText.Should().Be("@Kuro");
-
-        var createdStub = await _db.BibleEntries.FirstOrDefaultAsync(e => e.Name == "Kuro");
-        createdStub.Should().NotBeNull();
-        createdStub!.IsStub.Should().BeTrue();
-        createdStub.IsActive.Should().BeTrue();
-    }
-
-    [Fact]
     public async Task CreateBibleEntry_AutoMatching_RemapsExistingStubLinks()
     {
         // Arrange: Tạo trước 1 Stub Entity cho "Akira" và liên kết vào dòng 1
         var stub = BibleEntry.CreateStub(_bible.Id, BibleEntryCategory.Character, "Akira");
         _db.BibleEntries.Add(stub);
-        var stubLink = ScriptLineBibleLink.Create(_line1.Id, stub.Id, "@Akira");
+        var stubLink = ScriptLineBibleLink.Create(_line1.Id, stub.Id);
         _db.ScriptLineBibleLinks.Add(stubLink);
         await _db.SaveChangesAsync();
 
@@ -131,14 +103,17 @@ public class DynamicEntityLinkingAndScriptFlowTests
         // Assert
         createResult.IsSuccess.Should().BeTrue();
         var formalEntryId = createResult.Value!.Id;
+        formalEntryId.Should().Be(stub.Id);
 
-        // Kiểm tra Stub Link đã được tự động chuyển hướng sang formal entry
+        // Link vẫn trỏ tới cùng ID vì stub được định nghĩa tại chỗ.
         var updatedLink = await _db.ScriptLineBibleLinks.FirstAsync(l => l.ScriptLineId == _line1.Id);
         updatedLink.BibleEntryId.Should().Be(formalEntryId);
 
-        // Stub cũ phải bị đánh dấu inactive
-        var oldStub = await _db.BibleEntries.FirstAsync(e => e.Id == stub.Id);
-        oldStub.IsActive.Should().BeFalse();
+        // Stub trở thành entry chính thức và vẫn active.
+        var definedEntry = await _db.BibleEntries.FirstAsync(e => e.Id == stub.Id);
+        definedEntry.IsStub.Should().BeFalse();
+        definedEntry.IsActive.Should().BeTrue();
+        definedEntry.Code.Should().Be("CHR_AKIRA");
     }
 
     [Fact]
@@ -191,35 +166,27 @@ public class DynamicEntityLinkingAndScriptFlowTests
         _chapter.StartProduction(_producer, null);
         await _db.SaveChangesAsync();
 
-        // 1. Writer gửi yêu cầu mở lại kịch bản
-        var requestHandler = new RequestScriptReopenCommandHandler(_db);
-        var reqResult = await requestHandler.Handle(
-            new RequestScriptReopenCommand(_chapter.Id, _writer, "Cần sửa thoại Panel 2 do đổi twist"), default);
+        // Producer mở lại kịch bản (UnfreezeScript)
+        var unfreezeHandler = new UnfreezeChapterScriptCommandHandler(_db);
+        var unfreezeResult = await unfreezeHandler.Handle(
+            new UnfreezeChapterScriptCommand(_chapter.Id, _producer, "Cần sửa thoại Panel 2 do đổi twist"), default);
 
-        reqResult.IsSuccess.Should().BeTrue();
-        reqResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Requested);
-        reqResult.Value!.ScriptReopenReason.Should().Be("Cần sửa thoại Panel 2 do đổi twist");
-
-        // 2. Producer duyệt mở kịch bản
-        var approveHandler = new ApproveScriptReopenCommandHandler(_db);
-        var approveResult = await approveHandler.Handle(
-            new ApproveScriptReopenCommand(_chapter.Id, _producer), default);
-
-        approveResult.IsSuccess.Should().BeTrue();
-        approveResult.Value!.IsScriptFrozen.Should().BeFalse();
-        approveResult.Value!.ScriptContentHash.Should().BeNull();
-        approveResult.Value!.ScriptReopenStatus.Should().Be(ScriptReopenStatus.Approved);
-
+        unfreezeResult.IsSuccess.Should().BeTrue();
+        unfreezeResult.Value!.IsScriptFrozen.Should().BeFalse();
+        unfreezeResult.Value!.ScriptContentHash.Should().BeNull();
         // 3. Giả lập Writer sửa thoại dòng 2 (gắn trên Panel 2)
         await Task.Delay(20);
-        _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới", null);
+        _line2.UpdateContent("Thoại mới bí ẩn cho Panel 2", "Chỉ dẫn mới");
         await _db.SaveChangesAsync();
 
         // 4. Writer nộp lại, Producer đóng băng lại kịch bản (kích hoạt Targeted Impact Analysis)
         _chapter.SubmitScript(_writer);
         await _db.SaveChangesAsync();
 
-        var freezeHandler = new FreezeChapterScriptCommandHandler(_db);
+        var resolver = new ChapterCastInheritanceResolver(_db);
+        var castService = new ChapterCastService(_db, resolver);
+        var castGate = new ChapterCastGate(_db, castService, resolver);
+        var freezeHandler = new FreezeChapterScriptCommandHandler(_db, castGate);
         var freezeResult = await freezeHandler.Handle(
             new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 

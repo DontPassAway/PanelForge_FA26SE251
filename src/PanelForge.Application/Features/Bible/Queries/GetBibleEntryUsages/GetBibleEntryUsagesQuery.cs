@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Application.Features.Chapters.Services;
+using PanelForge.Domain.Common;
 
 namespace PanelForge.Application.Features.Bible.Queries.GetBibleEntryUsages;
 
@@ -38,14 +40,19 @@ public sealed class GetBibleEntryUsagesQueryHandler : IRequestHandler<GetBibleEn
                 $"Mục BibleEntry {request.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var linkedLineIds = await _dbContext.ScriptLineBibleLinks
-            .Where(l => l.BibleEntryId == entry.Id)
+            .Where(l => l.BibleEntryId == entry.Id && !l.IsDeleted)
             .Select(l => l.ScriptLineId)
             .ToListAsync(ct);
 
-        var lines = await _dbContext.ScriptLines
-            .Where(l => l.SpeakerCharacterId == entry.Id || linkedLineIds.Contains(l.Id))
-            .Select(l => new { l.Id, l.SceneId })
+        var candidateLines = await _dbContext.ScriptLines
+            .Where(l => linkedLineIds.Contains(l.Id) || (l.SpeakerLabel != null && l.SpeakerLabel != ""))
+            .Select(l => new { l.Id, l.SceneId, l.SpeakerLabel })
             .ToListAsync(ct);
+
+        var lines = candidateLines
+            .Where(l => linkedLineIds.Contains(l.Id) || (l.SpeakerLabel != null && entry.NormalizedName == SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel)))
+            .Select(l => new { l.Id, l.SceneId })
+            .ToList();
 
         if (lines.Count == 0)
             return Result<IReadOnlyList<BibleEntryUsageDto>>.Success([]);
@@ -67,20 +74,33 @@ public sealed class GetBibleEntryUsagesQueryHandler : IRequestHandler<GetBibleEn
             .Select(c => new { c.Id, c.ChapterNumber, c.Title, c.IsScriptFrozen })
             .ToListAsync(ct);
 
+        var bindings = await _dbContext.ChapterBibleBindings
+            .Include(b => b.BoundRevision)
+            .Where(b => b.BibleEntryId == entry.Id && chapterIds.Contains(b.ChapterId))
+            .ToDictionaryAsync(b => b.ChapterId, ct);
+
         var result = chapters
             .OrderBy(c => c.ChapterNumber)
             .Select(c =>
             {
                 var number = (int)c.ChapterNumber;
-                var canon = entry.EffectiveRevisionAt(number, canonOnly: true);
+                bool isCanonSatisfied = false;
+                if (bindings.TryGetValue(c.Id, out var b) && b.BoundRevisionId.HasValue)
+                {
+                    var boundRev = b.BoundRevision ?? entry.Revisions.FirstOrDefault(r => r.Id == b.BoundRevisionId.Value);
+                    if (boundRev != null)
+                    {
+                        isCanonSatisfied = !entry.IsVisualDesign || boundRev.IsLocked;
+                    }
+                }
+
                 return new BibleEntryUsageDto(
                     ChapterId: c.Id,
                     ChapterNumber: number,
                     ChapterTitle: c.Title,
                     LineCount: linesPerChapter[c.Id],
                     IsScriptFrozen: c.IsScriptFrozen,
-                    // Cùng điều kiện "đạt" của Gate 1: mục văn bản chỉ cần bản hiệu lực, mục có hình phải khoá Canon
-                    IsCanonSatisfied: canon != null && (!entry.IsVisualDesign || canon.IsLocked));
+                    IsCanonSatisfied: isCanonSatisfied);
             })
             .ToList();
 

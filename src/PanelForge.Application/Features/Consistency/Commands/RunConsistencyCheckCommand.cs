@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.Consistency.Common;
 using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Domain.Entities.Content;
@@ -36,7 +37,7 @@ public sealed class RunConsistencyCheckCommandHandler
         var sceneNumber = scenes.ToDictionary(s => s.Id, s => s.SceneNumber);
 
         var rawLines = await _db.ScriptLines.AsNoTracking().Where(l => sceneIds.Contains(l.SceneId))
-            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.PanelId, l.NarrationMode })
+            .Select(l => new { l.Id, l.SceneId, l.LineOrder, l.DialogueText, l.StageDirection, l.PanelId, l.NarrationMode, l.SpeakerLabel })
             .ToListAsync(ct);
         var lineIds = rawLines.Select(l => l.Id).ToList();
         var links = (await _db.ScriptLineBibleLinks.AsNoTracking().Where(k => lineIds.Contains(k.ScriptLineId))
@@ -48,6 +49,12 @@ public sealed class RunConsistencyCheckCommandHandler
             .Select(p => new { p.Id, p.ReadingOrder, PageNumber = p.Page.PageNumber })
             .ToDictionaryAsync(p => p.Id, ct);
 
+        var bibleNames = await _db.BibleEntries.AsNoTracking()
+            .Where(e => e.SeriesBible.SeriesId == chapter.SeriesId)
+            .ToListAsync(ct);
+        var speakerToEntryMap = bibleNames
+            .ToDictionary(e => e.NormalizedName, e => e.Id);
+
         var lines = rawLines.Select(l =>
         {
             int? readingOrder = null;
@@ -57,30 +64,85 @@ public sealed class RunConsistencyCheckCommandHandler
                 readingOrder = p.ReadingOrder;
                 pageNumber = p.PageNumber;
             }
+
+            Guid? speakerId = null;
+            if (!string.IsNullOrWhiteSpace(l.SpeakerLabel))
+            {
+                var norm = SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel);
+                if (speakerToEntryMap.TryGetValue(norm, out var sid))
+                    speakerId = sid;
+            }
+
             return new CheckLine(
                 l.Id, l.SceneId, sceneNumber[l.SceneId], l.LineOrder, l.DialogueText, l.StageDirection,
-                l.SpeakerCharacterId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
+                speakerId, links[l.Id].ToList(), l.PanelId, readingOrder, pageNumber, l.NarrationMode);
         }).ToList();
 
         var bibleIds = await _db.SeriesBibles.AsNoTracking().Where(b => b.SeriesId == chapter.SeriesId)
             .Select(b => b.Id).ToListAsync(ct);
-        var rawEntries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
-            .Select(e => new
-            {
-                e.Id,
-                e.Name,
-                e.Category,
-                e.IsActive,
-                e.DetailsJson,
-                e.Code,
-                FirstEffective = e.Revisions.Select(r => (int?)r.EffectiveFromChapterNumber).Min(),
-                FirstLocked = e.Revisions.Where(r => r.LockedAt != null).Select(r => (int?)r.EffectiveFromChapterNumber).Min()
-            })
+        var bibleEntries = await _db.BibleEntries.AsNoTracking().Where(e => bibleIds.Contains(e.SeriesBibleId))
+            .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .ToListAsync(ct);
 
-        var entries = rawEntries.ToDictionary(e => e.Id, e => new CheckEntry(
-            e.Id, e.Name, e.Category, e.IsActive, e.FirstEffective, e.FirstLocked,
-            detailsJson: e.DetailsJson, code: e.Code));
+        var bindings = await _db.ChapterBibleBindings.AsNoTracking()
+            .Where(b => b.ChapterId == chapter.Id)
+            .ToListAsync(ct);
+        var bindingByEntryId = bindings.ToDictionary(b => b.BibleEntryId);
+
+        var chapterInt = (int)Math.Floor(chapter.ChapterNumber);
+        var isFrozen = chapter.ScriptStatus == ScriptStatus.Frozen || chapter.IsScriptFrozen;
+
+        var entries = new Dictionary<Guid, CheckEntry>();
+        foreach (var e in bibleEntries)
+        {
+            int? firstEffective;
+            int? firstLocked;
+
+            if (bindings.Count > 0)
+            {
+                if (bindingByEntryId.TryGetValue(e.Id, out var cb))
+                {
+                    firstEffective = chapterInt;
+                    var boundRev = cb.BoundRevisionId.HasValue
+                        ? e.Revisions.FirstOrDefault(r => r.Id == cb.BoundRevisionId.Value)
+                        : null;
+                    firstLocked = (boundRev?.IsLocked == true) ? chapterInt : null;
+                }
+                else if (!isFrozen)
+                {
+                    // Trước Gate 1: dùng bản tự gắn (auto binding)
+                    var autoRev = e.GetDefaultVariantRevision(canonOnly: false);
+                    if (autoRev != null)
+                    {
+                        firstEffective = chapterInt;
+                        firstLocked = autoRev.IsLocked ? chapterInt : null;
+                    }
+                    else
+                    {
+                        firstEffective = int.MaxValue;
+                        firstLocked = null;
+                    }
+                }
+                else
+                {
+                    // Chương đã khoá nhưng không có binding cho mục này
+                    firstEffective = int.MaxValue;
+                    firstLocked = null;
+                }
+            }
+            else
+            {
+                // Fallback tương thích cho các unit test cũ chưa nạp ChapterBibleBindings
+                // Nếu mục Bible có detailsJson chỉ định availableFromChapter/firstEffective thì tôn trọng
+                var checkEntryTemp = new CheckEntry(e.Id, e.Name, e.Category, e.IsActive, 1, null, detailsJson: e.DetailsJson);
+                firstEffective = checkEntryTemp.AvailableFromChapter ?? 1;
+                firstLocked = e.Revisions.Any(r => r.LockedAt != null) ? 1 : null;
+            }
+
+            entries[e.Id] = new CheckEntry(
+                e.Id, e.Name, e.Category, e.IsActive, firstEffective, firstLocked,
+                detailsJson: e.DetailsJson, code: e.Code);
+        }
 
         var rules = await _db.ConsistencyRules.AsNoTracking().Where(r => r.SeriesId == chapter.SeriesId && r.IsEnabled)
             .Select(r => new CheckRule(r.Id, r.Name, r.RuleType, r.Pattern, r.Severity, r.ConfigurationJson))

@@ -53,7 +53,7 @@ public static class ChapterLockGate
         var chapterPanelIds = db.Panels.Where(p => db.Pages.Any(pg => pg.Id == p.PageId && pg.ChapterId == chapter.Id)).Select(p => p.Id);
         var impactFlags =
             await db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && (a.ImpactReviewRequestedAt != null || a.HasScriptImpact), ct) +
-            await db.StageProgresses.CountAsync(sp => chapterPanelIds.Contains(sp.PanelId) && sp.HasScriptImpact, ct) +
+            await db.StageProgresses.CountAsync(sp => sp.PanelId.HasValue && chapterPanelIds.Contains(sp.PanelId.Value) && sp.HasScriptImpact, ct) +
             await db.StageTasks.CountAsync(t => t.ChapterId == chapter.Id && t.IsInputOutdated && t.Status != StageTaskStatus.Cancelled, ct);
         Block("IMPACT_FLAGS", impactFlags, $"Còn {impactFlags} cờ ảnh hưởng ⚑ chưa quyết định Keep/Rework, chưa thể duyệt Chapter.");
 

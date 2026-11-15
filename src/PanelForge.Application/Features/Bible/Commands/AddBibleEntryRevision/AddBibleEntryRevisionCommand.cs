@@ -6,7 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
@@ -23,7 +25,6 @@ public sealed record AddBibleEntryRevisionCommand(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    int EffectiveFromChapterNumber = 1,
     // UC-04 luồng phụ: version mà người dùng đã mở để sửa. Nếu khác version mới nhất → xung đột (409).
     int? ExpectedVersionNumber = null,
     // V1.2: Producer thay thế một bản đã khoá (route .../supersede, chỉ Producer). Bản mới cùng chương, được khoá luôn;
@@ -31,10 +32,16 @@ public sealed record AddBibleEntryRevisionCommand(
     Guid? SupersedesRevisionId = null,
     string? SupersedeReason = null,
     string? StageName = null,
-    int? EffectiveToChapterNumber = null,
     Guid? ArtistUserId = null,
-    BibleRevisionStatus? ReviewStatus = null
-) : IRequest<Result<BibleEntryRevisionDto>>;
+    BibleRevisionStatus? ReviewStatus = null,
+    Guid? ChapterId = null,
+    bool IsNewVariant = false,
+    Guid? TargetRevisionId = null,
+    string? VariantLabel = null
+) : IRequest<Result<BibleEntryRevisionDto>>
+{
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+}
 
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
 {
@@ -75,9 +82,10 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 ResultErrorCodes.Conflict);
         }
 
-        if (command.Name is not null && string.IsNullOrWhiteSpace(command.Name))
+        if (command.Name is not null && !string.Equals(command.Name.Trim(), entry.Name, StringComparison.Ordinal))
         {
-            return Result<BibleEntryRevisionDto>.Failure("Tên của mục Bible không được để trống.");
+            return Result<BibleEntryRevisionDto>.Failure(
+                "Tên của mục Bible không thể thay đổi sau khi đã được định nghĩa.", ResultErrorCodes.Validation);
         }
 
         if (command.Description is not null && string.IsNullOrWhiteSpace(command.Description))
@@ -85,22 +93,45 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure("Mô tả của mục Bible không được để trống.");
         }
 
-        var name = string.IsNullOrWhiteSpace(command.Name) ? entry.Name : command.Name.Trim();
-        var description = string.IsNullOrWhiteSpace(command.Description) ? entry.Description : command.Description.Trim();
-        var subtitle = command.Subtitle ?? entry.Subtitle;
-        var detailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? entry.DetailsJson : command.DetailsJson.Trim();
+        var displaySnapshot = BibleEntrySnapshot.From(entry, entry.GetDisplayRevision());
+        var name = entry.Name;
+        var description = string.IsNullOrWhiteSpace(command.Description) ? displaySnapshot.Description : command.Description.Trim();
+        var subtitle = command.Subtitle ?? displaySnapshot.Subtitle;
+        var detailsJson = string.IsNullOrWhiteSpace(command.DetailsJson) ? displaySnapshot.DetailsJson : command.DetailsJson.Trim();
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(description))
         {
             return Result<BibleEntryRevisionDto>.Failure("Tên và mô tả của mục Bible không được để trống.");
         }
 
-        var effectiveFrom = Math.Max(1, command.EffectiveFromChapterNumber);
-        var effectiveTo = command.EffectiveToChapterNumber;
-        var stageName = string.IsNullOrWhiteSpace(command.StageName) ? null : command.StageName.Trim();
+        string? stageName;
         var summary = command.Summary;
 
-        if (command.SupersedesRevisionId is { } supersededId)
+        if (command.IsNewVariant)
+        {
+            var variantLabel = command.EffectiveStageName;
+            if (string.IsNullOrWhiteSpace(variantLabel) || string.IsNullOrEmpty(BibleNameNormalizer.Normalize(variantLabel)))
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Tên biến thể (variant_label) không được để trống.", ResultErrorCodes.Validation);
+            }
+
+            var trimmedLabel = variantLabel.Trim();
+            if (trimmedLabel.Length > 100)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Tên biến thể tối đa 100 ký tự.", ResultErrorCodes.Validation);
+            }
+
+            if (entry.HasActiveVariant(trimmedLabel))
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    $"Biến thể '{trimmedLabel}' đã tồn tại và đang hoạt động.", ResultErrorCodes.Conflict);
+            }
+
+            stageName = trimmedLabel;
+        }
+        else if (command.SupersedesRevisionId is { } supersededId)
         {
             var superseded = entry.Revisions.FirstOrDefault(r => r.Id == supersededId);
             if (superseded is null)
@@ -114,25 +145,48 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 return Result<BibleEntryRevisionDto>.Failure(
                     $"Phải nhập lý do thay thế bản đã khoá (tối đa {MaxSupersedeReasonLength} ký tự).", ResultErrorCodes.Validation);
 
-            effectiveFrom = superseded.EffectiveFromChapterNumber;
-            // Bản thay thế giữ đúng giai đoạn của bản bị thay, trừ khi Producer chỉnh lại
-            effectiveTo ??= superseded.EffectiveToChapterNumber;
-            stageName ??= superseded.StageName;
+            // BIB-02, Q23: supersede chỉ thay bản cùng biến thể, cấm đổi variant_label
+            if (command.EffectiveStageName is not null)
+            {
+                var normalizedSent = BibleNameNormalizer.Normalize(command.EffectiveStageName);
+                var normalizedSuperseded = BibleNameNormalizer.Normalize(superseded.StageName);
+                if (!string.Equals(normalizedSent, normalizedSuperseded, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<BibleEntryRevisionDto>.Failure(
+                        "Bản thay thế phải thuộc cùng biến thể với bản được thay thế.", ResultErrorCodes.Conflict);
+                }
+            }
+
+            stageName = superseded.StageName;
             summary = $"Thay thế bản khoá v{superseded.VersionNumber}: {reason}";
         }
-        // Bản sửa của giai đoạn có sẵn (cùng chương bắt đầu) không gửi tên giai đoạn thì giữ tên cũ,
-        // tránh bản sửa mất tên rồi hiển thị/xoá như một giai đoạn khác.
-        else if (stageName is null && entry.LatestRevisionOfStageStartingAt(effectiveFrom) is { } sameStage)
+        else
         {
-            stageName = sameStage.StageName;
+            // Sửa nội dung (Content Edit): không được đổi variant_label (tránh tách biến thể)
+            var baseRevision = (command.TargetRevisionId.HasValue
+                ? entry.Revisions.FirstOrDefault(r => r.Id == command.TargetRevisionId.Value)
+                : null)
+                ?? (command.ExpectedVersionNumber.HasValue
+                    ? entry.Revisions.FirstOrDefault(r => r.VersionNumber == command.ExpectedVersionNumber.Value)
+                    : null)
+                ?? entry.GetDisplayRevision();
+
+            var baseStageName = baseRevision?.StageName;
+            if (command.EffectiveStageName is not null)
+            {
+                var normalizedSent = BibleNameNormalizer.Normalize(command.EffectiveStageName);
+                var normalizedBase = BibleNameNormalizer.Normalize(baseStageName);
+                if (!string.Equals(normalizedSent, normalizedBase, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<BibleEntryRevisionDto>.Failure(
+                        "Không thể thay đổi tên biến thể (variant_label) khi sửa nội dung. Để tạo biến thể mới, vui lòng dùng thao tác tạo biến thể.",
+                        ResultErrorCodes.Conflict);
+                }
+            }
+
+            stageName = baseStageName;
         }
 
-        if (effectiveTo < effectiveFrom)
-            return Result<BibleEntryRevisionDto>.Failure(
-                $"Chương kết thúc hiệu lực phải ≥ chương bắt đầu ({effectiveFrom}).", ResultErrorCodes.Validation);
-
-        // Snapshot lấy từ nội dung của CHÍNH revision này, không lấy từ current state của entry,
-        // vì bản sửa hồi tố không được thay đổi current state (Append-only BR-01, BR-15).
         var snapshotObj = new
         {
             entry.Id,
@@ -144,50 +198,57 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             ReferenceImageUrl = command.ReferenceImageUrl?.Trim(),
             command.Priority,
             command.StrictCheck,
-            EffectiveFromChapterNumber = effectiveFrom,
-            StageName = stageName?.Trim(),
-            EffectiveToChapterNumber = effectiveTo
+            StageName = stageName?.Trim()
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
+
+        var reviewStatus = command.SupersedesRevisionId.HasValue
+            ? BibleRevisionStatus.Draft
+            : (command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value);
 
         var revision = entry.AddRevision(
             summary: summary,
             snapshotJson: snapshotJson,
             contentHash: contentHash,
             authorId: command.UserId,
-            associatedChapterId: null,
-            effectiveFromChapterNumber: effectiveFrom,
+            associatedChapterId: command.ChapterId,
             isInitialVersion: false,
             stageName: stageName,
-            effectiveToChapterNumber: effectiveTo,
             artistUserId: command.ArtistUserId,
-            reviewStatus: command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value
+            reviewStatus: reviewStatus,
+            supersedesRevisionId: command.SupersedesRevisionId
         );
         // Artist nộp Concept kèm sửa nội dung: phiên bản mới bắt đầu Draft rồi ghi sự kiện nộp Concept như mọi lần nộp khác
         if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
             revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
-        // Bản thay thế là canon mới: khoá ngay, VersionNumber lớn hơn nên được chọn thay bản cũ ở cùng chương (BR-15).
-        if (command.SupersedesRevisionId is { } oldId)
+
+        // BIB-09, Q23: Bản thay thế KHÔNG khoá ngay và KHÔNG đánh dấu bản cũ Superseded sớm.
+        // Bản cũ vẫn CanonLocked dùng được. Khi Editor khoá bản mới (BIB-10 ConfirmCanon) mới ghi sự kiện Superseded cho bản cũ.
+        // Nếu tạo từ màn kịch bản chương N thì gắn luôn bản mới cho chương N (chosen_by_writer = true).
+        if (command.SupersedesRevisionId is not null && command.ChapterId is { } chapterId)
         {
-            revision.Lock(command.UserId);
-            entry.Revisions.First(r => r.Id == oldId).MarkSuperseded(command.UserId, revision.VersionNumber, command.SupersedeReason!.Trim());
+            var binding = await _dbContext.ChapterBibleBindings
+                .FirstOrDefaultAsync(b => b.ChapterId == chapterId && b.BibleEntryId == entry.Id, cancellationToken);
+            if (binding != null)
+            {
+                binding.UpdateBinding(revision.Id, binding.Source, chosenByWriter: true, boundById: command.UserId);
+            }
+            else
+            {
+                var newBinding = ChapterBibleBinding.Create(
+                    chapterId: chapterId,
+                    bibleEntryId: entry.Id,
+                    boundRevisionId: revision.Id,
+                    source: ChapterBibleBindingSource.Speaker,
+                    chosenByWriter: true,
+                    isCrowdAtBind: entry.IsCrowd,
+                    boundById: command.UserId
+                );
+                _dbContext.ChapterBibleBindings.Add(newBinding);
+            }
         }
 
-        // Chỉ cập nhật current state khi revision mới là bản có hiệu lực ở chương mới nhất.
-        // Bản sửa hồi tố (effective từ chương cũ hơn) chỉ được lưu thành version, current state giữ nguyên.
-        if (entry.GetCurrentRevision() == revision)
-        {
-            entry.UpdateDetails(
-                name: name,
-                description: description,
-                subtitle: subtitle,
-                detailsJson: detailsJson,
-                referenceImageUrl: command.ReferenceImageUrl,
-                priority: command.Priority,
-                strictCheck: command.StrictCheck
-            );
-        }
         entry.UpdatedBy = command.UserId.ToString();
 
         _dbContext.BibleEntryRevisions.Add(revision);

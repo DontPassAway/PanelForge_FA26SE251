@@ -87,6 +87,8 @@ public class PreviewFeedback : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
+
     /// <summary>Lưới V3: gắn phản hồi với ô lưới được trả về làm lại (ô không có ChangeRequest vì ChangeRequest gắn Assignment cũ).</summary>
     public void LinkStageTask(Guid stageTaskId)
     {

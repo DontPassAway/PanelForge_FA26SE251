@@ -4,6 +4,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
+using PanelForge.Domain.Services;
 
 namespace PanelForge.Application.Features.Assignments.Common;
 
@@ -107,18 +108,102 @@ internal static class ChangeRequestRules
     /// Tạo ChangeRequest khi trả về: mỗi phần tử của <paramref name="items"/>, hoặc một yêu cầu lấy từ chính comment nếu không có.
     /// Người chịu trách nhiệm là người nhận việc.
     /// </summary>
-    public static void AddChangeRequests(
+    public static async Task<IReadOnlyList<ChangeRequest>> AddChangeRequestsAsync(
         IPanelForgeDbContext db, Assignment a, Guid? submissionId, Guid reviewerUserId,
-        IReadOnlyList<ChangeRequestItemRequest>? items, string comment)
+        IReadOnlyList<ChangeRequestItemRequest>? items, string comment, CancellationToken ct)
     {
         IReadOnlyList<ChangeRequestItemRequest> list = items is { Count: > 0 } ? items : [new ChangeRequestItemRequest(comment)];
-        foreach (var item in list)
+        var expanded = await ExpandPanelRegionsAsync(db, a, list, ct);
+        var created = new List<ChangeRequest>();
+        foreach (var item in expanded)
         {
-            db.ChangeRequests.Add(ChangeRequest.Create(
-                a.Id, a.ChapterId, submissionId, a.AssigneeUserId, reviewerUserId,
+            var routed = await ResolveLayerAssignmentAsync(db, a, item.PanelId, item.Layer, ct);
+            var changeRequest = ChangeRequest.Create(
+                routed.Id, a.ChapterId, submissionId, routed.AssigneeUserId, reviewerUserId,
                 item.Description, item.RegionJson, item.DueDate, item.AssetReferenceId, item.PanelId,
-                item.SceneId, item.ScriptLineId, item.QuotedText));
+                item.SceneId, item.ScriptLineId, item.QuotedText, item.GroupId, item.Layer);
+            db.ChangeRequests.Add(changeRequest);
+            created.Add(changeRequest);
         }
+
+        return created;
+    }
+
+    public static async Task<IReadOnlyList<ChangeRequestItemRequest>> ExpandPanelRegionsAsync(
+        IPanelForgeDbContext db, Assignment scope, IReadOnlyList<ChangeRequestItemRequest> items, CancellationToken ct)
+    {
+        var panels = await StageProgressRules.ResolvePanelsAsync(db, scope, ct);
+        var result = new List<ChangeRequestItemRequest>();
+        foreach (var item in items)
+        {
+            if (item.PanelId is not null || string.IsNullOrWhiteSpace(item.RegionJson))
+            {
+                result.Add(item);
+                continue;
+            }
+
+            var panelIds = PanelOverlap.FindIntersectingPanelIds(
+                item.RegionJson, panels.Select(p => (p.Id, p.BoundingBox)));
+            if (panelIds.Count == 0)
+            {
+                result.Add(item);
+                continue;
+            }
+
+            var groupId = item.GroupId ?? (panelIds.Count > 1 ? Guid.NewGuid() : null);
+            result.AddRange(panelIds.Select(panelId => item with { PanelId = panelId, GroupId = groupId }));
+        }
+
+        return result;
+    }
+
+    public static async Task<Assignment> ResolveLayerAssignmentAsync(
+        IPanelForgeDbContext db, Assignment fallback, Guid? panelId, ChangeRequestLayer layer, CancellationToken ct)
+    {
+        if (panelId is null) return fallback;
+
+        var pageId = await db.Panels.AsNoTracking().Where(p => p.Id == panelId)
+            .Select(p => (Guid?)p.PageId).FirstOrDefaultAsync(ct);
+        if (pageId is null) return fallback;
+
+        var assignments = await db.Assignments
+            .Where(a => a.ChapterId == fallback.ChapterId &&
+                        (a.AssignedRole == WorkspaceRole.Artist || a.AssignedRole == WorkspaceRole.Letterer))
+            .ToListAsync(ct);
+
+        Assignment? ArtworkRoute() => assignments
+            .Where(a => a.AssignedRole == WorkspaceRole.Artist)
+            .Select(a => (Assignment: a, Priority: a.EntityType switch
+            {
+                WorkflowEntityType.Panel when a.TargetEntityId == panelId => 3,
+                WorkflowEntityType.Page when a.TargetEntityId == pageId => 2,
+                WorkflowEntityType.Chapter => 1,
+                _ => 0
+            }))
+            .Where(x => x.Priority > 0)
+            .OrderByDescending(x => x.Priority)
+            .ThenByDescending(x => x.Assignment.CreatedAt)
+            .Select(x => x.Assignment)
+            .FirstOrDefault();
+
+        if (layer == ChangeRequestLayer.Lettering)
+        {
+            var letterer = assignments
+                .Where(a => a.AssignedRole == WorkspaceRole.Letterer &&
+                            (a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == pageId ||
+                             a.EntityType == WorkflowEntityType.Chapter))
+                .OrderByDescending(a => a.EntityType == WorkflowEntityType.Page)
+                .ThenByDescending(a => a.CreatedAt)
+                .FirstOrDefault();
+            var pageArtist = assignments
+                .Where(a => a.AssignedRole == WorkspaceRole.Artist &&
+                            a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == pageId)
+                .OrderByDescending(a => a.CreatedAt)
+                .FirstOrDefault();
+            return letterer ?? pageArtist ?? ArtworkRoute() ?? fallback;
+        }
+
+        return ArtworkRoute() ?? fallback;
     }
 
     /// <summary>

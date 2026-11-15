@@ -109,7 +109,7 @@ public class WorkflowRoutingTests
 
         var script = await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Script), default);
         script.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        script.ErrorMessage.Should().Contain("Locked");
+        script.ErrorMessage.Should().Contain("ChapterApproved");
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class WorkflowRoutingTests
     private static async Task LockChapterAsync(AiHarness h)
     {
         var chapter = await h.Db.Chapters.SingleAsync();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
     }
 

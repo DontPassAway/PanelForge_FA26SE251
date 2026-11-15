@@ -3,11 +3,13 @@ using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
+using PanelForge.Infrastructure.Services;
 using PanelForge.UnitTests.Common;
 using Xunit;
 using DomainSeries = PanelForge.Domain.Entities.Content.Series;
@@ -28,6 +30,8 @@ public class ScriptLifecycleTests
     private readonly StudioWorkspace _studio;
     private readonly Chapter _chapter;
     private readonly Scene _scene;
+    private readonly ChapterCastGate _castGate;
+    private readonly ChapterCastService _castService;
 
     public ScriptLifecycleTests()
     {
@@ -39,6 +43,11 @@ public class ScriptLifecycleTests
         _db.Chapters.Add(_chapter);
         _scene = Scene.Create(_chapter.Id, 1, "Bến cảng");
         _db.Scenes.Add(_scene);
+
+        var resolver = new ChapterCastInheritanceResolver(_db);
+        _castService = new ChapterCastService(_db, resolver);
+        _castGate = new ChapterCastGate(_db, _castService, resolver);
+
         _db.SaveChanges();
 
         _auth.Setup(a => a.GetMemberRoleAsync(_writer, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
@@ -46,7 +55,8 @@ public class ScriptLifecycleTests
         _auth.Setup(a => a.GetMemberRoleAsync(_producer, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Producer);
     }
 
-    private ScriptLifecycleCommandHandler Lifecycle => new(_db, _auth.Object);
+    private ScriptLifecycleCommandHandler Lifecycle => new(_db, _auth.Object, _castGate, _castService);
+    private FreezeChapterScriptCommandHandler FreezeHandler => new(_db, _castGate);
 
     private void AddLine()
     {
@@ -105,7 +115,7 @@ public class ScriptLifecycleTests
         _db.ScriptLines.Add(ScriptLine.Create(_scene.Id, 2, stageDirection: "Tàu cập bến."));
         _db.SaveChanges();
 
-        var blocked = await new FreezeChapterScriptCommandHandler(_db)
+        var blocked = await FreezeHandler
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         blocked.IsSuccess.Should().BeFalse("bản chốt sản xuất phải trùng bản Editor đã đọc");
@@ -113,7 +123,7 @@ public class ScriptLifecycleTests
         _chapter.ScriptStatus.Should().Be(ScriptStatus.InReview);
 
         await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
-        var started = await new FreezeChapterScriptCommandHandler(_db)
+        var started = await FreezeHandler
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         started.IsSuccess.Should().BeTrue(started.ErrorMessage);
@@ -125,7 +135,7 @@ public class ScriptLifecycleTests
     {
         AddLine();
         await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
-        await new FreezeChapterScriptCommandHandler(_db)
+        await FreezeHandler
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         var edit = await ScriptLineRules.AuthorizeAsync(_db, _auth.Object, _writer, _chapter.Id, null, default);
@@ -181,7 +191,7 @@ public class ScriptLifecycleTests
     {
         AddLine();
 
-        var result = await new FreezeChapterScriptCommandHandler(_db)
+        var result = await FreezeHandler
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         result.IsSuccess.Should().BeFalse();
@@ -195,7 +205,7 @@ public class ScriptLifecycleTests
         AddLine();
         await Lifecycle.Handle(new SubmitScriptCommand(_chapter.Id, _writer), default);
 
-        var result = await new FreezeChapterScriptCommandHandler(_db)
+        var result = await FreezeHandler
             .Handle(new FreezeChapterScriptCommand(_chapter.Id, _producer), default);
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);

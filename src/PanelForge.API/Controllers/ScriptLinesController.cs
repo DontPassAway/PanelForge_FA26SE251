@@ -5,11 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.ScriptLines.Commands.CreateScriptLine;
-using PanelForge.Application.Features.ScriptLines.Commands.BatchSaveScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.DeleteScriptLine;
 using PanelForge.Application.Features.ScriptLines.Commands.ReorderScriptLines;
 using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptRevision;
-using PanelForge.Application.Features.ScriptLines.Commands.LinkBibleEntries;
 using PanelForge.Application.Features.ScriptLines.Commands.UpdateScriptLine;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptLines.Queries.GetScriptRevision;
@@ -39,20 +37,8 @@ public sealed class ScriptLinesController : ControllerBase
     {
         var result = await _mediator.Send(new CreateScriptLineCommand(
             chapterId, sceneId, GetCurrentUserId(), body.DialogueText, body.StageDirection,
-            body.SpeakerCharacterId, body.LineOrder, body.ExpectedChapterVersion, body.BibleEntryIds, body.ClientLineId, body.NarrationMode), ct);
+            body.LineOrder, body.ExpectedChapterVersion, body.ClientLineId, body.NarrationMode), ct);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
-    }
-
-    /// <summary>POST /api/chapters/{chapterId}/scenes/{sceneId}/script-lines/batch — Lưu đồng bộ hàng loạt các dòng kịch bản trong 1 giao dịch duy nhất.</summary>
-    [HttpPost("api/chapters/{chapterId:guid}/scenes/{sceneId:guid}/script-lines/batch")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(typeof(BatchSaveScriptLinesResult), StatusCodes.Status200OK)]
-    public async Task<IActionResult> BatchSave(
-        Guid chapterId, Guid sceneId, [FromBody] BatchSaveScriptLinesRequest body, CancellationToken ct)
-    {
-        var result = await _mediator.Send(new BatchSaveScriptLinesCommand(
-            chapterId, sceneId, GetCurrentUserId(), body.Lines, body.ExpectedChapterVersion, body.Summary, body.RawText), ct);
-        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>PUT /api/chapters/{chapterId}/script-lines/{lineId} — sửa dòng (thay toàn bộ nội dung).</summary>
@@ -64,7 +50,7 @@ public sealed class ScriptLinesController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateScriptLineCommand(
             chapterId, lineId, GetCurrentUserId(), body.DialogueText, body.StageDirection,
-            body.SpeakerCharacterId, body.ExpectedChapterVersion, body.BibleEntryIds, body.NarrationMode), ct);
+            body.ExpectedChapterVersion, body.NarrationMode), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -76,18 +62,6 @@ public sealed class ScriptLinesController : ControllerBase
         Guid chapterId, Guid lineId, [FromQuery] long? expectedChapterVersion, CancellationToken ct)
     {
         var result = await _mediator.Send(new DeleteScriptLineCommand(chapterId, lineId, GetCurrentUserId(), expectedChapterVersion), ct);
-        return result.IsSuccess ? Ok(result.Value) : Error(result);
-    }
-
-    /// <summary>POST /api/chapters/{chapterId}/script-lines/{lineId}/bible-links — gắn liên kết @-mentions từ kịch bản vào Series Bible (hỗ trợ Stub Entity).</summary>
-    [HttpPost("api/chapters/{chapterId:guid}/script-lines/{lineId:guid}/bible-links")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(typeof(IReadOnlyList<ScriptLineBibleLinkDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> LinkBibleEntries(
-        Guid chapterId, Guid lineId, [FromBody] LinkBibleEntriesRequest body, CancellationToken ct)
-    {
-        var result = await _mediator.Send(new LinkBibleEntriesCommand(
-            GetCurrentUserId(), chapterId, lineId, body.Mentions), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

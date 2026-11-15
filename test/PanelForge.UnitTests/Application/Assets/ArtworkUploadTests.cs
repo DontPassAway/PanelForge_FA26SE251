@@ -340,7 +340,7 @@ public class ArtworkUploadTests
     public async Task Upload_ToApprovedChapter_IsConflict()
     {
         var f = new Fixture();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(f.Chapter, ChapterStatus.Approved);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(f.Chapter, ChapterStatus.ChapterApproved);
 
         var result = await f.Upload(Png());
 

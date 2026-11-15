@@ -48,6 +48,10 @@ public class PageVersionHistoryTests
         public Task<long> GetStreamVersionAsync(Guid pageId, CancellationToken ct = default) =>
             Task.FromResult(Streams.TryGetValue(pageId, out var e) ? (long)e.Count : -1);
 
+        public Task<IReadOnlyDictionary<Guid, long>> GetStreamVersionsAsync(IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, long>>(
+                pageIds.ToDictionary(id => id, id => Streams.TryGetValue(id, out var e) ? (long)e.Count : -1));
+
         public Task<IReadOnlyList<IDomainEvent>> GetEventsAsync(Guid pageId, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<IDomainEvent>>(Streams.TryGetValue(pageId, out var e) ? e.ToList() : []);
 

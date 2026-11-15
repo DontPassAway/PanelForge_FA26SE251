@@ -6,7 +6,6 @@ public enum BibleRevisionEventType
     Created = 1,
     ConceptSubmitted = 2,
     ReworkRequested = 3,
-    Endorsed = 4,
-    Locked = 5,
-    Superseded = 6
+    Locked = 4,
+    Superseded = 5
 }

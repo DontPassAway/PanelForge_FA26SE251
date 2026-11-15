@@ -36,7 +36,7 @@ public class PreviewPageAccessTests
 
         _chapter = Chapter.Create(_series.Id, 1, "Trả phí");
         _chapter.SetPricing(true, 10000m);
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_chapter, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_chapter, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_chapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_chapter);
 

@@ -47,6 +47,14 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasColumnType("varchar(255)")
                .IsRequired();
 
+        builder.Property(e => e.NormalizedName)
+               .HasColumnName("normalized_name")
+               .HasColumnType("varchar(200)")
+               .IsRequired();
+        builder.HasIndex(e => new { e.SeriesBibleId, e.NormalizedName })
+               .IsUnique()
+               .HasDatabaseName("ix_bible_entries_series_bible_id_normalized_name");
+
         builder.Property(e => e.Subtitle)
                .HasColumnName("subtitle")
                .HasColumnType("varchar(255)");
@@ -88,6 +96,12 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
 
         builder.Property(e => e.IsStub)
                .HasColumnName("is_stub")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(e => e.IsCrowd)
+               .HasColumnName("is_crowd")
                .HasColumnType("boolean")
                .HasDefaultValue(false)
                .IsRequired();

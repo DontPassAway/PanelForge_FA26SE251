@@ -44,6 +44,14 @@ internal sealed class BibleRevisionEventConfiguration : IEntityTypeConfiguration
                .HasColumnName("image_url")
                .HasColumnType("text");
 
+        builder.Property(e => e.ConceptVersionNumber)
+               .HasColumnName("concept_version_number")
+               .HasColumnType("integer");
+
+        builder.Property(e => e.AssetSha256)
+               .HasColumnName("asset_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(e => e.EventHash)
                .HasColumnName("event_hash")
                .HasColumnType("varchar(64)")

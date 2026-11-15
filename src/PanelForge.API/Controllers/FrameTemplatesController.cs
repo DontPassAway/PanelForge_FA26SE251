@@ -57,7 +57,7 @@ public sealed class FrameTemplatesController : ControllerBase
     /// <summary>POST /api/pages/{pageId}/frame-template — dựng Page chưa có Panel từ template. Body: { "templateId": "guid" }</summary>
     [HttpPost("api/pages/{pageId:guid}/frame-template")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
-    [ProducesResponseType(typeof(IReadOnlyList<PanelDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(PageLayoutDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -71,6 +71,7 @@ public sealed class FrameTemplatesController : ControllerBase
     {
         ResultErrorCodes.NotFound => NotFound(new { error = message }),
         ResultErrorCodes.Conflict => Conflict(new { error = message, code = ResultErrorCodes.Conflict }),
+        ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = message, code = ResultErrorCodes.Forbidden }),
         _ => BadRequest(new { error = message })
     };
 

@@ -21,7 +21,8 @@ internal static class WorkspaceMapper
         int memberCount,
         int pendingTasks = 0,
         IReadOnlyList<WorkspaceMemberPreviewDto>? memberPreviews = null,
-        int pendingEditorReviews = 0)
+        int pendingEditorReviews = 0,
+        WorkspaceActivity? activity = null)
         => new(
             Id: workspace.Id,
             Name: workspace.Name,
@@ -38,7 +39,13 @@ internal static class WorkspaceMapper
             CoverUrl: SetWorkspaceCoverCommandHandler.CoverUrl(workspace.Id, workspace.CoverImageSha256),
             Description: null,
             MemberPreviews: memberPreviews,
-            PendingEditorReviews: pendingEditorReviews);
+            PendingEditorReviews: pendingEditorReviews,
+            SeriesCount: activity?.SeriesCount ?? 0,
+            SeriesPreviews: activity?.SeriesPreviews,
+            LastActivityAt: activity?.LastActivityAt);
+
+    /// <summary>Tóm tắt series và hoạt động gần nhất của một Studio cho danh sách Studio.</summary>
+    public sealed record WorkspaceActivity(int SeriesCount, IReadOnlyList<WorkspaceSeriesPreviewDto> SeriesPreviews, DateTime? LastActivityAt);
 
     public static WorkspaceMemberDto ToMemberDto(WorkspaceMember member, User user, Guid ownerId)
         => new(

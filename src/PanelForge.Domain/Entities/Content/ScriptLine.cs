@@ -11,7 +11,6 @@ public class ScriptLine : BaseEntity
     public ScriptLineKind Kind { get; private set; } = ScriptLineKind.Action;
     public string? Text { get; private set; }
     public string? SpeakerLabel { get; private set; }
-    public Guid? SpeakerCharacterId { get; private set; }
 
     // Tương thích ngược: chỉ giữ để code cũ biên dịch tới khi chuyển xong, xoá ở SCR-23
     public string? DialogueText { get; private set; }
@@ -23,7 +22,6 @@ public class ScriptLine : BaseEntity
 
     public Scene Scene { get; private set; } = default!;
     public Panel? Panel { get; private set; }
-    public BibleEntry? SpeakerCharacter { get; private set; }
     public ICollection<ScriptLineBibleLink> BibleLinks { get; private set; } = [];
 
     private ScriptLine() { }
@@ -33,7 +31,6 @@ public class ScriptLine : BaseEntity
         int lineOrder,
         string? dialogueText = null,
         string? stageDirection = null,
-        Guid? speakerCharacterId = null,
         Guid? id = null,
         NarrationMode narrationMode = NarrationMode.Present,
         ScriptLineKind? kind = null,
@@ -46,7 +43,7 @@ public class ScriptLine : BaseEntity
         if (string.IsNullOrWhiteSpace(resolvedText))
             throw new ArgumentException("ScriptLine phải có nội dung văn bản (Text, DialogueText hoặc StageDirection).");
 
-        var resolvedKind = kind ?? (!string.IsNullOrWhiteSpace(dialogueText) || speakerCharacterId.HasValue
+        var resolvedKind = kind ?? (!string.IsNullOrWhiteSpace(dialogueText)
             ? ScriptLineKind.Dialogue
             : ScriptLineKind.Action);
 
@@ -55,8 +52,8 @@ public class ScriptLine : BaseEntity
             throw new ArgumentException("SpeakerLabel không được vượt quá 100 ký tự.");
 
         // SCR-04 Luật domain: Action không có speaker
-        if (resolvedKind == ScriptLineKind.Action && (speakerCharacterId.HasValue || !string.IsNullOrWhiteSpace(trimmedSpeakerLabel)))
-            throw new InvalidOperationException("Dòng Action không được có người nói (SpeakerCharacterId hoặc SpeakerLabel).");
+        if (resolvedKind == ScriptLineKind.Action && !string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
+            throw new InvalidOperationException("Dòng Action không được có người nói (SpeakerLabel).");
 
         return new ScriptLine
         {
@@ -66,7 +63,6 @@ public class ScriptLine : BaseEntity
             Kind = resolvedKind,
             Text = resolvedText,
             SpeakerLabel = trimmedSpeakerLabel,
-            SpeakerCharacterId = resolvedKind == ScriptLineKind.Action ? null : speakerCharacterId,
             DialogueText = resolvedKind == ScriptLineKind.Dialogue || resolvedKind == ScriptLineKind.Thought ? resolvedText : dialogueText?.Trim(),
             StageDirection = resolvedKind != ScriptLineKind.Dialogue && resolvedKind != ScriptLineKind.Thought ? resolvedText : stageDirection?.Trim(),
             NarrationMode = narrationMode
@@ -76,7 +72,6 @@ public class ScriptLine : BaseEntity
     public void UpdateContent(
         string? dialogueText,
         string? stageDirection,
-        Guid? speakerCharacterId,
         NarrationMode narrationMode = NarrationMode.Present,
         ScriptLineKind? kind = null,
         string? speakerLabel = null,
@@ -91,13 +86,12 @@ public class ScriptLine : BaseEntity
         if (trimmedSpeakerLabel?.Length > 100)
             throw new ArgumentException("SpeakerLabel không được vượt quá 100 ký tự.");
 
-        if (resolvedKind == ScriptLineKind.Action && (speakerCharacterId.HasValue || !string.IsNullOrWhiteSpace(trimmedSpeakerLabel)))
+        if (resolvedKind == ScriptLineKind.Action && !string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
             throw new InvalidOperationException("Dòng Action không được có người nói.");
 
         Kind = resolvedKind;
         Text = resolvedText;
         SpeakerLabel = trimmedSpeakerLabel;
-        SpeakerCharacterId = resolvedKind == ScriptLineKind.Action ? null : speakerCharacterId;
         DialogueText = resolvedKind == ScriptLineKind.Dialogue || resolvedKind == ScriptLineKind.Thought ? resolvedText : dialogueText?.Trim();
         StageDirection = resolvedKind != ScriptLineKind.Dialogue && resolvedKind != ScriptLineKind.Thought ? resolvedText : stageDirection?.Trim();
         NarrationMode = narrationMode;

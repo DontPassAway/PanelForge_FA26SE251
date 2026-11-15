@@ -22,6 +22,7 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
         var bible = await _dbContext.SeriesBibles
             .Include(b => b.Entries)
                 .ThenInclude(e => e.Revisions)
+                    .ThenInclude(r => r.Events)
             .FirstOrDefaultAsync(b => b.SeriesId == request.SeriesId, cancellationToken);
 
         if (bible == null)
@@ -37,57 +38,7 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
         var entryDtos = bible.Entries
             .OrderBy(e => e.Category)
             .ThenBy(e => e.Name)
-            .Select(e =>
-            {
-                // Revision có hiệu lực ở chương mới nhất (BR-15), khớp với current state của entry
-                var latestRev = e.GetCurrentRevision();
-
-                BibleEntryRevisionDto? revDto = null;
-                if (latestRev != null)
-                {
-                    revDto = new BibleEntryRevisionDto(
-                        Id: latestRev.Id,
-                        BibleEntryId: latestRev.BibleEntryId,
-                        VersionNumber: latestRev.VersionNumber,
-                        Summary: latestRev.Summary,
-                        SnapshotJson: latestRev.SnapshotJson,
-                        ContentHash: latestRev.ContentHash,
-                        AuthorId: latestRev.AuthorId,
-                        AssociatedChapterId: latestRev.AssociatedChapterId,
-                        EffectiveFromChapterNumber: latestRev.EffectiveFromChapterNumber,
-                        IsInitialVersion: latestRev.IsInitialVersion,
-                        CreatedAt: latestRev.CreatedAt,
-                        IsLocked: latestRev.IsLocked,
-                        LockedAt: latestRev.LockedAt,
-                        LockedById: latestRev.LockedById,
-                        StageName: latestRev.StageName,
-                        EffectiveToChapterNumber: latestRev.EffectiveToChapterNumber,
-                        ArtistUserId: latestRev.ArtistUserId,
-                        ReviewStatus: latestRev.ReviewStatus,
-                        ReworkFeedback: latestRev.ReworkFeedback,
-                        ConceptImageUrl: latestRev.ConceptImageUrl
-                    );
-                }
-
-                return new BibleEntryDto(
-                    Id: e.Id,
-                    SeriesBibleId: e.SeriesBibleId,
-                    Category: e.Category,
-                    Code: e.Code,
-                    Name: e.Name,
-                    Subtitle: e.Subtitle,
-                    Description: e.Description,
-                    DetailsJson: e.DetailsJson,
-                    ReferenceImageUrl: e.ReferenceImageUrl,
-                    Priority: e.Priority,
-                    StrictCheck: e.StrictCheck,
-                    IsActive: e.IsActive,
-                    EffectiveRevision: revDto,
-                    CreatedAt: e.CreatedAt,
-                    UpdatedAt: e.UpdatedAt,
-                    IsStub: e.IsStub
-                );
-            })
+            .Select(e => BibleEntryDto.From(e) with { IsCrowd = false })
             .ToList();
 
         return Result<SeriesBibleDto>.Success(new SeriesBibleDto(

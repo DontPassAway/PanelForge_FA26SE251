@@ -37,7 +37,7 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
 
         builder.Property(c => c.Status)
                .HasColumnName("status")
-               .HasColumnType("varchar(20)")
+               .HasColumnType("varchar(30)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<ChapterStatus>(v))
                .HasDefaultValue(ChapterStatus.PreProduction)
                .HasSentinel(ChapterStatus.PreProduction)
@@ -46,6 +46,20 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
         builder.Property(c => c.PublishedAt)
                .HasColumnName("published_at")
                .HasColumnType("timestamptz");
+
+        builder.Property(c => c.IsHandedOff)
+               .HasColumnName("is_handed_off")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(c => c.HandedOffAt)
+               .HasColumnName("handed_off_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.HandedOffById)
+               .HasColumnName("handed_off_by_id")
+               .HasColumnType("uuid");
 
         builder.Property(c => c.IsLocked)
                .HasColumnName("is_locked")
@@ -117,6 +131,10 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
 
         builder.Property(c => c.ScriptFrozenById)
                .HasColumnName("script_frozen_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.FrozenScriptVersionId)
+               .HasColumnName("frozen_script_version_id")
                .HasColumnType("uuid");
 
         builder.Property(c => c.ScriptContentHash)

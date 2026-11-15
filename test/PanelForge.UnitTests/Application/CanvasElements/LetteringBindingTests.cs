@@ -29,7 +29,7 @@ public class LetteringBindingTests
     private async Task<ScriptLine> SeedLineAsync(Guid? chapterId = null, string text = "Đợi tôi với!")
     {
         var scene = Scene.Create(chapterId ?? _chapterId, 1);
-        var line = ScriptLine.Create(scene.Id, 1, text, speakerCharacterId: _speakerId);
+        var line = ScriptLine.Create(scene.Id, 1, text);
         _db.Scenes.Add(scene);
         _db.ScriptLines.Add(line);
         await _db.SaveChangesAsync();
@@ -50,8 +50,7 @@ public class LetteringBindingTests
         var result = await BindAsync(line.Id);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.SpeakerId.Should().Be(_speakerId);
-        var el = _page.Elements[result.Value.ElementId];
+        var el = _page.Elements[result.Value!.ElementId];
         el.ScriptLineId.Should().Be(line.Id);
         el.RenderedText.Should().Be("Đợi tôi với!");
         el.SourceLineText.Should().Be("Đợi tôi với!");
@@ -93,7 +92,7 @@ public class LetteringBindingTests
         var before = await handler.Handle(new GetPageSnapshotQuery(_page.Id), CancellationToken.None);
         before.Value!.Elements.Single().IsStale.Should().BeFalse();
 
-        line.UpdateContent("Đợi tôi một chút!", null, _speakerId);
+        line.UpdateContent("Đợi tôi một chút!", null);
         await _db.SaveChangesAsync();
 
         var after = (await handler.Handle(new GetPageSnapshotQuery(_page.Id), CancellationToken.None)).Value!.Elements.Single();

@@ -33,8 +33,28 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
 
         var entries = await _dbContext.BibleEntries
             .AsNoTracking()
-            .Where(e => e.SeriesBibleId == bible.Id && e.IsActive)
+            .Where(e => e.SeriesBibleId == bible.Id
+                && e.IsActive
+                && !e.IsStub
+                && !e.IsCrowd
+                && (e.Category == BibleEntryCategory.Character
+                    || e.Category == BibleEntryCategory.Location
+                    || e.Category == BibleEntryCategory.Prop))
             .Include(e => e.Revisions)
+            .ToListAsync(ct);
+
+        // BIB-13: Lấy các chương chưa Frozen cùng Series và bindings để tính waiting chapters
+        var nonFrozenChapters = await _dbContext.Chapters
+            .AsNoTracking()
+            .Where(c => c.SeriesId == query.SeriesId && c.ScriptStatus != ScriptStatus.Frozen && !c.IsScriptFrozen)
+            .Select(c => new { c.Id, c.ChapterNumber })
+            .ToListAsync(ct);
+
+        var nonFrozenChapterIds = nonFrozenChapters.Select(c => c.Id).ToList();
+
+        var bindings = await _dbContext.ChapterBibleBindings
+            .AsNoTracking()
+            .Where(b => nonFrozenChapterIds.Contains(b.ChapterId))
             .ToListAsync(ct);
 
         var queue = new List<BibleDesignQueueItemDto>();
@@ -50,6 +70,17 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                 latestRev.ReviewStatus == BibleRevisionStatus.ReworkRequired ||
                 (latestRev.ReviewStatus == BibleRevisionStatus.ConceptSubmitted && !latestRev.IsLocked))
             {
+                var waitingChapterIds = bindings
+                    .Where(b => b.BibleEntryId == entry.Id && (b.BoundRevisionId == latestRev.Id || b.BoundRevisionId == null))
+                    .Select(b => b.ChapterId)
+                    .ToHashSet();
+
+                var waitingNumbers = nonFrozenChapters
+                    .Where(c => waitingChapterIds.Contains(c.Id))
+                    .Select(c => c.ChapterNumber)
+                    .OrderBy(n => n)
+                    .ToList();
+
                 queue.Add(new BibleDesignQueueItemDto(
                     EntryId: entry.Id,
                     SeriesId: query.SeriesId,
@@ -58,14 +89,15 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                     Category: entry.Category,
                     Description: entry.Description,
                     ReferenceImageUrl: latestRev.ConceptImageUrl ?? entry.ReferenceImageUrl,
-                    EffectiveFromChapterNumber: latestRev.EffectiveFromChapterNumber,
                     StageName: latestRev.StageName,
                     Status: latestRev.ReviewStatus,
                     VersionNumber: latestRev.VersionNumber,
                     ReworkFeedback: latestRev.ReworkFeedback,
                     CreatedAt: entry.CreatedAt,
                     UpdatedAt: entry.UpdatedAt,
-                    RevisionId: latestRev.Id
+                    IsStub: entry.IsStub,
+                    RevisionId: latestRev.Id,
+                    WaitingChapterNumbers: waitingNumbers
                 ));
             }
         }

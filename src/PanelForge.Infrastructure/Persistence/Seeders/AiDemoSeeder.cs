@@ -67,15 +67,15 @@ public static class AiDemoSeeder
 
         var bible = SeriesBible.Create(SeriesId, WorkspaceId, "Series Bible – Thành phố mưa");
         db.SeriesBibles.Add(bible);
-        AddEntry(bible, BibleEntryCategory.Character, "AN", "An", AnDescription);
+        AddEntry(bible, BibleEntryCategory.Character, "AN", "An", AnDescription, db);
         AddEntry(bible, BibleEntryCategory.Character, "BA_LAN", "Bà Lan",
-            "Bà Lan (60 tuổi) là chủ quán trà Giọt Mưa đối diện tiệm đồng hồ. Bà là người giữ chiếc chìa khóa bạc cho tới khi trao nó cho An ở Chương 5.");
+            "Bà Lan (60 tuổi) là chủ quán trà Giọt Mưa đối diện tiệm đồng hồ. Bà là người giữ chiếc chìa khóa bạc cho tới khi trao nó cho An ở Chương 5.", db);
         AddEntry(bible, BibleEntryCategory.Prop, "KHOA_BAC", "Chìa khóa bạc",
-            "Chiếc chìa khóa bạc khắc hình giọt mưa. Từ đầu truyện đến hết Chương 4 nó nằm trong tay bà Lan; chỉ chuyển sang An ở Chương 5.");
+            "Chiếc chìa khóa bạc khắc hình giọt mưa. Từ đầu truyện đến hết Chương 4 nó nằm trong tay bà Lan; chỉ chuyển sang An ở Chương 5.", db);
         AddEntry(bible, BibleEntryCategory.Location, "QUAN_TRA", "Quán trà Giọt Mưa",
-            "Quán trà nhỏ có mái hiên thấp, lúc nào cũng nghe tiếng mưa rơi trên mái.");
+            "Quán trà nhỏ có mái hiên thấp, lúc nào cũng nghe tiếng mưa rơi trên mái.", db);
         AddEntry(bible, BibleEntryCategory.PlotFact, "MOC_CK5", "Mốc timeline chìa khóa bạc",
-            "Chìa khóa bạc chỉ chuyển sang An ở Chương 5. Các chương 1–4 không được mô tả An cầm, dùng hoặc sở hữu chìa khóa bạc.");
+            "Chìa khóa bạc chỉ chuyển sang An ở Chương 5. Các chương 1–4 không được mô tả An cầm, dùng hoặc sở hữu chìa khóa bạc.", db);
 
         var chapter = Chapter.Create(SeriesId, 3, "Tiếng mưa đêm");
         SetId(chapter, ChapterId);
@@ -89,12 +89,15 @@ public static class AiDemoSeeder
         return true;
     }
 
-    private static void AddEntry(SeriesBible bible, BibleEntryCategory category, string code, string name, string description)
+    private static void AddEntry(SeriesBible bible, BibleEntryCategory category, string code, string name, string description, PanelForgeDbContext? db = null)
     {
         var entry = bible.AddEntry(category, code, name, description);
+        if (db != null)
+        {
+        }
         var snapshot = JsonSerializer.Serialize(new { Name = name, Description = description });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
-        var revision = entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, effectiveFromChapterNumber: 1, isInitialVersion: true);
+        var revision = entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, isInitialVersion: true);
         // AI chỉ dùng bản thiết kế đã khoá: khoá sẵn để demo có nhân vật, địa điểm, đạo cụ trong context
         if (entry.IsVisualDesign) revision.Lock(ProducerUser);
     }

@@ -45,7 +45,7 @@ public class PublicCatalogQueryTests
     // Luồng Approve → Lock → Publish thuộc CF5; test đặt trạng thái trực tiếp
     private static void SetPublished(Chapter chapter, DateTime publishedAt)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(chapter, publishedAt);
     }
 

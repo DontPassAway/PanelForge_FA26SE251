@@ -42,7 +42,7 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
 
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-        if (chapter.Status is not (ChapterStatus.Approved or ChapterStatus.Published))
+        if (chapter.Status is not (ChapterStatus.ChapterApproved or ChapterStatus.HandedOffAndPublished))
             return Fail("Chỉ xuất được chương đã duyệt (Approved) hoặc đã phát hành.", ResultErrorCodes.Conflict);
 
         var artwork = await FinalArtwork.SelectAsync(_db, chapter.Id, ct);

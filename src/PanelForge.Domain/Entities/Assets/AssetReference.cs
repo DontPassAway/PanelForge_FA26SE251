@@ -45,4 +45,6 @@ public class AssetReference : BaseEntity
             CreatedAt = DateTime.UtcNow
         };
     }
+
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 }

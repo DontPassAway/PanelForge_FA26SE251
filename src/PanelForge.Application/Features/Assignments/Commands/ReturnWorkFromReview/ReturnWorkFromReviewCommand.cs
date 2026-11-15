@@ -24,7 +24,9 @@ public sealed record ReturnWorkFromReviewCommand(
     string? RegionJson = null,
     Guid? PanelId = null,
     Guid? AssetReferenceId = null,
-    DateTime? DueDate = null) : IRequest<Result<ChangeRequestDto>>;
+    DateTime? DueDate = null,
+    Guid? GroupId = null,
+    ChangeRequestLayer Layer = ChangeRequestLayer.Artwork) : IRequest<Result<ChangeRequestDto>>;
 
 public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnWorkFromReviewCommand, Result<ChangeRequestDto>>
 {
@@ -70,7 +72,15 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
             return Fail("Khung được khoanh không thuộc việc được trả về.", ResultErrorCodes.Validation);
 
         var description = cmd.Description.Trim();
-        if (target.Status == AssignmentStatus.Approved)
+        var requested = new ChangeRequestItemRequest(
+            description, cmd.RegionJson, cmd.DueDate, cmd.AssetReferenceId, cmd.PanelId, cmd.GroupId, cmd.Layer);
+        var expanded = await ChangeRequestRules.ExpandPanelRegionsAsync(_db, target, [requested], ct);
+        var routes = new List<Assignment>();
+        foreach (var item in expanded)
+            routes.Add(await ChangeRequestRules.ResolveLayerAssignmentAsync(_db, target, item.PanelId, item.Layer, ct));
+
+        if (target.Status == AssignmentStatus.Approved && cmd.Layer == ChangeRequestLayer.Artwork &&
+            routes.All(route => route.Id == target.Id))
         {
             if (await StageProgressRules.TransitionAsync(_db, target, r => r.ReopenForRework(), ct) is { } error)
                 return Fail(error, ResultErrorCodes.Conflict);
@@ -86,22 +96,27 @@ public sealed class ReturnWorkFromReviewCommandHandler : IRequestHandler<ReturnW
             await StageProgressRules.FlagImpactedWorkAsync(_db, target, description, ct);
         }
 
-        ChangeRequest cr;
+        var created = new List<ChangeRequest>();
         try
         {
-            cr = ChangeRequest.Create(target.Id, chapter.Id, null, target.AssigneeUserId, cmd.UserId, description,
-                cmd.RegionJson, cmd.DueDate, cmd.AssetReferenceId, cmd.PanelId);
+            foreach (var (item, route) in expanded.Zip(routes))
+            {
+                var cr = ChangeRequest.Create(route.Id, chapter.Id, null, route.AssigneeUserId, cmd.UserId, description,
+                    item.RegionJson, item.DueDate, item.AssetReferenceId, item.PanelId,
+                    groupId: item.GroupId, layer: item.Layer);
+                _db.ChangeRequests.Add(cr);
+                created.Add(cr);
+            }
         }
         catch (ArgumentException ex)
         {
             return Fail(ex.Message, ResultErrorCodes.Validation);
         }
 
-        _db.ChangeRequests.Add(cr);
         _db.Notifications.Add(Notification.Create(target.AssigneeUserId, NotificationType.AssignmentChangesRequested,
             "Có yêu cầu sửa từ bước duyệt chương", description, target.Id, target.ChapterId));
 
         await _db.SaveChangesAsync(ct);
-        return Result<ChangeRequestDto>.Success(ChangeRequestDto.From(cr));
+        return Result<ChangeRequestDto>.Success(ChangeRequestDto.From(created[0]));
     }
 }

@@ -192,7 +192,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (latest is null && existing.Count > 0)
         {
             var baselinePayload = AiJson.Serialize(existing.Select(l => new BaselineScriptLine(
-                l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection)));
+                l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection)));
             var baseline = ContentRevision.Create(
                 s.ChapterId, s.SceneId, ContentRevisionKind.Script, 1, "Baseline: script có sẵn trước khi áp dụng đề xuất AI",
                 baselinePayload, AiContentValidator.Sha256(baselinePayload), null, null);
@@ -207,7 +207,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         {
             // Id do ứng dụng cấp ở draft → Storyboard.sourceScriptLineIds trỏ đúng dòng này
             _db.ScriptLines.Add(ScriptLine.Create(
-                s.SceneId, line.Order, line.Dialogue, line.StageDirection, line.SpeakerId, line.LineId));
+                s.SceneId, line.Order, line.Dialogue, line.StageDirection, line.LineId));
         }
 
         var revision = ContentRevision.Create(
@@ -347,11 +347,11 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             return Applied.Fail("Dòng thoại đã bị sửa hoặc xoá sau khi AI đề xuất.", ResultErrorCodes.Conflict);
 
         var (previousId, nextVersion) = CaptureBaseline(s, latestScript, existing);
-        line.UpdateContent(sug.SuggestedText, line.StageDirection, line.SpeakerCharacterId);
+        line.UpdateContent(sug.SuggestedText, line.StageDirection);
 
         var payload = AiJson.Serialize(new ScriptDraft(
             AiProtocol.SchemaVersion, s.RunId, s.SceneId, 0,
-            existing.Select(l => new ScriptDraftLine(l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection)).ToList(),
+            existing.Select(l => new ScriptDraftLine(l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection)).ToList(),
             AiRunHelpers.ReadGuidList(s.BibleRevisionIdsJson), $"Copilot {sug.Task}: sửa 1 dòng thoại."));
         var revision = ContentRevision.Create(
             s.ChapterId, s.SceneId, ContentRevisionKind.Script, nextVersion,
@@ -372,7 +372,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     {
         if (latest is not null || existing.Count == 0) return (latest?.Id, (latest?.VersionNumber ?? 0) + 1);
         var baselinePayload = AiJson.Serialize(existing.Select(l => new BaselineScriptLine(
-            l.Id, l.LineOrder, l.SpeakerCharacterId, l.DialogueText, l.StageDirection)));
+            l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection)));
         var baseline = ContentRevision.Create(
             s.ChapterId, s.SceneId, ContentRevisionKind.Script, 1, "Baseline: script có sẵn trước khi áp dụng đề xuất AI",
             baselinePayload, AiContentValidator.Sha256(baselinePayload), null, null);
