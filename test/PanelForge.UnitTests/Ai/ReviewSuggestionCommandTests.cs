@@ -91,7 +91,7 @@ public class ReviewSuggestionCommandTests
         var result = await h.ReviewAsync(script.Id, AiSuggestionStatus.Accepted);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Locked");
+        result.ErrorMessage.Should().Contain("ChapterApproved");
         h.Db.ContentRevisions.Count().Should().Be(0);
         h.Db.ScriptLines.Count().Should().Be(0);
     }

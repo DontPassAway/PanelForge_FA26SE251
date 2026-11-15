@@ -203,7 +203,7 @@ public class ReviewNewKindsTests
         var result = await h.ReviewAsync(s.Id, AiSuggestionStatus.Accepted, AiHarness.Artist, ReadyVersion);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Locked");
+        result.ErrorMessage.Should().Contain("ChapterApproved");
         h.Db.ContentRevisions.Count(r => r.Kind == ContentRevisionKind.ImagePrompt).Should().Be(0);
     }
 

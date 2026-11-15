@@ -109,7 +109,7 @@ public class WorkflowRoutingTests
 
         var script = await h.RunHandler().Handle(await h.CommandAsync(AiWorkflowType.Script), default);
         script.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        script.ErrorMessage.Should().Contain("Locked");
+        script.ErrorMessage.Should().Contain("ChapterApproved");
     }
 
     [Fact]

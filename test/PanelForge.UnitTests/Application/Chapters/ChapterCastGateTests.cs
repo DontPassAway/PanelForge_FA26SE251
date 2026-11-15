@@ -459,7 +459,7 @@ public class ChapterCastGateTests
         chapter.UnfreezeScript(_producerId);
         await _db.SaveChangesAsync();
 
-        var reopenSince = DateTime.UtcNow.AddSeconds(-10);
+        var reopenSince = chapter.ScriptReopenRequestedAt!.Value;
 
         // Writer sửa dòng kịch bản trên panel
         line.UpdateContent("Chiến lược mới!", null);

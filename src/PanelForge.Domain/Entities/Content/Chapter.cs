@@ -190,11 +190,15 @@ public class Chapter : BaseEntity
     }
 
     /// <summary>D12: Producer mở lại kịch bản đã đóng băng (Frozen → Draft); lý do ghi ở Audit Log của handler.</summary>
-    public void UnfreezeScript(Guid userId)
+    public void UnfreezeScript(Guid userId, string? reason = null)
     {
         RequireStatus(ChapterStatus.InProduction, "mở lại kịch bản");
         RequireScriptStatus(ScriptStatus.Frozen, "mở lại");
         ReturnScriptToDraft();
+        ScriptReopenStatus = ScriptReopenStatus.Approved;
+        ScriptReopenReason = reason?.Trim();
+        ScriptReopenRequestedById = userId;
+        ScriptReopenRequestedAt = DateTime.UtcNow;
         IncrementVersion();
     }
 

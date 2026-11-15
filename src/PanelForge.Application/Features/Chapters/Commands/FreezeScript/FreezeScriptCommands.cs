@@ -324,7 +324,7 @@ public sealed class UnfreezeChapterScriptCommandHandler : IRequestHandler<Unfree
         if (!chapter.IsScriptFrozen)
             return Result<ChapterDetailDto>.Failure("Kịch bản của chương này chưa bị đóng băng.", ResultErrorCodes.Conflict);
 
-        chapter.UnfreezeScript(cmd.UserId);
+        chapter.UnfreezeScript(cmd.UserId, reason);
         chapter.UpdatedBy = cmd.UserId.ToString();
 
         await ScriptNotifications.NotifyWritersAsync(_dbContext, chapter, cmd.UserId,
