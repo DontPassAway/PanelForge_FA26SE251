@@ -47,9 +47,10 @@ internal sealed class AssetReferenceConfiguration : IEntityTypeConfiguration<Ass
         builder.Property(r => r.PanelId).HasColumnName("panel_id").HasColumnType("uuid");
         builder.Property(r => r.PipelineStageId).HasColumnName("pipeline_stage_id").HasColumnType("uuid").IsRequired();
         builder.Property(r => r.VersionNumber).HasColumnName("version_number").HasColumnType("int").IsRequired();
-        // Phiên bản tăng dần theo (Page, Panel, Stage), không trùng (BR-01); panel_id null (cả trang) coi là bằng nhau
+        // Phiên bản tăng dần theo (Page, Panel, Stage), không trùng (BR-01).
+        // NULLS DISTINCT cho phép giữ nhiều artwork dư ở cấp Page sau khi bố cục bị thu gọn.
         builder.HasIndex(r => new { r.PageId, r.PanelId, r.PipelineStageId, r.VersionNumber })
-               .IsUnique().AreNullsDistinct(false).HasDatabaseName("ix_asset_references_page_panel_stage_version");
+               .IsUnique().AreNullsDistinct().HasDatabaseName("ix_asset_references_page_panel_stage_version");
 
         builder.Property(r => r.LayerType).HasColumnName("layer_type").HasColumnType("varchar(40)");
         builder.Property(r => r.FileName).HasColumnName("file_name").HasColumnType("varchar(255)").IsRequired();

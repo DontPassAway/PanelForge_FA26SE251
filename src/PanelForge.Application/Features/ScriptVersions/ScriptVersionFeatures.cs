@@ -93,10 +93,10 @@ public static class ScriptSnapshotBuilder
 
         var panelIds = panels.Select(p => p.Id).ToList();
         var panelVariants = await db.PanelBibleVariants.AsNoTracking()
-            .Where(v => panelIds.Contains(v.PanelId))
+            .Where(v => v.PanelId.HasValue && panelIds.Contains(v.PanelId.Value))
             .ToListAsync(ct);
         var castsByPanel = panelVariants
-            .GroupBy(v => v.PanelId)
+            .GroupBy(v => v.PanelId!.Value)
             .ToDictionary(
                 g => g.Key,
                 g => (IReadOnlyList<ScriptVersionRowCast>)g

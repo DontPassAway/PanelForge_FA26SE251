@@ -86,8 +86,8 @@ internal static class StageProgressRules
         if (chapterLevelApproved) return null;
 
         var approved = await db.StageProgresses.AsNoTracking()
-            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
-            .Select(s => s.PanelId).ToListAsync(ct);
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value))
+            .Select(s => s.PanelId!.Value).ToListAsync(ct);
 
         var missing = panelIds.Except(approved).Count();
         return missing == 0
@@ -132,8 +132,8 @@ internal static class StageProgressRules
 
         var panelIds = panels.Select(p => p.Id).ToList();
         var approved = (await db.StageProgresses.AsNoTracking()
-            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
-            .Select(s => s.PanelId).ToListAsync(ct)).ToHashSet();
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value))
+            .Select(s => s.PanelId!.Value).ToListAsync(ct)).ToHashSet();
 
         var unfinishedPageIds = panels.Where(p => !approved.Contains(p.Id)).Select(p => p.PageId).Distinct().ToList();
         if (unfinishedPageIds.Count == 0) return null;
@@ -239,7 +239,7 @@ internal static class StageProgressRules
 
         var panelIds = panels.Select(p => p.Id).ToList();
         var rows = await db.StageProgresses
-            .Where(s => s.PipelineStageId == a.PipelineStageId && panelIds.Contains(s.PanelId)).ToListAsync(ct);
+            .Where(s => s.PipelineStageId == a.PipelineStageId && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
 
         try
         {
@@ -390,7 +390,7 @@ internal static class StageProgressRules
         var pageIds = targetPanels.Select(p => p.PageId).Distinct().ToList();
         var pagePanels = await db.Panels.Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
         var pagePanelIds = pagePanels.Select(p => p.Id).ToList();
-        var rows = await db.StageProgresses.Where(s => pagePanelIds.Contains(s.PanelId)).ToListAsync(ct);
+        var rows = await db.StageProgresses.Where(s => s.PanelId.HasValue && pagePanelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
 
         try
         {

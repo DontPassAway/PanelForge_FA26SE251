@@ -10,12 +10,20 @@ internal sealed class PanelBibleVariantConfiguration : IEntityTypeConfiguration<
     {
         builder.ToTable("panel_bible_variants");
 
-        builder.HasKey(p => new { p.PanelId, p.BibleEntryId });
+        builder.HasKey(p => p.Id);
+
+        builder.Property(p => p.Id)
+               .HasColumnName("id")
+               .HasColumnType("uuid")
+               .ValueGeneratedNever();
 
         builder.Property(p => p.PanelId)
                .HasColumnName("panel_id")
-               .HasColumnType("uuid")
-               .IsRequired();
+               .HasColumnType("uuid");
+
+        builder.HasIndex(p => new { p.PanelId, p.BibleEntryId })
+               .IsUnique()
+               .HasDatabaseName("ix_panel_bible_variants_panel_entry");
 
         builder.Property(p => p.BibleEntryId)
                .HasColumnName("bible_entry_id")
@@ -40,7 +48,7 @@ internal sealed class PanelBibleVariantConfiguration : IEntityTypeConfiguration<
         builder.HasOne(p => p.Panel)
                .WithMany()
                .HasForeignKey(p => p.PanelId)
-               .OnDelete(DeleteBehavior.Cascade);
+               .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne(p => p.BibleEntry)
                .WithMany()

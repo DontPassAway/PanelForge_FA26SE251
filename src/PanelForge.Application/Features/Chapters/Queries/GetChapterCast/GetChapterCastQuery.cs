@@ -156,7 +156,7 @@ public sealed class GetChapterCastQueryHandler
         // Load panel variants for these panels
         var panelVariants = await _db.PanelBibleVariants.AsNoTracking()
             .Include(v => v.Revision)
-            .Where(v => panelIds.Contains(v.PanelId))
+            .Where(v => v.PanelId.HasValue && panelIds.Contains(v.PanelId.Value))
             .ToListAsync(ct);
 
         // Load script lines and bible links
@@ -269,11 +269,11 @@ public sealed class GetChapterCastQueryHandler
                 .Where(v => v.BibleEntryId == entry.Id)
                 .Select(v =>
                 {
-                    var pan = panelMap.GetValueOrDefault(v.PanelId);
+                    var pan = v.PanelId.HasValue ? panelMap.GetValueOrDefault(v.PanelId.Value) : null;
                     var pageNum = pan != null && pageMap.TryGetValue(pan.PageId, out var p) ? p : 0;
                     var panNum = pan?.PanelNumber ?? 0;
                     return new ChapterCastPanelRevisionDto(
-                        v.PanelId,
+                        v.PanelId!.Value,
                         pageNum,
                         panNum,
                         v.RevisionId,

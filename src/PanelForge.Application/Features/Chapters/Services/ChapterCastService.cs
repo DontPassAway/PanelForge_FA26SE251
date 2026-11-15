@@ -112,7 +112,7 @@ public sealed class ChapterCastService : IChapterCastService
         var pageIds = await _db.Pages.Where(p => p.ChapterId == chapterId).Select(p => p.Id).ToListAsync(ct);
         var panelIds = await _db.Panels.Where(p => pageIds.Contains(p.PageId)).Select(p => p.Id).ToListAsync(ct);
         var panelVariants = await _db.PanelBibleVariants
-            .Where(v => panelIds.Contains(v.PanelId))
+            .Where(v => v.PanelId.HasValue && panelIds.Contains(v.PanelId.Value))
             .ToListAsync(ct);
 
         var speakerEntryIds = candidates

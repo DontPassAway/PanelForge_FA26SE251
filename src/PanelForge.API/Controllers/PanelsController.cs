@@ -10,6 +10,7 @@ using PanelForge.Application.Features.Panels.Commands.AssignPanelScriptLines;
 using PanelForge.Application.Features.Panels.Commands.AutoAssignScriptLines;
 using PanelForge.Application.Features.Panels.Commands.CreatePanel;
 using PanelForge.Application.Features.Panels.Commands.DeletePanel;
+using PanelForge.Application.Features.Panels.Commands.ReplacePageLayout;
 using PanelForge.Application.Features.Panels.Commands.UpdatePanelCoordinates;
 using PanelForge.Application.Features.Panels.Models;
 using PanelForge.Application.Features.Panels.Queries.GetPanelById;
@@ -69,6 +70,29 @@ public sealed class PanelsController : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetPanelById), new { panelId = result.Value!.Id }, result.Value);
+    }
+
+    [HttpPut("api/pages/{pageId:guid}/panels/layout")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(PageLayoutDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ReplacePageLayout(
+        [FromRoute] Guid pageId,
+        [FromBody] IReadOnlyList<CreatePanelRequest> panels,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ReplacePageLayoutCommand(pageId, GetCurrentUserId(), panels ?? []), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == PanelForge.Application.Common.ResultErrorCodes.NotFound)
+                return NotFound(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Value);
     }
 
     /// <summary>

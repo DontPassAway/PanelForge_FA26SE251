@@ -228,6 +228,15 @@ public sealed class Page : AggregateRoot
         ));
     }
 
+    public void ReassignElementPanel(Guid elementId, Guid? panelId, Guid reassignedByUserId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (element.PanelId == panelId) return;
+
+        RaiseEvent(new ElementPanelReassignedEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, panelId, element.PanelId, reassignedByUserId));
+    }
+
     /// <summary>
     /// Sửa chữ / làm mới sau khi Writer sửa thoại / gắn lại sang ScriptLine khác (BR-05).
     /// scriptLineId = null nghĩa là element không gắn dòng nào. Giữ unique: một dòng chỉ gắn một element đang hoạt động.
@@ -371,6 +380,7 @@ public sealed class Page : AggregateRoot
             case ElementReadingOrderSetEvent e:       Apply(e); break;
             case ElementStyleUpdatedEvent e:          Apply(e); break;
             case ElementRestoredEvent e:              Apply(e); break;
+            case ElementPanelReassignedEvent e:       Apply(e); break;
             case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
@@ -436,6 +446,13 @@ public sealed class Page : AggregateRoot
         element.Height = e.NewHeight;
         if (e.NewRotation is { } r) element.Rotation = r;
         if (e.NewZIndex is { } z) element.ZIndex = z;
+        element.Version++;
+    }
+
+    internal void Apply(ElementPanelReassignedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.PanelId = e.PanelId;
         element.Version++;
     }
 

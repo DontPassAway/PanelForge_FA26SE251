@@ -3,7 +3,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Panels.Models;
+using PanelForge.Application.Features.Panels.Services;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -11,21 +13,28 @@ namespace PanelForge.Application.Features.FrameTemplates.Commands.ApplyFrameTemp
 
 /// <summary>
 /// Artist dựng Page từ frame template (CF2 bước 9): tạo một Panel cho mỗi khung, SAO CHÉP hình học vào BoundingBox.
-/// Chỉ áp dụng cho Page chưa có Panel (không ghi đè bố cục đang làm). Thứ tự đọc tính theo ReadingDirection của Series.
+/// Thay thế bố cục hiện tại và giữ dữ liệu theo ReadingOrder. Thứ tự đọc tính theo ReadingDirection của Series.
 /// </summary>
 public sealed record ApplyFrameTemplateCommand(Guid PageId, Guid TemplateId, Guid UserId)
-    : IRequest<Result<IReadOnlyList<PanelDto>>>;
+    : IRequest<Result<PageLayoutDto>>;
 
 public sealed class ApplyFrameTemplateCommandHandler
-    : IRequestHandler<ApplyFrameTemplateCommand, Result<IReadOnlyList<PanelDto>>>
+    : IRequestHandler<ApplyFrameTemplateCommand, Result<PageLayoutDto>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly IPageRepository _pages;
+    private readonly PageLayoutReplacer _replacer;
 
-    public ApplyFrameTemplateCommandHandler(IPanelForgeDbContext db) => _db = db;
-
-    public async Task<Result<IReadOnlyList<PanelDto>>> Handle(ApplyFrameTemplateCommand cmd, CancellationToken ct)
+    public ApplyFrameTemplateCommandHandler(IPanelForgeDbContext db, IPageRepository pages, PageLayoutReplacer replacer)
     {
-        static Result<IReadOnlyList<PanelDto>> Fail(string msg, string code) => Result<IReadOnlyList<PanelDto>>.Failure(msg, code);
+        _db = db;
+        _pages = pages;
+        _replacer = replacer;
+    }
+
+    public async Task<Result<PageLayoutDto>> Handle(ApplyFrameTemplateCommand cmd, CancellationToken ct)
+    {
+        static Result<PageLayoutDto> Fail(string msg, string code) => Result<PageLayoutDto>.Failure(msg, code);
 
         var page = await (
             from p in _db.Pages
@@ -44,10 +53,14 @@ public sealed class ApplyFrameTemplateCommandHandler
 
         if (page.Status != ChapterStatus.InProduction)
             return Fail("Chương không còn ở trạng thái sản xuất, không dựng lại bố cục được (BR-12).", ResultErrorCodes.Conflict);
+        if (await WorkScopeGuard.DenyReasonAsync(_db, cmd.UserId, cmd.PageId, null, ct) is { } outOfScope)
+            return Fail(outOfScope, ResultErrorCodes.Forbidden);
         if (template.LayoutFormat == LayoutFormat.SpreadDouble && page.LayoutFormat != LayoutFormat.SpreadDouble)
             return Fail($"Template dành cho trang đôi (SpreadDouble), không thể áp dụng cho trang đơn ({page.LayoutFormat}).", ResultErrorCodes.Validation);
-        if (await _db.Panels.AnyAsync(p => p.PageId == cmd.PageId, ct))
-            return Fail("Page đã có Panel; xoá các Panel hiện có trước khi áp dụng template.", ResultErrorCodes.Conflict);
+
+        var pageAggregate = await _pages.GetAsync(cmd.PageId, ct);
+        if (pageAggregate is null)
+            return Fail($"Page {cmd.PageId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var panels = new List<Panel>();
         foreach (var (slot, order) in OrderForReading(template.Slots, page.ReadingDirection))
@@ -67,12 +80,11 @@ public sealed class ApplyFrameTemplateCommandHandler
             panels.Add(panel);
         }
 
-        _db.Panels.AddRange(panels);
-        await _db.SaveChangesAsync(ct);
-
-        return Result<IReadOnlyList<PanelDto>>.Success(panels.Select(p => new PanelDto(
+        var replacement = await _replacer.ReplaceAsync(pageAggregate, panels, cmd.UserId, ct);
+        var panelDtos = replacement.Panels.Select(p => new PanelDto(
             p.Id, p.PageId, p.PanelNumber, p.BoundingBox, p.ReadingOrder, p.CurrentStageId,
-            p.CreatedAt, p.UpdatedAt, p.CreatedBy, p.SceneId, p.Version, p.Direction)).ToList());
+            p.CreatedAt, p.UpdatedAt, p.CreatedBy, p.SceneId, p.Version, p.Direction)).ToList();
+        return Result<PageLayoutDto>.Success(new PageLayoutDto(panelDtos, replacement.UnassignedArtworkCount));
     }
 
     /// <summary>

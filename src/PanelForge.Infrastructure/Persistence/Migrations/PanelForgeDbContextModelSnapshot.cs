@@ -755,7 +755,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_asset_references_page_panel_stage_version");
 
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PageId", "PanelId", "PipelineStageId", "VersionNumber"), false);
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PageId", "PanelId", "PipelineStageId", "VersionNumber"), true);
 
                     b.ToTable("asset_references", (string)null);
                 });
@@ -2399,13 +2399,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.PanelBibleVariant", b =>
                 {
-                    b.Property<Guid>("PanelId")
+                    b.Property<Guid>("Id")
                         .HasColumnType("uuid")
-                        .HasColumnName("panel_id");
+                        .HasColumnName("id");
 
                     b.Property<Guid>("BibleEntryId")
                         .HasColumnType("uuid")
                         .HasColumnName("bible_entry_id");
+
+                    b.Property<Guid?>("PanelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("panel_id");
 
                     b.Property<Guid>("RevisionId")
                         .HasColumnType("uuid")
@@ -2419,13 +2423,17 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("set_by");
 
-                    b.HasKey("PanelId", "BibleEntryId");
+                    b.HasKey("Id");
 
                     b.HasIndex("BibleEntryId");
 
                     b.HasIndex("RevisionId");
 
                     b.HasIndex("SetById");
+
+                    b.HasIndex("PanelId", "BibleEntryId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_panel_bible_variants_panel_entry");
 
                     b.ToTable("panel_bible_variants", (string)null);
                 });
@@ -4977,7 +4985,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid>("PanelId")
+                    b.Property<Guid?>("PanelId")
                         .HasColumnType("uuid")
                         .HasColumnName("panel_id");
 
@@ -5834,8 +5842,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Content.Panel", "Panel")
                         .WithMany()
                         .HasForeignKey("PanelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("PanelForge.Domain.Entities.Bible.BibleEntryRevision", "Revision")
                         .WithMany()
@@ -6254,8 +6261,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Content.Panel", null)
                         .WithMany()
                         .HasForeignKey("PanelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("PanelForge.Domain.Entities.Workflow.PipelineStage", null)
                         .WithMany()

@@ -133,7 +133,7 @@ internal static class ChapterSnapshotBuilder
         var panelVariants = await db.PanelBibleVariants.AsNoTracking()
             .Include(v => v.Revision)
                 .ThenInclude(r => r.Events)
-            .Where(v => panelIds.Contains(v.PanelId))
+            .Where(v => v.PanelId.HasValue && panelIds.Contains(v.PanelId.Value))
             .ToListAsync(ct);
 
         var variants = panelVariants.Select(v =>
@@ -143,7 +143,7 @@ internal static class ChapterSnapshotBuilder
                 .OrderByDescending(e => e.CreatedAt)
                 .FirstOrDefault();
             var sha = lockedEvt?.AssetSha256;
-            return new SnapshotPanelVariant(v.PanelId, v.BibleEntryId, v.RevisionId, sha);
+            return new SnapshotPanelVariant(v.PanelId!.Value, v.BibleEntryId, v.RevisionId, sha);
         }).ToList();
 
         var bibleRevisionIds = cast.Select(c => c.BoundRevisionId).Distinct().ToList();

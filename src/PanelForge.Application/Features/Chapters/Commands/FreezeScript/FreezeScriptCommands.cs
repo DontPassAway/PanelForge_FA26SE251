@@ -115,7 +115,8 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         // 2. Biến thể Panel bị đặt/sửa sau khi mở lại
         var modifiedVariants = await _dbContext.PanelBibleVariants
             .Where(v => v.Panel.Page.ChapterId == chapterId && v.SetAt >= since)
-            .Select(v => v.PanelId)
+            .Where(v => v.PanelId.HasValue)
+            .Select(v => v.PanelId!.Value)
             .ToListAsync(ct);
 
         // 3. Thực thể binding đổi bound_revision_id hoặc thêm mới sau khi mở lại
@@ -184,9 +185,9 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         }
 
         foreach (var sp in await _dbContext.StageProgresses
-                     .Where(sp => allAffectedPanelIds.Contains(sp.PanelId)).ToListAsync(ct))
+                      .Where(sp => sp.PanelId.HasValue && allAffectedPanelIds.Contains(sp.PanelId.Value)).ToListAsync(ct))
         {
-            var lineId = lineByPanel.GetValueOrDefault(sp.PanelId, Guid.Empty);
+            var lineId = lineByPanel.GetValueOrDefault(sp.PanelId!.Value, Guid.Empty);
             sp.FlagScriptImpact(lineId);
         }
     }

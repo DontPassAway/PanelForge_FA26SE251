@@ -135,7 +135,7 @@ public sealed class ChapterCastGate : IChapterCastGate
 
         var panelVariants = await _db.PanelBibleVariants.AsNoTracking()
             .Include(v => v.Revision)
-            .Where(v => panelIds.Contains(v.PanelId))
+            .Where(v => v.PanelId.HasValue && panelIds.Contains(v.PanelId.Value))
             .ToListAsync(ct);
 
         // Query previous chapter bindings to determine inheritance source when !chosenByWriter
@@ -237,7 +237,7 @@ public sealed class ChapterCastGate : IChapterCastGate
             {
                 if (!pv.Revision.IsLocked)
                 {
-                    var pan = panelMap.GetValueOrDefault(pv.PanelId);
+                    var pan = pv.PanelId.HasValue ? panelMap.GetValueOrDefault(pv.PanelId.Value) : null;
                     var pageNum = pan != null && pageMap.TryGetValue(pan.PageId, out var p) ? p : 0;
                     var panNum = pan?.PanelNumber ?? 0;
                     var pvStage = pv.Revision.StageName ?? "Mặc định";
