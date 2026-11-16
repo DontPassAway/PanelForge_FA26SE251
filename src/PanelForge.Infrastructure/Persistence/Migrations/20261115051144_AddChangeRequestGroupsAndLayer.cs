@@ -21,7 +21,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 name: "layer",
                 table: "change_requests",
                 type: "varchar(20)",
-                nullable: false);
+                nullable: false,
+                defaultValue: "Artwork");
 
             migrationBuilder.CreateIndex(
                 name: "ix_change_requests_group_id",
