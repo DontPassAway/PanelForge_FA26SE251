@@ -604,9 +604,11 @@ public class TaskGridHandlerTests
     public async Task ChapterLockGate_BlocksUnfinishedAndOutdatedGridCells_OnlyWhenGridIsUsed()
     {
         var f = new Fixture();
+        (await ChapterLockGate.EvaluateAsync(f.Db.Object, f.Chapter, default))
+            .Should().NotContain(i => i.Code == "TASK_GRID_NOT_APPROVED", "chưa sinh ô thì chương chưa dùng lưới");
         await f.Generate();
         (await ChapterLockGate.EvaluateAsync(f.Db.Object, f.Chapter, default))
-            .Should().NotContain(i => i.Code == "TASK_GRID_NOT_APPROVED", "chưa giao lô nào thì lưới chưa được dùng");
+            .Should().Contain(i => i.Code == "TASK_GRID_NOT_APPROVED" && i.Blocking, "đã sinh ô mà chưa giao thì chưa duyệt chương được");
 
         var (pencil, _, _) = await PencilDoneInkAndLetteringStarted(f);
         await new ReopenStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, pencil.Id, f.ProducerId, "Sửa"), default);

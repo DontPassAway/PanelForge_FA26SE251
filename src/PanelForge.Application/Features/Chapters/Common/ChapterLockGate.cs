@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -28,8 +29,8 @@ public static class ChapterLockGate
         var unfinished = await db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && a.Status != AssignmentStatus.Approved, ct);
         Block("ASSIGNMENTS_NOT_APPROVED", unfinished, $"Còn {unfinished} việc chưa được duyệt, chưa thể duyệt Chapter.");
 
-        // Lưới V3: chỉ xét khi chương đã thật sự giao việc qua lưới (có lô), để chương làm theo luồng cũ không bị chặn oan.
-        var usesGrid = await db.StageTaskLots.AnyAsync(l => l.ChapterId == chapter.Id, ct);
+        // Lưới V3: chương đã sinh ô (kể cả chưa giao lô) là chương dùng lưới; ô Unassigned cũng chặn duyệt chương.
+        var usesGrid = await WorkScopeGuard.UsesGridAsync(db, chapter.Id, ct);
         var gridUnfinished = usesGrid
             ? await db.StageTasks.CountAsync(t => t.ChapterId == chapter.Id &&
                 t.Status != StageTaskStatus.Approved && t.Status != StageTaskStatus.Cancelled, ct)
