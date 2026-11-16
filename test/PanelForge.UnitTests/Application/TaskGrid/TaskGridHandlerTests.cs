@@ -268,6 +268,27 @@ public class TaskGridHandlerTests
         (await f.Submit(f.LettererId, pencil)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
     }
 
+    /// <summary>Nộp nhiều ô: tất cả hoặc không, nhưng 409 liệt kê đủ mọi trang chưa đạt.</summary>
+    [Fact]
+    public async Task Submit_ManyCellsWithoutArtwork_ListsEveryBlockedPage()
+    {
+        var f = new Fixture();
+        (await f.Generate()).IsSuccess.Should().BeTrue();
+        var p1 = f.Cell(f.Pencil, 0);
+        var p2 = f.Cell(f.Pencil, 1);
+        (await f.Assign(false, f.Lot(f.Pencil, f.ArtistId, p1, p2))).IsSuccess.Should().BeTrue();
+        await f.Start(p1, f.ArtistId);
+        await f.Start(p2, f.ArtistId);
+        f.Artwork.RemoveAll(r => r.PipelineStageId == f.Pencil.Id);
+
+        var result = await f.Submit(f.ArtistId, p1, p2);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("Trang 1").And.Contain("Trang 2");
+        p1.Status.Should().Be(StageTaskStatus.InProgress);
+        p2.Status.Should().Be(StageTaskStatus.InProgress);
+    }
+
     /// <summary>CF2: ô cấp Trang của Artist không nộp được khi trang chưa có artwork ở công đoạn đó (như V2).</summary>
     [Fact]
     public async Task Submit_ArtistCellWithoutArtwork_IsBlocked_AndCellStaysInProgress()

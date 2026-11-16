@@ -65,6 +65,7 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
         var lotIds = tasks.Select(t => t.LotId!.Value).Distinct().ToList();
         var roleByLot = await _db.StageTaskLots.AsNoTracking().Where(l => lotIds.Contains(l.Id))
             .ToDictionaryAsync(l => l.Id, l => l.AssignedRole, ct);
+        var blocked = new List<(int Page, string Reason)>();
         foreach (var task in tasks.Where(t => t.PageId != null))
         {
             var pageNumber = await _db.Pages.AsNoTracking().Where(p => p.Id == task.PageId).Select(p => p.PageNumber).FirstOrDefaultAsync(ct);
@@ -78,8 +79,12 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
                 WorkspaceRole.Letterer => await StageProgressRules.LetteringPagesBlockReasonAsync(_db, _pages, [task.PageId!.Value], ct),
                 _ => null
             };
-            if (reason is not null) return Fail($"Trang {pageNumber}: {reason}", ResultErrorCodes.Conflict);
+            if (reason is not null) blocked.Add((pageNumber, reason));
         }
+        // Tất cả hoặc không, nhưng báo đủ mọi trang chưa đạt để người làm sửa một lượt
+        if (blocked.Count > 0)
+            return Fail(string.Join("\n", blocked.OrderBy(b => b.Page).Select(b => $"Trang {b.Page}: {b.Reason}")),
+                ResultErrorCodes.Conflict);
         var attempts = await _db.StageTaskSubmissions.AsNoTracking().Where(s => taskIds.Contains(s.StageTaskId))
             .GroupBy(s => s.StageTaskId).Select(g => new { g.Key, Max = g.Max(s => s.AttemptNumber) })
             .ToDictionaryAsync(x => x.Key, x => x.Max, ct);
