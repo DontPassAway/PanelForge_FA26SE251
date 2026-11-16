@@ -48,7 +48,7 @@ internal static class ScriptLineRules
             var bound = page?.Elements.Values.Where(e => !e.IsRemoved && e.ScriptLineId == line.Id).ToList() ?? [];
             if (bound.Count == 0) continue;
 
-            foreach (var cell in gridLettering.Where(t => t.PageId == pageId)) cell.Reopen();
+            foreach (var cell in gridLettering.Where(t => t.PageId == pageId)) cell.Reopen("Thoại trên trang đã thay đổi, cần dàn chữ lại.");
 
             var pagePanels = await db.Panels.AsNoTracking().Where(p => p.PageId == pageId).Select(p => p.Id).ToListAsync(ct);
             foreach (var element in bound)

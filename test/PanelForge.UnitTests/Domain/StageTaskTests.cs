@@ -132,6 +132,19 @@ public class StageTaskTests
     }
 
     [Fact]
+    public void Reopen_KeepsReason_UntilResubmitted()
+    {
+        var task = Started();
+        task.Submit(Guid.NewGuid(), isApprovalGate: false);
+        task.Reopen("  Sai bố cục  ");
+        task.ReopenReason.Should().Be("Sai bố cục");
+
+        task.Start(prerequisitesApproved: true);
+        task.Submit(Guid.NewGuid(), isApprovalGate: true);
+        task.ReopenReason.Should().BeNull();
+    }
+
+    [Fact]
     public void MarkInputOutdated_OnTaskNotStarted_IsIgnored()
     {
         var t = StageTask.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());

@@ -38,7 +38,7 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         var task = chapterTasks.FirstOrDefault(t => t.Id == cmd.TaskId);
         if (task is null) return Fail($"Ô {cmd.TaskId} không thuộc chương này.", ResultErrorCodes.NotFound);
 
-        try { task.Reopen(); }
+        try { task.Reopen(cmd.Reason); }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
         var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);

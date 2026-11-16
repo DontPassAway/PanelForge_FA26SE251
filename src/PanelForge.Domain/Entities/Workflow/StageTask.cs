@@ -20,6 +20,8 @@ public class StageTask : BaseEntity
     public StageTaskStatus Status { get; private set; } = StageTaskStatus.Unassigned;
     public bool IsInputOutdated { get; private set; }
     public string? OutdatedReason { get; private set; }
+    /// <summary>Lý do Producer/hệ thống mở lại ô đã duyệt; xoá khi nộp lại.</summary>
+    public string? ReopenReason { get; private set; }
     public Guid? ReviewerUserId { get; private set; }
     public Guid? CurrentSubmissionId { get; private set; }
     public DateTime? StartedAt { get; private set; }
@@ -104,6 +106,7 @@ public class StageTask : BaseEntity
         EnsureInputCurrent();
 
         CurrentSubmissionId = submissionId;
+        ReopenReason = null;
         Status = isApprovalGate ? StageTaskStatus.Submitted : StageTaskStatus.Approved;
         Touch();
     }
@@ -152,10 +155,12 @@ public class StageTask : BaseEntity
     }
 
     /// <summary>Mở lại ô đã duyệt (thay cho ReturnWork). Không cho mở khi đầu vào đang lỗi thời: phải qua Impact Review.</summary>
-    public void Reopen()
+    public void Reopen(string? reason = null)
     {
         if (Status != StageTaskStatus.Approved) throw Invalid("mở lại");
         EnsureInputCurrent();
+        var trimmed = reason?.Trim();
+        ReopenReason = string.IsNullOrEmpty(trimmed) ? null : trimmed.Length <= MaxOutdatedReasonLength ? trimmed : trimmed[..MaxOutdatedReasonLength];
         Status = StageTaskStatus.ReworkRequired;
         Touch();
     }

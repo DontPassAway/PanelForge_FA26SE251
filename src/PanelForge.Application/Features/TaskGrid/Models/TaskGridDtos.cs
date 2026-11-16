@@ -25,11 +25,11 @@ public sealed record TaskGridPageDto(Guid Id, int PageNumber);
 public sealed record StageTaskDto(
     Guid Id, Guid PipelineStageId, Guid? PageId, StageTaskStatus Status, Guid? LotId, Guid? AssigneeUserId,
     bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion,
-    string? LastDecisionComment = null, int AttemptCount = 0)
+    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null)
 {
     public static StageTaskDto From(StageTask t, Guid? assigneeUserId, bool isStartable) => new(
         t.Id, t.PipelineStageId, t.PageId, t.Status, t.LotId, assigneeUserId,
-        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion);
+        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion, ReopenReason: t.ReopenReason);
 }
 
 public sealed record StageTaskLotDto(
@@ -96,7 +96,7 @@ public sealed record MyTaskLotDto(
 /// <param name="PageNumber">null = ô cấp Chương.</param>
 public sealed record MyTaskCellDto(
     Guid Id, Guid? PageId, int? PageNumber, StageTaskStatus Status, bool IsStartable, bool IsInputOutdated, string? OutdatedReason,
-    string? LastDecisionComment = null, int AttemptCount = 0);
+    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null);
 
 /// <summary>Ô đang chờ duyệt (Submitted) hoặc đang được duyệt (UnderReview).</summary>
 public sealed record TaskGridReviewItemDto(
