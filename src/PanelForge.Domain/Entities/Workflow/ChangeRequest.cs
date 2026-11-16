@@ -32,6 +32,8 @@ public class ChangeRequest : BaseEntity
     /// gắn đúng phiên bản Editor đã đọc (CF3 bước 3).
     /// </summary>
     public string? QuotedText { get; private set; }
+    /// <summary>BR-34: Ngôn ngữ nhận xét cho công đoạn Lettering (null = ngôn ngữ gốc/artwork).</summary>
+    public string? LanguageCode { get; private set; }
     public DateTime? DueDate { get; private set; }
     public ChangeRequestStatus Status { get; private set; }
 
@@ -47,7 +49,7 @@ public class ChangeRequest : BaseEntity
     public static ChangeRequest Create(
         Guid assignmentId, Guid chapterId, Guid? submissionId, Guid responsibleUserId, Guid createdByUserId,
         string description, string? regionJson = null, DateTime? dueDate = null, Guid? assetReferenceId = null, Guid? panelId = null,
-        Guid? sceneId = null, Guid? scriptLineId = null, string? quotedText = null)
+        Guid? sceneId = null, Guid? scriptLineId = null, string? quotedText = null, string? languageCode = null)
     {
         if (scriptLineId is not null && sceneId is null)
             throw new ArgumentException("Nhận xét dòng kịch bản phải kèm phân cảnh chứa dòng đó.", nameof(sceneId));
@@ -69,11 +71,14 @@ public class ChangeRequest : BaseEntity
             SceneId = sceneId,
             ScriptLineId = scriptLineId,
             QuotedText = string.IsNullOrWhiteSpace(quotedText) ? null : quotedText.Trim(),
+            LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? null : languageCode.Trim(),
             DueDate = dueDate,
             Status = ChangeRequestStatus.Open,
             CreatedAt = DateTime.UtcNow
         };
     }
+
+    public void SetLanguageCode(string? languageCode) => LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? null : languageCode.Trim();
 
     /// <summary>Open → Resolved (người chịu trách nhiệm báo đã sửa).</summary>
     public void Resolve(string? note)

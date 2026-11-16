@@ -29,6 +29,7 @@ public interface IPanelForgeDbContext
     DbSet<AiSuggestionDecision> AiSuggestionDecisions { get; }
     DbSet<ContentRevision> ContentRevisions { get; }
     DbSet<ChapterSnapshot> ChapterSnapshots { get; }
+    DbSet<ChapterEdition> ChapterEditions { get; }
 
     // Master Data
     DbSet<ElementTypeMasterData> ElementTypes { get; }
@@ -77,7 +78,6 @@ public interface IPanelForgeDbContext
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
     DbSet<ChapterLanguagePrice> ChapterLanguagePrices { get; }
-    DbSet<PanelForge.Domain.Entities.Content.PageTranslation> PageTranslations { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
     DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }
 

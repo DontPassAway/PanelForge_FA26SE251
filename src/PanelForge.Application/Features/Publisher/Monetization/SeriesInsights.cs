@@ -120,10 +120,9 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
             .GroupBy(p => p.ChapterId)
             .Select(g => new { ChapterId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ChapterId, x => x.Count, ct);
-        var translated = await _db.PageTranslations.AsNoTracking()
-            .Where(t => chapterIds.Contains(t.ChapterId) && !t.IsDeleted)
-            .GroupBy(t => new { t.ChapterId, t.Language })
-            .Select(g => new { g.Key.ChapterId, g.Key.Language, Pages = g.Select(t => t.PageId).Distinct().Count() })
+        var publishedEditions = await _db.ChapterEditions.AsNoTracking()
+            .Where(e => chapterIds.Contains(e.ChapterId) && e.Status == EditionStatus.Published && !e.IsDeleted)
+            .Select(e => new { e.ChapterId, e.LanguageCode })
             .ToListAsync(ct);
 
         InsightStatsDto Stats(Guid? chapterId, string? language, bool includeRatings)
@@ -146,9 +145,19 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
         foreach (var c in chapters)
         {
             var pageCount = pageCounts.GetValueOrDefault(c.Id);
-            var langs = new List<string> { ContentLanguages.Original };
-            langs.AddRange(ContentLanguages.Translations.Where(l =>
-                pageCount > 0 && translated.Any(t => t.ChapterId == c.Id && t.Language == l && t.Pages >= pageCount)));
+            var langs = publishedEditions
+                .Where(e => e.ChapterId == c.Id)
+                .Select(e => e.LanguageCode)
+                .Distinct()
+                .ToList();
+            if (langs.Count == 0 && c.Status == ChapterStatus.Published)
+            {
+                langs.Add(ContentLanguages.Original);
+            }
+            if (langs.Count == 0)
+            {
+                langs.Add(ContentLanguages.Original);
+            }
             var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(_db, c.Id, ct);
 
             chapterDtos.Add(new ChapterInsightDto(

@@ -46,6 +46,21 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
         builder.Property(s => s.IsCompleted).HasColumnName("is_completed").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
         builder.Property(s => s.DefaultPreviewPageCount).HasColumnName("default_preview_page_count").HasColumnType("int").HasDefaultValue(0).IsRequired();
 
+        builder.Property(s => s.OriginalLanguage)
+               .HasColumnName("original_language")
+               .HasColumnType("varchar(10)")
+               .HasDefaultValue(ContentLanguages.Original)
+               .IsRequired();
+
+        builder.Property(s => s.ReleaseLanguages)
+               .HasColumnName("release_languages")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[\"vi\",\"en\",\"ja\"]'::jsonb")
+               .HasConversion(
+                   v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                   v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>())
+               .IsRequired();
+
         builder.Property(s => s.BannerImageSha256)
                .HasColumnName("banner_image_sha256")
                .HasColumnType("varchar(64)");

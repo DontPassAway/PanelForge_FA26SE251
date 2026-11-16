@@ -15,11 +15,11 @@ public sealed record ComparePageVersionsQuery(Guid PageId, long Left, long Right
 public sealed record PageElementStateDto(
     Guid ElementId, string ElementType, int ZIndex, double X, double Y, double Width, double Height, double Rotation,
     string? Content, string? AssetId, Guid? PanelId, Guid? BibleEntryId, Guid? ScriptLineId, Guid? SpeakerId,
-    string? RenderedText, int? ReadingOrder, TextStyle? Style)
+    string? RenderedText, int? ReadingOrder, TextStyle? Style, IReadOnlyDictionary<string, string>? Texts = null)
 {
     public static PageElementStateDto From(ElementState e) => new(
         e.ElementId, e.ElementType, e.ZIndex, e.X, e.Y, e.Width, e.Height, e.Rotation, e.Content, e.AssetId, e.PanelId,
-        e.BibleEntryId, e.ScriptLineId, e.SpeakerId, e.RenderedText, e.ReadingOrder, e.Style);
+        e.BibleEntryId, e.ScriptLineId, e.SpeakerId, e.RenderedText, e.ReadingOrder, e.Style, e.Texts.Count > 0 ? e.Texts : null);
 }
 
 /// <param name="Change">Added, Removed, Modified.</param>
@@ -98,6 +98,7 @@ public sealed class ComparePageVersionsQueryHandler : IRequestHandler<ComparePag
         Check("readingOrder", a.ReadingOrder == b.ReadingOrder);
         Check("style", a.Style == b.Style);
         Check("overflowAck", a.OverflowAckReason == b.OverflowAckReason);
+        Check("texts", a.Texts.Count == b.Texts.Count && a.Texts.All(kv => b.Texts.TryGetValue(kv.Key, out var val) && val == kv.Value));
         return fields;
     }
 }

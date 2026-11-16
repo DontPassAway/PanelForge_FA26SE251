@@ -262,6 +262,33 @@ public sealed class Page : AggregateRoot
             UpdatedByUserId:      updatedByUserId));
     }
 
+    /// <summary>
+    /// BR-34: Cập nhật bản dịch của bóng thoại cho một ngôn ngữ phát hành.
+    /// → Raises: ElementTranslationUpdatedEvent
+    /// </summary>
+    public void UpdateElementTranslation(
+        Guid elementId, string languageCode, string? text, Guid updatedByUserId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không thể chứa bản dịch.");
+
+        var lang = Enums.ContentLanguages.Normalize(languageCode)
+            ?? throw new ArgumentException($"Mã ngôn ngữ '{languageCode}' không hợp lệ.", nameof(languageCode));
+
+        element.Texts.TryGetValue(lang, out var prevText);
+
+        RaiseEvent(new ElementTranslationUpdatedEvent(
+            EventId:         Guid.NewGuid(),
+            OccurredAt:      DateTimeOffset.UtcNow,
+            PageId:          Id,
+            ElementId:       elementId,
+            LanguageCode:    lang,
+            Text:            text?.Trim(),
+            PreviousText:    prevText,
+            UpdatedByUserId: updatedByUserId));
+    }
+
     /// <summary>BR-20: xác nhận cảnh báo tràn chữ kèm lý do (bắt buộc). → Raises: ElementOverflowAcknowledgedEvent</summary>
     public void AcknowledgeOverflow(Guid elementId, string reason, Guid userId)
     {
@@ -347,7 +374,20 @@ public sealed class Page : AggregateRoot
         && a.Content == b.Content && a.AssetId == b.AssetId && a.PanelId == b.PanelId && a.BibleEntryId == b.BibleEntryId
         && a.ScriptLineId == b.ScriptLineId && a.SpeakerId == b.SpeakerId
         && a.RenderedText == b.RenderedText && a.SourceLineText == b.SourceLineText
-        && a.OverflowAckReason == b.OverflowAckReason && a.ReadingOrder == b.ReadingOrder && a.Style == b.Style;
+        && a.OverflowAckReason == b.OverflowAckReason && a.ReadingOrder == b.ReadingOrder && a.Style == b.Style
+        && DictionariesEqual(a.Texts, b.Texts);
+
+    private static bool DictionariesEqual(Dictionary<string, string>? a, Dictionary<string, string>? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return (a?.Count ?? 0) == 0 && (b?.Count ?? 0) == 0;
+        if (a.Count != b.Count) return false;
+        foreach (var (k, v) in a)
+        {
+            if (!b.TryGetValue(k, out var bv) || bv != v) return false;
+        }
+        return true;
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // APPLY — Rebuild state từ events (pure, không có side effects)
@@ -367,6 +407,7 @@ public sealed class Page : AggregateRoot
             case ElementMovedEvent e:      Apply(e); break;
             case ElementRemovedEvent e:    Apply(e); break;
             case ElementTextUpdatedEvent e:           Apply(e); break;
+            case ElementTranslationUpdatedEvent e:    Apply(e); break;
             case ElementOverflowAcknowledgedEvent e:  Apply(e); break;
             case ElementReadingOrderSetEvent e:       Apply(e); break;
             case ElementStyleUpdatedEvent e:          Apply(e); break;
@@ -458,6 +499,20 @@ public sealed class Page : AggregateRoot
         element.Version++;
     }
 
+    internal void Apply(ElementTranslationUpdatedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        if (string.IsNullOrWhiteSpace(e.Text))
+        {
+            element.Texts.Remove(e.LanguageCode);
+        }
+        else
+        {
+            element.Texts[e.LanguageCode] = e.Text.Trim();
+        }
+        element.Version++;
+    }
+
     internal void Apply(ElementOverflowAcknowledgedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
@@ -504,6 +559,7 @@ public sealed class Page : AggregateRoot
             OverflowAckReason = e.OverflowAckReason,
             ReadingOrder      = e.ReadingOrder,
             Style             = e.Style,
+            Texts             = existing?.Texts != null ? new Dictionary<string, string>(existing.Texts, StringComparer.OrdinalIgnoreCase) : new(StringComparer.OrdinalIgnoreCase),
             IsRemoved         = false,
             Version           = version + 1
         };

@@ -44,6 +44,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<AiSuggestionDecision> AiSuggestionDecisions => Set<AiSuggestionDecision>();
     public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
     public DbSet<ChapterSnapshot> ChapterSnapshots => Set<ChapterSnapshot>();
+    public DbSet<ChapterEdition> ChapterEditions => Set<ChapterEdition>();
 
     // Master Data
     public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();
@@ -92,7 +93,6 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
     public DbSet<ChapterLanguagePrice> ChapterLanguagePrices => Set<ChapterLanguagePrice>();
-    public DbSet<PanelForge.Domain.Entities.Content.PageTranslation> PageTranslations => Set<PanelForge.Domain.Entities.Content.PageTranslation>();
     public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();
     public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
 

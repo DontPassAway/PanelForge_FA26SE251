@@ -91,9 +91,8 @@ public static class ChapterManageReader
         var withArtwork = (await db.Pages.AsNoTracking()
             .Where(p => p.ChapterId == chapterId && db.AssetReferences.Any(r => r.PageId == p.Id))
             .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
-        var translations = await db.PageTranslations.AsNoTracking()
-            .Where(t => t.ChapterId == chapterId && !t.IsDeleted)
-            .Select(t => new { t.PageId, t.Language })
+        var editions = await db.ChapterEditions.AsNoTracking()
+            .Where(e => e.ChapterId == chapterId && !e.IsDeleted)
             .ToListAsync(ct);
         var customPrices = await db.ChapterLanguagePrices.AsNoTracking()
             .Where(p => p.ChapterId == chapterId && !p.IsDeleted)
@@ -102,20 +101,17 @@ public static class ChapterManageReader
         var pageCount = previews.Count;
         var languages = ContentLanguages.All.Select(lang =>
         {
-            var translated = lang == ContentLanguages.Original
-                ? pageCount
-                : translations.Where(t => t.Language == lang).Select(t => t.PageId).Distinct().Count();
-            return new ChapterLanguageStatusDto(lang, translated,
-                lang == ContentLanguages.Original || (pageCount > 0 && translated >= pageCount));
+            var ed = editions.FirstOrDefault(e => e.LanguageCode == lang);
+            var isAvailable = ed?.Status == EditionStatus.Published;
+            var translated = ed is not null && ed.Status != EditionStatus.Draft ? pageCount : 0;
+            return new ChapterLanguageStatusDto(lang, translated, isAvailable);
         }).ToList();
 
         var pages = previews.Select(p =>
         {
             var urls = ContentLanguages.All.ToDictionary(
                 lang => lang,
-                lang => (lang == ContentLanguages.Original
-                    ? withArtwork.Contains(p.PageId)
-                    : translations.Any(t => t.PageId == p.PageId && t.Language == lang))
+                lang => withArtwork.Contains(p.PageId)
                     ? PreviewImageUrl(chapterId, p.PageId, lang)
                     : null);
             return new ManagedPageDto(p.PageId, p.PageNumber, p.IsPreview, urls);
@@ -249,78 +245,6 @@ public sealed class SetChapterLanguagePricesCommandHandler
         await _db.SaveChangesAsync(ct);
         return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
     }
-}
-
-// ─── Command: ảnh trang bản dịch ─────────────────────────────────────────────
-
-/// <summary>
-/// Publisher upload ảnh trang đã dịch (en/ja; PNG/JPEG/WebP ≤ 15 MB) hoặc xóa (<see cref="Content"/> = null).
-/// Bản ngôn ngữ phát hành cho Reader khi mọi trang của chương có ảnh dịch.
-/// </summary>
-public sealed record SetPageTranslationCommand(Guid ChapterId, Guid PageId, string Language, byte[]? Content, Guid UserId)
-    : IRequest<Result<ChapterManageDto>>;
-
-public sealed class SetPageTranslationCommandHandler : IRequestHandler<SetPageTranslationCommand, Result<ChapterManageDto>>
-{
-    public const long MaxBytes = 15 * 1024 * 1024;
-
-    private readonly IPanelForgeDbContext _db;
-    private readonly IAssetStorage _storage;
-
-    public SetPageTranslationCommandHandler(IPanelForgeDbContext db, IAssetStorage storage)
-    {
-        _db = db;
-        _storage = storage;
-    }
-
-    public async Task<Result<ChapterManageDto>> Handle(SetPageTranslationCommand cmd, CancellationToken ct)
-    {
-        var language = ContentLanguages.Normalize(cmd.Language);
-        if (language is null || !ContentLanguages.Translations.Contains(language))
-            return Failure("Chỉ upload ảnh cho bản dịch (en, ja); bản tiếng Việt dùng ảnh Studio.", ResultErrorCodes.Validation);
-
-        var pageExists = await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == cmd.PageId && p.ChapterId == cmd.ChapterId, ct);
-        if (!pageExists)
-            return Failure("Trang không thuộc chương này.", ResultErrorCodes.NotFound);
-
-        var existing = await _db.PageTranslations
-            .FirstOrDefaultAsync(t => t.PageId == cmd.PageId && t.Language == language, ct);
-
-        if (cmd.Content is null)
-        {
-            if (existing is not null) _db.PageTranslations.Remove(existing);
-        }
-        else
-        {
-            if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)
-                return Failure("Ảnh trang phải từ 1 byte đến 15 MB.", ResultErrorCodes.Validation);
-            var contentType = AssetRules.DetectImageContentType(cmd.Content);
-            if (contentType is null)
-                return Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
-
-            var sha = AssetRules.ComputeSha256(cmd.Content);
-            await _storage.SaveAsync(PageTranslation.StorageKey(cmd.PageId, language, sha), cmd.Content,
-                new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = "page-translation", ["lang"] = language }), ct);
-
-            if (existing is null)
-            {
-                var row = PageTranslation.Create(cmd.PageId, cmd.ChapterId, language, sha, contentType);
-                row.CreatedBy = cmd.UserId.ToString();
-                _db.PageTranslations.Add(row);
-            }
-            else
-            {
-                existing.Replace(sha, contentType);
-                existing.UpdatedBy = cmd.UserId.ToString();
-            }
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return await ChapterManageReader.ReadAsync(_db, cmd.ChapterId, ct);
-    }
-
-    private static Result<ChapterManageDto> Failure(string message, string code) =>
-        Result<ChapterManageDto>.Failure(message, code);
 }
 
 // ─── Query: ảnh xem trước cho Publisher (không cần chương đã phát hành) ──────

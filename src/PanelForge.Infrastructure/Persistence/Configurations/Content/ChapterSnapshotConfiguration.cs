@@ -18,6 +18,7 @@ internal sealed class ChapterSnapshotConfiguration : IEntityTypeConfiguration<Ch
         builder.Property(s => s.CreatedByUserId).HasColumnName("created_by_user_id").HasColumnType("uuid").IsRequired();
         builder.Property(s => s.ManifestJson).HasColumnName("manifest_json").HasColumnType("text").IsRequired();
         builder.Property(s => s.ManifestHash).HasColumnName("manifest_hash").HasColumnType("varchar(64)").IsRequired();
+        builder.Property(s => s.LanguageCode).HasColumnName("language_code").HasColumnType("varchar(10)").HasDefaultValue("vi").IsRequired();
 
         builder.Property(s => s.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(s => s.CreatedBy).HasColumnName("created_by").HasColumnType("varchar(100)");

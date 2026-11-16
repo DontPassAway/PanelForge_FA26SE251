@@ -18,11 +18,13 @@ public class ChapterSnapshot : BaseEntity
     public string ManifestJson { get; private set; } = default!;
     /// <summary>SHA-256 của ManifestJson để kiểm chứng manifest không bị đổi.</summary>
     public string ManifestHash { get; private set; } = default!;
+    /// <summary>Ngôn ngữ của snapshot (BR-34, mặc định 'vi').</summary>
+    public string LanguageCode { get; private set; } = Enums.ContentLanguages.Original;
 
     private ChapterSnapshot() { }
 
     public static ChapterSnapshot Create(Guid chapterId, int snapshotNumber, long chapterVersion,
-        Guid createdByUserId, string manifestJson, string manifestHash)
+        Guid createdByUserId, string manifestJson, string manifestHash, string? languageCode = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(snapshotNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestJson);
@@ -35,7 +37,8 @@ public class ChapterSnapshot : BaseEntity
             ChapterVersion = chapterVersion,
             CreatedByUserId = createdByUserId,
             ManifestJson = manifestJson,
-            ManifestHash = manifestHash
+            ManifestHash = manifestHash,
+            LanguageCode = Enums.ContentLanguages.Normalize(languageCode) ?? Enums.ContentLanguages.Original
         };
     }
 }
