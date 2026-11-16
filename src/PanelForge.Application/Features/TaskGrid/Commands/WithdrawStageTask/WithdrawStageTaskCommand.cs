@@ -45,6 +45,6 @@ public sealed class WithdrawStageTaskCommandHandler : IRequestHandler<WithdrawSt
 
         task.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
-        return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot.AssigneeUserId, isStartable: false));
+        return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot.AssigneeUserId, isStartable: false)], ct))[0]);
     }
 }

@@ -66,6 +66,6 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         await _db.SaveChangesAsync(ct);
 
         var lot = task.LotId is { } lotId ? await _db.StageTaskLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct) : null;
-        return Result<ReopenStageTaskResultDto>.Success(new(StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false), outdated));
+        return Result<ReopenStageTaskResultDto>.Success(new((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false)], ct))[0], outdated));
     }
 }

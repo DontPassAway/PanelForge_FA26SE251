@@ -25,7 +25,7 @@ public sealed class GetTaskGridReviewQueueQueryHandler
             join s in _db.Series.AsNoTracking() on t.SeriesId equals s.Id
             join c in _db.Chapters.AsNoTracking() on t.ChapterId equals c.Id
             join st in _db.PipelineStages.AsNoTracking() on t.PipelineStageId equals st.Id
-            where s.WorkspaceId == q.WorkspaceId && (q.SeriesId == null || s.Id == q.SeriesId)
+            where st.IsEnabled && s.WorkspaceId == q.WorkspaceId && (q.SeriesId == null || s.Id == q.SeriesId)
                 && (t.Status == StageTaskStatus.Submitted || t.Status == StageTaskStatus.UnderReview)
             select new { Task = t, SeriesTitle = s.Title, c.ChapterNumber, ChapterTitle = c.Title, StageName = st.Name })
             .ToListAsync(ct);
@@ -41,6 +41,10 @@ public sealed class GetTaskGridReviewQueueQueryHandler
         var submissions = await _db.StageTaskSubmissions.AsNoTracking().Where(s => submissionIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id, ct);
 
+        var reviewerIds = rows.Select(r => r.Task.ReviewerUserId).OfType<Guid>().Distinct().ToList();
+        var reviewerNames = await _db.Users.AsNoTracking().Where(u => reviewerIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+
         var result = rows.Select(r =>
         {
             var t = r.Task;
@@ -49,7 +53,8 @@ public sealed class GetTaskGridReviewQueueQueryHandler
                 t.Id, t.SeriesId, r.SeriesTitle, t.ChapterId, r.ChapterNumber, r.ChapterTitle, t.PipelineStageId, r.StageName,
                 t.PageId, t.PageId is { } pid && pageNumbers.TryGetValue(pid, out var no) ? no : null, t.Status,
                 t.LotId is { } lid && assignees.TryGetValue(lid, out var a) ? a : null, t.ReviewerUserId,
-                sub?.AttemptNumber, sub?.SubmittedAt);
+                sub?.AttemptNumber, sub?.SubmittedAt,
+                t.ReviewerUserId is { } rid ? reviewerNames.GetValueOrDefault(rid) : null, t.IsInputOutdated);
         })
             .OrderBy(i => i.SubmittedAt ?? DateTime.MaxValue).ThenBy(i => i.ChapterNumber).ThenBy(i => i.PageNumber ?? 0)
             .ToList();

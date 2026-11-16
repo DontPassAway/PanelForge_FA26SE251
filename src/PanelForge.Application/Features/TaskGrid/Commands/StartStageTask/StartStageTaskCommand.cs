@@ -41,6 +41,6 @@ public sealed class StartStageTaskCommandHandler : IRequestHandler<StartStageTas
 
         task.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
-        return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot.AssigneeUserId, isStartable: false));
+        return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot.AssigneeUserId, isStartable: false)], ct))[0]);
     }
 }

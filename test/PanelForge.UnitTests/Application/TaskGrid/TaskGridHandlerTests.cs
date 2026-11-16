@@ -1,3 +1,4 @@
+using PanelForge.Domain.Entities.Identity;
 using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
@@ -51,6 +52,7 @@ public class TaskGridHandlerTests
         public readonly List<StageTaskLot> Lots = [];
         public readonly List<StageTaskSubmission> Submissions = [];
         public readonly List<Notification> Notifications = [];
+        public readonly List<User> Users = [];
         public readonly List<SeriesMember> SeriesMembers = [];
         public readonly List<AssetReference> Artwork;
         public readonly Mock<IPanelForgeDbContext> Db = new();
@@ -103,6 +105,7 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
             Db.Setup(d => d.StageTaskSubmissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
+            Db.Setup(d => d.Users).Returns(DbSetMockHelper.CreateDbSetMock(Users));
             // Mỗi trang một panel và ảnh cả trang ở mọi công đoạn, để điều kiện nộp (CF2) của ô cấp Trang được thoả.
             // CreatedAt ở tương lai: vẫn tính là "bản mới" sau lần bị trả về.
             var panels = Pages.Select(p => Panel.Create(p.Id, 1, 1, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}")).ToList();
@@ -408,7 +411,9 @@ public class TaskGridHandlerTests
         (await claim.Handle(new(f.Chapter.Id, color.Id, f.EditorId, Open: false), default)).IsSuccess.Should().BeTrue();
         color.Status.Should().Be(StageTaskStatus.Submitted);
 
-        await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default);
+        var changed = await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default);
+        changed.Value!.LastDecisionComment.Should().Be("Màu da lệch"); // DTO trả về đã có sẵn, FE khỏi tải lại lưới
+        changed.Value.AttemptCount.Should().Be(2);
         var grid = await new GetChapterTaskGridQueryHandler(f.Db.Object).Handle(new GetChapterTaskGridQuery(f.Chapter.Id), default);
         var cell = grid.Value!.Tasks.Single(t => t.Id == color.Id);
         cell.LastDecisionComment.Should().Be("Màu da lệch");
@@ -724,5 +729,17 @@ public class TaskGridHandlerTests
         item.StageName.Should().Be("Color");
         item.AssigneeUserId.Should().Be(f.ArtistId);
         item.AttemptNumber.Should().Be(1);
+
+        // Đang có người duyệt: hàng đợi trả tên người giữ khoá, FE khỏi gọi danh sách thành viên
+        var editor = User.Create("ed@test.com", "Biên tập A");
+        f.Users.Add(editor);
+        f.Tasks.Single(t => t.Id == item.TaskId).OpenReview(editor.Id);
+        var locked = (await new GetTaskGridReviewQueueQueryHandler(f.Db.Object).Handle(new GetTaskGridReviewQueueQuery(f.WorkspaceId), default)).Value!.Single();
+        locked.ReviewerName.Should().Be("Biên tập A");
+        locked.IsInputOutdated.Should().BeFalse();
+
+        // Công đoạn bị tắt thì ô của nó không còn trong hàng đợi
+        f.Color.SetEnabled(false);
+        (await new GetTaskGridReviewQueueQueryHandler(f.Db.Object).Handle(new GetTaskGridReviewQueueQuery(f.WorkspaceId), default)).Value!.Should().BeEmpty();
     }
 }

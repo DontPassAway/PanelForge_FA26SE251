@@ -74,6 +74,16 @@ internal static class TaskGridRules
             g.Max(r => r.AttemptNumber)));
     }
 
+    /// <summary>Gắn nhận xét lần sửa gần nhất + số lần nộp vào DTO trả về của các lệnh ghi (để FE khỏi phải tải lại lưới).</summary>
+    public static async Task<IReadOnlyList<Models.StageTaskDto>> WithSummaryAsync(
+        IPanelForgeDbContext db, IEnumerable<Models.StageTaskDto> dtos, CancellationToken ct)
+    {
+        var list = dtos.ToList();
+        var summary = await SubmissionSummaryAsync(db, list.Select(d => d.Id).ToList(), ct);
+        return list.Select(d => summary.TryGetValue(d.Id, out var s)
+            ? d with { LastDecisionComment = s.Comment, AttemptCount = s.Attempts } : d).ToList();
+    }
+
     /// <summary>Ô chưa xong (chưa duyệt, chưa huỷ) thuộc lô của người dùng; <paramref name="seriesIds"/> null = mọi Series.</summary>
     public static IQueryable<StageTask> UnfinishedCellsOf(
         IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid>? seriesIds, WorkspaceRole? role = null) =>

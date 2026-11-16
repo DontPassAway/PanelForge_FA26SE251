@@ -57,6 +57,6 @@ public sealed class UnassignStageTasksCommandHandler : IRequestHandler<UnassignS
         await TaskGridRules.RefreshLotsAsync(_db, oldLotIds, tasks, ct);
         await _db.SaveChangesAsync(ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(
-            tasks.Select(t => StageTaskDto.From(t, assigneeUserId: null, isStartable: false)).ToList());
+            await TaskGridRules.WithSummaryAsync(_db, tasks.Select(t => StageTaskDto.From(t, assigneeUserId: null, isStartable: false)), ct));
     }
 }

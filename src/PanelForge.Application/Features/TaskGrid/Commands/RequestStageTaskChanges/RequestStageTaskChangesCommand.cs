@@ -56,6 +56,6 @@ public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<Requ
             _db.Notifications.Add(TaskGridNotifications.ChangesRequested(lot.AssigneeUserId, chapter.Id,
                 stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?", cmd.Comment.Trim()));
         await _db.SaveChangesAsync(ct);
-        return Result<StageTaskDto>.Success(StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false));
+        return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false)], ct))[0]);
     }
 }
