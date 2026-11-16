@@ -142,8 +142,9 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             // D1 / SCR-12: kịch bản không còn là stage pipeline; vòng đời riêng theo ScriptStatus (D12).
             // Nhóm không dùng công đoạn Thumbnail nữa: bắt đầu từ Pencil.
             pipeline.AddStage("Pencil", "pencil", 1, null, WorkspaceRole.Artist, false, isInitial: true, isTerminal: false);
-            pipeline.AddStage("Ink", "ink", 2, null, WorkspaceRole.Artist, false, isInitial: false, isTerminal: false);
-            pipeline.AddStage("Letter", "letter", 3, null, WorkspaceRole.Letterer, false, isInitial: false, isTerminal: false);
+            // Gate 2 theo trang: duyệt bước cuối mỗi nhánh (trắng đen: Ink; nhánh chữ: Letter)
+            pipeline.AddStage("Ink", "ink", 2, null, WorkspaceRole.Artist, isApprovalGate: true, isInitial: false, isTerminal: false);
+            pipeline.AddStage("Letter", "letter", 3, null, WorkspaceRole.Letterer, isApprovalGate: true, isInitial: false, isTerminal: false);
             pipeline.AddStage("Review", "review", 4, null, WorkspaceRole.Editor, isApprovalGate: true, isInitial: false, isTerminal: false);
             pipeline.AddStage("Approved", "approved", 5, null, WorkspaceRole.Editor, false, isInitial: false, isTerminal: true);
         }

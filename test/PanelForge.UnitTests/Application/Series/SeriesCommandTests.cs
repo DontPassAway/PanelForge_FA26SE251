@@ -143,6 +143,9 @@ public class SeriesCommandTests
         stages.Single(s => s.Slug == "review").Track.Should().BeNull();
         stages.Single(s => s.Slug == "review").AllowedRole.Should().Be(WorkspaceRole.Editor);
         stages.Single(s => s.Slug == "review").IsApprovalGate.Should().BeTrue();
+        // Gate 2 theo trang: bước cuối mỗi nhánh (Ink ở truyện trắng đen, Letter) có cổng duyệt
+        stages.Where(s => s.Slug is "ink" or "letter").Should().OnlyContain(s => s.IsApprovalGate);
+        stages.Single(s => s.Slug == "pencil").IsApprovalGate.Should().BeFalse();
         stages.Single(s => s.Slug == "approved").AllowedRole.Should().Be(WorkspaceRole.Editor);
     }
 
