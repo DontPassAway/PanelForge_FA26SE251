@@ -7,6 +7,7 @@ using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Application.Features.ScriptVersions;
+using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -151,6 +152,10 @@ internal static class ChapterScriptSaver
         {
             throw new ScriptSaveAbortException("Kịch bản vừa được người khác sửa. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
         }
+
+        // Lưới V3: kịch bản thêm/bớt trang thì đồng bộ ô cho trang đó ngay (giống thêm trang ở Bàn vẽ), Producer khỏi bấm Sinh / Đồng bộ.
+        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+            await new GenerateStageTasksCommandHandler(db).Handle(new GenerateStageTasksCommand(chapterId, userId), ct);
 
         return new ChapterScriptSaveOutcome(chapter, workspaceId, version, version.Id != latest?.Id, warnings.Distinct().ToList());
     }

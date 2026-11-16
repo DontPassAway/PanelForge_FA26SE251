@@ -10,6 +10,7 @@ using PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
@@ -116,6 +117,31 @@ public class SaveChapterScriptTests
         var versionInDb = await _db.ScriptVersions.FirstOrDefaultAsync(v => v.Id == result.Value.RevisionId);
         versionInDb.Should().NotBeNull();
         versionInDb!.VersionNumber.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SaveChapterScript_OnGridChapter_GeneratesCellsForNewPages()
+    {
+        // Chương đã dùng lưới (có ô cấp chương) nhưng chưa có trang
+        var pipeline = PipelineDefinition.Create(_studio.Id, "Pipeline", seriesId: _series.Id);
+        var pencil = pipeline.InsertStage("Pencil", null, null, null, WorkspaceRole.Artist, false, null);
+        var review = pipeline.InsertStage("Review", null, null, null, WorkspaceRole.Editor, true, null);
+        _series.SetPipelineDefinition(pipeline.Id);
+        _db.PipelineDefinitions.Add(pipeline);
+        _db.StageTasks.Add(StageTask.Create(_series.Id, _chapter.Id, review.Id, null));
+        await _db.SaveChangesAsync();
+
+        var body = new ChapterScriptBody(null,
+        [
+            new ScriptTreePage(null, 1, [new ScriptTreePanel(null, 1, "Toàn cảnh.", null, [new ScriptTreeLine(null, ScriptLineKind.Action, null, "Mở đầu.")])]),
+            new ScriptTreePage(null, 2, [new ScriptTreePanel(null, 1, "Cận cảnh.", null, [new ScriptTreeLine(null, ScriptLineKind.Action, null, "Tiếp.")])]),
+        ]);
+
+        var result = await CreateSaveHandler().Handle(new SaveChapterScriptCommand(_chapter.Id, _writerId, body), default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        (await _db.StageTasks.CountAsync(t => t.PipelineStageId == pencil.Id && t.PageId != null))
+            .Should().Be(2, "mỗi trang kịch bản vừa tạo có ngay ô Pencil, Producer khỏi bấm Sinh / Đồng bộ");
     }
 
     [Fact]
