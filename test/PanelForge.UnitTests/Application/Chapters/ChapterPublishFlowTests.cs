@@ -199,6 +199,17 @@ public class ChapterPublishFlowTests
     }
 
     [Fact]
+    public async Task HandOff_AddsWorkspacePublishersToSeries_SoTheyCanPublish()
+    {
+        await Approve();
+        await HandOff();
+        await HandOff(); // bàn giao lại không thêm trùng (đã bàn giao → 409, không ghi gì)
+
+        _db.SeriesMembers.Where(m => m.SeriesId == _chapter.SeriesId && m.UserId == _publisherId)
+            .Should().ContainSingle().Which.Role.Should().Be(WorkspaceRole.Publisher);
+    }
+
+    [Fact]
     public async Task Publish_InThePast_ShouldFailValidation()
     {
         await Approve();
