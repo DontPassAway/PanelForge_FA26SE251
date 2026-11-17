@@ -93,6 +93,8 @@ public partial class AssignmentTests
             Db.Setup(d => d.Submissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(ChangeRequests));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
+            Db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>()));
+            Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTaskLot>()));
             Db.Setup(d => d.ContentRevisions).Returns(DbSetMockHelper.CreateDbSetMock(Revisions));
             Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);

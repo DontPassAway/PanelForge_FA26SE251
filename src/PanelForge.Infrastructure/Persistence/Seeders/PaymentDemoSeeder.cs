@@ -64,6 +64,8 @@ public static class PaymentDemoSeeder
         var ch1 = Chapter.Create(MacKiemLucSeriesId, 1, "Kiếm Khởi Long Nhai");
         SetId(ch1, Chapter1Id);
         ch1.SetPricing(isLocked: false, priceVnd: 0m);
+        ch1.SubmitScript(Guid.Empty);
+        ch1.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch1.Approve();
         ch1.Publish(DateTime.UtcNow.AddDays(-10));
         db.Chapters.Add(ch1);
@@ -71,6 +73,8 @@ public static class PaymentDemoSeeder
         var ch2 = Chapter.Create(MacKiemLucSeriesId, 2, "Huyết Chiến Hắc Long");
         SetId(ch2, Chapter2Id);
         ch2.SetPricing(isLocked: true, priceVnd: 10000m);
+        ch2.SubmitScript(Guid.Empty);
+        ch2.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch2.Approve();
         ch2.Publish(DateTime.UtcNow.AddDays(-5));
         db.Chapters.Add(ch2);

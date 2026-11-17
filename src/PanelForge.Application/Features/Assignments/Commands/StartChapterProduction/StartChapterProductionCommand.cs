@@ -3,13 +3,15 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
-using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Models;
-using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
+using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
+using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.TaskGrid.Common;
+using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -24,6 +26,11 @@ public sealed record StartChapterProductionCommand(
     IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null)
     : IRequest<Result<StartChapterProductionResultDto>>;
 
+/// <summary>
+/// Gate 1 một chạm trên Lưới V3: đóng băng kịch bản (PreProduction → InProduction), sinh ô lưới và giao lô theo dải trang
+/// cho công đoạn Artist đầu tiên (Pencil) và Letterer. Ô trong dải đã giao đúng người thì giữ nguyên, nên gọi được
+/// cả với chương đã sinh/giao một phần lưới trước Gate 1.
+/// </summary>
 public sealed class StartChapterProductionCommandHandler
     : IRequestHandler<StartChapterProductionCommand, Result<StartChapterProductionResultDto>>
 {
@@ -85,14 +92,10 @@ public sealed class StartChapterProductionCommandHandler
                     ValidateRanges(letterers, pages, "Letterer") is { } lettererError)
                     return Fail(lettererError.Message, lettererError.Code);
 
-                var pipelineIds = await _db.PipelineDefinitions.AsNoTracking()
-                    .Where(d => d.SeriesId == chapter.SeriesId)
-                    .Select(d => d.Id)
-                    .ToListAsync(tct);
-                var stages = await _db.PipelineStages.AsNoTracking()
-                    .Where(s => pipelineIds.Contains(s.PipelineDefinitionId) && s.IsEnabled)
+                var stages = (await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, tct))
+                    .Where(s => s.IsEnabled && !(s.IsTerminal && !s.IsApprovalGate))
                     .OrderBy(s => s.StageOrder)
-                    .ToListAsync(tct);
+                    .ToList();
                 var artistStage = stages.FirstOrDefault(s => s.AllowedRole == WorkspaceRole.Artist);
                 if (artistStage is null)
                     return Fail("Pipeline của Series chưa có stage Artist đang bật.");
@@ -100,28 +103,26 @@ public sealed class StartChapterProductionCommandHandler
                 if (cmd.LettererAssignments is { Count: > 0 } && lettererStage is null)
                     return Fail("Pipeline của Series chưa có stage Letterer đang bật.");
 
+                var ranges = cmd.PageAssignments.Select(r => (Stage: artistStage, Range: r))
+                    .Concat((cmd.LettererAssignments ?? []).Select(r => (Stage: lettererStage!, Range: r)))
+                    .ToList();
+
+                // Kiểm tra người nhận trước mọi thay đổi để lỗi không để lại chương nửa chừng.
                 var workspaceId = await _db.Series.AsNoTracking()
                     .Where(s => s.Id == chapter.SeriesId)
                     .Select(s => s.WorkspaceId)
                     .SingleAsync(tct);
-
-                var batchId = Guid.NewGuid();
-                var pending = new List<Assignment>();
-                var artistResult = await BuildAssignmentsAsync(
-                    chapter, workspaceId, artistStage, WorkspaceRole.Artist,
-                    cmd.PageAssignments, pages, cmd.UserId, batchId, pending, true, tct);
-                if (!artistResult.IsSuccess)
-                    return Fail(artistResult.ErrorMessage!, artistResult.ErrorCode!);
-                pending.AddRange(artistResult.Value!);
-
-                if (cmd.LettererAssignments is { Count: > 0 } requestedLetterers)
+                var assigneeIds = ranges.Select(x => x.Range.ArtistId).Distinct().ToList();
+                var roles = await _db.WorkspaceMembers.AsNoTracking()
+                    .Where(m => m.WorkspaceId == workspaceId && assigneeIds.Contains(m.UserId) &&
+                                m.Status == WorkspaceMemberStatus.Active)
+                    .ToDictionaryAsync(m => m.UserId, m => m.Role, tct);
+                foreach (var (stage, range) in ranges)
                 {
-                    var lettererResult = await BuildAssignmentsAsync(
-                        chapter, workspaceId, lettererStage!, WorkspaceRole.Letterer,
-                        requestedLetterers, pages, cmd.UserId, batchId, pending, false, tct);
-                    if (!lettererResult.IsSuccess)
-                        return Fail(lettererResult.ErrorMessage!, lettererResult.ErrorCode!);
-                    pending.AddRange(lettererResult.Value!);
+                    if (!roles.TryGetValue(range.ArtistId, out var role))
+                        return Fail($"Người nhận dải trang {range.PageFrom}-{range.PageTo} không phải thành viên đang hoạt động của Workspace.");
+                    if (stage.AllowedRole is { } allowed && role != allowed)
+                        return Fail($"Dải trang {range.PageFrom}-{range.PageTo} của '{stage.Name}' cần vai trò {allowed}, người nhận đang là {role}.");
                 }
 
                 // Reuse D12's submitted-version hash check and freeze implementation.
@@ -130,24 +131,44 @@ public sealed class StartChapterProductionCommandHandler
                 if (!freeze.IsSuccess)
                     return Fail(freeze.ErrorMessage!, freeze.ErrorCode ?? ResultErrorCodes.Conflict);
 
-                foreach (var assignment in pending)
-                    _db.Assignments.Add(assignment);
+                // Từ đây đã ghi DB: lỗi phải ném ra để transaction rollback (ExecuteInTransactionAsync commit cả khi trả Fail).
+                var generated = await new GenerateStageTasksCommandHandler(_db)
+                    .Handle(new GenerateStageTasksCommand(chapter.Id, cmd.UserId), tct);
+                if (!generated.IsSuccess)
+                    throw new Gate1AbortException(generated.ErrorMessage!, generated.ErrorCode ?? ResultErrorCodes.Conflict);
 
-                foreach (var group in pending.GroupBy(a => a.PipelineStageId))
+                var cells = await _db.StageTasks.AsNoTracking()
+                    .Where(t => t.ChapterId == chapter.Id && t.PageId != null && t.Status != StageTaskStatus.Cancelled)
+                    .ToListAsync(tct);
+                var lotOwners = await _db.StageTaskLots.AsNoTracking()
+                    .Where(l => l.ChapterId == chapter.Id)
+                    .ToDictionaryAsync(l => l.Id, l => l.AssigneeUserId, tct);
+                var pageIdByNumber = pages.ToDictionary(p => p.PageNumber, p => p.Id);
+
+                var lotRequests = new List<StageTaskLotRequest>();
+                foreach (var (stage, range) in ranges)
                 {
-                    var stage = stages.Single(s => s.Id == group.Key);
-                    await AssignmentBatchPlanner.LinkLaterChapterWorkAsync(
-                        _db, chapter.Id, stage, group.ToList(), pending, tct);
+                    var rangePageIds = Enumerable.Range(range.PageFrom, range.PageTo - range.PageFrom + 1)
+                        .Select(n => pageIdByNumber[n]).ToHashSet();
+                    var rangeCells = cells.Where(t => t.PipelineStageId == stage.Id && rangePageIds.Contains(t.PageId!.Value)).ToList();
+                    if (rangeCells.FirstOrDefault(t => t.LotId is { } lotId && lotOwners[lotId] != range.ArtistId) is not null)
+                        throw new Gate1AbortException(
+                            $"Dải trang {range.PageFrom}-{range.PageTo} của '{stage.Name}' đã có ô giao cho người khác trên lưới.",
+                            ResultErrorCodes.Conflict);
+                    var free = rangeCells.Where(t => t.Status == StageTaskStatus.Unassigned).Select(t => t.Id).ToList();
+                    if (free.Count > 0)
+                        lotRequests.Add(new StageTaskLotRequest(stage.Id, range.ArtistId, free,
+                            $"Sản xuất trang {range.PageFrom}-{range.PageTo}", null));
                 }
 
-                foreach (var assignee in pending.DistinctBy(a => (a.AssigneeUserId, a.AssignedRole)))
-                    await AssignmentRules.EnsureSeriesMemberAsync(
-                        _db, chapter.SeriesId, assignee.AssigneeUserId, assignee.AssignedRole, tct);
-
-                foreach (var group in pending.GroupBy(a => (a.AssigneeUserId, a.PipelineStageId)))
+                var lots = new List<StageTaskLotDto>();
+                if (lotRequests.Count > 0)
                 {
-                    var stageName = stages.Single(s => s.Id == group.Key.PipelineStageId).Name;
-                    _db.Notifications.Add(AssignmentNotifications.AssignedBatch(group.ToList(), stageName));
+                    var assigned = await new AssignStageTaskLotsCommandHandler(_db)
+                        .Handle(new AssignStageTaskLotsCommand(chapter.Id, cmd.UserId, lotRequests, DryRun: false), tct);
+                    if (!assigned.IsSuccess)
+                        throw new Gate1AbortException(assigned.ErrorMessage!, assigned.ErrorCode ?? ResultErrorCodes.Conflict);
+                    lots.AddRange(assigned.Value!.Lots);
                 }
 
                 _db.AuditLogs.Add(AuditLog.Create(
@@ -159,16 +180,19 @@ public sealed class StartChapterProductionCommandHandler
                     changesJson: JsonSerializer.Serialize(new
                     {
                         ChapterStatus = ChapterStatus.InProduction.ToString(),
-                        AssignmentCount = pending.Count,
-                        BatchId = batchId
+                        LotCount = lots.Count,
+                        TaskCount = lots.Sum(l => l.TaskCount)
                     }),
-                    details: "Gate 1: froze script, assigned production pages, and started chapter production."));
+                    details: "Gate 1: froze script, generated the task grid and assigned production page ranges."));
 
                 await _db.SaveChangesAsync(tct);
                 return Result<StartChapterProductionResultDto>.Success(new(
-                    ChapterDetailDtoFactory.Create(chapter),
-                    pending.Select(AssignmentDto.From).ToList()));
+                    ChapterDetailDtoFactory.Create(chapter), [], lots));
             }, ct);
+        }
+        catch (Gate1AbortException ex)
+        {
+            return Fail(ex.Message, ex.Code);
         }
         catch (DbUpdateException)
         {
@@ -176,56 +200,6 @@ public sealed class StartChapterProductionCommandHandler
                 "Không thể bắt đầu sản xuất vì dữ liệu giao việc vừa thay đổi. Vui lòng tải lại và thử lại.",
                 ResultErrorCodes.Conflict);
         }
-    }
-
-    private async Task<Result<List<Assignment>>> BuildAssignmentsAsync(
-        Chapter chapter,
-        Guid workspaceId,
-        PipelineStage stage,
-        WorkspaceRole role,
-        IReadOnlyList<ProductionPageAssignmentRequest> requests,
-        IReadOnlyList<Page> pages,
-        Guid producerId,
-        Guid batchId,
-        IReadOnlyList<Assignment> pending,
-        bool allowWholeChapter,
-        CancellationToken ct)
-    {
-        var created = new List<Assignment>();
-        var wholeChapter = allowWholeChapter && requests.Count == 1 &&
-                           requests[0].PageFrom == pages[0].PageNumber &&
-                           requests[0].PageTo == pages[^1].PageNumber;
-
-        foreach (var request in requests)
-        {
-            var pageIds = pages
-                .Where(p => p.PageNumber >= request.PageFrom && p.PageNumber <= request.PageTo)
-                .Select(p => p.Id)
-                .ToList();
-            var resolved = await AssignmentBatchPlanner.ResolveAsync(
-                _db, chapter, workspaceId, stage.Id, request.ArtistId, pageIds, ct);
-            if (!resolved.IsSuccess)
-                return Result<List<Assignment>>.Failure(resolved.ErrorMessage!, resolved.ErrorCode);
-
-            var batch = wholeChapter
-                ? new AssignmentBatchPlanner.StageBatch(
-                    stage, role, [new AssignmentBatchPlanner.Target(WorkflowEntityType.Chapter, chapter.Id, null)])
-                : resolved.Value!;
-            var plan = await AssignmentBatchPlanner.PlanAsync(_db, chapter.Id, batch, pending.Concat(created).ToList(), ct);
-            var conflicts = plan.Where(i => i.ConflictReason is not null).ToList();
-            if (conflicts.Count > 0)
-                return Result<List<Assignment>>.Failure(
-                    AssignmentBatchPlanner.DescribeConflicts(conflicts), ResultErrorCodes.Conflict);
-
-            var brief = wholeChapter
-                ? "Sản xuất toàn bộ chương"
-                : $"Sản xuất trang {request.PageFrom}-{request.PageTo}";
-            created.AddRange(AssignmentBatchPlanner.Build(
-                chapter, batch, plan, request.ArtistId, producerId, brief,
-                null, null, AssignmentPriority.Medium, batchId));
-        }
-
-        return Result<List<Assignment>>.Success(created);
     }
 
     private static RangeError? ValidateRanges(
@@ -261,4 +235,9 @@ public sealed class StartChapterProductionCommandHandler
     }
 
     private sealed record RangeError(string Message, string Code);
+
+    private sealed class Gate1AbortException(string message, string code) : Exception(message)
+    {
+        public string Code { get; } = code;
+    }
 }

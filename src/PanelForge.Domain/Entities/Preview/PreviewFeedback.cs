@@ -28,6 +28,8 @@ public class PreviewFeedback : BaseEntity
     public DateTime? TriagedAt { get; private set; }
     /// <summary>CF5 bước 7 / CF3: yêu cầu sửa sinh từ phản hồi "cần sửa"; null = chưa chuyển.</summary>
     public Guid? ChangeRequestId { get; private set; }
+    /// <summary>Lưới V3: ô lưới được trả về làm lại từ phản hồi này; null = chưa chuyển hoặc chuyển qua ChangeRequest.</summary>
+    public Guid? StageTaskId { get; private set; }
 
     private PreviewFeedback() { }
 
@@ -80,12 +82,26 @@ public class PreviewFeedback : BaseEntity
     {
         if (Status != PreviewFeedbackStatus.NeedsChange)
             throw new InvalidOperationException("Chỉ phản hồi đã phân loại \"cần sửa\" mới chuyển thành yêu cầu sửa.");
-        if (ChangeRequestId.HasValue)
-            throw new InvalidOperationException("Phản hồi này đã được chuyển thành yêu cầu sửa.");
-
+        EnsureConvertible();
         ChangeRequestId = changeRequestId;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void ReassignPanel(Guid? panelId) => PanelId = panelId;
+
+    /// <summary>Lưới V3: gắn phản hồi với ô lưới được trả về làm lại (ô không có ChangeRequest vì ChangeRequest gắn Assignment cũ).</summary>
+    public void LinkStageTask(Guid stageTaskId)
+    {
+        EnsureConvertible();
+        StageTaskId = stageTaskId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    private void EnsureConvertible()
+    {
+        if (Status != PreviewFeedbackStatus.NeedsChange)
+            throw new InvalidOperationException("Chỉ phản hồi đã phân loại \"cần sửa\" mới chuyển thành yêu cầu sửa.");
+        if (ChangeRequestId.HasValue || StageTaskId.HasValue)
+            throw new InvalidOperationException("Phản hồi này đã được chuyển thành yêu cầu sửa.");
+    }
 }

@@ -52,6 +52,9 @@ public interface IPanelForgeDbContext
     DbSet<StageTransition> StageTransitions { get; }
     DbSet<Assignment> Assignments { get; }
     DbSet<StageProgress> StageProgresses { get; }
+    DbSet<StageTask> StageTasks { get; }
+    DbSet<StageTaskLot> StageTaskLots { get; }
+    DbSet<StageTaskSubmission> StageTaskSubmissions { get; }
     DbSet<Notification> Notifications { get; }
     DbSet<Submission> Submissions { get; }
     DbSet<ChangeRequest> ChangeRequests { get; }

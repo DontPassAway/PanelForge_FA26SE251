@@ -16,7 +16,8 @@ public sealed record UpdatePipelineStageCommand(
     WorkspaceRole? AllowedRole,
     bool IsApprovalGate,
     int? EstimatedDurationDays,
-    bool? IsEnabled = null
+    bool? IsEnabled = null,
+    string? Track = null
 ) : IRequest<Result<SeriesPipelineDto>>;
 
 public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePipelineStageCommand, Result<SeriesPipelineDto>>
@@ -36,15 +37,40 @@ public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePi
         if (cmd.EstimatedDurationDays is < 0)
             return Result<SeriesPipelineDto>.Failure("Số ngày ước tính không được âm.");
 
+        // Lưới V3: đổi nhánh / vai trò cần lưới không còn ô dở; tắt stage cần stage đó chưa có ô được giao
+        var trackChanged = cmd.Track is not null &&
+            !string.Equals(string.IsNullOrWhiteSpace(cmd.Track) ? null : cmd.Track.Trim().ToUpperInvariant(), stage.Track);
+        if ((trackChanged || cmd.AllowedRole != stage.AllowedRole) &&
+            await SeriesPipelineStore.StructureLockedReasonAsync(_dbContext, cmd.SeriesId, ct) is { } locked)
+            return Result<SeriesPipelineDto>.Failure(locked, ResultErrorCodes.Conflict);
+        if (cmd.IsEnabled == false && stage.IsEnabled &&
+            await SeriesPipelineStore.StageInUseOnGridReasonAsync(_dbContext, stage.Id, ct) is { } inUse)
+            return Result<SeriesPipelineDto>.Failure(inUse, ResultErrorCodes.Conflict);
+
         try
         {
             stage.UpdateDetails(cmd.Name, cmd.ColorCode, cmd.AllowedRole, cmd.IsApprovalGate, cmd.EstimatedDurationDays);
             if (cmd.IsEnabled is { } enabled) stage.SetEnabled(enabled);
+            if (cmd.Track is not null) stage.SetTrack(cmd.Track);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return Result<SeriesPipelineDto>.Failure(ex.Message);
         }
+
+        // Gate 2 theo trang: tắt bước cuối có cổng của một nhánh (vd. Color) thì cổng chuyển sang bước còn bật liền trước cùng nhánh
+        // (Ink), để nhánh vẫn qua Editor duyệt. Bật lại không tự gỡ: Producer tự chỉnh nếu muốn.
+        if (cmd.IsEnabled == false && stage.IsApprovalGate && stage.Track is { } track &&
+            pipeline.Stages.Where(s => s.IsEnabled && s.Track == track && s.StageOrder < stage.StageOrder)
+                .MaxBy(s => s.StageOrder) is { IsApprovalGate: false } previous)
+            previous.UpdateDetails(previous.Name, previous.ColorCode, previous.AllowedRole, true, previous.EstimatedDurationDays);
+
+        // Tắt stage: huỷ luôn các ô chưa giao của nó, nếu không cổng duyệt chương đếm chúng là "chưa duyệt" và kẹt mãi.
+        // Bật lại thì lần "Sinh / Đồng bộ ô" sau hồi sinh các ô này.
+        if (cmd.IsEnabled == false)
+            foreach (var cell in await _dbContext.StageTasks
+                         .Where(t => t.PipelineStageId == stage.Id && t.Status == StageTaskStatus.Unassigned).ToListAsync(ct))
+                cell.Cancel();
 
         // Vai trò / cổng duyệt thay đổi thì RequiredRole và nhánh reject của transition cũng đổi theo
         SeriesPipelineStore.RebuildTransitions(_dbContext, pipeline);

@@ -12,9 +12,12 @@ public sealed record StartChapterProductionRequest(
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
     IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null);
 
+/// <param name="Assignments">Luôn rỗng từ Gate 1 trên Lưới V3; giữ field để client cũ không vỡ.</param>
+/// <param name="Lots">Các lô lưới Gate 1 vừa giao (Pencil + Letterer theo dải trang).</param>
 public sealed record StartChapterProductionResultDto(
     ChapterDetailDto Chapter,
-    IReadOnlyList<AssignmentDto> Assignments);
+    IReadOnlyList<AssignmentDto> Assignments,
+    IReadOnlyList<PanelForge.Application.Features.TaskGrid.Models.StageTaskLotDto> Lots);
 
 public sealed record AssignmentDto(
     Guid Id,

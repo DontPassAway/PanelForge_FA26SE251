@@ -188,20 +188,45 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
 
             if (nextAssignment is not null)
             {
+                // Chỉ việc còn chờ (Assigned) mới cần bàn giao; việc đã bắt đầu/nộp/duyệt thì để nguyên.
                 if (nextAssignment.Status == AssignmentStatus.Assigned)
                 {
-                    try { nextAssignment.StartWork(); } catch { }
+                    // Tự bắt đầu chỉ khi CÙNG người làm và mọi tiền đề khác đã Approved (BR-19). Khác người: giữ Assigned,
+                    // để người nhận tự bấm Start (đúng thời điểm bắt đầu thật, vẫn qua đủ cổng của StartAssignment).
+                    var sameAssignee = nextAssignment.AssigneeUserId == completedAssignment.AssigneeUserId;
+                    var otherDeps = nextAssignment.GetDependsOnAssignmentIds().Where(id => id != completedAssignment.Id).ToList();
+                    var depsApproved = otherDeps.Count == 0 || !await db.Assignments.AsNoTracking()
+                        .AnyAsync(a => otherDeps.Contains(a.Id) && a.Status != AssignmentStatus.Approved, ct);
+
+                    if (sameAssignee && depsApproved)
+                    {
+                        nextAssignment.StartWork();
+                        db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                            nextAssignment.AssigneeUserId,
+                            NotificationType.AssignmentAssigned,
+                            "Bàn giao tự động Pencil ➔ Ink",
+                            $"Công đoạn nét chì (Pencil) của Chương {chapter.ChapterNumber} đã hoàn thành. Hệ thống đã tự động mở việc Ink để bạn tiếp tục hoàn thiện liên tục.",
+                            nextAssignment.Id,
+                            chapter.Id));
+                    }
+                    else if (!nextAssignment.GetDependsOnAssignmentIds().Contains(completedAssignment.Id))
+                    {
+                        // Việc phụ thuộc trực tiếp đã được báo "đến lượt bạn" ở cuối hàm; ở đây chỉ báo việc nối theo phạm vi.
+                        db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
+                            nextAssignment.AssigneeUserId,
+                            NotificationType.AssignmentAssigned,
+                            "Pencil đã xong, đến lượt bạn đi nét (Ink)",
+                            $"Công đoạn nét chì (Pencil) của Chương {chapter.ChapterNumber} đã hoàn thành. Bạn có thể bắt đầu việc Ink khi sẵn sàng.",
+                            nextAssignment.Id,
+                            chapter.Id));
+                    }
                 }
-                db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(
-                    nextAssignment.AssigneeUserId,
-                    NotificationType.AssignmentAssigned,
-                    "Bàn giao tự động Pencil ➔ Ink",
-                    $"Công đoạn nét chì (Pencil) của Chương {chapter.ChapterNumber} đã hoàn thành. Hệ thống đã tự động mở việc Ink để bạn tiếp tục hoàn thiện liên tục.",
-                    nextAssignment.Id,
-                    chapter.Id));
             }
-            else
+            else if ((nextStage.AllowedRole is null || nextStage.AllowedRole == completedAssignment.AssignedRole) &&
+                     await AssignmentRules.ScopeOverlapReasonAsync(db, chapter.Id, nextStage,
+                         completedAssignment.EntityType, completedAssignment.TargetEntityId, ct) is null)
             {
+                // Chỉ tự tạo khi đúng vai trò stage (BR-07) và không chồng phạm vi việc khác ở stage Ink.
                 // Tự động gán mở việc Ink cho nghệ sĩ hiện tại
                 var autoInk = Assignment.Create(
                     chapter.SeriesId,
@@ -210,7 +235,7 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
                     completedAssignment.TargetEntityId,
                     nextStage.Id,
                     completedAssignment.AssigneeUserId,
-                    WorkspaceRole.Artist,
+                    completedAssignment.AssignedRole,
                     $"Đi nét (Ink) - {completedAssignment.Brief}",
                     "Bàn giao tự động từ hoàn thành công đoạn Pencil",
                     null,
@@ -218,7 +243,7 @@ public sealed class SubmitAssignmentCommandHandler : IRequestHandler<SubmitAssig
                     AssignmentPriority.Medium,
                     completedAssignment.Id
                 );
-                try { autoInk.StartWork(); } catch { }
+                autoInk.StartWork(); // việc mới tạo luôn ở Assigned, cùng người làm, tiền đề duy nhất vừa Approved
                 db.Assignments.Add(autoInk);
 
                 db.Notifications.Add(Domain.Entities.Workflow.Notification.Create(

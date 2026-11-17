@@ -36,6 +36,8 @@ public class ArtworkUploadTests
         public readonly List<AssetReference> References = [];
         public readonly List<AssetAccessLog> AccessLogs = [];
         public readonly List<Panel> Panels = [];
+        public readonly List<StageTask> Cells = [];
+        public readonly List<StageTaskLot> Lots = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IAssetStorage> Storage = new();
         public readonly Mock<IImageThumbnailer> Thumbnailer = new();
@@ -69,7 +71,22 @@ public class ArtworkUploadTests
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(References));
             Db.Setup(d => d.AssetAccessLogs).Returns(DbSetMockHelper.CreateDbSetMock(AccessLogs));
             Db.Setup(d => d.Users).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Identity.User>()));
+            Db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(Cells));
+            Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
+            Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        }
+
+        /// <summary>Giao ô Pencil của trang qua lưới cho <paramref name="assignee"/>, bắt đầu nếu <paramref name="start"/>.</summary>
+        public StageTask GridCell(Guid assignee, bool start = true)
+        {
+            var lot = StageTaskLot.Create(Chapter.SeriesId, Chapter.Id, Stage.Id, assignee, WorkspaceRole.Artist, Guid.NewGuid(), null, null);
+            var cell = StageTask.Create(Chapter.SeriesId, Chapter.Id, Stage.Id, Page.Id);
+            cell.AssignTo(lot.Id);
+            if (start) cell.Start(prerequisitesApproved: true);
+            Lots.Add(lot);
+            Cells.Add(cell);
+            return cell;
         }
 
         public Task<Result<AssetReferenceDto>> Upload(
@@ -293,6 +310,21 @@ public class ArtworkUploadTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         f.Assets.Should().BeEmpty();
+    }
+
+    /// <summary>Lưới V3: quyền theo ô, không rơi về V2. Người giữ việc V2 cũ cũng bị chặn khi ô lưới thuộc người khác.</summary>
+    [Fact]
+    public async Task Upload_OnGridChapter_FollowsTheCellHolder()
+    {
+        var f = new Fixture();
+        var cell = f.GridCell(f.OtherId);
+
+        (await f.Upload(Png(1), userId: f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        var mine = await f.Upload(Png(2), userId: f.OtherId);
+        mine.IsSuccess.Should().BeTrue(mine.ErrorMessage);
+
+        cell.Submit(Guid.NewGuid(), isApprovalGate: false);   // ô đã duyệt: không ai ghi đè được nữa
+        (await f.Upload(Png(3), userId: f.OtherId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
     }
 
     [Fact]
@@ -634,6 +666,44 @@ public class ArtworkUploadTests
         all.AddRange(carved.Select(c => Assignment.Create(f.Assignment.SeriesId, f.Chapter.Id, c.Type, c.Target, f.Stage.Id,
             f.OtherId, WorkspaceRole.Artist, "Phần tách")));
         f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(all));
+    }
+
+    // ── Đường dự phòng "chưa có việc thì thành viên Artist/Producer tải trực tiếp" ──
+
+    private static void Members(Fixture f, IEnumerable<WorkspaceMember> workspace, IEnumerable<SeriesMember>? series = null)
+    {
+        f.Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(workspace.ToList()));
+        f.Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock((series ?? []).ToList()));
+    }
+
+    [Fact]
+    public async Task Upload_StageHeldByWholeChapterAssignment_OtherArtistMemberIsForbidden()
+    {
+        var f = new Fixture();
+        HoldWholeChapter(f);
+        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist)]);
+
+        var result = await f.Upload(Png(), userId: f.OtherId);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        f.References.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_NoAssignment_ActiveArtistMemberCanUpload_ButNotPendingMemberOrNonArtSeriesMember()
+    {
+        var f = new Fixture();
+        f.Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+        var writerId = Guid.NewGuid();
+        Members(f,
+            [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending)],
+            [SeriesMember.Create(f.Chapter.SeriesId, writerId, WorkspaceRole.Writer)]);
+
+        (await f.Upload(Png(1), userId: f.OtherId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await f.Upload(Png(2), userId: writerId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+
+        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist)]);
+        (await f.Upload(Png(3), userId: f.OtherId)).IsSuccess.Should().BeTrue();
     }
 
     [Fact]

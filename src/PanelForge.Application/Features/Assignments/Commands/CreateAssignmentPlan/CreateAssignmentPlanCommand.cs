@@ -46,6 +46,8 @@ public sealed class CreateAssignmentPlanCommandHandler : IRequestHandler<CreateA
             return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Fail(locked, ResultErrorCodes.Conflict);
+        if (await AssignmentRules.GridActiveReasonAsync(_db, chapter.Id, ct) is { } grid)
+            return Fail(grid, ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);

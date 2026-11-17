@@ -145,6 +145,23 @@ public class ChapterPublishFlowTests
     }
 
     [Fact]
+    public async Task LockGate_PageAssignedOnTaskGrid_CountsAsHavingWork()
+    {
+        var stageId = Guid.NewGuid();
+        var lot = StageTaskLot.Create(_chapter.SeriesId, _chapter.Id, stageId, Guid.NewGuid(), WorkspaceRole.Artist,
+            Guid.NewGuid(), null, null);
+        var task = StageTask.Create(_chapter.SeriesId, _chapter.Id, stageId, _page.Id);
+        task.AssignTo(lot.Id);
+        _db.AddRange(lot, task);
+        await _db.SaveChangesAsync();
+
+        var gate = await new PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate.GetChapterLockGateQueryHandler(_db)
+            .Handle(new(_chapter.Id), default);
+
+        gate.Value!.Items.Should().NotContain(i => i.Code == "PAGES_WITHOUT_WORK");
+    }
+
+    [Fact]
     public async Task Approve_WhenChangeRequestStillOpen_ShouldConflict()
     {
         _db.ChangeRequests.Add(ChangeRequest.Create(
@@ -179,6 +196,17 @@ public class ChapterPublishFlowTests
     {
         (await Publish()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         _chapter.Status.Should().Be(ChapterStatus.InProduction);
+    }
+
+    [Fact]
+    public async Task HandOff_AddsWorkspacePublishersToSeries_SoTheyCanPublish()
+    {
+        await Approve();
+        await HandOff();
+        await HandOff(); // bàn giao lại không thêm trùng (đã bàn giao → 409, không ghi gì)
+
+        _db.SeriesMembers.Where(m => m.SeriesId == _chapter.SeriesId && m.UserId == _publisherId)
+            .Should().ContainSingle().Which.Role.Should().Be(WorkspaceRole.Publisher);
     }
 
     [Fact]

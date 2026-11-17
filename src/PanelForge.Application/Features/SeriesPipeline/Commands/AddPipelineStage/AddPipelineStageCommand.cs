@@ -33,6 +33,9 @@ public sealed class AddPipelineStageCommandHandler : IRequestHandler<AddPipeline
         if (cmd.EstimatedDurationDays is < 0)
             return Result<SeriesPipelineDto>.Failure("Số ngày ước tính không được âm.");
 
+        if (await SeriesPipelineStore.StructureLockedReasonAsync(_dbContext, cmd.SeriesId, ct) is { } locked)
+            return Result<SeriesPipelineDto>.Failure(locked, ResultErrorCodes.Conflict);
+
         PipelineStage stage;
         try
         {

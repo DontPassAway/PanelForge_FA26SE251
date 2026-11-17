@@ -44,7 +44,7 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, command.PageId, cancellationToken) is { } readOnly)
             return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
         // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
-        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, command.PageId, null, cancellationToken) is { } outOfScope)
+        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, command.PageId, null, cancellationToken, layout: true) is { } outOfScope)
             return Result<PanelDto>.Failure(outOfScope, ResultErrorCodes.Forbidden);
         if (await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, command.UserId, chapterId.Value, cancellationToken) is { } writerBlock)
             return Result<PanelDto>.Failure(writerBlock.Error, writerBlock.Code);

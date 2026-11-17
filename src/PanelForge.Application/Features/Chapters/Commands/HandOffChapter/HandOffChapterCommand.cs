@@ -49,6 +49,12 @@ public sealed class HandOffChapterCommandHandler : IRequestHandler<HandOffChapte
         var workspacePublisherIds = await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.ProducerUserId, ct);
         var allPublishers = systemPublisherIds.Union(workspacePublisherIds).Distinct();
 
+        // Quyền phát hành xét vai trò trong Series: Publisher của Workspace chưa vào Series thì nhận thông báo mà bấm
+        // Phát hành bị 403. Bàn giao là lúc Producer giao chương cho họ, nên thêm họ vào Series với vai trò Publisher.
+        var seriesMemberIds = await _db.SeriesMembers.Where(m => m.SeriesId == chapter.SeriesId).Select(m => m.UserId).ToListAsync(ct);
+        foreach (var publisherId in workspacePublisherIds.Except(seriesMemberIds))
+            _db.SeriesMembers.Add(SeriesMember.Create(chapter.SeriesId, publisherId, WorkspaceRole.Publisher));
+
         foreach (var publisherId in allPublishers)
         {
             _db.Notifications.Add(ChapterReviewRules.Notify(

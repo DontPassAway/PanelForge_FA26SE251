@@ -53,6 +53,10 @@ internal sealed class PipelineStageConfiguration : IEntityTypeConfiguration<Pipe
                .HasColumnType("boolean")
                .IsRequired();
 
+        builder.Property(s => s.Track)
+               .HasColumnName("track")
+               .HasColumnType($"varchar({PipelineStage.MaxTrackLength})");
+
         builder.Property(s => s.ColorCode)
                .HasColumnName("color_code")
                .HasColumnType("varchar(20)");

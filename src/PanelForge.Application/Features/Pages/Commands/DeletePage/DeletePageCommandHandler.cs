@@ -59,6 +59,7 @@ public sealed class DeletePageCommandHandler
         targetIds.Add(command.PageId);
         if (await AssignmentRules.DeleteBlockedReasonAsync(_dbContext, "trang", targetIds, cancellationToken) is { } blocked)
             return Result<bool>.Failure(blocked, ResultErrorCodes.Conflict);
+        await AssignmentRules.CancelUnstartedPageCellsAsync(_dbContext, command.PageId, cancellationToken);
 
         // 1. Event Store: đánh dấu Page đã xóa trong stream
         if (streamPage is not null)

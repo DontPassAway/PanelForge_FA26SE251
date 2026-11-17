@@ -1,4 +1,6 @@
-﻿using MediatR;
+using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.Assignments.Common;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Common;
@@ -111,6 +113,11 @@ public sealed class CreatePageCommandHandler
         // 6. Read Model: Lưu vào EF Core bảng pages để phục vụ relational queries nhanh
         _dbContext.Pages.Add(page);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // BR-12: chương đã dùng lưới thì trang mới có ngay ô chưa giao, để cổng khoá chương không cho trang trắng lọt qua.
+        if (await WorkScopeGuard.UsesGridAsync(_dbContext, command.ChapterId, cancellationToken))
+            await new GenerateStageTasksCommandHandler(_dbContext).Handle(
+                new GenerateStageTasksCommand(command.ChapterId, command.UserId ?? Guid.Empty), cancellationToken);
 
         return Result<PageDto>.Success(new PageDto(
             Id:            page.Id,
