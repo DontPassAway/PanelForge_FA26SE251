@@ -101,26 +101,21 @@ Installed as a Claude Code plugin at project scope (`.claude/settings.json`, mar
 
 ## Git workflow (bắt buộc cho AI Agents)
 
-- **Nhánh làm việc:** chỉ commit/push lên nhánh `feature/<tên-tính-năng>` (vd. `feature/publisher-monetization`). Chưa có nhánh phù hợp → tạo mới từ nhánh feature hiện tại, hỏi người dùng nếu không rõ tên.
-- **Lấy code mới:** `git fetch origin` rồi `git merge origin/trungkien` vào nhánh feature đang làm. Không pull/merge trực tiếp trên nhánh `trungkien`.
-- **Không tác động `trungkien` (và `main`):** không checkout để sửa, không commit, không push, không rebase, không force-push lên các nhánh này.
-- **Trước khi merge:** working tree phải sạch; nếu còn thay đổi thì commit lên nhánh feature (hoặc `git stash` rồi `stash pop` sau merge).
+- **Nhánh làm việc: `trungkien`.** Mọi thay đổi commit vào `trungkien` (có ở cả BE `PanelForge_FA26SE251` và FE `panelforge-fe`). Không commit/push lên `main`; không tạo nhánh `feature/*` hay `THBMinh` để làm việc.
+- **Một agent:** làm trực tiếp trên `trungkien` trong repo chính (`git checkout trungkien`), không tạo worktree.
+- **Nhiều agent song song (multi-agent / subagent / session song song):** mỗi agent làm trong **git worktree riêng**, tách nhánh con từ `trungkien`:
+  - `git worktree add ../.worktrees/<repo>-<task> -b trungkien-<task> trungkien`
+  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không được sửa cùng file.
+  - Không agent nào sửa trực tiếp working tree chính khi agent khác đang chạy.
+  - Khi xong: commit trong worktree → `git checkout trungkien && git merge --no-ff trungkien-<task>` → giải quyết conflict, build → `git worktree remove <path>` và `git branch -d trungkien-<task>`. Không push nhánh `trungkien-<task>` lên remote.
+- **Lấy code mới:** khi working tree sạch, `git pull origin trungkien` (còn thay đổi thì commit hoặc `git stash` rồi `stash pop` sau khi pull).
+- **Push:** chỉ `git push origin trungkien` khi hoàn thành 1 module lớn hoặc khi user yêu cầu trực tiếp. Không push sau mỗi prompt/commit nhỏ.
+- Không force-push, không rebase lại lịch sử đã push trên `trungkien`.
 - **Conflict:** giữ thay đổi của cả hai bên khi không loại trừ nhau; với `*ModelSnapshot.cs` của EF, sau khi gộp phải kiểm tra bằng `dotnet ef migrations add` thử (phải ra migration rỗng). Build/test trước khi commit merge.
-- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync trungkien into feature/<tên>`.
+- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync origin/trungkien into trungkien`.
 - Không dùng `--no-verify`, không `push --force` lên nhánh dùng chung.
 - **Sau khi sửa code, cập nhật `panelforge-hubs` (nhánh `main`) và push:**
   1. `git -C ../panelforge-hubs pull --ff-only origin main`.
-  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash + nhánh feature, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
+  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash trên `trungkien`, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
   3. Chạy `node scripts/sync-hub.mjs` để đồng bộ `hub-state.json`, `AUDIT_LOGS.md` và `web/public/docs`.
   4. Commit `docs(tracker): <việc ngắn gọn>` rồi `git push origin main` trong `panelforge-hubs`. Đây là ngoại lệ được phép cho quy tắc "không push sau mỗi lần làm" của hub.
-
-## Git Branch & Multi-Agent Workflow (THBMinh)
-
-- **Nhánh làm việc chính: `THBMinh`** (có ở cả BE `PanelForge_FA26SE251` và FE `panelforge-fe`). Mọi thay đổi đều đi vào `THBMinh`; không commit/push thẳng lên `main`.
-- **Một agent**: làm việc trực tiếp trên `THBMinh` (`git checkout THBMinh`).
-- **Nhiều agent (multi-agent / subagent / session song song)**: mỗi agent làm việc **tách biệt trong git worktree riêng**, tách nhánh con từ `THBMinh`:
-  - `git worktree add ../.worktrees/<repo>-<task> -b THBMinh-<task> THBMinh`
-  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không được sửa cùng file.
-  - Không agent nào sửa trực tiếp working tree chính khi agent khác đang chạy.
-- **Khi hoàn thành**: commit trong worktree → merge vào `THBMinh` (`git checkout THBMinh && git merge --no-ff THBMinh-<task>`), giải quyết conflict, chạy build/test, rồi `git push origin THBMinh`. Sau đó dọn dẹp: `git worktree remove <path>` và `git branch -d THBMinh-<task>`.
-- Không force-push, không rebase lại lịch sử đã push trên `THBMinh`.
