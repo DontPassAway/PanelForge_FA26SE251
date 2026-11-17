@@ -50,22 +50,35 @@ public static class ChapterReadAccess
     // ─── Ngôn ngữ & giá ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Các bản ngôn ngữ đã phát hành của chương: luôn có bản gốc (vi); bản dịch khi mọi trang đều có ảnh dịch.
+    /// BR-34: Các bản ngôn ngữ đã phát hành của chương dựa trên ChapterEdition Published.
+    /// Luôn có bản gốc (vi/original) nếu chương đã xuất bản.
     /// </summary>
     public static async Task<IReadOnlyList<string>> AvailableLanguagesAsync(
         IPanelForgeDbContext db, Guid chapterId, CancellationToken ct)
     {
-        var pageCount = await db.Pages.AsNoTracking().CountAsync(p => p.ChapterId == chapterId, ct);
-        var translated = await db.PageTranslations.AsNoTracking()
-            .Where(t => t.ChapterId == chapterId && !t.IsDeleted)
-            .GroupBy(t => t.Language)
-            .Select(g => new { Language = g.Key, Pages = g.Select(t => t.PageId).Distinct().Count() })
+        var publishedLangs = await db.ChapterEditions.AsNoTracking()
+            .Where(e => e.ChapterId == chapterId && e.Status == EditionStatus.Published && !e.IsDeleted)
+            .Select(e => e.LanguageCode)
             .ToListAsync(ct);
 
-        var result = new List<string> { ContentLanguages.Original };
-        result.AddRange(ContentLanguages.Translations.Where(lang =>
-            pageCount > 0 && translated.Any(t => t.Language == lang && t.Pages >= pageCount)));
-        return result;
+        if (publishedLangs.Count == 0)
+        {
+            var chapterStatus = await db.Chapters.AsNoTracking()
+                .Where(c => c.Id == chapterId)
+                .Select(c => c.Status)
+                .FirstOrDefaultAsync(ct);
+            if (chapterStatus == ChapterStatus.HandedOffAndPublished)
+            {
+                var origLang = await db.Chapters.AsNoTracking()
+                    .Where(c => c.Id == chapterId)
+                    .Select(c => c.Series.OriginalLanguage)
+                    .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
+                return [origLang];
+            }
+            return [ContentLanguages.Original];
+        }
+
+        return publishedLangs;
     }
 
     /// <summary>Giá mở khóa chương trả phí cho một ngôn ngữ (giá riêng của Publisher, không có thì giá chung).</summary>

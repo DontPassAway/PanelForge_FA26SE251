@@ -108,13 +108,9 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
         // Chương trả phí chưa mua bản ngôn ngữ này: vẫn trả danh sách trang, nhưng chỉ trang xem trước có ảnh.
         var current = languages.First(l => l.Language == language);
 
-        var hasImage = language == ContentLanguages.Original
-            ? (await _db.Pages.AsNoTracking()
-                .Where(p => p.ChapterId == chapter.Id && _db.AssetReferences.Any(r => r.PageId == p.Id))
-                .Select(p => p.Id).ToListAsync(ct)).ToHashSet()
-            : (await _db.PageTranslations.AsNoTracking()
-                .Where(t => t.ChapterId == chapter.Id && t.Language == language && !t.IsDeleted)
-                .Select(t => t.PageId).ToListAsync(ct)).ToHashSet();
+        var hasImage = (await _db.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == chapter.Id && _db.AssetReferences.Any(r => r.PageId == p.Id))
+            .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
 
         // Trang ngoài phần xem trước của chương chưa mua: không trả đường dẫn ảnh (ảnh cũng 403).
         var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(_db, chapter.Id, ct);
@@ -274,8 +270,16 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
 
-        var language = ContentLanguages.Normalize(q.Language);
-        if (language is null) return NotFound();
+        var language = ContentLanguages.Normalize(q.Language) ?? ContentLanguages.Original;
+        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct);
+        if (!available.Contains(language))
+        {
+            var origLang = await _db.Chapters.AsNoTracking()
+                .Where(c => c.Id == chapter.Id)
+                .Select(c => c.Series.OriginalLanguage)
+                .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
+            language = origLang;
+        }
 
         var pageExists = await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == q.PageId && p.ChapterId == q.ChapterId, ct);
         if (!pageExists) return NotFound();
@@ -288,35 +292,46 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
     }
 
     /// <summary>
-    /// Ảnh một trang theo ngôn ngữ (không kiểm quyền — người gọi tự kiểm): vi = ảnh Studio ghép lớp chữ,
-    /// en/ja = ảnh dịch Publisher upload. Null nếu chưa có ảnh.
+    /// BR-34: Ảnh một trang theo ngôn ngữ: dựng qua PageImageBuilder với lớp lettering tương ứng. Null nếu chưa có ảnh.
     /// </summary>
     public static async Task<AssetDownloadDto?> LoadImageAsync(
         IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pages, IPageLetteringCompositor compositor,
         Guid chapterId, Guid pageId, string language, CancellationToken ct)
     {
-        if (language != ContentLanguages.Original)
-        {
-            var translation = await db.PageTranslations.AsNoTracking()
-                .Where(t => t.PageId == pageId && t.ChapterId == chapterId && t.Language == language && !t.IsDeleted)
-                .Select(t => new { t.ContentSha256, t.ContentType, t.Page.PageNumber })
-                .FirstOrDefaultAsync(ct);
-            if (translation is null) return null;
-            var stream = await storage.OpenReadAsync(
-                PageTranslation.StorageKey(pageId, language, translation.ContentSha256), ct);
-            return stream is null
-                ? null
-                : new AssetDownloadDto(stream, translation.ContentType, $"trang-{translation.PageNumber}-{language}");
-        }
+        // BR-34: ấn bản có snapshot → dựng đúng artwork + lớp chữ đã nghiệm thu; ấn bản đã phát hành giữ snapshot cũ
+        // kể cả khi chương/ấn bản bị mở lại để sửa.
+        var snapshotJson = await (
+            from e in db.ChapterEditions.AsNoTracking()
+            where e.ChapterId == chapterId && e.LanguageCode == language && e.CurrentSnapshotId != null
+            join s in db.ChapterSnapshots.AsNoTracking() on e.CurrentSnapshotId equals s.Id
+            select s.ManifestJson).FirstOrDefaultAsync(ct);
+        var snapPage = snapshotJson is null
+            ? null
+            : PanelForge.AI.Contracts.AiJson.Deserialize<SnapshotManifest>(snapshotJson)?.Pages
+                .FirstOrDefault(p => p.PageId == pageId);
 
-        var artwork = (await FinalArtwork.SelectAsync(db, chapterId, ct, pageId)).FirstOrDefault();
-        if (artwork is null) return null;
+        List<Guid> refIds;
+        long? canvasVersion = null;
+        if (snapPage is not null)
+        {
+            refIds = snapPage.ArtworkReferenceId is { } whole
+                ? [whole]
+                : snapPage.PanelArtworks?.Select(a => a.ArtworkReferenceId).ToList() ?? [];
+            canvasVersion = snapPage.CanvasStreamVersion;
+        }
+        else
+        {
+            var artwork = (await FinalArtwork.SelectAsync(db, chapterId, ct, pageId)).FirstOrDefault();
+            if (artwork is null) return null;
+            refIds = artwork.AssetReferenceIds.ToList();
+        }
+        if (refIds.Count == 0) return null;
 
         var image = await PageImageBuilder.BuildAsync(
-            db, storage, pages, compositor, pageId, artwork.AssetReferenceIds.ToList(), ct);
+            db, storage, pages, compositor, pageId, refIds, ct, language, canvasVersion);
         return image is null
             ? null
-            : new AssetDownloadDto(new MemoryStream(image.Content), image.ContentType, $"trang-{image.PageNumber}.png");
+            : new AssetDownloadDto(new MemoryStream(image.Content), image.ContentType, $"trang-{image.PageNumber}-{language}.png");
     }
 
     private static Result<AssetDownloadDto> NotFound() =>

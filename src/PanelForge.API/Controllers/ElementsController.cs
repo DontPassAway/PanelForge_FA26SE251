@@ -8,6 +8,7 @@ using PanelForge.Application.Features.CanvasElements.Commands.AcknowledgeOverflo
 using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 using PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
 using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementTranslation;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
@@ -53,13 +54,14 @@ public sealed class ElementsController : ControllerBase
         Guid pageId,
         [FromQuery] bool includeRemoved = false,
         [FromQuery] long? version = null,
+        [FromQuery] string? lang = null,
         CancellationToken cancellationToken = default)
     {
         if (version is < 1)
             return BadRequest(new { message = "version phải ≥ 1." });
 
         var result = await _mediator.Send(
-            new GetPageSnapshotQuery(pageId, includeRemoved, version),
+            new GetPageSnapshotQuery(pageId, includeRemoved, version, lang),
             cancellationToken);
 
         return result.IsSuccess
@@ -137,6 +139,39 @@ public sealed class ElementsController : ControllerBase
         var result = await _mediator.Send(
             new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId(), request.ExpectedElementVersion),
             cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage, result.ErrorCode);
+    }
+
+    // ── PUT — Cập nhật bản dịch bóng thoại theo ngôn ngữ phát hành (BR-34) ───
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/elements/{elementId}/translations/{lang}
+    /// Body: { "text": "bản dịch", "expectedElementVersion": 3 }
+    /// </summary>
+    [HttpPut("{elementId:guid}/translations/{lang}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(UpdateElementTranslationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateElementTranslation(
+        Guid pageId,
+        Guid elementId,
+        string lang,
+        [FromBody] UpdateElementTranslationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateElementTranslationCommand(
+            PageId: pageId,
+            ElementId: elementId,
+            LanguageCode: lang,
+            Text: request.Text,
+            UserId: GetCurrentUserId(),
+            ExpectedElementVersion: request.ExpectedElementVersion
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
@@ -294,6 +329,8 @@ public sealed class ElementsController : ControllerBase
     {
         message ??= "Yêu cầu không hợp lệ.";
         if (code == ResultErrorCodes.ChapterReadOnly) // BR-12, không có field conflict nên FE không mở hộp thoại tải lại
+            return Conflict(new { message, code });
+        if (code == ResultErrorCodes.Conflict)
             return Conflict(new { message, code });
         if (code == ResultErrorCodes.Forbidden) // ngoài phạm vi việc được giao (WorkScopeGuard)
             return StatusCode(StatusCodes.Status403Forbidden, new { message, code });

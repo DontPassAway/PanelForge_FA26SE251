@@ -1,0 +1,100 @@
+@startuml PanelForge_Conceptual_Diagram
+!theme plain
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam classFontSize 13
+skinparam classFontName "Segoe UI"
+skinparam classFontStyle bold
+skinparam defaultFontName "Segoe UI"
+skinparam arrowThickness 1.5
+
+title PanelForge Manga Production Platform - Conceptual Data Model (CDM)
+
+package "Organization" #F4F6F8 {
+    entity User
+    entity StudioWorkspace
+}
+
+package "Content Production" #EBF5FB {
+    entity Series
+    entity Chapter
+    entity ChapterScript
+    entity Scene
+    entity Dialogue
+    entity Page
+    entity Panel
+}
+
+package "Workflow & Pipeline" #FEF9E7 {
+    entity ProductionPipeline
+    entity PipelineStage
+    entity TaskAssignment
+    entity Submission
+    entity ChangeRequest
+}
+
+package "Story Bible" #EAFAF1 {
+    entity SeriesBible
+    entity BibleEntry
+    entity ConsistencyRule
+}
+
+package "Asset Storage" #F4ECF7 {
+    entity DigitalAsset
+    entity ArtworkVersion
+}
+
+package "Publishing" #FDEDEC {
+    entity PreviewLink
+    entity Feedback
+}
+
+package "AI Multi-Agent" #E8F8F5 {
+    entity AiWorkflow
+    entity AiSuggestion
+}
+
+' Relationships & Cardinalities
+User "1" --- "0..*" StudioWorkspace : "sở hữu"
+User "1..*" --- "1..*" StudioWorkspace : "tham gia"
+StudioWorkspace "1" --- "0..*" Series : "quản lý"
+User "1..*" --- "0..*" Series : "tham gia làm"
+
+Series "1" --- "1..*" Chapter : "bao gồm"
+Chapter "1" --- "1" ChapterScript : "có kịch bản"
+ChapterScript "1" --- "1..*" Scene : "chia cảnh"
+Scene "1" --- "1..*" Dialogue : "có thoại"
+
+Chapter "1" --- "1..*" Page : "gồm các trang"
+Page "1" --- "1..*" Panel : "chia khung"
+Dialogue "0..*" --- "0..1" Panel : "gắn vào"
+Scene "1" --- "0..*" Panel : "thể hiện qua"
+
+StudioWorkspace "1" --- "1..*" ProductionPipeline : "định nghĩa"
+ProductionPipeline "1" --- "1..*" PipelineStage : "tuần tự"
+
+Chapter "1" --- "0..*" TaskAssignment : "tạo việc"
+PipelineStage "1" --- "0..*" TaskAssignment : "phân loại"
+User "1" --- "0..*" TaskAssignment : "thực hiện"
+TaskAssignment "1" --- "0..*" Submission : "nộp bài"
+Submission "1" --- "0..*" ChangeRequest : "yêu cầu sửa"
+
+Series "1" --- "1" SeriesBible : "có kinh thánh"
+SeriesBible "1" --- "1..*" BibleEntry : "chứa hồ sơ"
+Dialogue "0..*" --- "0..*" BibleEntry : "nhắc tới"
+Series "1" --- "0..*" ConsistencyRule : "áp dụng"
+
+DigitalAsset "1" --- "1..*" ArtworkVersion : "lưu trữ (SHA-256)"
+ArtworkVersion "1" --- "1" Page : "thuộc trang"
+ArtworkVersion "0..1" --- "1" Panel : "thuộc khung"
+
+Chapter "1" --- "0..*" PreviewLink : "chia sẻ"
+PreviewLink "1" --- "0..*" Feedback : "nhận góp ý"
+
+Chapter "1" --- "0..*" AiWorkflow : "hỗ trợ bởi"
+AiWorkflow "1" --- "1..*" AiSuggestion : "đưa gợi ý"
+AiSuggestion "0..*" --- "1" User : "phê duyệt bởi"
+
+@enduml

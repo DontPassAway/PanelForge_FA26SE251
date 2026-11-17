@@ -17,6 +17,7 @@ using PanelForge.Application.Features.Series.Commands.SetSeriesImage;
 using PanelForge.Application.Features.Series.Queries.GetSeriesImage;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Application.Features.Series.Commands.UpdateSeries;
+using PanelForge.Application.Features.Series.Commands.UpdateSeriesLanguages;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
@@ -161,6 +162,41 @@ public sealed class SeriesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/languages
+    /// Cập nhật ngôn ngữ gốc và danh sách ngôn ngữ phát hành của Series (BR-34). Chỉ Producer sửa.
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/languages")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateSeriesLanguages(
+        [FromRoute] Guid seriesId,
+        [FromBody] UpdateSeriesLanguagesRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateSeriesLanguagesCommand(
+            SeriesId: seriesId,
+            UserId: GetCurrentUserId(),
+            OriginalLanguage: body.OriginalLanguage,
+            ReleaseLanguages: body.ReleaseLanguages
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.Forbidden)
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage });
+            if (result.ErrorMessage?.Contains("không tồn tại") == true)
+                return NotFound(new { error = result.ErrorMessage });
             return BadRequest(new { error = result.ErrorMessage });
         }
 

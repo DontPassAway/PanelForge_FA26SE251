@@ -66,6 +66,7 @@ public class Chapter : BaseEntity
     public ChapterScript? Script { get; private set; }
     public ICollection<Scene> Scenes { get; private set; } = [];
     public ICollection<Page> Pages { get; private set; } = [];
+    public ICollection<ChapterEdition> Editions { get; private set; } = [];
 
     private Chapter() { }
 

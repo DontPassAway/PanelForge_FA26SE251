@@ -63,6 +63,7 @@ public static class DependencyInjection
                 typeof(ElementMovedEvent),
                 typeof(ElementRemovedEvent),
                 typeof(ElementTextUpdatedEvent),
+                typeof(ElementTranslationUpdatedEvent),
                 typeof(ElementOverflowAcknowledgedEvent),
                 typeof(ElementReadingOrderSetEvent),
                 typeof(ElementStyleUpdatedEvent),

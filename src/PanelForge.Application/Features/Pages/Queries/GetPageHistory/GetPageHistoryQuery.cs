@@ -88,6 +88,7 @@ public sealed class GetPageHistoryQueryHandler : IRequestHandler<GetPageHistoryQ
             ElementMovedEvent x => new(x.ElementId, x.MovedByUserId, $"Di chuyển / đổi cỡ {Type(x.ElementId)}"),
             ElementRemovedEvent x => new(x.ElementId, x.RemovedByUserId, $"Xoá {Type(x.ElementId)} ({x.Reason})"),
             ElementTextUpdatedEvent x => new(x.ElementId, x.UpdatedByUserId, $"Sửa chữ {Type(x.ElementId)}"),
+            ElementTranslationUpdatedEvent x => new(x.ElementId, x.UpdatedByUserId, $"Dịch [{x.LanguageCode}] {Type(x.ElementId)}"),
             ElementStyleUpdatedEvent x => new(x.ElementId, x.UpdatedByUserId, $"Đổi kiểu chữ {Type(x.ElementId)}"),
             ElementReadingOrderSetEvent x => new(x.ElementId, x.SetByUserId,
                 $"Thứ tự đọc {Type(x.ElementId)}: {x.ReadingOrder?.ToString() ?? "bỏ ghi đè"}"),

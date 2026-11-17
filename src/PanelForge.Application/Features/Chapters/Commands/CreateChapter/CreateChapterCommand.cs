@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Enums;
 using DomainChapter = PanelForge.Domain.Entities.Content.Chapter;
 
 namespace PanelForge.Application.Features.Chapters.Commands.CreateChapter;
@@ -75,6 +78,16 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
         var defaultScene = PanelForge.Domain.Entities.Content.Scene.CreateDefault(chapter.Id);
         defaultScene.CreatedBy = command.UserId.ToString();
         _dbContext.Scenes.Add(defaultScene);
+
+        // BR-34: Khởi tạo các ấn bản ngôn ngữ (ChapterEdition) theo cấu hình ReleaseLanguages của Series
+        var series = await _dbContext.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == command.SeriesId, cancellationToken);
+        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+        foreach (var lang in releaseLangs)
+        {
+            var edition = ChapterEdition.Create(chapter.Id, lang, EditionStatus.Draft);
+            edition.CreatedBy = command.UserId.ToString();
+            _dbContext.ChapterEditions?.Add(edition);
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

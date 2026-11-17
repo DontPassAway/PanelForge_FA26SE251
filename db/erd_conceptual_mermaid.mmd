@@ -1,0 +1,53 @@
+erDiagram
+    %% ========================================================
+    %% PanelForge Manga Production Platform - Conceptual Model
+    %% Engine: Mermaid ERD (Compatible with VPasCode & GitHub)
+    %% ========================================================
+
+    %% 1. Organization & Identity
+    USER ||--o{ STUDIO_WORKSPACE : "so_huu"
+    USER }|--|{ STUDIO_WORKSPACE : "tham_gia"
+    STUDIO_WORKSPACE ||--o{ SERIES : "quan_ly"
+    USER }o--o{ SERIES : "tham_gia_lam"
+
+    %% 2. Content & Narrative Production
+    SERIES ||--|{ CHAPTER : "bao_gom"
+    CHAPTER ||--|| CHAPTER_SCRIPT : "co_kich_ban"
+    CHAPTER_SCRIPT ||--|{ SCENE : "chia_canh"
+    SCENE ||--|{ DIALOGUE : "co_thoai"
+
+    %% 3. Canvas Layout
+    CHAPTER ||--|{ PAGE : "gom_cac_trang"
+    PAGE ||--|{ PANEL : "chia_khung"
+    SCENE ||--o{ PANEL : "the_hien_qua"
+    PANEL ||--o{ DIALOGUE : "gan_thoai"
+
+    %% 4. Workflow & Pipeline
+    STUDIO_WORKSPACE ||--|{ PRODUCTION_PIPELINE : "dinh_nghia"
+    PRODUCTION_PIPELINE ||--|{ PIPELINE_STAGE : "tuan_tu"
+    CHAPTER ||--o{ TASK_ASSIGNMENT : "tao_viec"
+    PIPELINE_STAGE ||--o{ TASK_ASSIGNMENT : "phan_loai"
+    USER ||--o{ TASK_ASSIGNMENT : "thuc_hien"
+    TASK_ASSIGNMENT ||--o{ SUBMISSION : "nop_bai"
+    SUBMISSION ||--o{ CHANGE_REQUEST : "yeu_cau_sua"
+
+    %% 5. Story Bible & Lore
+    SERIES ||--|| SERIES_BIBLE : "co_kinh_thanh"
+    SERIES_BIBLE ||--|{ BIBLE_ENTRY : "chua_ho_so"
+    DIALOGUE }o--o{ BIBLE_ENTRY : "nhac_toi"
+    SERIES ||--o{ CONSISTENCY_RULE : "ap_dung"
+
+    %% 6. Asset & Storage (CAS SHA-256)
+    DIGITAL_ASSET ||--|{ ARTWORK_VERSION : "luu_tru_sha256"
+    ARTWORK_VERSION ||--|| PAGE : "thuoc_trang"
+    ARTWORK_VERSION ||--o| PANEL : "thuoc_khung"
+
+    %% 7. Publishing & External Sharing
+    CHAPTER ||--o{ PREVIEW_LINK : "chia_se"
+    PREVIEW_LINK ||--o{ FEEDBACK : "nhan_gop_y"
+
+    %% 8. AI Multi-Agent Assistant
+    CHAPTER ||--o{ AI_WORKFLOW : "ho_tro_boi"
+    AI_WORKFLOW ||--|{ AI_SUGGESTION : "dua_goi_y"
+    AI_SUGGESTION }o--|| USER : "phe_duyet_boi"
+
