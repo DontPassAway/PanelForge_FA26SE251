@@ -149,6 +149,14 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.ImageTimeoutSeconds, 15, 200));
         });
 
+        // ── Dịch kịch bản / thoại (LibreTranslate tự lưu trữ) ──
+        var translationBaseUrl = configuration["TranslationService:BaseUrl"] ?? "http://localhost:5000";
+        services.AddHttpClient<ITranslationService, LibreTranslateService>(client =>
+        {
+            client.BaseAddress = new Uri(translationBaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+
         // ── Audit trail: danh tính người gọi request (BR-18, UC-15) ─────────────
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
