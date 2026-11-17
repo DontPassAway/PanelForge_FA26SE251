@@ -101,21 +101,21 @@ Installed as a Claude Code plugin at project scope (`.claude/settings.json`, mar
 
 ## Git workflow (bắt buộc cho AI Agents)
 
-- **Nhánh làm việc: `trungkien`.** Mọi thay đổi commit vào `trungkien` (có ở cả BE `PanelForge_FA26SE251` và FE `panelforge-fe`). Không commit/push lên `main`; không tạo nhánh `feature/*` hay `THBMinh` để làm việc.
-- **Một agent:** làm trực tiếp trên `trungkien` trong repo chính (`git checkout trungkien`), không tạo worktree.
-- **Nhiều agent song song (multi-agent / subagent / session song song):** mỗi agent làm trong **git worktree riêng**, tách nhánh con từ `trungkien`:
-  - `git worktree add ../.worktrees/<repo>-<task> -b trungkien-<task> trungkien`
+- **Nhánh làm việc: `{work-branch}`** — nhánh do người code trên máy này chọn (mỗi người push nhánh riêng), lưu ở `git config --local panelforge.workBranch` (chỉ trên máy này, không commit). Đầu phiên chạy `git config --local --get panelforge.workBranch`: có giá trị → dùng, không hỏi lại; trống → hỏi người dùng tên nhánh rồi lưu bằng `powershell -File ../panelforge-hub/.agents/scripts/work_branch.ps1 -Action set -Branch <tên>`; repo đang ở nhánh khác → hỏi trước khi checkout. Không commit/push lên `main` hay nhánh của người khác; không tạo nhánh `feature/*` để làm việc thường ngày.
+- **Một agent:** làm trực tiếp trên `{work-branch}` trong repo chính (`git checkout {work-branch}`), không tạo worktree.
+- **Nhiều agent song song (multi-agent / subagent / session song song):** mỗi agent làm trong **git worktree riêng**, tách nhánh con từ `{work-branch}`:
+  - `git worktree add ../.worktrees/<repo>-<task> -b {work-branch}-<task> {work-branch}`
   - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không được sửa cùng file.
   - Không agent nào sửa trực tiếp working tree chính khi agent khác đang chạy.
-  - Khi xong: commit trong worktree → `git checkout trungkien && git merge --no-ff trungkien-<task>` → giải quyết conflict, build → `git worktree remove <path>` và `git branch -d trungkien-<task>`. Không push nhánh `trungkien-<task>` lên remote.
-- **Lấy code mới:** khi working tree sạch, `git pull origin trungkien` (còn thay đổi thì commit hoặc `git stash` rồi `stash pop` sau khi pull).
-- **Push:** chỉ `git push origin trungkien` khi hoàn thành 1 module lớn hoặc khi user yêu cầu trực tiếp. Không push sau mỗi prompt/commit nhỏ.
-- Không force-push, không rebase lại lịch sử đã push trên `trungkien`.
+  - Khi xong: commit trong worktree → `git checkout {work-branch} && git merge --no-ff {work-branch}-<task>` → giải quyết conflict, build → `git worktree remove <path>` và `git branch -d {work-branch}-<task>`. Không push nhánh `{work-branch}-<task>` lên remote.
+- **Lấy code mới:** khi working tree sạch, `git pull origin {work-branch}` (còn thay đổi thì commit hoặc `git stash` rồi `stash pop` sau khi pull).
+- **Push:** chỉ `git push origin {work-branch}` khi hoàn thành 1 module lớn hoặc khi user yêu cầu trực tiếp. Không push sau mỗi prompt/commit nhỏ.
+- Không force-push, không rebase lại lịch sử đã push trên `{work-branch}`.
 - **Conflict:** giữ thay đổi của cả hai bên khi không loại trừ nhau; với `*ModelSnapshot.cs` của EF, sau khi gộp phải kiểm tra bằng `dotnet ef migrations add` thử (phải ra migration rỗng). Build/test trước khi commit merge.
-- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync origin/trungkien into trungkien`.
+- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync origin/{work-branch} into {work-branch}`.
 - Không dùng `--no-verify`, không `push --force` lên nhánh dùng chung.
 - **Sau khi sửa code, cập nhật `panelforge-hubs` (nhánh `main`) và push:**
   1. `git -C ../panelforge-hubs pull --ff-only origin main`.
-  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash trên `trungkien`, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
+  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash trên `{work-branch}`, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
   3. Chạy `node scripts/sync-hub.mjs` để đồng bộ `hub-state.json`, `AUDIT_LOGS.md` và `web/public/docs`.
   4. Commit `docs(tracker): <việc ngắn gọn>` rồi `git push origin main` trong `panelforge-hubs`. Đây là ngoại lệ được phép cho quy tắc "không push sau mỗi lần làm" của hub.
