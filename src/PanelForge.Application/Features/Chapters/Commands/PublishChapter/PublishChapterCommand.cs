@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Chapters.Common;
@@ -40,6 +41,15 @@ public sealed class PublishChapterCommandHandler : IRequestHandler<PublishChapte
 
         chapter.Publish(publishAt);
         chapter.UpdatedBy = cmd.UserId.ToString();
+
+        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Published
+        var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+        var origLang = series?.OriginalLanguage ?? ContentLanguages.Original;
+        var origEdition = await _db.ChapterEditions.FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == origLang, ct);
+        if (origEdition is not null)
+        {
+            origEdition.Publish();
+        }
 
         var review = ChapterReview.Create(
             chapter.Id, ChapterReviewAction.PublisherPublished, cmd.UserId, chapter.VersionVector, scheduledAt: publishAt);

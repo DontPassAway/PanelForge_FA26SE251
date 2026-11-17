@@ -78,7 +78,8 @@ public class UpdateUserProfileCommandHandler : IRequestHandler<UpdateUserProfile
             IsActive: user.IsActive,
             Role: user.Role.ToString(),
             CreatedAt: user.CreatedAt,
-            ProfileCoverPresetId: user.ProfileCoverPresetId
+            ProfileCoverPresetId: user.ProfileCoverPresetId,
+            PreferredReadingLanguage: user.PreferredReadingLanguage
         );
     }
 }

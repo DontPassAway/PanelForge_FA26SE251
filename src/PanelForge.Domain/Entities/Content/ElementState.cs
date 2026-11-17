@@ -14,6 +14,11 @@ public sealed class ElementState
     public double Width { get; set; }
     public double Height { get; set; }
     public string? Content { get; set; }  // Text nội dung (balloon/narration)
+    /// <summary>
+    /// BR-34: Bản dịch của các ngôn ngữ phát hành (key = languageCode, value = translated text).
+    /// Ngôn ngữ gốc vẫn ở Content / RenderedText.
+    /// </summary>
+    public Dictionary<string, string> Texts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string? AssetId { get; set; } // Asset ID (artwork layer)
     public Guid? PanelId { get; set; }   // Panel chứa element (null = thuộc cả trang)
     public double Rotation { get; set; } // góc xoay, độ

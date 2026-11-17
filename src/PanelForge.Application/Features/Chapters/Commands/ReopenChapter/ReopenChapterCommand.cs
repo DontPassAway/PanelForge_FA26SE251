@@ -42,6 +42,16 @@ public sealed class ReopenChapterCommandHandler : IRequestHandler<ReopenChapterC
         chapter.Reopen();
         chapter.UpdatedBy = cmd.UserId.ToString();
 
+        // BR-34: Mở lại chương đưa mọi ấn bản chưa Published về Draft; ấn bản Published giữ snapshot cũ
+        var editions = await _db.ChapterEditions.Where(e => e.ChapterId == chapter.Id).ToListAsync(ct);
+        foreach (var ed in editions)
+        {
+            if (ed.Status != EditionStatus.Published)
+            {
+                ed.Reopen();
+            }
+        }
+
         // CF5: mở lại thì link xem thử của bản cũ bị thu hồi (BR-17)
         foreach (var link in await _db.PreviewLinks.Where(l => l.ChapterId == chapter.Id && l.RevokedAt == null).ToListAsync(ct))
             link.Revoke(cmd.UserId, "Chương được mở lại");

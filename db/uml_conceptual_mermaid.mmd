@@ -1,0 +1,141 @@
+classDiagram
+    title PanelForge Manga Production Platform - Conceptual Class Diagram (UML 2.0)
+
+    class User {
+        <<Entity>>
+    }
+
+    class StudioWorkspace {
+        <<AggregateRoot>>
+    }
+
+    class Series {
+        <<AggregateRoot>>
+    }
+
+    class Chapter {
+        <<Entity>>
+    }
+
+    class ChapterScript {
+        <<Entity>>
+    }
+
+    class Scene {
+        <<Entity>>
+    }
+
+    class DialogueLine {
+        <<Entity>>
+    }
+
+    class Page {
+        <<Entity>>
+    }
+
+    class Panel {
+        <<Entity>>
+    }
+
+    class PipelineDefinition {
+        <<AggregateRoot>>
+    }
+
+    class PipelineStage {
+        <<Entity>>
+    }
+
+    class TaskAssignment {
+        <<Entity>>
+    }
+
+    class Submission {
+        <<Entity>>
+    }
+
+    class ChangeRequest {
+        <<Entity>>
+    }
+
+    class SeriesBible {
+        <<AggregateRoot>>
+    }
+
+    class BibleEntry {
+        <<Entity>>
+    }
+
+    class ConsistencyRule {
+        <<Entity>>
+    }
+
+    class DigitalAsset {
+        <<Entity>>
+    }
+
+    class ArtworkVersion {
+        <<Entity>>
+    }
+
+    class PreviewLink {
+        <<Entity>>
+    }
+
+    class ReaderFeedback {
+        <<Entity>>
+    }
+
+    class AiWorkflowRun {
+        <<AggregateRoot>>
+    }
+
+    class AiSuggestion {
+        <<Entity>>
+    }
+
+    %% Organization & Workspace
+    User "1" --> "*" StudioWorkspace : owns
+    User "*" --> "*" StudioWorkspace : participates in
+
+    %% Content & Narrative
+    StudioWorkspace "1" *-- "*" Series : manages
+    Series "1" *-- "1..*" Chapter : contains
+    Chapter "1" *-- "1" ChapterScript : has baseline
+    ChapterScript "1" *-- "1..*" Scene : structured into
+    Scene "1" *-- "1..*" DialogueLine : contains
+
+    Chapter "1" *-- "1..*" Page : composed of
+    Page "1" *-- "1..*" Panel : partitioned into
+    Scene "1" --> "*" Panel : visualized across
+    Panel "1" o-- "*" DialogueLine : anchors
+
+    %% Workflow & Orchestration
+    StudioWorkspace "1" *-- "1..*" PipelineDefinition : configures
+    PipelineDefinition "1" *-- "1..*" PipelineStage : sequences
+    Chapter "1" --> "*" TaskAssignment : scopes work
+    PipelineStage "1" --> "*" TaskAssignment : governs
+    User "1" --> "*" TaskAssignment : performs
+    TaskAssignment "1" *-- "*" Submission : produces
+    Submission "1" *-- "*" ChangeRequest : reviewed with
+
+    %% Story Bible & Lore
+    Series "1" *-- "1" SeriesBible : governed by
+    SeriesBible "1" *-- "1..*" BibleEntry : catalogs
+    DialogueLine "*" --> "*" BibleEntry : references
+    Series "1" *-- "*" ConsistencyRule : enforces
+
+    %% Asset Management
+    StudioWorkspace "1" *-- "*" DigitalAsset : stores
+    DigitalAsset "1" *-- "1..*" ArtworkVersion : addresses
+    ArtworkVersion "1" --> "1" Page : renders
+    ArtworkVersion "0..1" --> "1" Panel : illustrates
+
+    %% Publishing & Sharing
+    Chapter "1" *-- "*" PreviewLink : shared via
+    PreviewLink "1" *-- "*" ReaderFeedback : collects
+
+    %% AI Multi-Agent
+    Chapter "1" --> "*" AiWorkflowRun : analyzed by
+    AiWorkflowRun "1" *-- "1..*" AiSuggestion : yields
+    AiSuggestion "*" --> "1" User : reviewed by
+

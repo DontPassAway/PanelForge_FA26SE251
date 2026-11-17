@@ -46,7 +46,23 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 
         // CF4 / 4.1: manifest bất biến của bản vừa duyệt, lưu cùng SaveChanges với Approve (BR-18);
         // duyệt lại sau khi mở lại tạo snapshot mới, bản cũ giữ nguyên (BR-01)
-        _db.ChapterSnapshots.Add(await ChapterSnapshotBuilder.CreateAsync(_db, _pages, chapter, cmd.UserId, ct));
+        var snapshot = await ChapterSnapshotBuilder.CreateAsync(_db, _pages, chapter, cmd.UserId, ct);
+        _db.ChapterSnapshots.Add(snapshot);
+
+        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Approved (tham chiếu snapshot cấp Chương)
+        var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+        var origLang = series?.OriginalLanguage ?? ContentLanguages.Original;
+        var origEdition = await _db.ChapterEditions.FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == origLang, ct);
+        if (origEdition is null)
+        {
+            origEdition = ChapterEdition.Create(chapter.Id, origLang, EditionStatus.Approved);
+            origEdition.Approve(snapshot.Id, cmd.UserId);
+            _db.ChapterEditions.Add(origEdition);
+        }
+        else
+        {
+            origEdition.Approve(snapshot.Id, cmd.UserId);
+        }
 
         var review = ChapterReview.Create(chapter.Id, ChapterReviewAction.ProducerApproved, cmd.UserId, chapter.VersionVector);
         _db.ChapterReviews.Add(review);

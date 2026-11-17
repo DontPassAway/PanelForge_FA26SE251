@@ -40,6 +40,11 @@ public class User : BaseEntity
     /// </summary>
     public bool CanCreateStudio { get; private set; } = false;
 
+    /// <summary>
+    /// BR-34: Ngôn ngữ đọc ưa thích của người dùng (null = theo ngôn ngữ mặc định).
+    /// </summary>
+    public string? PreferredReadingLanguage { get; private set; }
+
     public ICollection<StudioWorkspace> OwnedWorkspaces { get; private set; } = [];
     public ICollection<WorkspaceMember> WorkspaceMemberships { get; private set; } = [];
     public ICollection<Assignment> AssignedTasks { get; private set; } = [];
@@ -164,6 +169,20 @@ public class User : BaseEntity
     }
 
     public void AssignSystemRole(SystemRole newRole) => Role = newRole;
+
+    /// <summary>BR-34: Đặt ngôn ngữ đọc ưa thích (null hoặc rỗng = mặc định).</summary>
+    public void SetPreferredReadingLanguage(string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+        {
+            PreferredReadingLanguage = null;
+            return;
+        }
+
+        var norm = ContentLanguages.Normalize(languageCode)
+            ?? throw new ArgumentException($"Mã ngôn ngữ '{languageCode}' không hợp lệ.", nameof(languageCode));
+        PreferredReadingLanguage = norm;
+    }
 
     public void Deactivate() => IsActive = false;
     public void Activate()   => IsActive = true;

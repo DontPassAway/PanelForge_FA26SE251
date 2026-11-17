@@ -10,5 +10,6 @@ public record UserProfileDto(
     bool IsActive,
     string Role,
     DateTime CreatedAt,
-    string? ProfileCoverPresetId = null
+    string? ProfileCoverPresetId = null,
+    string? PreferredReadingLanguage = null
 );

@@ -41,7 +41,7 @@ public sealed record SnapshotManifest(
 internal static class ChapterSnapshotBuilder
 {
     public static async Task<ChapterSnapshot> CreateAsync(
-        IPanelForgeDbContext db, IPageRepository pages, Chapter chapter, Guid userId, CancellationToken ct)
+        IPanelForgeDbContext db, IPageRepository pages, Chapter chapter, Guid userId, CancellationToken ct, string? languageCode = null)
     {
         // 1. Artwork cuối từng trang + SHA-256 của file (BR-04)
         var finals = await FinalArtwork.SelectAsync(db, chapter.Id, ct);
@@ -173,6 +173,6 @@ internal static class ChapterSnapshotBuilder
 
         var json = AiJson.Serialize(manifest);
 
-        return ChapterSnapshot.Create(chapter.Id, next, chapter.VersionVector, userId, json, AiContentValidator.Sha256(json));
+        return ChapterSnapshot.Create(chapter.Id, next, chapter.VersionVector, userId, json, AiContentValidator.Sha256(json), languageCode);
     }
 }

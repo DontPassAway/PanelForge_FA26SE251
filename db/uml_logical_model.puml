@@ -1,0 +1,471 @@
+@startuml PanelForge_UML2_Logical_Model
+!theme plain
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam packageStyle rectangle
+skinparam classFontSize 11
+skinparam classFontName "Segoe UI"
+skinparam defaultFontName "Segoe UI"
+skinparam arrowThickness 1.5
+
+title PanelForge Manga Production Platform - Logical Domain Model (UML 2.0)
+
+package "Identity & Workspace Management" {
+    class User {
+        + id : Guid
+        + email : String
+        + fullName : String
+        + phoneNumber : String
+        + avatarUrl : String
+        + role : SystemRole
+        + isActive : Boolean
+        + isEmailConfirmed : Boolean
+        + twoFactorEnabled : Boolean
+        + canCreateStudio : Boolean
+        + createdAt : DateTime
+    }
+
+    class StudioWorkspace {
+        + id : Guid
+        + ownerId : Guid
+        + name : String
+        + slug : String
+        + description : String
+        + status : WorkspaceStatus
+        + planTier : WorkspacePlan
+        + createdAt : DateTime
+    }
+
+    class WorkspaceMember {
+        + id : Guid
+        + workspaceId : Guid
+        + userId : Guid
+        + role : WorkspaceRole
+        + status : MemberStatus
+        + joinedAt : DateTime
+    }
+
+    class RefreshToken {
+        + id : Guid
+        + userId : Guid
+        + tokenHash : String
+        + sessionId : Guid
+        + deviceName : String
+        + expiresAt : DateTime
+        + revokedAt : DateTime
+    }
+}
+
+package "Series & Content Production" {
+    class Series {
+        + id : Guid
+        + workspaceId : Guid
+        + title : String
+        + slug : String
+        + synopsis : String
+        + status : SeriesStatus
+        + targetDemographic : String
+        + releaseSchedule : JsonObject
+        + createdAt : DateTime
+    }
+
+    class SeriesMember {
+        + id : Guid
+        + seriesId : Guid
+        + userId : Guid
+        + role : WorkspaceRole
+        + assignedAt : DateTime
+    }
+
+    class Chapter {
+        + id : Guid
+        + seriesId : Guid
+        + chapterNumber : Decimal
+        + title : String
+        + outline : String
+        + status : ChapterStatus
+        + coverImageSha256 : String
+        + versionVector : Long
+        + isScriptFrozen : Boolean
+        + scriptFrozenAt : DateTime
+        + scriptContentHash : String
+        + targetReleaseDate : Date
+    }
+
+    class ChapterScript {
+        + id : Guid
+        + chapterId : Guid
+        + version : Integer
+        + rawText : String
+        + isLocked : Boolean
+        + lockedAt : DateTime
+        + lockedById : Guid
+    }
+
+    class Scene {
+        + id : Guid
+        + chapterId : Guid
+        + sceneNumber : Integer
+        + heading : String
+        + summary : String
+        + defaultNarrationMode : NarrationMode
+        + version : Integer
+    }
+
+    class ScriptLine {
+        + id : Guid
+        + sceneId : Guid
+        + panelId : Guid
+        + speakerCharacterId : Guid
+        + lineOrder : Integer
+        + dialogueText : String
+        + stageDirection : String
+        + narrationMode : NarrationMode
+    }
+
+    class Page {
+        + id : Guid
+        + chapterId : Guid
+        + pageNumber : Integer
+        + layoutFormat : LayoutFormat
+        + widthPx : Integer
+        + heightPx : Integer
+        + dpi : Integer
+        + isContentReady : Boolean
+        + currentStageId : Guid
+    }
+
+    class Panel {
+        + id : Guid
+        + pageId : Guid
+        + sceneId : Guid
+        + panelNumber : Integer
+        + readingOrder : Integer
+        + boundingBox : JsonObject
+        + currentStageId : Guid
+        + version : Integer
+    }
+
+    class ChapterSnapshot {
+        + id : Guid
+        + chapterId : Guid
+        + snapshotNumber : Integer
+        + chapterVersion : Long
+        + manifestHash : String
+        + manifestJson : String
+        + createdAt : DateTime
+    }
+}
+
+package "Workflow Orchestration" {
+    class PipelineDefinition {
+        + id : Guid
+        + workspaceId : Guid
+        + seriesId : Guid
+        + name : String
+        + description : String
+        + isDefault : Boolean
+    }
+
+    class PipelineStage {
+        + id : Guid
+        + pipelineDefinitionId : Guid
+        + name : String
+        + stageOrder : Integer
+        + requiredRole : WorkspaceRole
+        + isEnabled : Boolean
+        + configuration : JsonObject
+    }
+
+    class StageTransition {
+        + id : Guid
+        + pipelineDefinitionId : Guid
+        + fromStageId : Guid
+        + toStageId : Guid
+        + isAutoApproved : Boolean
+    }
+
+    class Assignment {
+        + id : Guid
+        + seriesId : Guid
+        + chapterId : Guid
+        + pipelineStageId : Guid
+        + assigneeUserId : Guid
+        + assignedRole : WorkspaceRole
+        + entityType : WorkflowEntityType
+        + targetEntityId : Guid
+        + brief : String
+        + status : AssignmentStatus
+        + priority : AssignmentPriority
+        + dueDate : DateTime
+        + dependsOnAssignmentIds : List<Guid>
+    }
+
+    class Submission {
+        + id : Guid
+        + assignmentId : Guid
+        + chapterId : Guid
+        + submittedByUserId : Guid
+        + attemptNumber : Integer
+        + status : SubmissionStatus
+        + panelLayout : JsonObject
+        + canvasVersions : JsonObject
+        + submittedAt : DateTime
+    }
+
+    class ChangeRequest {
+        + id : Guid
+        + assignmentId : Guid
+        + chapterId : Guid
+        + submissionId : Guid
+        + assetReferenceId : Guid
+        + panelId : Guid
+        + responsibleUserId : Guid
+        + status : ChangeRequestStatus
+        + severity : SeverityLevel
+        + comment : String
+        + region : JsonObject
+    }
+
+    class Notification {
+        + id : Guid
+        + userId : Guid
+        + assignmentId : Guid
+        + chapterId : Guid
+        + type : NotificationType
+        + title : String
+        + message : String
+        + readAt : DateTime
+        + createdAt : DateTime
+    }
+}
+
+package "Story Bible & Continuity" {
+    class SeriesBible {
+        + id : Guid
+        + seriesId : Guid
+        + workspaceId : Guid
+        + name : String
+        + version : Integer
+    }
+
+    class BibleEntry {
+        + id : Guid
+        + seriesBibleId : Guid
+        + category : BibleEntryCategory
+        + code : String
+        + name : String
+        + subtitle : String
+        + description : String
+        + details : JsonObject
+        + priority : BiblePriority
+        + strictCheck : Boolean
+        + isActive : Boolean
+    }
+
+    class BibleEntryRevision {
+        + id : Guid
+        + bibleEntryId : Guid
+        + revisionNumber : Integer
+        + changeType : String
+        + snapshotJson : String
+        + createdAt : DateTime
+    }
+
+    class ScriptLineBibleLink {
+        + id : Guid
+        + scriptLineId : Guid
+        + bibleEntryId : Guid
+        + resolvedRevisionId : Guid
+        + matchConfidence : Decimal
+    }
+
+    class ConsistencyRule {
+        + id : Guid
+        + seriesId : Guid
+        + name : String
+        + ruleType : RuleType
+        + configuration : JsonObject
+        + isActive : Boolean
+    }
+
+    class ConsistencyFinding {
+        + id : Guid
+        + chapterId : Guid
+        + ruleId : Guid
+        + targetEntityId : Guid
+        + severity : FindingSeverity
+        + status : FindingStatus
+        + description : String
+    }
+}
+
+package "Content-Addressed Storage (CAS)" {
+    class Asset {
+        + id : Guid
+        + workspaceId : Guid
+        + sha256 : String
+        + sizeBytes : Long
+        + contentType : String
+        + storageKey : String
+        + createdAt : DateTime
+    }
+
+    class AssetReference {
+        + id : Guid
+        + assetId : Guid
+        + workspaceId : Guid
+        + chapterId : Guid
+        + pageId : Guid
+        + panelId : Guid
+        + pipelineStageId : Guid
+        + versionNumber : Integer
+        + layerType : String
+        + fileName : String
+    }
+}
+
+package "Publishing & Feedback" {
+    class PreviewLink {
+        + id : Guid
+        + chapterId : Guid
+        + workspaceId : Guid
+        + recipientEmail : String
+        + tokenHash : String
+        + expiresAt : DateTime
+        + revokedAt : DateTime
+        + snapshotArtworkIds : List<Guid>
+        + chapterVersion : Long
+    }
+
+    class PreviewFeedback {
+        + id : Guid
+        + previewLinkId : Guid
+        + reviewerEmail : String
+        + rating : Integer
+        + comment : String
+        + createdAt : DateTime
+    }
+
+    class ExportJob {
+        + id : Guid
+        + chapterId : Guid
+        + workspaceId : Guid
+        + status : ExportStatus
+        + format : ExportFormat
+        + outputAssetSha256 : String
+    }
+}
+
+package "AI Multi-Agent & Audit" {
+    class AiWorkflowRun {
+        + id : Guid
+        + workspaceId : Guid
+        + seriesId : Guid
+        + chapterId : Guid
+        + workflowType : AiWorkflowType
+        + status : WorkflowStatus
+        + contextSnapshotJson : String
+    }
+
+    class AiAgentStep {
+        + id : Guid
+        + runId : Guid
+        + agentName : String
+        + status : StepStatus
+        + parametersJson : String
+        + outputJson : String
+    }
+
+    class AiSuggestion {
+        + id : Guid
+        + runId : Guid
+        + stepId : Guid
+        + targetEntityType : String
+        + targetEntityId : Guid
+        + status : SuggestionStatus
+        + payloadJson : String
+    }
+
+    class AiUsageRecord {
+        + id : Guid
+        + workspaceId : Guid
+        + userId : Guid
+        + feature : String
+        + provider : String
+        + model : String
+        + promptTokens : Long
+        + completionTokens : Long
+        + costUsd : Decimal
+        + occurredAtUtc : DateTime
+    }
+
+    class AuditLog {
+        + id : Guid
+        + workspaceId : Guid
+        + userId : Guid
+        + action : String
+        + entityName : String
+        + entityId : String
+        + changesJson : String
+        + timestampUtc : DateTime
+    }
+}
+
+' Structural Relationships & Multiplicities
+User "1" -- "0..*" StudioWorkspace : owns >
+StudioWorkspace "1" *-- "1..*" WorkspaceMember : has >
+User "1" -- "0..*" WorkspaceMember : participates in >
+User "1" *-- "0..*" RefreshToken : authenticates via >
+User "1" *-- "0..*" Notification : receives >
+
+StudioWorkspace "1" *-- "0..*" Series : manages >
+Series "1" *-- "0..*" SeriesMember : assigns >
+User "1" -- "0..*" SeriesMember : acts as >
+Series "1" *-- "1..*" Chapter : contains >
+Chapter "1" *-- "1" ChapterScript : has baseline >
+Chapter "1" *-- "0..*" ChapterSnapshot : snapshots >
+
+Chapter "1" *-- "1..*" Scene : divides into >
+Scene "1" *-- "1..*" ScriptLine : contains >
+Chapter "1" *-- "1..*" Page : renders >
+Page "1" *-- "1..*" Panel : frames >
+Scene "1" -- "0..*" Panel : visualizes across >
+Panel "1" o-- "0..*" ScriptLine : anchors >
+
+StudioWorkspace "1" *-- "1..*" PipelineDefinition : defines >
+PipelineDefinition "1" *-- "1..*" PipelineStage : sequences >
+PipelineDefinition "1" *-- "0..*" StageTransition : transitions >
+
+Chapter "1" -- "0..*" Assignment : tracks >
+PipelineStage "1" -- "0..*" Assignment : regulates >
+User "1" -- "0..*" Assignment : assigned to >
+Assignment "1" *-- "0..*" Submission : receives >
+Assignment "1" *-- "0..*" ChangeRequest : requests revisions >
+Submission "1" o-- "0..*" ChangeRequest : includes >
+
+Series "1" *-- "1" SeriesBible : documented by >
+SeriesBible "1" *-- "1..*" BibleEntry : catalogs >
+BibleEntry "1" *-- "0..*" BibleEntryRevision : versions >
+ScriptLine "*" -- "*" BibleEntry : references >
+Series "1" *-- "0..*" ConsistencyRule : enforces >
+Chapter "1" -- "0..*" ConsistencyFinding : detects >
+
+StudioWorkspace "1" *-- "0..*" Asset : stores >
+Asset "1" *-- "1..*" AssetReference : referenced as >
+Page "1" -- "0..*" AssetReference : displays >
+Panel "1" -- "0..*" AssetReference : layers >
+
+Chapter "1" *-- "0..*" PreviewLink : shared via >
+PreviewLink "1" *-- "0..*" PreviewFeedback : gathers >
+Chapter "1" *-- "0..*" ExportJob : exports >
+
+StudioWorkspace "1" *-- "0..*" AiWorkflowRun : executes >
+AiWorkflowRun "1" *-- "1..*" AiAgentStep : breaks into >
+AiAgentStep "1" *-- "0..*" AiSuggestion : suggests >
+StudioWorkspace "1" *-- "0..*" AiUsageRecord : accounts >
+StudioWorkspace "1" *-- "0..*" AuditLog : audits >
+
+@enduml
+

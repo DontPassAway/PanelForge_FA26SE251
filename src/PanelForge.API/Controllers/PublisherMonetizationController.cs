@@ -64,31 +64,6 @@ public sealed class PublisherMonetizationController : ControllerBase
         [FromRoute] Guid chapterId, [FromBody] SetChapterLanguagePricesRequest request, CancellationToken ct)
         => ToResult(await _mediator.Send(new SetChapterLanguagePricesCommand(chapterId, request.Prices ?? []), ct));
 
-    /// <summary>PUT /api/publisher/chapters/{chapterId}/pages/{pageId}/translations/{language} — upload ảnh trang bản dịch (en/ja).</summary>
-    [HttpPut("chapters/{chapterId:guid}/pages/{pageId:guid}/translations/{language}")]
-    [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetPageTranslationCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetPageTranslationCommandHandler.MaxBytes + 1024 * 1024)]
-    [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UploadTranslation(
-        [FromRoute] Guid chapterId, [FromRoute] Guid pageId, [FromRoute] string language, IFormFile? file, CancellationToken ct)
-    {
-        if (file is null || file.Length == 0)
-            return BadRequest(new { error = "Thiếu file ảnh trang." });
-
-        using var buffer = new MemoryStream();
-        await file.CopyToAsync(buffer, ct);
-        return ToResult(await _mediator.Send(
-            new SetPageTranslationCommand(chapterId, pageId, language, buffer.ToArray(), CurrentUserId), ct));
-    }
-
-    /// <summary>DELETE /api/publisher/chapters/{chapterId}/pages/{pageId}/translations/{language} — xóa ảnh dịch.</summary>
-    [HttpDelete("chapters/{chapterId:guid}/pages/{pageId:guid}/translations/{language}")]
-    [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> DeleteTranslation(
-        [FromRoute] Guid chapterId, [FromRoute] Guid pageId, [FromRoute] string language, CancellationToken ct)
-        => ToResult(await _mediator.Send(new SetPageTranslationCommand(chapterId, pageId, language, null, CurrentUserId), ct));
-
     /// <summary>GET /api/publisher/chapters/{chapterId}/pages/{pageId}/image?lang= — ảnh xem trước (cả chương chưa phát hành).</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]

@@ -53,6 +53,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasColumnName("profile_cover_preset_id")
                .HasColumnType("varchar(64)");
 
+        builder.Property(u => u.PreferredReadingLanguage)
+               .HasColumnName("preferred_reading_language")
+               .HasColumnType("varchar(10)");
+
         builder.Property(u => u.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")

@@ -71,6 +71,10 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
                .HasColumnName("quoted_text")
                .HasColumnType("text");
 
+        builder.Property(c => c.LanguageCode)
+               .HasColumnName("language_code")
+               .HasColumnType("varchar(10)");
+
         builder.Property(c => c.SubmissionId)
                .HasColumnName("submission_id")
                .HasColumnType("uuid");

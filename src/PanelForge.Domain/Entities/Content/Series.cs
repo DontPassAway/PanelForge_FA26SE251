@@ -27,6 +27,12 @@ public class Series : BaseEntity
     /// <summary>Producer đánh dấu bộ truyện đã hoàn thành (Reader thấy "Hoàn thành" thay vì "Đang ra").</summary>
     public bool IsCompleted { get; private set; }
 
+    /// <summary>Ngôn ngữ kịch bản gốc (BR-34, mặc định 'vi').</summary>
+    public string OriginalLanguage { get; private set; } = ContentLanguages.Original;
+
+    /// <summary>Các ngôn ngữ phát hành (BR-34, luôn chứa OriginalLanguage, mặc định ['vi', 'en', 'ja']).</summary>
+    public List<string> ReleaseLanguages { get; private set; } = [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+
     /// <summary>
     /// Publisher: mặc định N trang đầu mỗi chương trả phí là trang xem trước cho người chưa mua (0 = khóa toàn bộ).
     /// Chương Publisher đã chọn trang xem trước bằng tay (<see cref="Chapter.PreviewPagesCustomized"/>) không theo mặc định này.
@@ -85,6 +91,29 @@ public class Series : BaseEntity
     {
         if (IsCompleted == isCompleted) return;
         IsCompleted = isCompleted;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Producer thiết lập ngôn ngữ gốc và danh sách ngôn ngữ phát hành (BR-34).</summary>
+    public void SetLanguages(string originalLanguage, IEnumerable<string> releaseLanguages)
+    {
+        var original = ContentLanguages.Normalize(originalLanguage)
+            ?? throw new ArgumentException($"Ngôn ngữ gốc '{originalLanguage}' không thuộc ContentLanguages.", nameof(originalLanguage));
+
+        var releases = new List<string>();
+        foreach (var l in releaseLanguages)
+        {
+            var code = ContentLanguages.Normalize(l)
+                ?? throw new ArgumentException($"Ngôn ngữ phát hành '{l}' không thuộc ContentLanguages.", nameof(releaseLanguages));
+            if (!releases.Contains(code))
+                releases.Add(code);
+        }
+
+        if (!releases.Contains(original))
+            releases.Insert(0, original);
+
+        OriginalLanguage = original;
+        ReleaseLanguages = releases;
         UpdatedAt = DateTime.UtcNow;
     }
 

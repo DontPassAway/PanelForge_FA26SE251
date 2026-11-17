@@ -139,6 +139,7 @@ internal sealed class ProductionHistory
     {
         ElementAddedEvent x => (x.ElementId, x.AddedByUserId, $"đặt bóng \"{Clip(x.RenderedText ?? x.Content)}\""),
         ElementTextUpdatedEvent x => (x.ElementId, x.UpdatedByUserId, $"sửa chữ \"{Clip(x.Content)}\""),
+        ElementTranslationUpdatedEvent x => (x.ElementId, x.UpdatedByUserId, $"dịch [{x.LanguageCode}] \"{Clip(x.Text)}\""),
         ElementStyleUpdatedEvent x => (x.ElementId, x.UpdatedByUserId, x.Style is null
             ? "về kiểu mặc định"
             : $"đổi kiểu {x.Style.FontFamily} {x.Style.FontSize}px{(x.Style.BalloonShape is { } s ? $", bóng {s}" : "")}"),

@@ -20,7 +20,9 @@ public sealed record SeriesDto(
     string? CoverUrl = null,
     string? AvatarUrl = null,
     string? BannerUrl = null,
-    bool IsCompleted = false
+    bool IsCompleted = false,
+    string OriginalLanguage = ContentLanguages.Original,
+    IReadOnlyList<string>? ReleaseLanguages = null
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -50,7 +52,14 @@ public sealed record SeriesDetailDto(
     string? StoryArc = null,
     string? CoverUrl = null,
     string? AvatarUrl = null,
-    string? BannerUrl = null
+    string? BannerUrl = null,
+    string OriginalLanguage = ContentLanguages.Original,
+    IReadOnlyList<string>? ReleaseLanguages = null
+);
+
+public sealed record UpdateSeriesLanguagesRequest(
+    string OriginalLanguage,
+    IReadOnlyList<string> ReleaseLanguages
 );
 
 public sealed record CreateSeriesRequest(

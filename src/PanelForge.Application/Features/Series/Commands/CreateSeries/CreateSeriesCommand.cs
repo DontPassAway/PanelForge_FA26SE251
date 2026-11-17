@@ -197,7 +197,10 @@ public sealed class CreateSeriesCommandHandler : IRequestHandler<CreateSeriesCom
             StoryArc: series.StoryArc,
             CoverUrl: SetSeriesCoverCommandHandler.CoverUrl(series.Id, series.CoverImageSha256),
             AvatarUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Avatar, series.AvatarImageSha256),
-            BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256)
+            BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256),
+            IsCompleted: series.IsCompleted,
+            OriginalLanguage: series.OriginalLanguage,
+            ReleaseLanguages: series.ReleaseLanguages
         ));
     }
 }

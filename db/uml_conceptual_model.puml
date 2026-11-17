@@ -1,0 +1,110 @@
+@startuml PanelForge_UML2_Conceptual_Model
+!theme plain
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam packageStyle rectangle
+skinparam classFontSize 12
+skinparam classFontName "Segoe UI"
+skinparam defaultFontName "Segoe UI"
+skinparam arrowThickness 1.5
+
+title PanelForge Manga Production Platform - Conceptual Model (UML 2.0)
+
+package "Organization & Identity" {
+    class User <<Entity>>
+    class StudioWorkspace <<Aggregate Root>>
+}
+
+package "Content & Narrative" {
+    class Series <<Aggregate Root>>
+    class Chapter <<Entity>>
+    class ChapterScript <<Entity>>
+    class Scene <<Entity>>
+    class DialogueLine <<Entity>>
+    class Page <<Entity>>
+    class Panel <<Entity>>
+}
+
+package "Workflow & Pipeline" {
+    class PipelineDefinition <<Aggregate Root>>
+    class PipelineStage <<Entity>>
+    class TaskAssignment <<Entity>>
+    class Submission <<Entity>>
+    class ChangeRequest <<Entity>>
+}
+
+package "Story Bible & Continuity" {
+    class SeriesBible <<Aggregate Root>>
+    class BibleEntry <<Entity>>
+    class ConsistencyRule <<Entity>>
+}
+
+package "Asset Management" {
+    class DigitalAsset <<Entity>>
+    class ArtworkVersion <<Entity>>
+}
+
+package "Publishing & Sharing" {
+    class PreviewLink <<Entity>>
+    class ReaderFeedback <<Entity>>
+    class ExportJob <<Entity>>
+}
+
+package "AI Multi-Agent System" {
+    class AiWorkflowRun <<Aggregate Root>>
+    class AiSuggestion <<Entity>>
+}
+
+' UML 2.0 Structural Associations & Compositions
+
+' Organization relationships
+User "1" -- "0..*" StudioWorkspace : owns >
+User "*" -- "*" StudioWorkspace : participates in >
+
+' Content Lifecycle & Compositions
+StudioWorkspace "1" *-- "0..*" Series : manages >
+Series "1" *-- "1..*" Chapter : contains >
+Chapter "1" *-- "1" ChapterScript : has baseline >
+ChapterScript "1" *-- "1..*" Scene : structured into >
+Scene "1" *-- "1..*" DialogueLine : contains >
+
+Chapter "1" *-- "1..*" Page : composed of >
+Page "1" *-- "1..*" Panel : partitioned into >
+Scene "1" -- "0..*" Panel : visualized across >
+Panel "1" o-- "0..*" DialogueLine : anchors >
+
+' Pipeline & Task Assignments
+StudioWorkspace "1" *-- "1..*" PipelineDefinition : configures >
+PipelineDefinition "1" *-- "1..*" PipelineStage : sequences >
+
+Chapter "1" -- "0..*" TaskAssignment : scopes work >
+PipelineStage "1" -- "0..*" TaskAssignment : governs >
+User "1" -- "0..*" TaskAssignment : performs >
+TaskAssignment "1" *-- "0..*" Submission : produces >
+Submission "1" *-- "0..*" ChangeRequest : reviewed with >
+
+' Story Bible Relationships
+Series "1" *-- "1" SeriesBible : governed by >
+SeriesBible "1" *-- "1..*" BibleEntry : catalogs >
+DialogueLine "*" -- "*" BibleEntry : references >
+Series "1" *-- "0..*" ConsistencyRule : enforces >
+
+' Digital Asset Storage (CAS)
+StudioWorkspace "1" *-- "0..*" DigitalAsset : stores >
+DigitalAsset "1" *-- "1..*" ArtworkVersion : addresses >
+ArtworkVersion "1" -- "1" Page : renders >
+ArtworkVersion "0..1" -- "1" Panel : illustrates >
+
+' Publishing & External Feedback
+Chapter "1" *-- "0..*" PreviewLink : shared via >
+PreviewLink "1" *-- "0..*" ReaderFeedback : collects >
+Chapter "1" *-- "0..*" ExportJob : exported as >
+
+' AI Workflow Execution
+Chapter "1" -- "0..*" AiWorkflowRun : analyzed by >
+AiWorkflowRun "1" *-- "1..*" AiSuggestion : yields >
+AiSuggestion "*" -- "1" User : reviewed by >
+
+@enduml
+

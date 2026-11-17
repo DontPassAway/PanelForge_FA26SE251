@@ -270,6 +270,26 @@ public class UsersController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+    /// <summary>
+    /// Cập nhật ngôn ngữ đọc ưa thích của người dùng đang đăng nhập (BR-34).
+    /// </summary>
+    [HttpPut("me/reading-language")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateMyReadingLanguage(
+        [FromBody] UpdateReadingLanguageRequest request, CancellationToken ct)
+    {
+        var userIdStr = GetCallerUserIdStr();
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new PanelForge.Application.Features.Users.Commands.UpdateReadingLanguage.UpdateReadingLanguageCommand(userId, request.LanguageCode), ct);
+        return result.IsSuccess
+            ? Ok(new { preferredReadingLanguage = result.Value })
+            : BadRequest(new { error = result.ErrorMessage });
+    }
 }
 
 public record SetProfileCoverRequest(string? PresetId);
+public record UpdateReadingLanguageRequest(string? LanguageCode);

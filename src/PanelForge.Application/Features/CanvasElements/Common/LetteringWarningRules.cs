@@ -23,10 +23,12 @@ public static class LetteringWarningRules
 
     /// <param name="active">Element chưa bị xóa của Page.</param>
     /// <param name="lineOrder">ScriptLineId → (số Scene, thứ tự dòng); thiếu = dòng đã xóa, bỏ qua kiểm thứ tự.</param>
+    /// <param name="lang">Ngôn ngữ kiểm tra tràn chữ (BR-34, null = ngôn ngữ gốc).</param>
     public static List<ElementWarningDto> Evaluate(
         IReadOnlyCollection<ElementState> active,
         ReadingDirection direction,
-        IReadOnlyDictionary<Guid, (int Scene, int Line)> lineOrder)
+        IReadOnlyDictionary<Guid, (int Scene, int Line)> lineOrder,
+        string? lang = null)
     {
         var warnings = new List<ElementWarningDto>();
         var texts = active.Where(e => Page.TextElementTypes.Contains(e.ElementType)).ToList();
@@ -34,11 +36,20 @@ public static class LetteringWarningRules
 
         foreach (var e in texts)
         {
-            var text = (e.RenderedText ?? e.Content)?.Trim();
+            string? text;
+            if (!string.IsNullOrEmpty(lang))
+            {
+                text = (e.Texts != null && e.Texts.TryGetValue(lang, out var t) ? t : null)?.Trim();
+            }
+            else
+            {
+                text = (e.RenderedText ?? e.Content)?.Trim();
+            }
+
             var limit = LetteringLimits.ForElement(e.Width, e.Height);
             if (!string.IsNullOrEmpty(text) && text.Length > limit)
                 warnings.Add(new(e.ElementId, TextOverflow,
-                    $"Chữ dài {text.Length} ký tự, ước lượng hộp chỉ chứa khoảng {limit}. Hãy phóng to hộp hoặc rút gọn thoại.",
+                    $"Chữ {(string.IsNullOrEmpty(lang) ? "" : $"[{lang}] ")}dài {text.Length} ký tự, ước lượng hộp chỉ chứa khoảng {limit}. Hãy phóng to hộp hoặc rút gọn thoại.",
                     Acknowledged: e.OverflowAckReason is not null, AcknowledgedReason: e.OverflowAckReason));
 
             foreach (var r in regions.Where(r => Intersects(e, r)))

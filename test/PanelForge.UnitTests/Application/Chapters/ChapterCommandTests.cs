@@ -20,6 +20,8 @@ public class ChapterCommandTests
         _dbContextMock = new Mock<IPanelForgeDbContext>();
         // SCR-05: tạo chương kèm Scene mặc định ẩn
         _dbContextMock.Setup(db => db.Scenes).Returns(DbSetMockHelper.CreateDbSetMock(new List<Scene>()));
+        // BR-34: ChapterEditions
+        _dbContextMock.Setup(db => db.ChapterEditions).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChapterEdition>()));
     }
 
     [Fact]

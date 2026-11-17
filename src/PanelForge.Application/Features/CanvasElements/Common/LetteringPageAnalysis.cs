@@ -27,7 +27,8 @@ public sealed record PageLetteringAnalysis(
 
 public static class LetteringPageAnalysis
 {
-    public static async Task<PageLetteringAnalysis> AnalyzeAsync(IPanelForgeDbContext db, Page page, CancellationToken ct)
+    public static async Task<PageLetteringAnalysis> AnalyzeAsync(
+        IPanelForgeDbContext db, Page page, CancellationToken ct, string? lang = null)
     {
         var active = page.Elements.Values.Where(e => !e.IsRemoved).ToList();
         var lineIds = active.Where(e => e.ScriptLineId.HasValue).Select(e => e.ScriptLineId!.Value).Distinct().ToList();
@@ -53,7 +54,7 @@ public static class LetteringPageAnalysis
             .FirstOrDefaultAsync(ct) ?? ReadingDirection.LeftToRight;
 
         var warnings = LetteringWarningRules.Evaluate(
-            active, direction, lines.ToDictionary(kv => kv.Key, kv => (kv.Value.SceneNumber, kv.Value.LineOrder)));
+            active, direction, lines.ToDictionary(kv => kv.Key, kv => (kv.Value.SceneNumber, kv.Value.LineOrder)), lang);
 
         return new PageLetteringAnalysis(lines, warnings, stale);
     }

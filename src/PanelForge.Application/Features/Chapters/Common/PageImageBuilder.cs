@@ -16,7 +16,8 @@ internal static class PageImageBuilder
     /// <summary>Trả null nếu trang không có artwork nào trong <paramref name="assetReferenceIds"/> đọc được từ kho.</summary>
     public static async Task<ExportPageImage?> BuildAsync(
         IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pageRepository, IPageLetteringCompositor compositor,
-        Guid pageId, IReadOnlyCollection<Guid> assetReferenceIds, CancellationToken ct)
+        Guid pageId, IReadOnlyCollection<Guid> assetReferenceIds, CancellationToken ct, string? languageCode = null,
+        long? canvasStreamVersion = null)
     {
         // Snapshot có thể trỏ tới trang/Panel đã xoá sau khi duyệt: bỏ bộ lọc xoá mềm để dựng lại đúng bản đã duyệt
         var page = await db.Pages.IgnoreQueryFilters().AsNoTracking().Where(p => p.Id == pageId)
@@ -75,7 +76,8 @@ internal static class PageImageBuilder
             image = compositor.ComposePanels(page.PageNumber, width, height, layers);
         }
 
-        return await WithLetteringAsync(pageRepository, compositor, image, pageId, pin?.CanvasStreamVersion, ct);
+        return await WithLetteringAsync(pageRepository, compositor, image, pageId, ct, languageCode,
+            canvasStreamVersion, pin?.CanvasStreamVersion);
     }
 
     /// <summary>
@@ -104,22 +106,40 @@ internal static class PageImageBuilder
     }
 
     /// <summary>
-    /// Vẽ lớp chữ của Page lên ảnh trang (bóng thoại, dẫn truyện, SFX). Có version canvas đã ghim thì dựng lại stream đúng
-    /// version đó; -1 = trang chưa có event nào lúc ghim (không có chữ). Không ghim thì lấy trạng thái hiện tại.
+    /// Vẽ lớp chữ của Page lên ảnh trang (bóng thoại, dẫn truyện, SFX), theo ngôn ngữ phát hành nếu có (BR-34).
+    /// Version canvas: ưu tiên version người gọi truyền (snapshot ấn bản ngôn ngữ; âm = dùng bản hiện tại), không có thì
+    /// version ghim trong ChapterSnapshot (-1 = trang chưa có event nào lúc duyệt → không có chữ), không ghim thì bản hiện tại
+    /// (BR-01/BR-12/BR-17: mở lại chương rồi sửa chữ không lọt vào bản đã duyệt).
     /// </summary>
     private static async Task<ExportPageImage> WithLetteringAsync(
-        IPageRepository pageRepository, IPageLetteringCompositor compositor, ExportPageImage image, Guid pageId,
-        long? pinnedVersion, CancellationToken ct)
+        IPageRepository pageRepository, IPageLetteringCompositor compositor, ExportPageImage image, Guid pageId, CancellationToken ct,
+        string? languageCode = null, long? canvasStreamVersion = null, long? pinnedVersion = null)
     {
-        if (pinnedVersion is < 0) return image;
-        var page = pinnedVersion is { } v
-            ? await pageRepository.GetAtVersionAsync(pageId, v, ct)
+        long? version = canvasStreamVersion;
+        if (version is null)
+        {
+            if (pinnedVersion is < 0) return image;
+            version = pinnedVersion;
+        }
+        var page = version is >= 0
+            ? await pageRepository.GetAtVersionAsync(pageId, version.Value, ct)
             : await pageRepository.GetAsync(pageId, ct);
         if (page is null) return image;
         var texts = page.Elements.Values
             .Where(e => !e.IsRemoved && Page.TextElementTypes.Contains(e.ElementType))
-            .Select(e => new ExportLetteringElement(e.ElementType, e.X, e.Y, e.Width, e.Height, e.Rotation, e.ZIndex,
-                e.RenderedText ?? e.Content ?? "", e.Style))
+            .Select(e =>
+            {
+                string text = "";
+                if (!string.IsNullOrEmpty(languageCode) && e.Texts != null && e.Texts.TryGetValue(languageCode, out var trans) && !string.IsNullOrWhiteSpace(trans))
+                {
+                    text = trans;
+                }
+                else
+                {
+                    text = e.RenderedText ?? e.Content ?? "";
+                }
+                return new ExportLetteringElement(e.ElementType, e.X, e.Y, e.Width, e.Height, e.Rotation, e.ZIndex, text, e.Style);
+            })
             .ToList();
         return compositor.Compose(image, page.WidthPx, page.HeightPx, texts);
     }

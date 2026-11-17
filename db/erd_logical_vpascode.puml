@@ -1,0 +1,474 @@
+@startuml PanelForge_Logical_Data_Model
+!theme plain
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam classFontSize 12
+skinparam classFontName "Segoe UI"
+skinparam classAttributeFontSize 11
+
+title PanelForge Manga Production Platform - Logical Data Model (LDM)
+
+package "1. Identity & Organization Domain" #F4F6F8 {
+    class User {
+        + UserId
+        --
+        Email
+        FullName
+        Role (SystemRole)
+        IsActive
+        CanCreateStudio
+        TwoFactorEnabled
+    }
+
+    class StudioWorkspace {
+        + WorkspaceId
+        --
+        OwnerId [FK]
+        Name
+        Slug
+        PlanTier
+        Status
+    }
+
+    class WorkspaceMember {
+        + MemberId
+        --
+        WorkspaceId [FK]
+        UserId [FK]
+        Role (Producer/Writer/Artist/Letterer/Editor)
+        Status
+    }
+
+    class UserSession {
+        + TokenId
+        --
+        UserId [FK]
+        TokenHash
+        SessionId
+        ExpiresAt
+        DeviceMetadata
+    }
+}
+
+package "2. Content Production Domain" #EBF5FB {
+    class Series {
+        + SeriesId
+        --
+        WorkspaceId [FK]
+        Title
+        Slug
+        Status
+        Demographic
+        ReleaseSchedule
+    }
+
+    class SeriesMember {
+        + SeriesMemberId
+        --
+        SeriesId [FK]
+        UserId [FK]
+        Role (WorkspaceRole)
+        AssignedAt
+    }
+
+    class Chapter {
+        + ChapterId
+        --
+        SeriesId [FK]
+        ChapterNumber
+        Title
+        Status (Draft/InProduction/Published)
+        Outline
+        IsScriptFrozen
+        ScriptContentHash
+        TargetReleaseDate
+    }
+
+    class ChapterScript {
+        + ScriptId
+        --
+        ChapterId [FK, 1:1]
+        Version
+        RawText
+        IsLocked
+        LockedAt
+    }
+
+    class Scene {
+        + SceneId
+        --
+        ChapterId [FK]
+        SceneNumber
+        Heading
+        Summary
+        DefaultNarrationMode
+    }
+
+    class ScriptLine {
+        + LineId
+        --
+        SceneId [FK]
+        PanelId [FK, opt]
+        SpeakerCharacterId [FK, opt]
+        LineOrder
+        DialogueText
+        StageDirection
+        NarrationMode
+    }
+
+    class Page {
+        + PageId
+        --
+        ChapterId [FK]
+        PageNumber
+        LayoutFormat
+        WidthPx
+        HeightPx
+        Dpi
+        IsContentReady
+    }
+
+    class Panel {
+        + PanelId
+        --
+        PageId [FK]
+        SceneId [FK, opt]
+        PanelNumber
+        ReadingOrder
+        BoundingBox
+        CurrentStageId [FK]
+    }
+
+    class ChapterSnapshot {
+        + SnapshotId
+        --
+        ChapterId [FK]
+        SnapshotNumber
+        ChapterVersion
+        ManifestHash
+        ManifestJson
+    }
+}
+
+package "3. Workflow & Production Pipeline Domain" #FEF9E7 {
+    class PipelineDefinition {
+        + PipelineDefinitionId
+        --
+        WorkspaceId [FK]
+        SeriesId [FK, opt]
+        Name
+        Description
+    }
+
+    class PipelineStage {
+        + StageId
+        --
+        PipelineDefinitionId [FK]
+        Name (Script/Storyboarding/LineArt/Lettering/Review)
+        StageOrder
+        RequiredRole
+        IsEnabled
+    }
+
+    class StageTransition {
+        + TransitionId
+        --
+        PipelineDefinitionId [FK]
+        FromStageId [FK]
+        ToStageId [FK]
+        IsAutoApproved
+    }
+
+    class Assignment {
+        + AssignmentId
+        --
+        SeriesId [FK]
+        ChapterId [FK]
+        PipelineStageId [FK]
+        AssigneeUserId [FK]
+        EntityType (Chapter/Page/Panel)
+        TargetEntityId
+        Status (Assigned/InProgress/Submitted/Approved/ReworkRequired)
+        Priority
+        DueDate
+        DependsOnAssignments (DAG)
+    }
+
+    class Submission {
+        + SubmissionId
+        --
+        AssignmentId [FK]
+        ChapterId [FK]
+        AttemptNumber
+        Status (Pending/Approved/Rejected)
+        PanelLayoutJson
+        CanvasVersionsJson
+        SubmittedAt
+    }
+
+    class ChangeRequest {
+        + ChangeRequestId
+        --
+        AssignmentId [FK]
+        ChapterId [FK]
+        SubmissionId [FK, opt]
+        AssetReferenceId [FK, opt]
+        ResponsibleUserId [FK]
+        Status (Open/InReview/Resolved/Closed)
+        Severity
+        Comment
+        RegionJson
+    }
+
+    class Notification {
+        + NotificationId
+        --
+        UserId [FK]
+        AssignmentId [FK, opt]
+        ChapterId [FK, opt]
+        Type
+        Title
+        Message
+        ReadAt
+    }
+}
+
+package "4. Bible & Narrative Continuity Domain" #EAFAF1 {
+    class SeriesBible {
+        + BibleId
+        --
+        SeriesId [FK, 1:1]
+        WorkspaceId [FK]
+        Name
+        Version
+    }
+
+    class BibleEntry {
+        + EntryId
+        --
+        SeriesBibleId [FK]
+        Category (Character/Location/Prop/Lore)
+        Code
+        Name
+        Description
+        DetailsJson
+        ReferenceImageUrl
+        StrictCheck
+    }
+
+    class BibleEntryRevision {
+        + RevisionId
+        --
+        BibleEntryId [FK]
+        RevisionNumber
+        ChangeType
+        SnapshotJson
+        AppliedStageRange
+    }
+
+    class ScriptLineBibleLink {
+        + LinkId
+        --
+        ScriptLineId [FK]
+        BibleEntryId [FK]
+        ResolvedRevisionId [FK]
+        MatchConfidence
+    }
+
+    class ConsistencyRule {
+        + RuleId
+        --
+        SeriesId [FK]
+        Name
+        RuleType
+        ConfigurationJson
+        IsActive
+    }
+
+    class ConsistencyFinding {
+        + FindingId
+        --
+        ChapterId [FK]
+        RuleId [FK]
+        TargetEntityId
+        Severity (Info/Warning/Error)
+        Description
+        Status
+    }
+}
+
+package "5. Content-Addressed Storage (CAS) Domain" #F4ECF7 {
+    class Asset {
+        + AssetId
+        --
+        WorkspaceId [FK]
+        Sha256
+        SizeBytes
+        ContentType
+        StorageKey
+    }
+
+    class AssetReference {
+        + AssetReferenceId
+        --
+        AssetId [FK]
+        WorkspaceId [FK]
+        ChapterId [FK]
+        PageId [FK]
+        PanelId [FK, opt]
+        PipelineStageId [FK]
+        VersionNumber
+        LayerType
+        FileName
+    }
+}
+
+package "6. Preview & Publishing Domain" #FDEDEC {
+    class PreviewLink {
+        + PreviewLinkId
+        --
+        ChapterId [FK]
+        WorkspaceId [FK]
+        RecipientEmail
+        TokenHash
+        ExpiresAt
+        RevokedAt
+        SnapshotArtworkIds
+    }
+
+    class PreviewFeedback {
+        + FeedbackId
+        --
+        PreviewLinkId [FK]
+        ReviewerEmail
+        Rating
+        Comment
+    }
+
+    class ExportJob {
+        + ExportJobId
+        --
+        ChapterId [FK]
+        WorkspaceId [FK]
+        Format (PDF/CBZ/EPUB/WebtoonZip)
+        Status
+        OutputAssetSha256
+    }
+}
+
+package "7. AI Multi-Agent & Audit Domain" #E8F8F5 {
+    class AiWorkflowRun {
+        + RunId
+        --
+        WorkspaceId [FK]
+        SeriesId [FK]
+        ChapterId [FK]
+        WorkflowType
+        Status
+        ContextSnapshotJson
+    }
+
+    class AiAgentStep {
+        + StepId
+        --
+        RunId [FK]
+        AgentName (Writer/Layout/Colorist/Editor/QA)
+        Status
+        ParametersJson
+        OutputJson
+    }
+
+    class AiSuggestion {
+        + SuggestionId
+        --
+        RunId [FK]
+        StepId [FK]
+        TargetEntityType
+        TargetEntityId
+        Status (Pending/Accepted/Rejected)
+        PayloadJson
+    }
+
+    class AiUsageRecord {
+        + UsageRecordId
+        --
+        WorkspaceId [FK]
+        UserId [FK]
+        Feature
+        Provider
+        Model
+        PromptTokens
+        CompletionTokens
+        CostUsd
+    }
+
+    class AuditLog {
+        + LogId
+        --
+        WorkspaceId [FK, opt]
+        UserId [FK, opt]
+        Action
+        EntityName
+        EntityId
+        ChangesJson
+        TimestampUtc
+    }
+}
+
+' Relationships & Cardinalities
+User ||--o{ StudioWorkspace : "owns"
+User ||--o{ WorkspaceMember : "participates"
+StudioWorkspace ||--|{ WorkspaceMember : "has"
+StudioWorkspace ||--o{ Series : "contains"
+StudioWorkspace ||--o{ PipelineDefinition : "defines"
+StudioWorkspace ||--o{ Asset : "stores"
+StudioWorkspace ||--o{ AuditLog : "records"
+User ||--o{ UserSession : "authenticates"
+User ||--o{ Notification : "receives"
+
+Series ||--o{ SeriesMember : "assigned_team"
+Series ||--|{ Chapter : "consists_of"
+Series ||--|| SeriesBible : "documented_by"
+Series ||--o{ ConsistencyRule : "enforces"
+
+Chapter ||--|| ChapterScript : "has_narrative_baseline"
+Chapter ||--o{ Scene : "structured_into"
+Scene ||--|{ ScriptLine : "contains_dialogues"
+Chapter ||--|{ Page : "composed_of"
+Page ||--|{ Panel : "divided_into"
+Scene ||--o{ Panel : "visualized_in"
+ScriptLine }o--o| Panel : "anchored_to"
+Chapter ||--o{ ChapterSnapshot : "versioned_by"
+
+PipelineDefinition ||--|{ PipelineStage : "sequences"
+PipelineDefinition ||--o{ StageTransition : "routes"
+Chapter ||--o{ Assignment : "dispatches_work"
+PipelineStage ||--o{ Assignment : "governs"
+User ||--o{ Assignment : "assigned_to"
+Assignment ||--o{ Submission : "delivers"
+Assignment ||--o{ ChangeRequest : "requires_revision"
+Submission ||--o{ ChangeRequest : "reviewed_in"
+
+SeriesBible ||--|{ BibleEntry : "indexes"
+BibleEntry ||--|{ BibleEntryRevision : "tracks_history"
+ScriptLine ||--o{ ScriptLineBibleLink : "references_entity"
+BibleEntry ||--o{ ScriptLineBibleLink : "referenced_in"
+Chapter ||--o{ ConsistencyFinding : "evaluated_with"
+
+Asset ||--|{ AssetReference : "instantiated_as"
+Page ||--o{ AssetReference : "renders_art"
+Panel ||--o{ AssetReference : "layers_artwork"
+
+Chapter ||--o{ PreviewLink : "shared_via"
+PreviewLink ||--o{ PreviewFeedback : "collects"
+Chapter ||--o{ ExportJob : "published_as"
+
+StudioWorkspace ||--o{ AiWorkflowRun : "executes"
+AiWorkflowRun ||--|{ AiAgentStep : "decomposes"
+AiAgentStep ||--o{ AiSuggestion : "proposes"
+StudioWorkspace ||--o{ AiUsageRecord : "tracks_cost"
+
+@enduml
+

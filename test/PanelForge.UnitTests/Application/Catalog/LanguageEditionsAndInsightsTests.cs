@@ -4,6 +4,7 @@ using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Application.Features.Publisher.Monetization;
+using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Payments;
@@ -40,11 +41,19 @@ public class LanguageEditionsAndInsightsTests
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_chapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_chapter);
 
+        // BR-34: ChapterEdition cho bản gốc vi
+        _db.ChapterEditions.Add(ChapterEdition.Create(_chapter.Id, "vi", EditionStatus.Published));
+
+        var asset = Asset.Create(_studio.Id, new string('a', 64), 1024, "image/png");
+        _db.Assets.Add(asset);
+
         for (var n = 1; n <= 4; n++)
         {
             var page = Page.CreateNew(_chapter.Id, n, default, 1200, 1800, 300);
             _pages.Add(page);
             _db.Pages.Add(page);
+            _db.AssetReferences.Add(AssetReference.Create(
+                asset.Id, _studio.Id, _chapter.Id, page.Id, Guid.NewGuid(), 1, null, $"page{n}.png", Guid.NewGuid()));
         }
         _db.SaveChanges();
     }
@@ -59,10 +68,10 @@ public class LanguageEditionsAndInsightsTests
         return user.Id;
     }
 
-    private void TranslateAll(string language, int pages = 4)
+    private void PublishEdition(string language)
     {
-        foreach (var p in _pages.Take(pages))
-            _db.PageTranslations.Add(PageTranslation.Create(p.Id, _chapter.Id, language, new string('a', 64), "image/png"));
+        var edition = ChapterEdition.Create(_chapter.Id, language, EditionStatus.Published);
+        _db.ChapterEditions.Add(edition);
         _db.SaveChanges();
     }
 
@@ -73,12 +82,15 @@ public class LanguageEditionsAndInsightsTests
     // ─── Bản ngôn ngữ ─────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task TranslationEdition_IsAvailableOnlyWhenEveryPageTranslated()
+    public async Task TranslationEdition_IsAvailableOnlyWhenPublished()
     {
-        TranslateAll(ContentLanguages.English, pages: 3);
+        var draft = ChapterEdition.Create(_chapter.Id, "en", EditionStatus.Draft);
+        _db.ChapterEditions.Add(draft);
+        await _db.SaveChangesAsync();
+
         (await Read(null, "en")).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
 
-        _db.PageTranslations.Add(PageTranslation.Create(_pages[3].Id, _chapter.Id, "en", new string('b', 64), "image/png"));
+        draft.Publish();
         await _db.SaveChangesAsync();
 
         var dto = (await Read(null, "en")).Value!;
@@ -92,7 +104,7 @@ public class LanguageEditionsAndInsightsTests
         _chapter.SetPricing(true, 10000m);
         _db.ChapterLanguagePrices.Add(ChapterLanguagePrice.Create(_chapter.Id, "en", 15000m));
         await _db.SaveChangesAsync();
-        TranslateAll(ContentLanguages.English);
+        PublishEdition(ContentLanguages.English);
         var reader = AddUser(balance: 20000m);
 
         var unlock = await new UnlockChapterCommandHandler(_db).Handle(
@@ -110,7 +122,7 @@ public class LanguageEditionsAndInsightsTests
         _chapter.SetPricing(true, 10000m);
         _series.SetDefaultPreviewPages(1);
         await _db.SaveChangesAsync();
-        TranslateAll(ContentLanguages.Japanese);
+        PublishEdition(ContentLanguages.Japanese);
         var reader = AddUser();
         _db.ChapterEntitlements.Add(ChapterEntitlement.Create(reader, _chapter.Id, _series.Id, _studio.Id, 10000m, language: "vi"));
         await _db.SaveChangesAsync();
@@ -125,7 +137,7 @@ public class LanguageEditionsAndInsightsTests
     [Fact]
     public async Task TranslatedPageImageUrl_CarriesLanguage()
     {
-        TranslateAll(ContentLanguages.Japanese);
+        PublishEdition(ContentLanguages.Japanese);
 
         var dto = (await Read(null, "ja")).Value!;
 
