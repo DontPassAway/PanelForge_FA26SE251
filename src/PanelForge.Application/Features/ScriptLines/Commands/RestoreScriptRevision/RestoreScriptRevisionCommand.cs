@@ -4,7 +4,9 @@ using PanelForge.AI.Contracts;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Application.Features.ScriptLines.Common;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -25,11 +27,14 @@ public sealed class RestoreScriptRevisionCommandHandler
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly IChapterCastService _castService;
 
-    public RestoreScriptRevisionCommandHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public RestoreScriptRevisionCommandHandler(
+        IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IChapterCastService castService)
     {
         _db = db;
         _auth = auth;
+        _castService = castService;
     }
 
     public async Task<Result<RestoreScriptRevisionResult>> Handle(RestoreScriptRevisionCommand cmd, CancellationToken ct)
@@ -102,6 +107,11 @@ public sealed class RestoreScriptRevisionCommandHandler
             _db, chapter, cmd.SceneId, $"Khôi phục về phiên bản {target.VersionNumber}", before, ScriptLineRules.Snapshot(after), ct,
             AiJson.Serialize(new { restoredFromRevisionId = target.Id, restoredFromVersionNumber = target.VersionNumber }));
 
+        await _db.SaveChangesAsync(ct);
+        // BR-01/BR-11: bản khôi phục phải thành một ScriptVersion, nếu không lần nộp ô ghim bản cũ và Writer đang mở màn hình
+        // cũ vẫn khớp ExpectedRevisionId rồi ghi đè mất bản khôi phục. Snapshot đọc từ DB nên commit sau khi đã lưu dòng.
+        await ScriptSnapshotBuilder.CommitAsync(_db, chapter.Id, cmd.UserId,
+            $"Khôi phục về phiên bản {target.VersionNumber}", ct, _castService);
         await _db.SaveChangesAsync(ct);
         return Result<RestoreScriptRevisionResult>.Success(new RestoreScriptRevisionResult(
             chapter.VersionVector, revision.Id, revision.VersionNumber, target.Id, target.VersionNumber));

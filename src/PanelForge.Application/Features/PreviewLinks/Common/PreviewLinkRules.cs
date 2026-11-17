@@ -13,6 +13,35 @@ public static class PreviewLinkRules
     public const int MaxHours = 720;
     public static readonly TimeSpan ImageLinkLifetime = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// DTO phản hồi kèm số trang, số khung và version artwork (1-based) chiếu sẵn, để FE không phải tra thêm.
+    /// Trang / khung đã xoá vẫn lấy được số (bỏ query filter); không tìm thấy thì để null.
+    /// </summary>
+    public static async Task<List<Models.PreviewFeedbackDto>> FeedbackDtosAsync(
+        IPanelForgeDbContext db, IReadOnlyCollection<PreviewFeedback> items, CancellationToken ct)
+    {
+        var pageIds = items.Where(f => f.PageId != null).Select(f => f.PageId!.Value).Distinct().ToList();
+        var panelIds = items.Where(f => f.PanelId != null).Select(f => f.PanelId!.Value).Distinct().ToList();
+        var refIds = items.Where(f => f.AssetReferenceId != null).Select(f => f.AssetReferenceId!.Value).Distinct().ToList();
+        var pages = await db.Pages.IgnoreQueryFilters().AsNoTracking().Where(p => pageIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PageNumber, ct);
+        var panels = await db.Panels.IgnoreQueryFilters().AsNoTracking().Where(p => panelIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PanelNumber, ct);
+        var versions = await db.AssetReferences.IgnoreQueryFilters().AsNoTracking().Where(r => refIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, r => r.VersionNumber, ct);
+
+        return items.Select(f => Models.PreviewFeedbackDto.From(f) with
+        {
+            PageNumber = f.PageId is { } pg && pages.TryGetValue(pg, out var pn) ? pn : null,
+            PanelNumber = f.PanelId is { } pl && panels.TryGetValue(pl, out var ln) ? ln : null,
+            ArtworkVersionNumber = f.AssetReferenceId is { } r && versions.TryGetValue(r, out var v) ? v : null
+        }).ToList();
+    }
+
+    public static async Task<Models.PreviewFeedbackDto> FeedbackDtoAsync(
+        IPanelForgeDbContext db, PreviewFeedback item, CancellationToken ct) =>
+        (await FeedbackDtosAsync(db, [item], ct))[0];
+
     /// <summary>32 byte ngẫu nhiên, base64url (an toàn trong URL).</summary>
     public static string NewToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');

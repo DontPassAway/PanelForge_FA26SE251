@@ -647,6 +647,24 @@ public class TaskGridHandlerTests
     }
 
     [Fact]
+    public async Task Submit_PinsFrozenScriptVersion_NotNewerDraft()
+    {
+        var f = new Fixture();
+        var frozen = ScriptVersion.Create(f.Chapter.Id, 3, "v3 đóng băng", f.ProducerId, "h3", "[]", 0);
+        var draft = ScriptVersion.Create(f.Chapter.Id, 4, "v4 nháp sau khi mở băng", f.ProducerId, "h4", "[]", 0);
+        f.ScriptVersions.AddRange([frozen, draft]);
+        typeof(Chapter).GetProperty(nameof(Chapter.FrozenScriptVersionId))!.SetValue(f.Chapter, frozen.Id);
+        await f.AssignPageOne();
+
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+        await f.Submit(f.ArtistId, pencil);
+
+        // BR-01/BR-08: người làm vẽ theo bản đã đóng băng, không phải nháp Writer đang sửa
+        f.Submissions.Single(s => s.StageTaskId == pencil.Id).ScriptVersionId.Should().Be(frozen.Id);
+    }
+
+    [Fact]
     public async Task Generate_CancelsUnassignedCellsOfDisabledStage_AndRevivesThemWhenReEnabled()
     {
         var f = new Fixture();

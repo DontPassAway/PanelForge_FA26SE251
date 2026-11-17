@@ -114,7 +114,7 @@ public sealed class TaskGridController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(StageTaskLotDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateLot(Guid chapterId, Guid lotId, [FromBody] UpdateStageTaskLotRequest body, CancellationToken ct) =>
-        ToResult(await _mediator.Send(new UpdateStageTaskLotCommand(chapterId, lotId, CurrentUserId, body.Brief, body.DueDate, body.ClearDueDate), ct));
+        ToResult(await _mediator.Send(new UpdateStageTaskLotCommand(chapterId, lotId, CurrentUserId, body.Brief, body.DueDate, body.ClearDueDate, body.ExpectedRowVersion), ct));
 
     /// <summary>POST /tasks/{taskId}/withdraw — người giữ ô rút bài đã nộp (chỉ khi còn Submitted).</summary>
     [HttpPost("tasks/{taskId:guid}/withdraw")]

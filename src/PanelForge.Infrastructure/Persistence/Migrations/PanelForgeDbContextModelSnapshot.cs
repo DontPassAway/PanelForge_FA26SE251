@@ -1026,6 +1026,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reference_image_url");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("SeriesBibleId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_bible_id");
@@ -1147,6 +1153,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(1000)")
                         .HasColumnName("rework_feedback");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("SnapshotJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1192,7 +1204,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BibleEntryId", "VersionNumber")
                         .IsUnique()
-                        .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version");
+                        .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version")
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("bible_entry_revisions", (string)null);
                 });
@@ -1563,6 +1576,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_crowd_at_bind");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -5628,6 +5647,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<int?>("SessionIdleTimeoutMinutes")
                         .HasColumnType("integer")

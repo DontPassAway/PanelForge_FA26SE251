@@ -37,13 +37,17 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPageRepository _pages;
 
+    private readonly Chapters.Services.IChapterCastService _castService;
+
     public ReviewSuggestionCommandHandler(
-        IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IUnitOfWork unitOfWork, IPageRepository pages)
+        IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, IUnitOfWork unitOfWork, IPageRepository pages,
+        Chapters.Services.IChapterCastService castService)
     {
         _db = db;
         _auth = auth;
         _unitOfWork = unitOfWork;
         _pages = pages;
+        _castService = castService;
     }
 
     public Task<Result<ReviewSuggestionResponse>> Handle(ReviewSuggestionCommand cmd, CancellationToken ct)
@@ -92,6 +96,14 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         try
         {
             await _db.SaveChangesAsync(ct);
+            // BR-01/BR-11: đề xuất đã áp vào dòng/khung kịch bản phải thành một ScriptVersion (snapshot đọc DB nên sau khi lưu)
+            if (cmd.Decision == AiSuggestionStatus.Accepted &&
+                suggestion.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.Layout)
+            {
+                await ScriptVersions.ScriptSnapshotBuilder.CommitAsync(
+                    _db, chapter.Id, cmd.UserId, $"Chấp nhận đề xuất AI ({suggestion.Kind})", ct, _castService);
+                await _db.SaveChangesAsync(ct);
+            }
         }
         catch (DbUpdateConcurrencyException)
         {

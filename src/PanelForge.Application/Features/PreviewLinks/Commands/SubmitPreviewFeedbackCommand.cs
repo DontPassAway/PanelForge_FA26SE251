@@ -43,7 +43,7 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
             // Trang ghép: phản hồi cấp panel gắn đúng ảnh của Panel đó; còn lại lấy artwork bất kỳ của trang
             assetReferenceId = await _db.AssetReferences.AsNoTracking()
                 .Where(r => snapshotIds.Contains(r.Id) && r.PageId == pageId)
-                .OrderByDescending(r => cmd.PanelId != null && r.PanelId == cmd.PanelId)
+                .OrderByDescending(r => cmd.PanelId != null && r.PanelId == cmd.PanelId).ThenBy(r => r.Id) // cùng ảnh đại diện với OpenPreview
                 .Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
             if (assetReferenceId is null) return Fail("Trang không thuộc bản xem thử này.", ResultErrorCodes.Validation);
 
@@ -59,6 +59,6 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
         feedback.CreatedBy = link.RecipientEmail;
         _db.PreviewFeedback.Add(feedback);
         await _db.SaveChangesAsync(ct);
-        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+        return Result<PreviewFeedbackDto>.Success(await PreviewLinkRules.FeedbackDtoAsync(_db, feedback, ct));
     }
 }

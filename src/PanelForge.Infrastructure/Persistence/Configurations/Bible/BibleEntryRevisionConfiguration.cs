@@ -9,6 +9,8 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<BibleEntryRevision> builder)
     {
         builder.ToTable("bible_entry_revisions");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id)
@@ -27,8 +29,11 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("version_number")
                .HasColumnType("integer")
                .IsRequired();
+        // Chỉ duy nhất trong các bản còn sống: xoá mềm bản cuối rồi thêm bản mới (Max(VersionNumber)+1 không thấy dòng đã xoá)
+        // không còn đụng số version của dòng đã xoá (BR-01, BR-15)
         builder.HasIndex(r => new { r.BibleEntryId, r.VersionNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version");
 
         builder.Property(r => r.Summary)

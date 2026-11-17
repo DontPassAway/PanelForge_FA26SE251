@@ -139,7 +139,9 @@ public sealed class AiHarness
     }
 
     public ReviewSuggestionCommandHandler ReviewHandler() =>
-        new(Db, Auth, new PassThroughUnitOfWork(), Pages.Object);
+        new(Db, Auth, new PassThroughUnitOfWork(), Pages.Object,
+            new PanelForge.Application.Features.Chapters.Services.ChapterCastService(
+                Db, new PanelForge.Infrastructure.Services.ChapterCastInheritanceResolver(Db)));
 
     public RecordAgentStepCommandHandler RecordHandler() => new(Db, Usage.Object);
 

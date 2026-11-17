@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.PreviewLinks.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Domain.Enums;
 
@@ -33,6 +34,6 @@ public sealed class TriagePreviewFeedbackCommandHandler : IRequestHandler<Triage
 
         feedback.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
-        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+        return Result<PreviewFeedbackDto>.Success(await PreviewLinkRules.FeedbackDtoAsync(_db, feedback, ct));
     }
 }

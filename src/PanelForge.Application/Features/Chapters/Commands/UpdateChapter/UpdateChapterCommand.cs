@@ -16,7 +16,8 @@ public sealed record UpdateChapterCommand(
     bool IncrementVersion,
     string? Outline = null,
     bool? IsLocked = null,
-    decimal? PriceVnd = null
+    decimal? PriceVnd = null,
+    long? ExpectedChapterVersion = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterCommand, Result<ChapterDto>>
@@ -39,6 +40,11 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
         if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
             return Result<ChapterDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // BR-11: client gửi version đã đọc thì phải khớp, không thì người khác vừa sửa → 409 thay vì đè
+        if (command.ExpectedChapterVersion is { } expected && expected != chapter.VersionVector)
+            return Result<ChapterDto>.Failure(
+                $"Chương vừa được người khác cập nhật (expected={expected}, actual={chapter.VersionVector}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
         chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();

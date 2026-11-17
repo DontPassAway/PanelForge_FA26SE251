@@ -10,6 +10,8 @@ internal sealed class ChapterBibleBindingConfiguration : IEntityTypeConfiguratio
     public void Configure(EntityTypeBuilder<ChapterBibleBinding> builder)
     {
         builder.ToTable("chapter_bible_bindings");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(b => new { b.ChapterId, b.BibleEntryId });
 

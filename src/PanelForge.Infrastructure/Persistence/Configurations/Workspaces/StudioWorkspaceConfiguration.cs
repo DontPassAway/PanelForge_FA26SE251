@@ -9,6 +9,8 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
     public void Configure(EntityTypeBuilder<StudioWorkspace> builder)
     {
         builder.ToTable("studio_workspaces");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(w => w.Id);
         builder.Property(w => w.Id)

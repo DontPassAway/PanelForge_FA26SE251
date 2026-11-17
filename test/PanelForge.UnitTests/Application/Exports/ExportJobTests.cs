@@ -407,4 +407,39 @@ public class ExportJobTests
         layers[1].Should().Match<PagePanelLayer>(l => l.X == 60 && l.Y == 720 && l.Width == 528 && l.Height == 516);
         _lettering.Composed.Should().NotContainKeys(1, 2); // trang có ảnh cả trang ở stage cuối giữ nguyên
     }
+
+    [Fact]
+    public async Task ComposedPage_IsRenderedFromApprovedSnapshot_NotLayoutOrLetteringEditedAfterReopen()
+    {
+        // Trang 3 ghép từ 2 khung; lớp chữ lúc duyệt ở version 5 của stream canvas
+        var page3 = Page.CreateNew(_chapter.Id, 3, default, 1200, 1800, 300);
+        _db.Pages.Add(page3);
+        var panelA = Panel.Create(page3.Id, 1, 1);
+        panelA.UpdateBoundingBox("""{"x":60,"y":60,"width":1080,"height":600,"pageWidthPx":1200,"pageHeightPx":1800}""");
+        var panelB = Panel.Create(page3.Id, 2, 2);
+        panelB.UpdateBoundingBox("""{"x":60,"y":720,"width":528,"height":516,"pageWidthPx":1200,"pageHeightPx":1800}""");
+        _db.Panels.AddRange(panelA, panelB);
+        AddPanelArtwork(page3, panelA, _ink, 1, [7]);
+        AddPanelArtwork(page3, panelB, _ink, 1, [8]);
+        _db.SaveChanges();
+        _pageRepo.Setup(r => r.GetStreamVersionAsync(page3.Id, It.IsAny<CancellationToken>())).ReturnsAsync(5);
+
+        // Duyệt: snapshot ghim toạ độ khung + version canvas
+        _db.ChapterSnapshots.Add(await PanelForge.Application.Features.Chapters.Common.ChapterSnapshotBuilder.CreateAsync(
+            _db, _pageRepo.Object, _chapter, _producerId, default));
+        _db.SaveChanges();
+
+        // Sau khi mở lại: khung B bị kéo sang chỗ khác
+        panelB.UpdateBoundingBox("""{"x":600,"y":1200,"width":100,"height":100,"pageWidthPx":1200,"pageHeightPx":1800}""");
+        _db.SaveChanges();
+
+        (await Create()).IsSuccess.Should().BeTrue();
+        (await ProcessNext()).Should().BeTrue();
+
+        // BR-01/BR-17: bản xuất dựng theo toạ độ lúc duyệt, lớp chữ dựng lại đúng version 5 chứ không phải bản đang sửa
+        var layers = _lettering.Composed[3];
+        layers[1].Should().Match<PagePanelLayer>(l => l.X == 60 && l.Y == 720 && l.Width == 528 && l.Height == 516);
+        _pageRepo.Verify(r => r.GetAtVersionAsync(page3.Id, 5, It.IsAny<CancellationToken>()), Times.Once);
+        _pageRepo.Verify(r => r.GetAsync(page3.Id, It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

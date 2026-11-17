@@ -52,8 +52,15 @@ public sealed class PageLayoutReplacer
             var artworkReferences = await _db.AssetReferences
                 .Where(r => r.PanelId.HasValue && oldPanelIds.Contains(r.PanelId.Value))
                 .ToListAsync(ct);
+            // Khung bị bỏ (bố cục mới ít khung hơn): giữ artwork ở khung cũ (đã xoá mềm), KHÔNG gán PanelId = null — null nghĩa
+            // là "ảnh cả trang", ảnh một khung lẻ sẽ bị dựng thành cả trang. FinalArtwork bỏ qua khung đã xoá nên ảnh này
+            // tự rơi khỏi bản cuối; snapshot / link cũ vẫn dựng đúng nhờ toạ độ đã ghim.
+            var unassignedArtworkCount = 0;
             foreach (var reference in artworkReferences)
-                reference.ReassignPanel(replacements[reference.PanelId!.Value]);
+            {
+                if (replacements[reference.PanelId!.Value] is { } newPanelId) reference.ReassignPanel(newPanelId);
+                else unassignedArtworkCount++;
+            }
 
             var variants = await _db.PanelBibleVariants
                 .Where(v => v.PanelId.HasValue && oldPanelIds.Contains(v.PanelId.Value))
@@ -94,6 +101,6 @@ public sealed class PageLayoutReplacer
 
             return new PageLayoutReplacement(
                 newPanels,
-                artworkReferences.Count(r => r.PanelId is null));
+                unassignedArtworkCount);
         }, cancellationToken);
 }

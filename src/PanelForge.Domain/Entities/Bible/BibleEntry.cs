@@ -8,6 +8,9 @@ namespace PanelForge.Domain.Entities.Bible;
 /// </summary>
 public class BibleEntry : BaseEntity
 {
+    /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL (BR-11): hai lần ghi chồng nhau → 409.</summary>
+    public uint RowVersion { get; private set; }
+
     public Guid SeriesBibleId { get; private set; }
     public BibleEntryCategory Category { get; private set; }
     public string Code { get; private set; } = default!;

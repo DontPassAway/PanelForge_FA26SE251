@@ -59,7 +59,11 @@ public sealed record PreviewFeedbackDto(
     DateTime CreatedAt,
     Guid? ChangeRequestId,
     string? ReviewerName = null,
-    Guid? StageTaskId = null)
+    Guid? StageTaskId = null,
+    int? PageNumber = null,
+    int? PanelNumber = null,
+    // AssetReference.VersionNumber (1-based) của artwork gắn phản hồi; khác ChapterVersion (VersionVector, 0-based)
+    int? ArtworkVersionNumber = null)
 {
     public static PreviewFeedbackDto From(PreviewFeedback f) => new(
         f.Id, f.PreviewLinkId, f.ChapterId, f.PageId, f.PanelId, f.AssetReferenceId, f.ChapterVersion, f.RecipientEmail,

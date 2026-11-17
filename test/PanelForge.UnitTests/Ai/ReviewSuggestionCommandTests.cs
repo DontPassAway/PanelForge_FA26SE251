@@ -53,6 +53,11 @@ public class ReviewSuggestionCommandTests
         // BR-18: thay đổi được ghi audit cùng lần lưu
         h.Db.AuditLogs.Any(a => a.EntityName == "ContentRevision").Should().BeTrue();
         h.Db.AuditLogs.Any(a => a.EntityName == "AiSuggestionDecision").Should().BeTrue();
+
+        // BR-01/BR-11: kịch bản AI vừa áp thành ScriptVersion mới, để màn hình giữ ExpectedRevisionId cũ bị 409 thay vì đè
+        var version = await h.Db.ScriptVersions.SingleAsync(v => v.ChapterId == chapter.Id);
+        version.Message.Should().Be("Chấp nhận đề xuất AI (Script)");
+        version.LineCount.Should().Be(draft.Lines.Count);
     }
 
     [Fact]

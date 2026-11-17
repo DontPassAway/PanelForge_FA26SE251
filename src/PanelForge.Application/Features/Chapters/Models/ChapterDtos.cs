@@ -109,5 +109,6 @@ public sealed record UpdateChapterRequest(
     bool IncrementVersion = false,
     string? Outline = null,
     bool? IsLocked = null,
-    decimal? PriceVnd = null
+    decimal? PriceVnd = null,
+    long? ExpectedChapterVersion = null
 );

@@ -67,6 +67,11 @@ public class DefineBibleEntryTests
         rev.VersionNumber.Should().Be(1);
         rev.Summary.Should().Contain("Kurogane");
         rev.SnapshotJson.Should().Contain("Kurogane");
+        // BR-01: lịch sử ghi nội dung mới, không chỉ còn event Created mang nội dung stub; vẫn chưa tính là "đã duyệt"
+        var events = await _db.Set<PanelForge.Domain.Entities.Bible.BibleRevisionEvent>()
+            .Where(e => e.BibleEntryRevisionId == rev.Id).ToListAsync();
+        events.Should().Contain(e => e.Type == PanelForge.Domain.Enums.BibleRevisionEventType.DraftOverwritten);
+        rev.HasReviewHistory.Should().BeFalse();
 
         _stubEntry.NormalizedName.Should().Be("kurogane");
     }

@@ -8,7 +8,8 @@ using PanelForge.Application.Features.TaskGrid.Models;
 namespace PanelForge.Application.Features.TaskGrid.Commands.UpdateStageTaskLot;
 
 /// <summary>Producer sửa brief / hạn của lô (gia hạn khi trễ). Brief null = giữ nguyên; ClearDueDate = bỏ hạn.</summary>
-public sealed record UpdateStageTaskLotCommand(Guid ChapterId, Guid LotId, Guid UserId, string? Brief, DateTime? DueDate, bool ClearDueDate)
+public sealed record UpdateStageTaskLotCommand(
+    Guid ChapterId, Guid LotId, Guid UserId, string? Brief, DateTime? DueDate, bool ClearDueDate, uint? ExpectedRowVersion = null)
     : IRequest<Result<StageTaskLotDto>>, ITransactionalCommand;
 
 public sealed class UpdateStageTaskLotCommandHandler : IRequestHandler<UpdateStageTaskLotCommand, Result<StageTaskLotDto>>
@@ -26,6 +27,9 @@ public sealed class UpdateStageTaskLotCommandHandler : IRequestHandler<UpdateSta
 
         var lot = await _db.StageTaskLots.FirstOrDefaultAsync(l => l.Id == cmd.LotId && l.ChapterId == chapter.Id, ct);
         if (lot is null) return Fail($"Lô {cmd.LotId} không thuộc chương này.", ResultErrorCodes.NotFound);
+        // BR-11: xmin client đã đọc phải khớp — chặn cả trường hợp mở màn hình rồi lưu nối tiếp, không chỉ ghi cùng lúc
+        if (cmd.ExpectedRowVersion is { } expected && expected != lot.RowVersion)
+            return Fail("Lô vừa được người khác cập nhật. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
 
         var dueDate = cmd.ClearDueDate ? null : cmd.DueDate ?? lot.DueDate;
         if (dueDate is { } due && dueDate != lot.DueDate && due < DateTime.UtcNow)

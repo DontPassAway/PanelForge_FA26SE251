@@ -10,6 +10,8 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
     public void Configure(EntityTypeBuilder<BibleEntry> builder)
     {
         builder.ToTable("bible_entries");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id)

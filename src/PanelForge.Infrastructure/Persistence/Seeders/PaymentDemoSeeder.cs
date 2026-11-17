@@ -67,6 +67,7 @@ public static class PaymentDemoSeeder
         ch1.SubmitScript(Guid.Empty);
         ch1.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch1.Approve();
+        ch1.HandOff(Guid.Empty); // Publish đòi bàn giao trước
         ch1.Publish(DateTime.UtcNow.AddDays(-10));
         db.Chapters.Add(ch1);
 
@@ -76,6 +77,7 @@ public static class PaymentDemoSeeder
         ch2.SubmitScript(Guid.Empty);
         ch2.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch2.Approve();
+        ch2.HandOff(Guid.Empty);
         ch2.Publish(DateTime.UtcNow.AddDays(-5));
         db.Chapters.Add(ch2);
 

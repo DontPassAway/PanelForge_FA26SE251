@@ -11,6 +11,9 @@ namespace PanelForge.Domain.Entities.Content;
 /// </summary>
 public class ChapterBibleBinding
 {
+    /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL (BR-11): hai lần ghi chồng nhau → 409.</summary>
+    public uint RowVersion { get; private set; }
+
     public Guid ChapterId { get; private set; }
     public Guid BibleEntryId { get; private set; }
     public Guid? BoundRevisionId { get; private set; }

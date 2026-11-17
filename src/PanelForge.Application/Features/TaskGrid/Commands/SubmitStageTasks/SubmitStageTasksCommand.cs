@@ -89,7 +89,9 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
             .GroupBy(s => s.StageTaskId).Select(g => new { g.Key, Max = g.Max(s => s.AttemptNumber) })
             .ToDictionaryAsync(x => x.Key, x => x.Max, ct);
         // BR-01: lần nộp phải dựng lại được: bố cục Panel, version canvas (lớp chữ) và bản kịch bản chương đã commit
-        var scriptVersionId = await _db.ScriptVersions.AsNoTracking().Where(v => v.ChapterId == chapter.Id)
+        // Bản đã đóng băng (Gate 1) là bản người làm vẽ theo; bản mới nhất có thể là nháp Writer đang sửa sau khi mở băng
+        var scriptVersionId = chapter.FrozenScriptVersionId ?? await _db.ScriptVersions.AsNoTracking()
+            .Where(v => v.ChapterId == chapter.Id)
             .OrderByDescending(v => v.VersionNumber).Select(v => (Guid?)v.Id).FirstOrDefaultAsync(ct);
         var canvasVersionByPage = new Dictionary<Guid, long>();
 
