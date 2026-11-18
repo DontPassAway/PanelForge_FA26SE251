@@ -23,7 +23,9 @@ public enum AiSuggestionKind
     /// <summary>Ảnh thumbnail AI cho panel (áp dụng = AssetReference phiên bản mới của panel; ảnh cũ giữ nguyên).</summary>
     Thumbnail = 7,
     /// <summary>Hồ sơ nháp cho mục Bible stub (Accept không ghi Bible, người viết tự sửa rồi lưu).</summary>
-    BibleStub = 8
+    BibleStub = 8,
+    /// <summary>Gợi ý Keep/Rework cho ô bị ảnh hưởng do sửa kịch bản (Accept chạy Impact Review).</summary>
+    ImpactRipple = 9
 }
 
 public enum AiStepStatus

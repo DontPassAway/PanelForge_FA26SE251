@@ -240,6 +240,15 @@ public static class MockFixtures
                 reason = "Có yếu tố căng thẳng nhẹ, không có nội dung người lớn (Mock)."
             });
         }
+        if (msg.Contains($"[[task:{CopilotTasks.ImpactRipple}]]"))
+        {
+            var rework = msg.Contains("role=Letterer") || msg.Contains("type=Action");
+            return Json(new
+            {
+                decision = rework ? CopilotRules.ImpactRework : CopilotRules.ImpactKeep,
+                reason = rework ? "Thay đổi chạm tới phần công đoạn này đã làm (Mock)." : "Chỉ đổi lời thoại, nét vẽ không bị ảnh hưởng (Mock)."
+            });
+        }
         if (msg.Contains($"[[task:{CopilotTasks.BibleStubDraft}]]"))
         {
             var first = Regex.Match(msg, @"^- lineId=([0-9a-fA-F-]+) \| ""(.*)""\s*$", RegexOptions.Multiline);

@@ -18,7 +18,8 @@ public sealed class CopilotAgent
         [CopilotTasks.WriterRewrite] = PromptLibrary.Load("copilot_writer_rewrite"),
         [CopilotTasks.LettererShorten] = PromptLibrary.Load("copilot_letterer_shorten"),
         [CopilotTasks.PublisherMetadata] = PromptLibrary.Load("copilot_publisher_metadata"),
-        [CopilotTasks.BibleStubDraft] = PromptLibrary.Load("copilot_bible_stub")
+        [CopilotTasks.BibleStubDraft] = PromptLibrary.Load("copilot_bible_stub"),
+        [CopilotTasks.ImpactRipple] = PromptLibrary.Load("copilot_impact_ripple")
     };
 
     private readonly AgentRunner _runner;
@@ -32,6 +33,7 @@ public sealed class CopilotAgent
         var prompt = Prompts[req.Task];
         if (req.Task == CopilotTasks.PublisherMetadata) return await RunMetadataAsync(prompt, req, ct);
         if (req.Task == CopilotTasks.BibleStubDraft) return await RunStubDraftAsync(prompt, req, ct);
+        if (req.Task == CopilotTasks.ImpactRipple) return await RunImpactAsync(prompt, req, ct);
         var line = req.Line!;
         var speaker = req.Bible.FirstOrDefault(b => b.EntryId == line.SpeakerId);
 
@@ -62,6 +64,33 @@ public sealed class CopilotAgent
         return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
             call.ErrorCode, call.ErrorMessage);
+    }
+
+    private sealed record ImpactOutput(string? Decision, string? Reason);
+
+    private async Task<CopilotResponse> RunImpactAsync(PromptInfo prompt, CopilotRequest req, CancellationToken ct)
+    {
+        var ripple = req.Ripple!;
+        var sb = new StringBuilder();
+        sb.AppendLine($"[[agent:copilot]] [[task:{req.Task}]]");
+        sb.AppendLine("## Công đoạn cần xét (dữ liệu)");
+        sb.AppendLine($"stage=\"{Flat(ripple.StageName)}\" | role={ripple.Role} | page={ripple.PageNumber}");
+        sb.AppendLine().AppendLine("## Thay đổi kịch bản của trang (dữ liệu)");
+        foreach (var c in ripple.Changes)
+            sb.AppendLine($"- type={c.Type} | label=\"{Flat(c.Label)}\" | before=\"{Flat(c.Before)}\" | after=\"{Flat(c.After)}\"");
+        sb.AppendLine().AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
+
+        var call = await _runner.RunAsync<ImpactOutput>(prompt, sb.ToString(), text =>
+        {
+            var output = OutputParser.Parse<ImpactOutput>(text, out var error);
+            if (output is null) return (null, [error!]);
+            var errors = CopilotRules.ValidateImpact(output.Decision, output.Reason);
+            return errors.Count == 0 ? (output with { Reason = output.Reason!.Trim() }, []) : (null, errors);
+        }, ct);
+
+        return new CopilotResponse(call.Succeeded, null, call.Payload?.Reason, prompt.Version, prompt.Ref,
+            call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
+            call.ErrorCode, call.ErrorMessage, ImpactDecision: call.Payload?.Decision);
     }
 
     private sealed record StubOutput(string? Description, string? Subtitle, List<BibleStubCitation>? Citations, string? Reason);

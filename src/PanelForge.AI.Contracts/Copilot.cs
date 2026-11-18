@@ -9,8 +9,9 @@ public static class CopilotTasks
     public const string LettererShorten = "letterer.shorten";
     public const string PublisherMetadata = "publisher.metadata";
     public const string BibleStubDraft = "bible.stub_draft";
+    public const string ImpactRipple = "impact.ripple";
 
-    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata, BibleStubDraft];
+    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata, BibleStubDraft, ImpactRipple];
     /// <summary>Task làm trên MỘT dòng thoại (cần Line); còn lại làm ở cấp Series (cần Series).</summary>
     public static bool IsLineTask(string task) => task is WriterRewrite or LettererShorten;
 }
@@ -27,7 +28,8 @@ public sealed record CopilotRequest(
     string? Instruction,
     int SchemaVersion = AiProtocol.SchemaVersion,
     CopilotSeriesContext? Series = null,
-    BibleStubContext? Stub = null)
+    BibleStubContext? Stub = null,
+    ImpactRippleContext? Ripple = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {
@@ -71,7 +73,15 @@ public sealed record CopilotResponse(
     string? ErrorCode,
     string? ErrorMessage,
     ReleaseMetadata? Metadata = null,
-    BibleStubDraft? Stub = null);
+    BibleStubDraft? Stub = null,
+    string? ImpactDecision = null);
+
+public sealed record ImpactLineChange(string Type, string? Label, string? Before, string? After);
+public sealed record ImpactRippleContext(string StageName, string Role, int PageNumber, IReadOnlyList<ImpactLineChange> Changes);
+
+/// <summary>Payload của AiSuggestion kind ImpactRipple. Accept mới thực hiện Keep hoặc Rework qua Impact Review.</summary>
+public sealed record ImpactRippleSuggestion(int SchemaVersion, Guid RunId, Guid TaskId, string Decision, string Reason,
+    IReadOnlyList<ImpactLineChange> Changes);
 
 /// <summary>Dòng kịch bản có nhắc tới mục Bible nháp: nguồn duy nhất AI được dùng.</summary>
 public sealed record BibleStubEvidence(Guid LineId, string Text);
@@ -128,6 +138,16 @@ public static class CopilotRules
     public const int MaxCharsLimit = 500;
 
     public static readonly string[] AgeRatings = ["All", "13+", "16+", "18+"];
+
+    public const string ImpactKeep = "Keep", ImpactRework = "Rework";
+
+    public static IReadOnlyList<string> ValidateImpact(string? decision, string? reason)
+    {
+        var errors = new List<string>();
+        if (decision is not (ImpactKeep or ImpactRework)) errors.Add("decision phải là Keep hoặc Rework.");
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 300) errors.Add("reason phải có nội dung và tối đa 300 ký tự.");
+        return errors;
+    }
 
     /// <summary>Mọi trích dẫn phải chỉ tới dòng được cung cấp và là đoạn nguyên văn của dòng đó.</summary>
     public static IReadOnlyList<string> ValidateStubDraft(BibleStubDraft? draft, BibleStubContext context)

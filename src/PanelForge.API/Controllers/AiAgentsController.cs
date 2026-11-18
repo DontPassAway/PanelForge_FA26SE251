@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Commands.RunImpactSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunBibleStubDraft;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunCopilot;
@@ -91,6 +92,17 @@ public sealed class AiAgentsController : ControllerBase
         [FromRoute] Guid seriesId, [FromBody] RunPublisherMetadataRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new RunPublisherMetadataCommand(seriesId, body.ChapterId, CurrentUserId, body.Instruction), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/ai/impact/{taskId} — Producer xin gợi ý Keep/Rework cho ô bị ảnh hưởng do sửa kịch bản.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/ai/impact/{taskId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunImpactSuggestion([FromRoute] Guid chapterId, [FromRoute] Guid taskId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunImpactSuggestionCommand(chapterId, taskId, CurrentUserId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

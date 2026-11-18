@@ -12,6 +12,7 @@ using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
@@ -95,7 +96,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         var decision = AiSuggestionDecision.Create(
             suggestion.Id, cmd.UserId, cmd.Decision, cmd.Reason, versionSeen, revisionId,
             appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail
-                or AiSuggestionKind.Lettering or AiSuggestionKind.BibleStub);
+                or AiSuggestionKind.Lettering or AiSuggestionKind.BibleStub or AiSuggestionKind.ImpactRipple);
         _db.AiSuggestionDecisions.Add(decision);
 
         try
@@ -146,6 +147,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (s.Kind == AiSuggestionKind.Lettering) return await ApplyBubbleShortenAsync(cmd, s, ct);
         // Hồ sơ nháp: Accept chỉ ghi nhận đã dùng làm nháp, Bible chỉ đổi khi người viết tự lưu
         if (s.Kind == AiSuggestionKind.BibleStub) return new Applied(null, null, null);
+        if (s.Kind == AiSuggestionKind.ImpactRipple) return await ApplyImpactAsync(cmd, s, chapter, ct);
 
         // BR-12: chương Approved/Locked/Published chỉ đọc
         if (!chapter.IsContentEditable)
@@ -230,6 +232,18 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
                 return Applied.Fail(reason, ResultErrorCodes.Forbidden);
         }
         return null;
+    }
+
+    /// <summary>Producer chấp nhận gợi ý thì chạy đúng lệnh Impact Review, giữ nguyên mọi luật của ô và thông báo.</summary>
+    private async Task<Applied> ApplyImpactAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
+    {
+        var sug = AiContentValidator.TryParse<ImpactRippleSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload gợi ý không hợp lệ: {pe}", ResultErrorCodes.Validation);
+        var resolved = await new ResolveStageTaskImpactCommandHandler(_db).Handle(
+            new ResolveStageTaskImpactCommand(chapter.Id, sug.TaskId, cmd.UserId, sug.Decision == CopilotRules.ImpactKeep), ct);
+        return resolved.IsSuccess
+            ? new Applied(null, null, null)
+            : Applied.Fail(resolved.ErrorMessage!, resolved.ErrorCode ?? ResultErrorCodes.Conflict);
     }
 
     /// <summary>Áp dụng bản rút gọn bằng đúng lệnh sửa chữ của Letterer, nên giữ cùng luật phạm vi, khoá chương và version element.</summary>
