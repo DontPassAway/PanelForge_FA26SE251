@@ -117,7 +117,7 @@ public sealed class BibleController : ControllerBase
             ReferenceImageUrl: body.EffectiveImageUrl,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            StageName: body.StageName,
+            StageName: body.EffectiveStageName,
             IsCrowd: body.IsCrowd
         );
 

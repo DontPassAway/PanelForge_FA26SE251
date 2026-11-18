@@ -92,7 +92,7 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 Subtitle: body.Subtitle,
                 DetailsJson: body.DetailsJson,
                 ReferenceImageUrl: body.EffectiveImageUrl,
-                StageName: body.StageName,
+                StageName: body.EffectiveStageName,
                 ExpectedVersionNumber: body.ExpectedVersionNumber,
                 ArtistUserId: cmd.ArtistUserId,
                 TargetRevisionId: target?.Id), ct);
@@ -123,6 +123,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
             || Differs(b.Description, snapshot.Description)
             || Differs(b.Subtitle, snapshot.Subtitle)
             || Differs(b.DetailsJson, snapshot.DetailsJson)
-            || Differs(b.StageName, target.StageName);
+            || Differs(b.EffectiveStageName, target.StageName);
     }
 }

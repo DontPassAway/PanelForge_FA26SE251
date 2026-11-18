@@ -31,6 +31,7 @@ public sealed record BibleEntryRevisionDto(
     int? CurrentConceptVersionNumber = null
 )
 {
+    public string VariantLabel => StageName ?? string.Empty;
     /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
     public static BibleEntryRevisionDto From(BibleEntryRevision r)
     {
@@ -139,10 +140,12 @@ public sealed record CreateBibleEntryRequest(
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
     string? StageName = null,
-    bool IsCrowd = false
+    bool IsCrowd = false,
+    string? VariantLabel = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
 }
 
 public sealed record AddBibleEntryRevisionRequest(
@@ -259,11 +262,13 @@ public sealed record SubmitConceptArtRequest(
     string? DetailsJson = null,
     string? StageName = null,
     int? ExpectedVersionNumber = null,
-    Guid? RevisionId = null
+    Guid? RevisionId = null,
+    string? VariantLabel = null
 )
 {
     public string EffectiveSummary => (!string.IsNullOrWhiteSpace(Summary) ? Summary : (!string.IsNullOrWhiteSpace(Note) ? Note : "Nộp bản vẽ Concept Art")).Trim();
     public string EffectiveImageUrl => (!string.IsNullOrWhiteSpace(ReferenceImageUrl) ? ReferenceImageUrl : ImageAssetUrl)?.Trim() ?? string.Empty;
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
 }
 
 public sealed record BibleDesignQueueItemDto(
@@ -286,6 +291,7 @@ public sealed record BibleDesignQueueItemDto(
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;
+    public string VariantLabel => StageName ?? string.Empty;
 }
 
 /// <summary>Một chương mà mục Bible xuất hiện trong kịch bản.</summary>
