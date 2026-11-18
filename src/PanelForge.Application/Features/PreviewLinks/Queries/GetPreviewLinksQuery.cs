@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.PreviewLinks.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Domain.Enums;
 
@@ -58,7 +59,7 @@ public sealed class GetPreviewFeedbackQueryHandler
     {
         var query = _db.PreviewFeedback.AsNoTracking().Where(f => f.ChapterId == q.ChapterId);
         if (q.Status is { } s) query = query.Where(f => f.Status == s);
-        var items = (await query.OrderByDescending(f => f.CreatedAt).ToListAsync(ct)).Select(PreviewFeedbackDto.From).ToList();
+        var items = await PreviewLinkRules.FeedbackDtosAsync(_db, await query.OrderByDescending(f => f.CreatedAt).ToListAsync(ct), ct);
         return Result<IReadOnlyList<PreviewFeedbackDto>>.Success(items);
     }
 }

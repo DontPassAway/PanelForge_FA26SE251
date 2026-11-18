@@ -10,11 +10,13 @@ namespace PanelForge.Application.Features.Chapters.Common;
 /// <param name="CanvasStreamVersion">Version event stream (Marten) của Page lúc chụp; -1 = Page chưa có event nào.</param>
 /// <param name="ArtworkReferenceId">Ảnh cả trang theo <see cref="FinalArtwork"/>; null = trang ghép từ ảnh Panel hoặc chưa có ảnh.</param>
 /// <param name="PanelArtworks">Ảnh Panel tạo nên trang khi không dùng ảnh cả trang (trang được ghép); null với snapshot cũ.</param>
+/// <param name="WidthPx">Khổ trang lúc chụp, để dựng lại trang ghép đúng tỉ lệ; null với snapshot cũ.</param>
 public sealed record SnapshotPage(
     Guid PageId, int PageNumber, long CanvasStreamVersion, Guid? ArtworkReferenceId, string? ArtworkSha256,
-    IReadOnlyList<SnapshotPanelArtwork>? PanelArtworks = null);
+    IReadOnlyList<SnapshotPanelArtwork>? PanelArtworks = null, int? WidthPx = null, int? HeightPx = null);
 
-public sealed record SnapshotPanelArtwork(Guid PanelId, Guid ArtworkReferenceId, string? ArtworkSha256);
+/// <param name="BoundingBox">JSON toạ độ khung lúc chụp (như <c>Panel.BoundingBox</c>); null với snapshot cũ.</param>
+public sealed record SnapshotPanelArtwork(Guid PanelId, Guid ArtworkReferenceId, string? ArtworkSha256, string? BoundingBox = null);
 
 public sealed record SnapshotCastItem(
     Guid BibleEntryId, Guid BoundRevisionId, string? ModelSheetSha256);
@@ -52,8 +54,12 @@ internal static class ChapterSnapshotBuilder
 
         // 2. Mọi trang còn sống + version stream canvas (batch multi-page stream query, giữ -1 cho trang chưa có event)
         var pageRows = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id)
-            .OrderBy(p => p.PageNumber).Select(p => new { p.Id, p.PageNumber }).ToListAsync(ct);
+            .OrderBy(p => p.PageNumber).Select(p => new { p.Id, p.PageNumber, p.WidthPx, p.HeightPx }).ToListAsync(ct);
         var pageIds = pageRows.Select(p => p.Id).ToList();
+        // Toạ độ khung lúc duyệt: trang ghép phải dựng lại được dù Panel bị sửa / thay bố cục sau khi mở lại chương
+        var artPanelIds = finals.SelectMany(f => f.Parts).Where(x => x.PanelId != null).Select(x => x.PanelId!.Value).ToList();
+        var panelRows = await db.Panels.AsNoTracking().Where(p => artPanelIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => new { p.BoundingBox, p.PanelNumber }, ct);
 
         IReadOnlyDictionary<Guid, long>? streamVersions = null;
         try
@@ -98,10 +104,13 @@ internal static class ChapterSnapshotBuilder
             var whole = art?.WholePageReferenceId;
             var panelArtworks = art is null || whole is not null
                 ? null
-                : art.Parts.Select(x => new SnapshotPanelArtwork(x.PanelId!.Value, x.AssetReferenceId,
-                    shas.GetValueOrDefault(x.AssetReferenceId))).ToList();
+                // Thứ tự ghép = thứ tự khung (như PageImageBuilder dựng từ dữ liệu sống)
+                : art.Parts.OrderBy(x => panelRows.GetValueOrDefault(x.PanelId!.Value)?.PanelNumber ?? int.MaxValue)
+                    .Select(x => new SnapshotPanelArtwork(x.PanelId!.Value, x.AssetReferenceId,
+                        shas.GetValueOrDefault(x.AssetReferenceId), panelRows.GetValueOrDefault(x.PanelId!.Value)?.BoundingBox))
+                    .ToList();
             snapshotPages.Add(new SnapshotPage(p.Id, p.PageNumber, streamVersion, whole,
-                whole is null ? null : shas.GetValueOrDefault(whole.Value), panelArtworks));
+                whole is null ? null : shas.GetValueOrDefault(whole.Value), panelArtworks, p.WidthPx, p.HeightPx));
         }
 
         // 3. Phiên bản kịch bản chốt sản xuất (BIB-14, SCR-41)
@@ -146,7 +155,8 @@ internal static class ChapterSnapshotBuilder
             return new SnapshotPanelVariant(v.PanelId!.Value, v.BibleEntryId, v.RevisionId, sha);
         }).ToList();
 
-        var bibleRevisionIds = cast.Select(c => c.BoundRevisionId).Distinct().ToList();
+        // Gồm cả bản Bible gắn riêng từng Panel (biến thể), không chỉ cast cấp chương
+        var bibleRevisionIds = cast.Select(c => c.BoundRevisionId).Concat(variants.Select(v => v.RevisionId)).Distinct().ToList();
 
         // 6. Số snapshot tăng dần + hash manifest
         var next = (await db.ChapterSnapshots.Where(s => s.ChapterId == chapter.Id)

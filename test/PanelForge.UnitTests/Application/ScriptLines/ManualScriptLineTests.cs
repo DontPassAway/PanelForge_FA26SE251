@@ -255,7 +255,9 @@ public class ManualScriptLineTests
     // ── UC-13 / BR-08: khôi phục phiên bản script ─────────────────────────────
 
     private Task<Result<RestoreScriptRevisionResult>> Restore(Guid revisionId, long? expected = null, Guid? sceneId = null) =>
-        new RestoreScriptRevisionCommandHandler(_db, _auth.Object).Handle(
+        new RestoreScriptRevisionCommandHandler(_db, _auth.Object,
+            new PanelForge.Application.Features.Chapters.Services.ChapterCastService(
+                _db, new PanelForge.Infrastructure.Services.ChapterCastInheritanceResolver(_db))).Handle(
             new RestoreScriptRevisionCommand(_chapter.Id, sceneId ?? _scene.Id, revisionId, _writer, expected), default);
 
     private Task EditLine(Guid lineId, string dialogue) =>
@@ -288,6 +290,11 @@ public class ManualScriptLineTests
         history[4].ContentHash.Should().Be(history[1].ContentHash);
         history[4].PreviousRevisionId.Should().Be(history[3].Id);
         history[4].MappingJson.Should().Contain(history[1].Id.ToString());
+
+        // BR-01/BR-11: bản khôi phục thành ScriptVersion mới nhất, để lưu từ màn hình cũ (ExpectedRevisionId cũ) bị 409
+        var head = _db.ScriptVersions.Where(v => v.ChapterId == _chapter.Id).OrderByDescending(v => v.VersionNumber).First();
+        head.Message.Should().Be("Khôi phục về phiên bản 2");
+        head.RowsJson.Should().Contain("\"A\"").And.Contain("\"B\"").And.NotContain("A sửa");
     }
 
     [Fact]

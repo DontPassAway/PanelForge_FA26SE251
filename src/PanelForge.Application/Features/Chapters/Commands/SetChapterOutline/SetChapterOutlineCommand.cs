@@ -7,7 +7,8 @@ using PanelForge.Application.Features.Assignments.Common;
 namespace PanelForge.Application.Features.Chapters.Commands.SetChapterOutline;
 
 /// <summary>V1.2: Producer/Writer ghi outline chương (input của Writer Agent). Chương đã khoá (BR-12) thì không sửa.</summary>
-public sealed record SetChapterOutlineCommand(Guid ChapterId, Guid UserId, string? Outline) : IRequest<Result<string?>>;
+public sealed record SetChapterOutlineCommand(Guid ChapterId, Guid UserId, string? Outline, long? ExpectedChapterVersion = null)
+    : IRequest<Result<string?>>;
 
 public sealed class SetChapterOutlineCommandHandler : IRequestHandler<SetChapterOutlineCommand, Result<string?>>
 {
@@ -22,6 +23,11 @@ public sealed class SetChapterOutlineCommandHandler : IRequestHandler<SetChapter
             return Result<string?>.Failure($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Result<string?>.Failure(locked, ResultErrorCodes.Conflict);
+        // BR-11: như UpdateChapter — version client đã đọc phải khớp
+        if (cmd.ExpectedChapterVersion is { } expected && expected != chapter.VersionVector)
+            return Result<string?>.Failure(
+                $"Chương vừa được người khác cập nhật (expected={expected}, actual={chapter.VersionVector}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
         chapter.SetOutline(cmd.Outline);
         chapter.UpdatedBy = cmd.UserId.ToString();

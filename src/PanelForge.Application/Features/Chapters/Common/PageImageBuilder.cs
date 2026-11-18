@@ -21,19 +21,27 @@ internal static class PageImageBuilder
     {
         // Snapshot có thể trỏ tới trang/Panel đã xoá sau khi duyệt: bỏ bộ lọc xoá mềm để dựng lại đúng bản đã duyệt
         var page = await db.Pages.IgnoreQueryFilters().AsNoTracking().Where(p => p.Id == pageId)
-            .Select(p => new { p.PageNumber, p.WidthPx, p.HeightPx }).FirstOrDefaultAsync(ct);
+            .Select(p => new { p.ChapterId, p.PageNumber, p.WidthPx, p.HeightPx }).FirstOrDefaultAsync(ct);
         if (page is null) return null;
-        int width = page.WidthPx > 0 ? page.WidthPx : 1200, height = page.HeightPx > 0 ? page.HeightPx : 1800;
 
         var refs = await (
-            from r in db.AssetReferences.AsNoTracking()
+            from r in db.AssetReferences.IgnoreQueryFilters().AsNoTracking()
             where assetReferenceIds.Contains(r.Id) && r.PageId == pageId
             join a in db.Assets.AsNoTracking() on r.AssetId equals a.Id
-            select new { r.PanelId, a.StorageKey, a.ContentType }).ToListAsync(ct);
+            select new { r.Id, r.PanelId, a.StorageKey, a.ContentType }).ToListAsync(ct);
         if (refs.Count == 0) return null;
 
+        // BR-01/BR-12/BR-17: dựng đúng bản đã duyệt. ChapterSnapshot nào chứa đúng bộ artwork này của trang thì lấy khổ trang,
+        // toạ độ khung và version canvas đã ghim trong đó — mở lại chương rồi sửa bố cục / lớp chữ không lọt vào link xem
+        // thử, job xuất hay Reader của bản cũ. Không có snapshot (dữ liệu cũ / chương chưa duyệt) thì dùng dữ liệu sống.
+        var pin = await FindPinAsync(db, page.ChapterId, pageId, refs.Select(r => r.Id).ToHashSet(), ct);
+        int width = pin?.WidthPx ?? (page.WidthPx > 0 ? page.WidthPx : 1200);
+        int height = pin?.HeightPx ?? (page.HeightPx > 0 ? page.HeightPx : 1800);
+
         ExportPageImage image;
-        var whole = refs.FirstOrDefault(r => r.PanelId == null);
+        var whole = pin is not null
+            ? refs.FirstOrDefault(r => r.Id == pin.ArtworkReferenceId)
+            : refs.FirstOrDefault(r => r.PanelId == null);
         if (whole is not null)
         {
             var bytes = await ReadAsync(storage, whole.StorageKey, ct);
@@ -42,35 +50,79 @@ internal static class PageImageBuilder
         }
         else
         {
-            var panelIds = refs.Select(r => r.PanelId!.Value).ToList();
-            var panels = await db.Panels.IgnoreQueryFilters().AsNoTracking().Where(p => panelIds.Contains(p.Id))
-                .OrderBy(p => p.PanelNumber).Select(p => new { p.Id, p.BoundingBox }).ToListAsync(ct);
-            var layers = new List<PagePanelLayer>();
-            foreach (var panel in panels)
+            // (artwork, BoundingBox) theo thứ tự khung: bản ghim lấy hộp đã chụp, không đọc Panel đang sống
+            List<(string StorageKey, string? Box)> parts;
+            if (pin is not null)
             {
-                var source = refs.First(r => r.PanelId == panel.Id);
-                var box = PanelBox.Parse(panel.BoundingBox, width, height);
-                layers.Add(new PagePanelLayer(await ReadAsync(storage, source.StorageKey, ct),
+                parts = pin.PanelArtworks!
+                    .Select(pa => (Ref: refs.FirstOrDefault(r => r.Id == pa.ArtworkReferenceId), pa.BoundingBox))
+                    .Where(x => x.Ref is not null).Select(x => (x.Ref!.StorageKey, x.BoundingBox)).ToList();
+            }
+            else
+            {
+                var panelIds = refs.Where(r => r.PanelId != null).Select(r => r.PanelId!.Value).ToList();
+                var panels = await db.Panels.IgnoreQueryFilters().AsNoTracking().Where(p => panelIds.Contains(p.Id))
+                    .OrderBy(p => p.PanelNumber).Select(p => new { p.Id, p.BoundingBox }).ToListAsync(ct);
+                parts = panels.Select(p => (refs.First(r => r.PanelId == p.Id).StorageKey, (string?)p.BoundingBox)).ToList();
+            }
+
+            var layers = new List<PagePanelLayer>();
+            foreach (var (key, boxJson) in parts)
+            {
+                var box = PanelBox.Parse(boxJson, width, height);
+                layers.Add(new PagePanelLayer(await ReadAsync(storage, key, ct),
                     box.X, box.Y, box.Width, box.Height, box.Corners, box.Borderless));
             }
             image = compositor.ComposePanels(page.PageNumber, width, height, layers);
         }
 
-        return await WithLetteringAsync(pageRepository, compositor, image, pageId, ct, languageCode, canvasStreamVersion);
+        return await WithLetteringAsync(pageRepository, compositor, image, pageId, ct, languageCode,
+            canvasStreamVersion, pin?.CanvasStreamVersion);
     }
 
     /// <summary>
-    /// Vẽ lớp chữ của Page lên ảnh trang (bóng thoại, dẫn truyện, SFX). Chương đã Approved/Published thì Page chỉ đọc
-    /// (ChapterEditGuard), nên trạng thái hiện tại của stream chính là lớp chữ đã duyệt.
-    /// Hỗ trợ vẽ lớp chữ theo ngôn ngữ phát hành (BR-34).
+    /// Trang trong ChapterSnapshot mới nhất có đúng bộ artwork <paramref name="pageRefIds"/> và đủ dữ liệu ghim (khổ trang,
+    /// toạ độ khung). Null nếu không có — snapshot cũ chưa chụp toạ độ cũng trả null để dùng dữ liệu sống.
+    /// </summary>
+    // ponytail: đọc và giải mã manifest của mọi snapshot chương cho mỗi trang; chương có nhiều lần duyệt lại thì cache theo chapterId.
+    internal static async Task<SnapshotPage?> FindPinAsync(
+        IPanelForgeDbContext db, Guid chapterId, Guid pageId, IReadOnlySet<Guid> pageRefIds, CancellationToken ct)
+    {
+        var manifests = await db.ChapterSnapshots.AsNoTracking().Where(s => s.ChapterId == chapterId)
+            .OrderByDescending(s => s.SnapshotNumber).Select(s => s.ManifestJson).ToListAsync(ct);
+        foreach (var json in manifests)
+        {
+            SnapshotManifest? manifest;
+            try { manifest = PanelForge.AI.Contracts.AiJson.Deserialize<SnapshotManifest>(json); }
+            catch (JsonException) { continue; }
+            var sp = manifest?.Pages.FirstOrDefault(p => p.PageId == pageId);
+            if (sp?.WidthPx is null || sp.HeightPx is null) continue;
+            var ids = sp.ArtworkReferenceId is { } w
+                ? new HashSet<Guid> { w }
+                : (sp.PanelArtworks ?? []).Select(a => a.ArtworkReferenceId).ToHashSet();
+            if (ids.Count > 0 && ids.SetEquals(pageRefIds)) return sp;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Vẽ lớp chữ của Page lên ảnh trang (bóng thoại, dẫn truyện, SFX), theo ngôn ngữ phát hành nếu có (BR-34).
+    /// Version canvas: ưu tiên version người gọi truyền (snapshot ấn bản ngôn ngữ; âm = dùng bản hiện tại), không có thì
+    /// version ghim trong ChapterSnapshot (-1 = trang chưa có event nào lúc duyệt → không có chữ), không ghim thì bản hiện tại
+    /// (BR-01/BR-12/BR-17: mở lại chương rồi sửa chữ không lọt vào bản đã duyệt).
     /// </summary>
     private static async Task<ExportPageImage> WithLetteringAsync(
-        IPageRepository pageRepository, IPageLetteringCompositor compositor, ExportPageImage image, Guid pageId, CancellationToken ct, string? languageCode = null,
-        long? canvasStreamVersion = null)
+        IPageRepository pageRepository, IPageLetteringCompositor compositor, ExportPageImage image, Guid pageId, CancellationToken ct,
+        string? languageCode = null, long? canvasStreamVersion = null, long? pinnedVersion = null)
     {
-        // Có version (từ snapshot ấn bản) → lớp chữ đúng lúc nghiệm thu, không lộ bản dịch đang sửa sau Reopen (BR-34)
-        var page = canvasStreamVersion is >= 0
-            ? await pageRepository.GetAtVersionAsync(pageId, canvasStreamVersion.Value, ct)
+        long? version = canvasStreamVersion;
+        if (version is null)
+        {
+            if (pinnedVersion is < 0) return image;
+            version = pinnedVersion;
+        }
+        var page = version is >= 0
+            ? await pageRepository.GetAtVersionAsync(pageId, version.Value, ct)
             : await pageRepository.GetAsync(pageId, ct);
         if (page is null) return image;
         var texts = page.Elements.Values

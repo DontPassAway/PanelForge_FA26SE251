@@ -52,7 +52,7 @@ public sealed record StageTaskLotRequest(
 public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun = false, bool Reassign = false);
 
 /// <summary>Sửa hạn / brief của lô (Producer). Trường null = giữ nguyên; ClearDueDate = true để bỏ hạn.</summary>
-public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate, bool ClearDueDate = false);
+public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate, bool ClearDueDate = false, uint? ExpectedRowVersion = null);
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 

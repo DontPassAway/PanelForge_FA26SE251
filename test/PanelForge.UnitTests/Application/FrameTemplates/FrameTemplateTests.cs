@@ -116,7 +116,7 @@ public class FrameTemplateTests
     }
 
     [Fact]
-    public async Task Apply_WithFewerPanels_LeavesOverflowArtworkAtPageLevel()
+    public async Task Apply_WithFewerPanels_KeepsOverflowArtworkOnDeletedPanel_NotPageLevel()
     {
         var (db, page, _) = await Seed(ReadingDirection.RightToLeft);
         var oldPanels = Enumerable.Range(1, 6).Select(i => Panel.Create(page.Id, i, i, "{}")).ToList();
@@ -131,7 +131,8 @@ public class FrameTemplateTests
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         result.Value!.Panels.Should().HaveCount(4);
         result.Value.UnassignedArtworkCount.Should().Be(1);
-        overflow.PanelId.Should().BeNull();
+        // PanelId null = "ảnh cả trang": ảnh khung lẻ không được biến thành cả trang (BR-01, BR-13)
+        overflow.PanelId.Should().Be(oldPanels[5].Id);
     }
 
     [Fact]

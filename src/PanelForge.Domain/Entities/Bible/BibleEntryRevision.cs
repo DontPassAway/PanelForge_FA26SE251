@@ -9,6 +9,9 @@ namespace PanelForge.Domain.Entities.Bible;
 /// </summary>
 public class BibleEntryRevision : BaseEntity
 {
+    /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL (BR-11): hai lần ghi chồng nhau → 409.</summary>
+    public uint RowVersion { get; private set; }
+
     public Guid BibleEntryId { get; private set; }
     public int VersionNumber { get; private set; }
     public string Summary { get; private set; } = default!;
@@ -45,7 +48,7 @@ public class BibleEntryRevision : BaseEntity
     public ICollection<BibleRevisionEvent> Events { get; private set; } = [];
 
     /// <summary>Đã qua ít nhất một bước kiểm duyệt (ngoài sự kiện Created): xoá đi sẽ mất provenance.</summary>
-    public bool HasReviewHistory => Events.Any(e => e.Type != BibleRevisionEventType.Created);
+    public bool HasReviewHistory => Events.Any(e => e.Type is not (BibleRevisionEventType.Created or BibleRevisionEventType.DraftOverwritten));
 
     /// <summary>Editor đã xác nhận và khoá revision này làm Canon tham chiếu. Chỉ thêm metadata, nội dung vẫn bất biến; không có thao tác mở khoá.</summary>
     public DateTime? LockedAt { get; private set; }
@@ -196,6 +199,8 @@ public class BibleEntryRevision : BaseEntity
         ContentHash = contentHash;
         AuthorId = authorId;
         if (!string.IsNullOrWhiteSpace(stageName)) StageName = stageName.Trim();
+        // BR-01: ghi lại nội dung mới thành event, để lịch sử không chỉ còn event Created mang nội dung stub cũ
+        Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.DraftOverwritten, authorId, summary));
     }
 
     public static BibleEntryRevision Create(

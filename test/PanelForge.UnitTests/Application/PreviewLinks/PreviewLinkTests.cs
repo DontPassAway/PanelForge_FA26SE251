@@ -109,6 +109,42 @@ public class PreviewLinkTests
         link.SnapshotArtworkIds.Should().HaveCount(2).And.Contain(f.InkV2.Id).And.NotContain(f.InkV1.Id);
     }
 
+    [Fact]
+    public async Task Create_GridCell_UsesLatestApprovedSubmission_NotRejectedOrNewerUpload()
+    {
+        var f = new Fixture();
+        var cell = StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, f.InkV1.PipelineStageId, f.Page1.Id);
+        f.Db.StageTasks.Add(cell);
+        var approved = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 1, [f.InkV1.Id], autoApproved: false);
+        approved.Approve(f.ProducerId);
+        var rejected = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 2, [f.InkV2.Id], autoApproved: false);
+        rejected.Reject(f.ProducerId, "Sai màu");
+        f.Db.StageTaskSubmissions.AddRange(approved, rejected);
+        f.Db.SaveChanges();
+
+        var (id, _) = await f.CreateLink();
+
+        // BR-06/BR-20: InkV2 bị trả về nên bản cuối của trang 1 là InkV1 (lần nộp đã duyệt), không phải bản upload mới nhất
+        f.Db.PreviewLinks.Single(l => l.Id == id).SnapshotArtworkIds.Should().Contain(f.InkV1.Id).And.NotContain(f.InkV2.Id);
+    }
+
+    [Fact]
+    public async Task Create_GridCellWithOnlyRejectedSubmission_FallsBackToLowerStage()
+    {
+        var f = new Fixture();
+        var cell = StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, f.InkV1.PipelineStageId, f.Page1.Id);
+        f.Db.StageTasks.Add(cell);
+        var rejected = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 1, [f.InkV1.Id, f.InkV2.Id], autoApproved: false);
+        rejected.Reject(f.ProducerId, "Làm lại");
+        f.Db.StageTaskSubmissions.Add(rejected);
+        f.Db.SaveChanges();
+
+        var (id, _) = await f.CreateLink();
+
+        f.Db.PreviewLinks.Single(l => l.Id == id).SnapshotArtworkIds.Should().Contain(f.Pencil.Id)
+            .And.NotContain(f.InkV1.Id).And.NotContain(f.InkV2.Id);
+    }
+
     [Theory]
     [InlineData("khong-phai-email", null)]
     [InlineData("a@b.com", 0)]
@@ -202,6 +238,11 @@ public class PreviewLinkTests
         ok.Value.PreviewLinkId.Should().Be(id);
         ok.Value.RecipientEmail.Should().Be("editor@publisher.com");
         ok.Value.Status.Should().Be(PreviewFeedbackStatus.New);
+        // Số chiếu sẵn cho FE: trang 1, khung 1, artwork v2 (1-based), không nhầm với ChapterVersion (VersionVector)
+        (ok.Value.PageNumber, ok.Value.PanelNumber, ok.Value.ArtworkVersionNumber).Should().Be((1, f.Panel1.PanelNumber, 2));
+
+        var listed = await new GetPreviewFeedbackQueryHandler(f.Db).Handle(new GetPreviewFeedbackQuery(f.Chapter.Id, null), default);
+        listed.Value!.Should().ContainSingle().Which.ArtworkVersionNumber.Should().Be(2);
     }
 
     [Fact]

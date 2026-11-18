@@ -212,7 +212,8 @@ public sealed class ChaptersController : ControllerBase
             IncrementVersion: body.IncrementVersion,
             Outline: body.Outline,
             IsLocked: body.IsLocked,
-            PriceVnd: body.PriceVnd
+            PriceVnd: body.PriceVnd,
+            ExpectedChapterVersion: body.ExpectedChapterVersion
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -529,7 +530,7 @@ public sealed class ChaptersController : ControllerBase
     public async Task<IActionResult> SetOutline(
         [FromRoute] Guid chapterId, [FromBody] SetChapterOutlineRequest body, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SetChapterOutlineCommand(chapterId, GetCurrentUserId(), body.Outline), cancellationToken);
+        var result = await _mediator.Send(new SetChapterOutlineCommand(chapterId, GetCurrentUserId(), body.Outline, body.ExpectedChapterVersion), cancellationToken);
         return result.IsSuccess ? Ok(new TextValueResponse(result.Value)) : ToActionResult(result);
     }
 
@@ -596,7 +597,7 @@ public sealed record UnfreezeScriptRequest(string? Reason);
 public sealed record SubmitScriptRequest(string? Message);
 public sealed record AddScriptCommentRequest(Guid? SceneId, Guid? ScriptLineId, string? QuotedText, string Body);
 
-public sealed record SetChapterOutlineRequest(string? Outline);
+public sealed record SetChapterOutlineRequest(string? Outline, long? ExpectedChapterVersion = null);
 
 /// <summary>Giá trị text vừa lưu (null = đã xoá).</summary>
 public sealed record TextValueResponse(string? Value);

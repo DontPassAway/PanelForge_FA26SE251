@@ -38,6 +38,12 @@ public class StoryArcOutlineTests
 
         (await handler.Handle(new(chapter.Id, Guid.NewGuid(), "Mở đầu"), default)).Value.Should().Be("Mở đầu");
 
+        // BR-11: gửi version đã cũ → 409, không đè outline
+        var stale = await handler.Handle(new(chapter.Id, Guid.NewGuid(), "Bản đè", chapter.VersionVector + 1), default);
+        stale.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        chapter.Outline.Should().Be("Mở đầu");
+        (await handler.Handle(new(chapter.Id, Guid.NewGuid(), "Mở đầu", chapter.VersionVector), default)).IsSuccess.Should().BeTrue();
+
         chapter.Approve();
         var locked = await handler.Handle(new(chapter.Id, Guid.NewGuid(), "Sửa"), default);
         locked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);

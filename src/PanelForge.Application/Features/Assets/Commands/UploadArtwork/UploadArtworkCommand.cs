@@ -228,7 +228,16 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         reference.CreatedBy = cmd.UserId.ToString();
 
         _db.AssetReferences.Add(reference);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // BR-11: hai upload cùng (Page, Panel, Stage) cùng lúc tính trùng VersionNumber (unique index), hoặc hai upload
+            // cùng giữ quota Workspace (xmin) — người sau nhận 409 để tải lên lại, thay vì 500
+            return Fail("Có người vừa tải ảnh lên cùng chỗ này. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
     }

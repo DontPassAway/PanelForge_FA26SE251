@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.PreviewLinks.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
 using PanelForge.Domain.Entities.Preview;
@@ -82,7 +83,7 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
             "Có yêu cầu sửa từ phản hồi xem thử", description, assignment.Id, assignment.ChapterId));
 
         await _db.SaveChangesAsync(ct);
-        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+        return Result<PreviewFeedbackDto>.Success(await PreviewLinkRules.FeedbackDtoAsync(_db, feedback, ct));
     }
 
     /// <summary>
@@ -117,6 +118,6 @@ public sealed class CreateChangeRequestFromFeedbackCommandHandler
         feedback.LinkStageTask(task.Id);
         feedback.UpdatedBy = cmd.UserId.ToString();
         await _db.SaveChangesAsync(ct);
-        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+        return Result<PreviewFeedbackDto>.Success(await PreviewLinkRules.FeedbackDtoAsync(_db, feedback, ct));
     }
 }

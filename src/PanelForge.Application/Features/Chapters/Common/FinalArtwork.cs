@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Chapters.Common;
 
@@ -29,7 +30,24 @@ internal static class FinalArtwork
             from r in db.AssetReferences.AsNoTracking()
             where r.ChapterId == chapterId && (pageId == null || r.PageId == pageId)
             join s in db.PipelineStages.AsNoTracking() on r.PipelineStageId equals s.Id
-            select new { r.Id, r.PageId, r.PanelId, s.StageOrder, r.VersionNumber }).ToListAsync(ct);
+            select new { r.Id, r.PageId, r.PanelId, r.PipelineStageId, s.StageOrder, r.VersionNumber }).ToListAsync(ct);
+
+        // BR-06/BR-20: ô lưới V3 đã có lần nộp thì chỉ ảnh thuộc lần nộp đã duyệt mới là "bản đúng" — ảnh bị trả về, đang chờ
+        // duyệt hay tải lên sau lần duyệt bị loại. Ô chưa nộp lần nào (dữ liệu cũ, Producer tải thẳng) giữ quy tắc bản mới nhất.
+        var submissions = await (
+            from sub in db.StageTaskSubmissions.AsNoTracking()
+            where sub.ChapterId == chapterId
+            join t in db.StageTasks.AsNoTracking() on sub.StageTaskId equals t.Id
+            select new { t.PageId, t.PipelineStageId, sub.Status, sub.ArtworkReferenceIds }).ToListAsync(ct);
+        if (submissions.Count > 0)
+        {
+            var gated = submissions.Select(s => (s.PageId, s.PipelineStageId)).ToHashSet();
+            var approved = submissions.Where(s => s.Status == SubmissionStatus.Approved)
+                .SelectMany(s => s.ArtworkReferenceIds).ToHashSet();
+            refs = refs.Where(r => approved.Contains(r.Id) ||
+                                   !(gated.Contains(((Guid?)r.PageId, r.PipelineStageId)) || gated.Contains(((Guid?)null, r.PipelineStageId))))
+                .ToList();
+        }
         var pages = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapterId && (pageId == null || p.Id == pageId))
             .Select(p => new { p.Id, p.PageNumber }).ToListAsync(ct);
         var pageIds = pages.Select(p => p.Id).ToList();

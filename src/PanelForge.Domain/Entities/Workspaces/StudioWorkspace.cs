@@ -6,6 +6,9 @@ namespace PanelForge.Domain.Entities.Workspaces;
 
 public class StudioWorkspace : BaseEntity
 {
+    /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL (BR-11): hai lần ghi chồng nhau → 409.</summary>
+    public uint RowVersion { get; private set; }
+
     public string Name { get; private set; } = default!;
     public Guid OwnerId { get; private set; }
     public long StorageQuotaBytes { get; private set; }
