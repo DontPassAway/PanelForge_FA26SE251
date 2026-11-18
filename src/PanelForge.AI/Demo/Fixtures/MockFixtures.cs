@@ -98,7 +98,7 @@ public static class MockFixtures
             {
                 new { speaker = (string?)null, dialogue = (string?)null,
                       stageDirection = "Nửa đêm, mưa vẫn gõ đều trên mái tiệm đồng hồ. An quét bụi giữa những chiếc đồng hồ ngừng chạy." },
-                new { speaker = "AN", dialogue = "Đếm đến trăm tiếng mưa nữa là mình đóng cửa.", stageDirection = (string?)null },
+                new { kind = "Dialogue", speaker = "AN", parenthetical = "lẩm bẩm", text = "Đếm đến trăm tiếng mưa nữa là mình đóng cửa." },
                 new { speaker = "BA_LAN", dialogue = "An ơi, ra giúp bà một chút.", stageDirection = "Bà Lan đứng ngoài hiên, mắt dán vào ổ khóa chiếc tủ cũ." },
                 line4,
                 line5

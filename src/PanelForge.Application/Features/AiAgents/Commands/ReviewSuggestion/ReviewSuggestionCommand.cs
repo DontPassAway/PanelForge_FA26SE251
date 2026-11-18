@@ -14,7 +14,9 @@ using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Entities.Assets;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -314,11 +316,21 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             _db.ScriptLines.Remove(line); // soft-delete; nội dung cũ còn trong revision/baseline
         }
 
+        SeriesBible? bible = null;
         foreach (var line in draft.Lines.OrderBy(l => l.Order))
         {
             // Id do ứng dụng cấp ở draft → Storyboard.sourceScriptLineIds trỏ đúng dòng này
-            _db.ScriptLines.Add(ScriptLine.Create(
-                s.SceneId, line.Order, line.Dialogue, line.StageDirection, line.LineId));
+            var created = ScriptLine.Create(s.SceneId, line.Order, line.Dialogue, line.StageDirection, line.LineId,
+                kind: Enum.TryParse<ScriptLineKind>(line.Kind, out var kind) ? kind : null, speakerLabel: line.SpeakerLabel);
+            _db.ScriptLines.Add(created);
+            if (line.Refs is not { Count: > 0 }) continue;
+
+            // Mục Bible chưa có được tạo thành mục nháp tại đây, tức chỉ khi người viết Accept
+            bible ??= await ScriptBibleRefs.GetOrAddBibleAsync(_db, run.SeriesId, ct);
+            var refs = line.Refs.Select(r => new ScriptLineRefInput(r.SurfaceText, r.BibleEntryId,
+                r.NewName is null ? null : new NewDraftBibleEntryInput(r.NewName, Enum.Parse<BibleEntryCategory>(r.NewCategory!)))).ToList();
+            if (await ScriptBibleRefs.ApplyAsync(_db, bible, created, $"Dòng {line.Order}", refs, [], [], ct) is { } refError)
+                return Applied.Fail(refError, ResultErrorCodes.Validation);
         }
 
         var revision = ContentRevision.Create(
@@ -465,7 +477,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         var (previousId, nextVersion) = CaptureBaseline(s, latestScript, existing);
         if (await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, s.ChapterId, line, "Thoại được đổi bằng đề xuất AI.", ct) is { } rework)
             return Applied.Fail(rework, ResultErrorCodes.Conflict);
-        line.UpdateContent(sug.SuggestedText, line.StageDirection);
+        line.UpdateContent(sug.SuggestedText, line.StageDirection, line.NarrationMode, line.Kind, line.SpeakerLabel);
 
         var payload = AiJson.Serialize(new ScriptDraft(
             AiProtocol.SchemaVersion, s.RunId, s.SceneId, 0,

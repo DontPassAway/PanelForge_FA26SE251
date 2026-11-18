@@ -55,6 +55,9 @@ public sealed class WriterAgent
         return (call, inputJson);
     }
 
+    private static string? Clean(string? s) =>
+        string.IsNullOrWhiteSpace(s) || s.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ? null : s.Trim();
+
     private static (ScriptDraft?, IReadOnlyList<string>) Parse(string text, AgentContext ctx, KeyMaps keys, int round)
     {
         var model = OutputParser.Parse<WriterOutput>(text, out var error);
@@ -63,6 +66,7 @@ public sealed class WriterAgent
 
         var unknownSpeakers = new Dictionary<string, List<int>>();
         var lines = new List<ScriptDraftLine>();
+        var badRefs = new List<string>();
         for (var i = 0; i < model.Lines.Count; i++)
         {
             var l = model.Lines[i];
@@ -74,10 +78,25 @@ public sealed class WriterAgent
                 else if (unknownSpeakers.TryGetValue(code, out var at)) at.Add(i + 1);
                 else unknownSpeakers[code] = [i + 1];
             }
+            var kind = Clean(l.Kind);
+            var lineText = Clean(l.Text);
+            var spoken = kind is "Dialogue" or "Thought";
+            var dialogue = kind is null ? Clean(l.Dialogue) : spoken ? lineText : null;
+            var stage = kind is null ? Clean(l.StageDirection) : spoken ? null : lineText;
+            var effectiveKind = kind ?? (dialogue is null ? "Action" : "Dialogue");
+            var name = speaker is null ? Clean(l.NewSpeaker) : keys.CharactersByCode.Values.First(c => c.EntryId == speaker).Name;
+            var label = effectiveKind == "Action" || name is null ? null
+                : Clean(l.Parenthetical) is { } tone ? $"{name} ({tone})" : name;
+            var refs = new List<ScriptDraftRef>();
+            foreach (var r in l.Refs ?? [])
+            {
+                var code = Clean(r.Code);
+                var entry = code is null ? null : ctx.Bible.FirstOrDefault(b => b.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
+                if (code is not null && entry is null) badRefs.Add($"Tham chiếu code '{code}' ở dòng {i + 1} không có trong Bible.");
+                else refs.Add(new ScriptDraftRef(r.Text?.Trim() ?? "", entry?.EntryId, entry is null ? Clean(r.NewName) : null, entry is null ? Clean(r.Category) : null));
+            }
             // LineId do ứng dụng cấp, không phải model
-            lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker,
-                string.IsNullOrWhiteSpace(l.Dialogue) ? null : l.Dialogue.Trim(),
-                string.IsNullOrWhiteSpace(l.StageDirection) ? null : l.StageDirection.Trim()));
+            lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker, dialogue, stage, kind, label, refs.Count > 0 ? refs : null));
         }
         if (unknownSpeakers.Count > 0)
         {
@@ -89,6 +108,8 @@ public sealed class WriterAgent
                 $"Speaker '{kv.Key}' (dòng {string.Join(", ", kv.Value)}) không nằm trong danh sách nhân vật AI được dùng ({allowed}). " +
                 "Nhân vật phải có hồ sơ đã được Producer khoá thì AI mới dùng được.").ToList());
         }
+
+        if (badRefs.Count > 0) return (null, badRefs);
 
         var draft = new ScriptDraft(AiProtocol.SchemaVersion, ctx.RunId, ctx.SceneId, round, lines,
             ctx.BibleRevisionIds, model.RevisionNotes);
