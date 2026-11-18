@@ -24,10 +24,22 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__PostgreSQL=Host=postgres-db;Port=5432;Database=panelforge;Username=postgres;Password=12345
+      - TranslationService__BaseUrl=http://translation-service:5000
     ports:
       - "7274:8080"
     depends_on:
       - postgres-db
+      - translation-service
+
+  translation-service:
+    image: libretranslate/libretranslate:latest
+    container_name: panelforge_translation
+    restart: always
+    environment:
+      - LT_LOAD_ONLY=en,vi
+      - LT_DISABLE_WEB_UI=true
+    ports:
+      - "5000:5000"
 
 volumes:
   # Và đổi tên ở đây
