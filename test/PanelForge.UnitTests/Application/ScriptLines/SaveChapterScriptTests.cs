@@ -293,7 +293,7 @@ public class SaveChapterScriptTests
     }
 
     [Fact]
-    public async Task SubmitChapterScript_WithBlocker_Returns409Conflict_AndNothingSaved()
+    public async Task SubmitChapterScript_WithBlocker_SucceedsWithWarning_AllowsSubmitBeforeBibleCompleted()
     {
         var mockGate = new Mock<IChapterCastGate>();
         mockGate.Setup(g => g.EvaluateSubmitAsync(_chapter.Id, It.IsAny<CancellationToken>()))
@@ -313,14 +313,13 @@ public class SaveChapterScriptTests
 
         var result = await handler.Handle(new SubmitChapterScriptCommand(_chapter.Id, _writerId, body), default);
 
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Kiếm Thần: Chưa duyệt thiết kế.");
-        trackingUow.RolledBack.Should().BeTrue();
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Warnings.Should().Contain(w => w.Contains("Kiếm Thần: Chưa duyệt thiết kế."));
+        result.Value.Chapter.ScriptStatus.Should().Be(ScriptStatus.InReview);
 
         var refreshedChapter = await _db.Chapters.FirstAsync(c => c.Id == _chapter.Id);
-        refreshedChapter.ScriptStatus.Should().Be(ScriptStatus.Draft);
-        refreshedChapter.LastSubmittedVersionId.Should().BeNull();
+        refreshedChapter.ScriptStatus.Should().Be(ScriptStatus.InReview);
+        refreshedChapter.LastSubmittedVersionId.Should().Be(result.Value.RevisionId);
     }
 
     [Fact]

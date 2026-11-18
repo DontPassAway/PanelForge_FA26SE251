@@ -54,12 +54,12 @@ public sealed class SubmitChapterScriptCommandHandler : IRequestHandler<SubmitCh
                 if (outcome.Version.LineCount == 0)
                     throw new ScriptSaveAbortException("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
+                var warnings = new List<string>(outcome.Warnings);
                 var gate = await _castGate.EvaluateSubmitAsync(cmd.ChapterId, token);
                 if (!gate.CanSubmit)
                 {
                     var blockers = string.Join("; ", gate.Blockers.Select(b => $"{b.EntryName}: {b.Reason}"));
-                    throw new ScriptSaveAbortException(
-                        $"Không thể gửi duyệt kịch bản do Series Bible chưa sẵn sàng: {blockers}", ResultErrorCodes.Conflict);
+                    warnings.Add($"Series Bible chưa hoàn thành: {blockers}");
                 }
 
                 var chapter = await _db.Chapters
@@ -71,7 +71,7 @@ public sealed class SubmitChapterScriptCommandHandler : IRequestHandler<SubmitCh
 
                 await _db.SaveChangesAsync(token);
                 return Result<SubmitChapterScriptResult>.Success(new SubmitChapterScriptResult(
-                    outcome.Version.Id, outcome.Version.VersionNumber, outcome.Created, outcome.Warnings,
+                    outcome.Version.Id, outcome.Version.VersionNumber, outcome.Created, warnings,
                     ChapterDetailDtoFactory.Create(chapter)));
             }, ct);
         }

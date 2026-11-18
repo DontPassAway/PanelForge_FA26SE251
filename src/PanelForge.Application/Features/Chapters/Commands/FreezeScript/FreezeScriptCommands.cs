@@ -239,14 +239,12 @@ public sealed class ScriptLifecycleCommandHandler :
         if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
-        // BIB-14: Evaluate submit gate
+        // Cho phép nộp kịch bản trước khi hoàn thành series bible (submitGate ghi nhận thông tin, không chặn)
         var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
         if (!submitGate.CanSubmit)
         {
             var blockerSummary = string.Join("; ", submitGate.Blockers.Select(b => $"{b.EntryName}: {b.Reason}"));
-            return Result<ChapterDetailDto>.Failure(
-                $"Không thể gửi duyệt kịch bản do Series Bible chưa sẵn sàng: {blockerSummary}",
-                ResultErrorCodes.Conflict);
+            // Ghi nhận cảnh báo nhưng cho phép nộp kịch bản sang Editor
         }
 
         if (await ScriptSubmitRules.ApplySubmitAsync(_db, chapter, version, cmd.UserId, workspaceId, ct) is { } submitError)
