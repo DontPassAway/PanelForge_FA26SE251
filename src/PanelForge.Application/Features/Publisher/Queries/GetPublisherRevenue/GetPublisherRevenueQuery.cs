@@ -25,7 +25,9 @@ public sealed record PublisherRevenueSummaryDto(
     decimal TotalRevenueVnd,
     decimal ChapterRevenueVnd,
     int PendingCount,
-    int TotalViews);
+    int TotalViews,
+    decimal VipRevenueVnd = 0m,
+    decimal TopupRevenueVnd = 0m);
 
 public sealed record PublisherRevenueDto(
     PublisherRevenueSummaryDto Summary,
@@ -94,11 +96,43 @@ public sealed class GetPublisherRevenueQueryHandler : IRequestHandler<GetPublish
         .ThenBy(r => r.SeriesTitle)
         .ToList();
 
+        decimal vipRevenue = 0m;
+        decimal topupRevenue = 0m;
+        int nonSeriesPendingCount = 0;
+
+        if (string.IsNullOrWhiteSpace(q.Search))
+        {
+            var globalTxQuery = _db.PaymentTransactions.AsNoTracking()
+                .Where(t => !t.IsDeleted && (t.SeriesId == null || !ids.Contains(t.SeriesId.Value)));
+            if (q.WorkspaceId.HasValue)
+            {
+                globalTxQuery = globalTxQuery.Where(t => t.WorkspaceId == q.WorkspaceId.Value);
+            }
+
+            var globalTx = await globalTxQuery
+                .GroupBy(t => new { t.Type, t.Status })
+                .Select(g => new { g.Key.Type, g.Key.Status, Count = g.Count(), Amount = g.Sum(t => t.AmountVnd) })
+                .ToListAsync(ct);
+
+            vipRevenue = globalTx
+                .Where(t => t.Type == PaymentTransactionType.VipSubscription && t.Status == PaymentTransactionStatus.Approved)
+                .Sum(t => t.Amount);
+            topupRevenue = globalTx
+                .Where(t => t.Type == PaymentTransactionType.Topup && t.Status == PaymentTransactionStatus.Approved)
+                .Sum(t => t.Amount);
+            nonSeriesPendingCount = globalTx
+                .Where(t => t.Status == PaymentTransactionStatus.Pending)
+                .Sum(t => t.Count);
+        }
+
+        var chapterRevenueTotal = rows.Sum(r => r.ChapterRevenueVnd);
         var summary = new PublisherRevenueSummaryDto(
-            rows.Sum(r => r.TotalRevenueVnd),
-            rows.Sum(r => r.ChapterRevenueVnd),
-            rows.Sum(r => r.PendingCount),
-            rows.Sum(r => r.TotalViews));
+            chapterRevenueTotal + vipRevenue,
+            chapterRevenueTotal,
+            rows.Sum(r => r.PendingCount) + nonSeriesPendingCount,
+            rows.Sum(r => r.TotalViews),
+            vipRevenue,
+            topupRevenue);
 
         return Result<PublisherRevenueDto>.Success(new PublisherRevenueDto(summary, rows));
     }

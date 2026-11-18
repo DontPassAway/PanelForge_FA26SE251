@@ -18,7 +18,12 @@ public sealed record ChapterLanguagePriceDto(string Language, decimal PriceVnd, 
 
 /// <param name="TranslatedPages">Số trang đã có ảnh dịch (bản gốc vi = mọi trang).</param>
 /// <param name="IsAvailable">Bản ngôn ngữ đã phát hành cho Reader (đủ ảnh mọi trang).</param>
-public sealed record ChapterLanguageStatusDto(string Language, int TranslatedPages, bool IsAvailable);
+/// <param name="EditionStatus">Trạng thái ấn bản ngôn ngữ (Draft | InReview | EditorApproved | Approved | Published).</param>
+public sealed record ChapterLanguageStatusDto(
+    string Language,
+    int TranslatedPages,
+    bool IsAvailable,
+    string? EditionStatus = null);
 
 /// <param name="IsPreview">Trang xem trước hiệu lực (sau khi áp mặc định Series nếu chương chưa chọn tay):
 /// người chưa mua chương trả phí vẫn xem được; các trang khác khóa đến khi mua chương.</param>
@@ -51,7 +56,10 @@ public sealed record SetChapterPreviewPagesRequest(IReadOnlyList<Guid>? PreviewP
 /// <param name="PriceVnd">null hoặc 0 = bỏ giá riêng, dùng giá chung của chương.</param>
 public sealed record LanguagePriceItem(string Language, decimal? PriceVnd);
 
-public sealed record SetChapterLanguagePricesRequest(IReadOnlyList<LanguagePriceItem>? Prices);
+public sealed record SetChapterLanguagePricesRequest(
+    IReadOnlyList<LanguagePriceItem>? Prices,
+    bool? IsLocked = null,
+    decimal? BasePriceVnd = null);
 
 // ─── Query: màn Manage của một chương ────────────────────────────────────────
 
@@ -104,7 +112,7 @@ public static class ChapterManageReader
             var ed = editions.FirstOrDefault(e => e.LanguageCode == lang);
             var isAvailable = ed?.Status == EditionStatus.Published;
             var translated = ed is not null && ed.Status != EditionStatus.Draft ? pageCount : 0;
-            return new ChapterLanguageStatusDto(lang, translated, isAvailable);
+            return new ChapterLanguageStatusDto(lang, translated, isAvailable, ed?.Status.ToString());
         }).ToList();
 
         var pages = previews.Select(p =>
@@ -188,8 +196,12 @@ public sealed class ResetChapterPreviewPagesCommandHandler
 
 // ─── Command: giá chương theo ngôn ngữ ───────────────────────────────────────
 
-/// <summary>Publisher đặt giá mở khóa chương trả phí riêng cho từng ngôn ngữ (bỏ trống = giá chung).</summary>
-public sealed record SetChapterLanguagePricesCommand(Guid ChapterId, IReadOnlyList<LanguagePriceItem> Prices)
+/// <summary>Publisher đặt giá mở khóa chương trả phí riêng cho từng ngôn ngữ (bỏ trống = giá chung), kèm tùy chọn bật/tắt khóa trả phí và giá chung.</summary>
+public sealed record SetChapterLanguagePricesCommand(
+    Guid ChapterId,
+    IReadOnlyList<LanguagePriceItem> Prices,
+    bool? IsLocked = null,
+    decimal? BasePriceVnd = null)
     : IRequest<Result<ChapterManageDto>>;
 
 public sealed class SetChapterLanguagePricesCommandHandler
@@ -204,16 +216,38 @@ public sealed class SetChapterLanguagePricesCommandHandler
 
     public async Task<Result<ChapterManageDto>> Handle(SetChapterLanguagePricesCommand cmd, CancellationToken ct)
     {
-        var chapter = await _db.Chapters.AsNoTracking()
-            .Where(c => c.Id == cmd.ChapterId)
-            .Select(c => new { c.Id, c.IsLocked })
-            .FirstOrDefaultAsync(ct);
+        var chapter = await _db.Chapters
+            .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null)
             return Result<ChapterManageDto>.Failure("Không tìm thấy chương.", ResultErrorCodes.NotFound);
+
+        if (cmd.IsLocked.HasValue || cmd.BasePriceVnd.HasValue)
+        {
+            var nextLocked = cmd.IsLocked ?? chapter.IsLocked;
+            var nextBasePrice = nextLocked
+                ? (cmd.BasePriceVnd ?? (chapter.PriceVnd >= MinChapterPriceVnd ? chapter.PriceVnd : 10000m))
+                : 0m;
+            if (nextLocked && (nextBasePrice < MinChapterPriceVnd || nextBasePrice > MaxChapterPriceVnd))
+            {
+                return Result<ChapterManageDto>.Failure(
+                    $"Giá chương phải từ {MinChapterPriceVnd:N0}đ đến {MaxChapterPriceVnd:N0}đ.", ResultErrorCodes.Validation);
+            }
+            chapter.SetPricing(nextLocked, nextBasePrice);
+        }
+
         if (!chapter.IsLocked)
+        {
+            if (cmd.IsLocked == false)
+            {
+                var existingFree = await _db.ChapterLanguagePrices.Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
+                if (existingFree.Count > 0) _db.ChapterLanguagePrices.RemoveRange(existingFree);
+                await _db.SaveChangesAsync(ct);
+                return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
+            }
             return Result<ChapterManageDto>.Failure(
                 "Chương miễn phí không có giá mở khóa. Giá theo ngôn ngữ chỉ áp dụng cho chương trả phí.",
                 ResultErrorCodes.Validation);
+        }
 
         var items = new List<(string Language, decimal? Price)>();
         foreach (var item in cmd.Prices)

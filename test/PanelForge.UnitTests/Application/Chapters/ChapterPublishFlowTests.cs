@@ -474,11 +474,11 @@ public class ChapterPublishFlowTests
         var approveMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.ApprovePayment));
         var approveAttr = approveMethod!.GetCustomAttribute<AuthorizeAttribute>();
         approveAttr.Should().NotBeNull();
-        approveAttr!.Roles.Should().Be("Admin");
+        approveAttr!.Roles.Should().Be("Publisher,Admin");
 
         var rejectMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.RejectPayment));
         var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
         rejectAttr.Should().NotBeNull();
-        rejectAttr!.Roles.Should().Be("Admin");
+        rejectAttr!.Roles.Should().Be("Publisher,Admin");
     }
 }

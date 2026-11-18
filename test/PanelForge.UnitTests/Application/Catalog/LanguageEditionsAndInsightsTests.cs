@@ -214,5 +214,14 @@ public class LanguageEditionsAndInsightsTests
 
         var cleared = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", null)]), default)).Value!;
         cleared.LanguagePrices.Single(p => p.Language == "en").Should().Be(new ChapterLanguagePriceDto("en", 10000m, false));
+
+        var toggledFree = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [], IsLocked: false, BasePriceVnd: 0m), default)).Value!;
+        toggledFree.ChapterIsLocked.Should().BeFalse();
+        toggledFree.BasePriceVnd.Should().Be(0m);
+
+        var toggledPaid = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", 18000m)], IsLocked: true, BasePriceVnd: 12000m), default)).Value!;
+        toggledPaid.ChapterIsLocked.Should().BeTrue();
+        toggledPaid.BasePriceVnd.Should().Be(12000m);
+        toggledPaid.LanguagePrices.Single(p => p.Language == "en").Should().Be(new ChapterLanguagePriceDto("en", 18000m, true));
     }
 }
