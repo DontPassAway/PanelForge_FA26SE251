@@ -144,11 +144,10 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Chỉ nhân vật thật sự có mặt trong Panel; ưu tiên nhân vật đã có character sheet.
-        var targetCharacter = characterEntries.Where(c => linkedEntryIds.Contains(c.Id) || speakerNames.Contains(c.NormalizedName))
-            .OrderByDescending(c => !string.IsNullOrWhiteSpace(c.ReferenceImageUrl))
-            .FirstOrDefault();
+        var targets = characterEntries.Where(c => linkedEntryIds.Contains(c.Id) || speakerNames.Contains(c.NormalizedName))
+            .OrderBy(c => c.Name).ToList();
 
-        if (targetCharacter is null)
+        if (targets.Count == 0)
         {
             // Không có nhân vật nào trong Series Bible để đối chiếu
             return new ImageConsistencyResultDto(
@@ -166,44 +165,50 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             );
         }
 
-        // Tìm Character Sheet đã khoá (hoặc bản default variant)
-        var lockedRev = targetCharacter.Revisions
-            .Where(r => r.LockedAt != null)
-            .OrderByDescending(r => r.VersionNumber)
-            .FirstOrDefault();
+        // Phiên bản hiệu lực: bản riêng của Panel, rồi bản gắn với chương, rồi bản đã khoá mới nhất (BR-15, BIB-11)
+        var targetIds = targets.Select(c => c.Id).ToList();
+        var panelVariants = await _db.PanelBibleVariants.AsNoTracking()
+            .Where(v => v.PanelId == panel.Id && targetIds.Contains(v.BibleEntryId))
+            .ToDictionaryAsync(v => v.BibleEntryId, v => v.RevisionId, cancellationToken);
+        var chapterBindings = await _db.ChapterBibleBindings.AsNoTracking()
+            .Where(b => b.ChapterId == chapter.Id && targetIds.Contains(b.BibleEntryId) && b.BoundRevisionId != null)
+            .ToDictionaryAsync(b => b.BibleEntryId, b => b.BoundRevisionId!.Value, cancellationToken);
 
-        var characterVersion = lockedRev?.VersionNumber ?? 1;
-
-        // Tải ảnh Character Sheet
-        byte[]? sheetBytes = null;
-
-        if (!string.IsNullOrWhiteSpace(targetCharacter.ReferenceImageUrl))
+        var results = new List<ImageConsistencyResultDto>();
+        foreach (var character in targets)
         {
-            sheetBytes = await ResolveImageBytesAsync(targetCharacter.ReferenceImageUrl, cancellationToken);
+            var effectiveId = panelVariants.TryGetValue(character.Id, out var variantId) ? variantId
+                : chapterBindings.TryGetValue(character.Id, out var boundId) ? boundId : (Guid?)null;
+            var revision = character.Revisions.FirstOrDefault(r => r.Id == effectiveId)
+                ?? character.Revisions.Where(r => r.LockedAt != null).OrderByDescending(r => r.VersionNumber).FirstOrDefault();
+            var sheetUrl = string.IsNullOrWhiteSpace(revision?.ConceptImageUrl) ? character.ReferenceImageUrl : revision.ConceptImageUrl;
+            var sheetBytes = string.IsNullOrWhiteSpace(sheetUrl) ? null : await ResolveImageBytesAsync(sheetUrl, cancellationToken);
+            if (sheetBytes is null || sheetBytes.Length == 0) continue;
+
+            results.Add(await CompareImagesAsync(new ImageConsistencyInput(
+                PanelId: panel.Id,
+                UserId: userId,
+                RevisionRef: artworkRef?.Id.ToString() ?? revisionRef,
+                AssetReferenceId: artworkRef?.Id,
+                WorkspaceId: workspaceId,
+                ChapterId: chapter.Id,
+                CharacterName: character.Name,
+                CharacterId: character.Id,
+                CharacterVersion: revision?.VersionNumber ?? 1,
+                CharacterSheetBytes: sheetBytes,
+                CharacterSheetMimeType: SniffMime(sheetBytes),
+                ArtworkBytes: artworkBytes,
+                ArtworkMimeType: artworkMime,
+                Threshold: targetThreshold
+            ), cancellationToken));
         }
 
-        if (sheetBytes is null || sheetBytes.Length == 0)
+        if (results.Count == 0)
             return Skipped(panel.Id, targetThreshold,
-                $"Nhân vật '{targetCharacter.Name}' chưa có ảnh character sheet (ReferenceImageUrl) để đối chiếu.", revisionRef);
+                $"Nhân vật '{targets[0].Name}' chưa có ảnh character sheet (ReferenceImageUrl) để đối chiếu.", revisionRef);
 
-        var input = new ImageConsistencyInput(
-            PanelId: panel.Id,
-            UserId: userId,
-            RevisionRef: artworkRef?.Id.ToString() ?? revisionRef,
-            AssetReferenceId: artworkRef?.Id,
-            WorkspaceId: workspaceId,
-            ChapterId: chapter.Id,
-            CharacterName: targetCharacter.Name,
-            CharacterId: targetCharacter.Id,
-            CharacterVersion: characterVersion,
-            CharacterSheetBytes: sheetBytes,
-            CharacterSheetMimeType: SniffMime(sheetBytes),
-            ArtworkBytes: artworkBytes,
-            ArtworkMimeType: artworkMime,
-            Threshold: targetThreshold
-        );
-
-        return await CompareImagesAsync(input, cancellationToken);
+        // Kết quả chính là nhân vật điểm thấp nhất; từng nhân vật nằm trong Characters
+        return results.OrderBy(r => r.Score).First() with { Characters = results };
     }
 
     public async Task<ImageConsistencyResultDto> CompareImagesAsync(

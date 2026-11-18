@@ -206,6 +206,26 @@ public class ImageConsistencyServiceTests
     }
 
     [Fact]
+    public async Task CheckPanel_ComparesEveryCharacter_AndReturnsLowestScore()
+    {
+        var fixture = new TestFixture(Reply(0.9m, "Khớp"));
+        var bible = await fixture.Db.SeriesBibles.SingleAsync();
+        var second = bible.AddEntry(BibleEntryCategory.Character, "RIVAL", "Rival", "The rival",
+            referenceImageUrl: "data:image/png;base64,iVBORw0KGgo=");
+        var line = await fixture.Db.ScriptLines.SingleAsync();
+        fixture.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, second.Id));
+        await fixture.Db.SaveChangesAsync();
+        fixture.AiClientMock.Setup(c => c.CompareImagesAsync(It.Is<VisionCompareRequest>(r => r.CharacterName == "Rival"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Reply(0.4m, "Lệch"));
+
+        var result = await fixture.CreateService().CheckPanelConsistencyAsync(fixture.Panel.Id, threshold: 0.75m);
+
+        result.Characters.Should().HaveCount(2);
+        result.CharacterName.Should().Be("Rival");
+        result.Passed.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task PanelsController_CheckImageConsistency_ReturnsOkWithResult()
     {
         var panelId = Guid.NewGuid();
