@@ -237,6 +237,9 @@ using (var scope = app.Services.CreateScope())
         var seeded = await AiDemoSeeder.SeedAsync(db);
         app.Logger.LogInformation("AiDemoSeeder: {Result}", seeded ? "đã seed Studio Moonlight" : "bỏ qua (đã có hoặc thiếu tài khoản dev)");
     }
+
+    if (app.Environment.IsDevelopment())
+        await DemoPipelineSeeder.EnsureAsync(db);
 }
 
 app.UseSwagger();
