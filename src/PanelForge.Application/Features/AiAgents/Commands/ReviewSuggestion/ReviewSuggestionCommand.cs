@@ -9,6 +9,7 @@ using PanelForge.Application.Features.AiAgents.Commands.RunThumbnail;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 using PanelForge.Domain.Entities.Ai;
@@ -93,7 +94,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         suggestion.Decide(cmd.Decision);
         var decision = AiSuggestionDecision.Create(
             suggestion.Id, cmd.UserId, cmd.Decision, cmd.Reason, versionSeen, revisionId,
-            appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail);
+            appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail or AiSuggestionKind.Lettering);
         _db.AiSuggestionDecisions.Add(decision);
 
         try
@@ -140,6 +141,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (s.Kind == AiSuggestionKind.SeriesMetadata) return await ApplySeriesMetadataAsync(s, ct);
         // Ảnh panel: không phải nội dung có version (giống UploadArtwork), Accept nhiều thumbnail không làm stale lẫn nhau
         if (s.Kind == AiSuggestionKind.Thumbnail) return await ApplyThumbnailAsync(cmd, s, chapter, ct);
+        // Chữ bóng thoại có version riêng theo element, không thuộc kịch bản nên không phụ thuộc Frozen
+        if (s.Kind == AiSuggestionKind.Lettering) return await ApplyBubbleShortenAsync(cmd, s, ct);
 
         // BR-12: chương Approved/Locked/Published chỉ đọc
         if (!chapter.IsContentEditable)
@@ -226,6 +229,27 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         return null;
     }
 
+    /// <summary>Áp dụng bản rút gọn bằng đúng lệnh sửa chữ của Letterer, nên giữ cùng luật phạm vi, khoá chương và version element.</summary>
+    private async Task<Applied> ApplyBubbleShortenAsync(ReviewSuggestionCommand cmd, AiSuggestion s, CancellationToken ct)
+    {
+        var sug = AiContentValidator.TryParse<BubbleShortenSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload rút gọn không hợp lệ: {pe}", ResultErrorCodes.Validation);
+        if (CopilotRules.Validate(sug.Task, sug.OriginalText, sug.SuggestedText, sug.MaxChars) is { Count: > 0 } errors)
+            return Applied.Fail(string.Join(" ", errors), ResultErrorCodes.Validation);
+
+        var page = await _pages.GetAsync(sug.PageId, ct);
+        if (page is null || !page.Elements.TryGetValue(sug.ElementId, out var element) || element.IsRemoved)
+            return Applied.Fail("Bóng thoại không còn tồn tại.", ResultErrorCodes.Conflict);
+        if (element.Version != sug.ElementVersion || CopilotRules.BubbleText(element.RenderedText, element.Content)?.Trim() != sug.OriginalText)
+            return Applied.Fail("Chữ trên bóng thoại đã đổi sau khi AI đề xuất.", ResultErrorCodes.Conflict);
+
+        var updated = await new UpdateElementTextCommandHandler(_pages, _db).Handle(
+            new UpdateElementTextCommand(sug.PageId, sug.ElementId, sug.SuggestedText, null, cmd.UserId, sug.ElementVersion), ct);
+        return updated.IsSuccess
+            ? new Applied(null, null, null)
+            : Applied.Fail(updated.ErrorMessage!, updated.ErrorCode ?? ResultErrorCodes.Conflict);
+    }
+
     private async Task<Applied> ApplyScriptAsync(
         ReviewSuggestionCommand cmd, AiSuggestion s, AiWorkflowRun run, RunSnapshot snapshot, Scene scene,
         ContentRevision? latest, CancellationToken ct)
@@ -258,7 +282,12 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             nextVersion = 2;
         }
 
-        foreach (var line in existing) _db.ScriptLines.Remove(line); // soft-delete; nội dung cũ còn trong revision/baseline
+        foreach (var line in existing)
+        {
+            if (await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, s.ChapterId, line, "Script được thay bằng đề xuất AI.", ct) is { } rework)
+                return Applied.Fail(rework, ResultErrorCodes.Conflict);
+            _db.ScriptLines.Remove(line); // soft-delete; nội dung cũ còn trong revision/baseline
+        }
 
         foreach (var line in draft.Lines.OrderBy(l => l.Order))
         {
@@ -409,6 +438,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             return Applied.Fail("Dòng thoại đã bị sửa hoặc xoá sau khi AI đề xuất.", ResultErrorCodes.Conflict);
 
         var (previousId, nextVersion) = CaptureBaseline(s, latestScript, existing);
+        if (await ScriptLineRules.ReworkApprovedLetteringAsync(_db, _pages, s.ChapterId, line, "Thoại được đổi bằng đề xuất AI.", ct) is { } rework)
+            return Applied.Fail(rework, ResultErrorCodes.Conflict);
         line.UpdateContent(sug.SuggestedText, line.StageDirection);
 
         var payload = AiJson.Serialize(new ScriptDraft(

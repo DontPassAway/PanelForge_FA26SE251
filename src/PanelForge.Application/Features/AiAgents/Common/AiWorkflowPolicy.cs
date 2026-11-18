@@ -28,7 +28,8 @@ internal static class AiWorkflowPolicy
     /// </summary>
     public static WorkspaceRole[] AcceptRoles(AiSuggestionKind kind) => kind switch
     {
-        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.Lettering => [WorkspaceRole.Writer],
+        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite => [WorkspaceRole.Writer],
+        AiSuggestionKind.Lettering => [WorkspaceRole.Letterer],
         AiSuggestionKind.Layout => [WorkspaceRole.Writer, WorkspaceRole.Artist],
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Artist],
         AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer],

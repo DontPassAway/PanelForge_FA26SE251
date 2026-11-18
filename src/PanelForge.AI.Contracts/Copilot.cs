@@ -81,6 +81,20 @@ public sealed record SeriesMetadataSuggestion(
     string Reason);
 
 /// <summary>Payload của AiSuggestion kind LineRewrite (Writer viết lại giọng / Letterer rút gọn một dòng).</summary>
+/// <summary>Bản rút gọn cho chữ trên MỘT bóng thoại. Accept chỉ đổi chữ của element, không đổi ScriptLine nên dùng được khi kịch bản Frozen.</summary>
+public sealed record BubbleShortenSuggestion(
+    int SchemaVersion,
+    Guid RunId,
+    Guid SceneId,
+    string Task,
+    Guid PageId,
+    Guid ElementId,
+    int ElementVersion,
+    string OriginalText,
+    string SuggestedText,
+    string Reason,
+    int MaxChars);
+
 public sealed record LineRewriteSuggestion(
     int SchemaVersion,
     Guid RunId,
@@ -95,6 +109,10 @@ public sealed record LineRewriteSuggestion(
 public static class CopilotRules
 {
     public const int MaxInstructionLength = 500;
+
+    /// <summary>Chữ đang hiển thị của bóng thoại.</summary>
+    public static string? BubbleText(string? renderedText, string? content) =>
+        string.IsNullOrWhiteSpace(renderedText) ? content : renderedText;
     public const int MaxCharsLimit = 500;
 
     public static readonly string[] AgeRatings = ["All", "13+", "16+", "18+"];

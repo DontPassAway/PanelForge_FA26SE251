@@ -51,7 +51,7 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new RunWorkflowCommand(
             seriesId, CurrentUserId, body.ChapterId, body.SceneId, body.Brief, body.ReadingDirection,
-            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds), ct);
+            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId), ct);
         return result.IsSuccess
             ? Accepted($"/api/series/{seriesId}/ai/runs/{result.Value!.RunId}", result.Value)
             : ToError(result);
@@ -71,7 +71,8 @@ public sealed class AiAgentsController : ControllerBase
     public async Task<IActionResult> RunCopilot([FromRoute] Guid seriesId, [FromBody] RunCopilotRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new RunCopilotCommand(
-            seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars), ct);
+            seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars,
+            body.PageId, body.ElementId, body.RevisionOfSuggestionId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

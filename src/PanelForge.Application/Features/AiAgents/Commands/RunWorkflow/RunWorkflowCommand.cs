@@ -26,7 +26,8 @@ public sealed record RunWorkflowCommand(
     long ChapterVersion,
     Guid? BaseScriptRevisionId,
     AiWorkflowType WorkflowType = AiWorkflowType.FullScene,
-    IReadOnlyList<Guid>? PanelIds = null) : IRequest<Result<RunWorkflowResponse>>;
+    IReadOnlyList<Guid>? PanelIds = null,
+    Guid? RevisionOfSuggestionId = null) : IRequest<Result<RunWorkflowResponse>>;
 
 public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowCommand, Result<RunWorkflowResponse>>
 {
@@ -97,6 +98,15 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
                 return AiRunHelpers.Fail<RunWorkflowResponse>($"Scene {cmd.SceneId} không thuộc Chapter.", ResultErrorCodes.NotFound);
         }
 
+        var brief = cmd.Brief;
+        if (cmd.RevisionOfSuggestionId is { } revisionOf)
+        {
+            var feedback = scene is null ? null : await AiRunHelpers.RevisionFeedbackAsync(_db, cmd.SeriesId, revisionOf, scene.Id, ct);
+            if (feedback is null)
+                return AiRunHelpers.Fail<RunWorkflowResponse>("Đề xuất cần làm lại không ở trạng thái Yêu cầu sửa trong Scene này.", ResultErrorCodes.Conflict);
+            brief = AiRunHelpers.AppendFeedback(brief, feedback, MaxBriefLength);
+        }
+
         // Assignment, stage/khoá chương, và context cần có — cùng bộ luật với API availability
         var facts = await AiWorkflowFacts.LoadAsync(_db, _auth, cmd.UserId, workspaceId.Value, chapter, scene, ct);
         // AI tắt xử lý ở nhánh provider bên dưới (Mock/Gemini có thông điệp + ghi usage riêng)
@@ -161,7 +171,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
             return AiRunHelpers.Fail<RunWorkflowResponse>(MissingInputMessage(type), ResultErrorCodes.Conflict);
 
         var run = AiWorkflowRun.Create(
-            workspaceId.Value, cmd.SeriesId, cmd.ChapterId, scene?.Id, cmd.UserId, provider, model, cmd.Brief,
+            workspaceId.Value, cmd.SeriesId, cmd.ChapterId, scene?.Id, cmd.UserId, provider, model, brief,
             cmd.ReadingDirection, _settings.MaxRevisionRounds, chapter.VersionVector, latestScriptRevisionId,
             AiJson.Serialize(snapshot), AiJson.Serialize(snapshot.Bible.Select(b => b.RevisionId)), type);
         _db.AiWorkflowRuns.Add(run);

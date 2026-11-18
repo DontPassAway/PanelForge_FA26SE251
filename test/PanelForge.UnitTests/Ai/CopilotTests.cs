@@ -34,7 +34,7 @@ public sealed class CopilotTests
     }
 
     private static RunCopilotCommandHandler Handler(AiHarness h) =>
-        new(h.Db, h.Auth, h.Usage.Object, h.KeyProtector.Object, h.AiClient.Object, h.Settings);
+        new(h.Db, h.Auth, h.Usage.Object, h.KeyProtector.Object, h.AiClient.Object, h.Settings, h.Pages.Object);
 
     private static RunCopilotCommand Shorten(Guid lineId, Guid? user = null, int maxChars = 40) =>
         new(AiDemoSeeder.SeriesId, user ?? AiHarness.Letterer, CopilotTasks.LettererShorten, lineId, null, maxChars);

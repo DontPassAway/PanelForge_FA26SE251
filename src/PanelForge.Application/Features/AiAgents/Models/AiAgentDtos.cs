@@ -4,7 +4,9 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.AiAgents.Models;
 
 /// <summary>Body POST /ai/copilot. maxChars bắt buộc với letterer.shorten (FE đo khung chữ bằng measureText).</summary>
-public sealed record RunCopilotRequest(string Task, Guid LineId, string? Instruction = null, int? MaxChars = null);
+public sealed record RunCopilotRequest(
+    string Task, Guid? LineId = null, string? Instruction = null, int? MaxChars = null,
+    Guid? PageId = null, Guid? ElementId = null, Guid? RevisionOfSuggestionId = null);
 
 /// <summary>Body POST /ai/copilot/publisher-metadata: chapter đang phát hành + chỉ dẫn tuỳ chọn (≤500 ký tự).</summary>
 public sealed record RunPublisherMetadataRequest(Guid ChapterId, string? Instruction = null);
@@ -23,7 +25,9 @@ public sealed record RunWorkflowRequest(
     /// <summary>Nhiệm vụ cần chạy. Không gửi = FullScene (hành vi của API demo cũ). Quyền KHÔNG lấy từ client: Backend tự xác định.</summary>
     AiWorkflowType WorkflowType = AiWorkflowType.FullScene,
     /// <summary>Chỉ với Artist: chỉ soạn mô tả vẽ cho các panel này (null/rỗng = mọi panel của layout đã duyệt).</summary>
-    IReadOnlyList<Guid>? PanelIds = null);
+    IReadOnlyList<Guid>? PanelIds = null,
+    /// <summary>Chạy lại từ đề xuất đang ChangesRequested: lý do của người duyệt được đưa vào brief.</summary>
+    Guid? RevisionOfSuggestionId = null);
 
 public sealed record RunWorkflowResponse(Guid RunId, AiRunStatus Status, string Provider, string Model);
 
