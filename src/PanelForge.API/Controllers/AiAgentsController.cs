@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Commands.RunBibleStubDraft;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunCopilot;
 using PanelForge.Application.Features.AiAgents.Commands.RunPublisherMetadata;
@@ -90,6 +91,19 @@ public sealed class AiAgentsController : ControllerBase
         [FromRoute] Guid seriesId, [FromBody] RunPublisherMetadataRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new RunPublisherMetadataCommand(seriesId, body.ChapterId, CurrentUserId, body.Instruction), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/series/{seriesId}/ai/bible/entries/{entryId}/stub-draft — Writer xin hồ sơ nháp có trích dẫn cho mục Bible stub.</summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/bible/entries/{entryId:guid}/stub-draft")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunBibleStubDraft(
+        [FromRoute] Guid seriesId, [FromRoute] Guid entryId, [FromBody] RunBibleStubDraftRequest? body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunBibleStubDraftCommand(seriesId, entryId, CurrentUserId, body?.Instruction), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

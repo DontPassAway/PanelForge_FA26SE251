@@ -17,7 +17,8 @@ public sealed class CopilotAgent
     {
         [CopilotTasks.WriterRewrite] = PromptLibrary.Load("copilot_writer_rewrite"),
         [CopilotTasks.LettererShorten] = PromptLibrary.Load("copilot_letterer_shorten"),
-        [CopilotTasks.PublisherMetadata] = PromptLibrary.Load("copilot_publisher_metadata")
+        [CopilotTasks.PublisherMetadata] = PromptLibrary.Load("copilot_publisher_metadata"),
+        [CopilotTasks.BibleStubDraft] = PromptLibrary.Load("copilot_bible_stub")
     };
 
     private readonly AgentRunner _runner;
@@ -30,6 +31,7 @@ public sealed class CopilotAgent
     {
         var prompt = Prompts[req.Task];
         if (req.Task == CopilotTasks.PublisherMetadata) return await RunMetadataAsync(prompt, req, ct);
+        if (req.Task == CopilotTasks.BibleStubDraft) return await RunStubDraftAsync(prompt, req, ct);
         var line = req.Line!;
         var speaker = req.Bible.FirstOrDefault(b => b.EntryId == line.SpeakerId);
 
@@ -60,6 +62,35 @@ public sealed class CopilotAgent
         return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
             call.ErrorCode, call.ErrorMessage);
+    }
+
+    private sealed record StubOutput(string? Description, string? Subtitle, List<BibleStubCitation>? Citations, string? Reason);
+
+    private async Task<CopilotResponse> RunStubDraftAsync(PromptInfo prompt, CopilotRequest req, CancellationToken ct)
+    {
+        var stub = req.Stub!;
+        var sb = new StringBuilder();
+        sb.AppendLine($"[[agent:copilot]] [[task:{req.Task}]]");
+        sb.AppendLine("## Mục cần soạn (dữ liệu)");
+        sb.AppendLine($"name=\"{Flat(stub.Name)}\" | category={stub.Category}");
+        sb.AppendLine().AppendLine("## Dòng có nhắc tới mục này (dữ liệu)");
+        foreach (var e in stub.Evidence) sb.AppendLine($"- lineId={e.LineId} | \"{Flat(e.Text)}\"");
+        if (!string.IsNullOrWhiteSpace(req.Instruction))
+            sb.AppendLine().AppendLine("## Chỉ dẫn của người dùng (dữ liệu)").AppendLine(Flat(req.Instruction));
+        sb.AppendLine().AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
+
+        var call = await _runner.RunAsync<(BibleStubDraft Draft, string? Reason)?>(prompt, sb.ToString(), text =>
+        {
+            var o = OutputParser.Parse<StubOutput>(text, out var error);
+            if (o is null) return (null, [error!]);
+            var draft = new BibleStubDraft(o.Description?.Trim() ?? "", o.Subtitle?.Trim(), o.Citations ?? []);
+            var errors = CopilotRules.ValidateStubDraft(draft, stub);
+            return errors.Count == 0 ? ((draft, o.Reason?.Trim()), []) : (null, errors);
+        }, ct);
+
+        return new CopilotResponse(call.Succeeded, null, call.Payload?.Reason, prompt.Version, prompt.Ref,
+            call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
+            call.ErrorCode, call.ErrorMessage, null, call.Payload?.Draft);
     }
 
     private async Task<CopilotResponse> RunMetadataAsync(PromptInfo prompt, CopilotRequest req, CancellationToken ct)

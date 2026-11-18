@@ -10,6 +10,7 @@ public sealed record RunCopilotRequest(
 
 /// <summary>Body POST /ai/copilot/publisher-metadata: chapter đang phát hành + chỉ dẫn tuỳ chọn (≤500 ký tự).</summary>
 public sealed record RunPublisherMetadataRequest(Guid ChapterId, string? Instruction = null);
+public sealed record RunBibleStubDraftRequest(string? Instruction = null);
 public sealed record RunThumbnailRequest(Guid PanelId, string? Instruction = null);
 
 public sealed record RunWorkflowRequest(

@@ -30,6 +30,7 @@ internal static class AiWorkflowPolicy
     {
         AiSuggestionKind.Script or AiSuggestionKind.LineRewrite => [WorkspaceRole.Writer],
         AiSuggestionKind.Lettering => [WorkspaceRole.Letterer],
+        AiSuggestionKind.BibleStub => [WorkspaceRole.Writer],
         AiSuggestionKind.Layout => [WorkspaceRole.Writer, WorkspaceRole.Artist],
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Artist],
         AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer],
@@ -44,6 +45,7 @@ internal static class AiWorkflowPolicy
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Editor],
         AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
         AiSuggestionKind.Thumbnail => [WorkspaceRole.Producer, WorkspaceRole.Artist],
+        AiSuggestionKind.BibleStub => [WorkspaceRole.Writer],
         AiSuggestionKind.Lettering or AiSuggestionKind.LineRewrite =>
             [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Letterer, WorkspaceRole.Editor],
         _ => []
@@ -68,6 +70,7 @@ internal static class AiWorkflowPolicy
         CopilotTasks.LettererShorten => [WorkspaceRole.Letterer],
         // Publisher chỉ kiểm duyệt thuần túy, không dùng AI → chỉ Producer xin gợi ý metadata.
         CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer],
+        CopilotTasks.BibleStubDraft => [WorkspaceRole.Writer],
         _ => []
     };
 

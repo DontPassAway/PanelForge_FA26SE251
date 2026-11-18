@@ -8,8 +8,9 @@ public static class CopilotTasks
     public const string WriterRewrite = "writer.rewrite";
     public const string LettererShorten = "letterer.shorten";
     public const string PublisherMetadata = "publisher.metadata";
+    public const string BibleStubDraft = "bible.stub_draft";
 
-    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata];
+    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata, BibleStubDraft];
     /// <summary>Task làm trên MỘT dòng thoại (cần Line); còn lại làm ở cấp Series (cần Series).</summary>
     public static bool IsLineTask(string task) => task is WriterRewrite or LettererShorten;
 }
@@ -25,7 +26,8 @@ public sealed record CopilotRequest(
     int? MaxChars,
     string? Instruction,
     int SchemaVersion = AiProtocol.SchemaVersion,
-    CopilotSeriesContext? Series = null)
+    CopilotSeriesContext? Series = null,
+    BibleStubContext? Stub = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {
@@ -68,7 +70,17 @@ public sealed record CopilotResponse(
     DateTime CompletedAtUtc,
     string? ErrorCode,
     string? ErrorMessage,
-    ReleaseMetadata? Metadata = null);
+    ReleaseMetadata? Metadata = null,
+    BibleStubDraft? Stub = null);
+
+/// <summary>Dòng kịch bản có nhắc tới mục Bible nháp: nguồn duy nhất AI được dùng.</summary>
+public sealed record BibleStubEvidence(Guid LineId, string Text);
+public sealed record BibleStubContext(string Name, string Category, IReadOnlyList<BibleStubEvidence> Evidence);
+public sealed record BibleStubCitation(string Claim, Guid LineId, string Quote);
+public sealed record BibleStubDraft(string Description, string? Subtitle, IReadOnlyList<BibleStubCitation> Citations);
+
+/// <summary>Payload của AiSuggestion kind BibleStub. Accept không ghi Bible; người viết sửa rồi lưu qua API định nghĩa mục.</summary>
+public sealed record BibleStubSuggestion(int SchemaVersion, Guid RunId, Guid EntryId, string Name, BibleStubDraft Draft, string Reason);
 
 /// <summary>Payload của AiSuggestion kind SeriesMetadata. Original* = giá trị Series lúc AI chạy (kiểm "đã đổi" khi Accept).</summary>
 public sealed record SeriesMetadataSuggestion(
@@ -116,6 +128,25 @@ public static class CopilotRules
     public const int MaxCharsLimit = 500;
 
     public static readonly string[] AgeRatings = ["All", "13+", "16+", "18+"];
+
+    /// <summary>Mọi trích dẫn phải chỉ tới dòng được cung cấp và là đoạn nguyên văn của dòng đó.</summary>
+    public static IReadOnlyList<string> ValidateStubDraft(BibleStubDraft? draft, BibleStubContext context)
+    {
+        if (draft is null) return ["thiếu hồ sơ nháp."];
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(draft.Description) || draft.Description.Length > 2000)
+            errors.Add("description phải có nội dung và tối đa 2000 ký tự.");
+        if (draft.Citations is not { Count: > 0 and <= 20 }) errors.Add("citations phải có từ 1 đến 20 phần tử.");
+        foreach (var c in draft.Citations ?? [])
+        {
+            var source = context.Evidence.FirstOrDefault(e => e.LineId == c.LineId);
+            if (source is null) errors.Add($"citation trỏ tới dòng không được cung cấp: {c.LineId}.");
+            else if (string.IsNullOrWhiteSpace(c.Claim) || string.IsNullOrWhiteSpace(c.Quote)
+                     || !source.Text.Contains(c.Quote.Trim(), StringComparison.OrdinalIgnoreCase))
+                errors.Add($"citation của dòng {c.LineId} không phải đoạn nguyên văn.");
+        }
+        return errors;
+    }
 
     /// <summary>Kiểm tra tất định gợi ý phát hành (độ dài khớp cột DB: genre varchar(100)).</summary>
     public static IReadOnlyList<string> ValidateMetadata(ReleaseMetadata? m)

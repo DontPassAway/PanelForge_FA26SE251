@@ -240,6 +240,18 @@ public static class MockFixtures
                 reason = "Có yếu tố căng thẳng nhẹ, không có nội dung người lớn (Mock)."
             });
         }
+        if (msg.Contains($"[[task:{CopilotTasks.BibleStubDraft}]]"))
+        {
+            var first = Regex.Match(msg, @"^- lineId=([0-9a-fA-F-]+) \| ""(.*)""\s*$", RegexOptions.Multiline);
+            var quote = first.Groups[2].Value;
+            return Json(new
+            {
+                description = $"Được nhắc trong kịch bản: {quote} (Mock).",
+                subtitle = (string?)null,
+                citations = new[] { new { claim = "Chi tiết từ dòng kịch bản", lineId = first.Groups[1].Value, quote } },
+                reason = "Chỉ dùng dòng có nhắc tới mục này (Mock)."
+            });
+        }
         var text = Regex.Match(msg, @"^dialogue=""(.*)""\s*$", RegexOptions.Multiline).Groups[1].Value.Trim();
         if (msg.Contains($"[[task:{CopilotTasks.LettererShorten}]]"))
         {

@@ -88,7 +88,8 @@ app.MapPost("/copilot/{task}", async (string task, CopilotRequest req, HttpConte
     if (task != req.Task || !PanelForge.AI.Agents.CopilotAgent.Supports(task) || req.SchemaVersion != AiProtocol.SchemaVersion
         || req.Provider is not (AiProtocol.ProviderMock or AiProtocol.ProviderGemini) || string.IsNullOrWhiteSpace(req.Model)
         || (req.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(req.ApiKey))
-        || (CopilotTasks.IsLineTask(task) ? string.IsNullOrWhiteSpace(req.Line?.Dialogue) : req.Series is null)
+        || (task == CopilotTasks.BibleStubDraft ? req.Stub is not { Evidence.Count: > 0 }
+            : CopilotTasks.IsLineTask(task) ? string.IsNullOrWhiteSpace(req.Line?.Dialogue) : req.Series is null)
         || (task == CopilotTasks.LettererShorten && req.MaxChars is not (> 0 and <= CopilotRules.MaxCharsLimit)))
         return Results.Json(new AiRunAck(false, "INVALID_JOB", "Request Copilot không hợp lệ."), statusCode: 400);
 

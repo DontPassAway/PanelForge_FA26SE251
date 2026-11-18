@@ -94,7 +94,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         suggestion.Decide(cmd.Decision);
         var decision = AiSuggestionDecision.Create(
             suggestion.Id, cmd.UserId, cmd.Decision, cmd.Reason, versionSeen, revisionId,
-            appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail or AiSuggestionKind.Lettering);
+            appliesOutsideContent: suggestion.Kind is AiSuggestionKind.SeriesMetadata or AiSuggestionKind.Thumbnail
+                or AiSuggestionKind.Lettering or AiSuggestionKind.BibleStub);
         _db.AiSuggestionDecisions.Add(decision);
 
         try
@@ -143,6 +144,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (s.Kind == AiSuggestionKind.Thumbnail) return await ApplyThumbnailAsync(cmd, s, chapter, ct);
         // Chữ bóng thoại có version riêng theo element, không thuộc kịch bản nên không phụ thuộc Frozen
         if (s.Kind == AiSuggestionKind.Lettering) return await ApplyBubbleShortenAsync(cmd, s, ct);
+        // Hồ sơ nháp: Accept chỉ ghi nhận đã dùng làm nháp, Bible chỉ đổi khi người viết tự lưu
+        if (s.Kind == AiSuggestionKind.BibleStub) return new Applied(null, null, null);
 
         // BR-12: chương Approved/Locked/Published chỉ đọc
         if (!chapter.IsContentEditable)
