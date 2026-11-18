@@ -206,6 +206,8 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
             // Lỗi: không ghi đề xuất nào, run Failed giữ lại để truy vết
             run.MarkFailed(response.ErrorCode ?? ResultErrorCodes.AiUnavailable, response.ErrorMessage);
             await _db.SaveChangesAsync(ct);
+            if (shorten && response.ErrorCode == "INVALID_OUTPUT")
+                return Fail($"AI chưa rút gọn được xuống {maxChars} ký tự. Hãy thử lại hoặc tăng số ký tự tối đa.", ResultErrorCodes.AiInvalidOutput);
             return Fail(response.ErrorMessage ?? "AI không trả được kết quả.", CopilotGate.FailureCode(response));
         }
 

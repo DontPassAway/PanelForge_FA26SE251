@@ -274,6 +274,7 @@ public sealed class AiAgentsController : ControllerBase
             ResultErrorCodes.Unauthorized => Unauthorized(body),
             ResultErrorCodes.AiQuotaExceeded => StatusCode(StatusCodes.Status429TooManyRequests, body),
             ResultErrorCodes.AiUnavailable => AiUnavailable(result),
+            ResultErrorCodes.AiInvalidOutput => UnprocessableEntity(body),
             _ => BadRequest(body)
         };
     }

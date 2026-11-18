@@ -89,5 +89,10 @@ internal static class CopilotGate
     }
 
     public static string FailureCode(CopilotResponse r) =>
-        r.ErrorCode == ResultErrorCodes.AiUnavailable ? ResultErrorCodes.AiUnavailable : ResultErrorCodes.Validation;
+        r.ErrorCode switch
+        {
+            ResultErrorCodes.AiUnavailable or "PROVIDER_UNAVAILABLE" or "PROVIDER_ERROR" or "RUN_TIMEOUT" => ResultErrorCodes.AiUnavailable,
+            "INVALID_OUTPUT" => ResultErrorCodes.AiInvalidOutput, // lỗi của model, không phải dữ liệu người dùng nhập
+            _ => ResultErrorCodes.Validation
+        };
 }

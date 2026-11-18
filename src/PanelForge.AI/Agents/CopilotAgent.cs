@@ -22,6 +22,9 @@ public sealed class CopilotAgent
         [CopilotTasks.ImpactRipple] = PromptLibrary.Load("copilot_impact_ripple")
     };
 
+    /// <summary>Đếm ký tự là việc model hay sai vài ký tự, nên rút gọn được sửa thêm một lần.</summary>
+    private const int ShortenRepairAttempts = 2;
+
     private readonly AgentRunner _runner;
 
     public CopilotAgent(AgentRunner runner) => _runner = runner;
@@ -47,7 +50,8 @@ public sealed class CopilotAgent
         foreach (var n in line.Neighbors) sb.AppendLine($"- \"{Flat(n)}\"");
         sb.AppendLine().AppendLine("## Dòng cần xử lý (dữ liệu)");
         sb.AppendLine($"speaker={speaker?.Code ?? "-"} | stage=\"{Flat(line.StageDirection)}\"");
-        if (req.MaxChars is { } max) sb.AppendLine($"maxChars={max} | length={line.Dialogue.Trim().Length}");
+        if (req.MaxChars is { } max)
+            sb.AppendLine($"maxChars={max} | aimChars={Math.Max(1, max - Math.Max(2, max / 5))} | length={line.Dialogue.Trim().Length}");
         sb.AppendLine($"dialogue=\"{Flat(line.Dialogue)}\"");
         if (!string.IsNullOrWhiteSpace(req.Instruction))
             sb.AppendLine().AppendLine("## Chỉ dẫn của người dùng (dữ liệu)").AppendLine(Flat(req.Instruction));
@@ -59,7 +63,7 @@ public sealed class CopilotAgent
             if (output is null) return (null, [error!]);
             var errors = CopilotRules.Validate(req.Task, line.Dialogue, output.Text, req.MaxChars);
             return errors.Count == 0 ? (output with { Text = output.Text!.Trim(), Reason = output.Reason?.Trim() }, []) : (null, errors);
-        }, ct);
+        }, ct, req.Task == CopilotTasks.LettererShorten ? ShortenRepairAttempts : AgentRunner.MaxRepairAttempts);
 
         return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,

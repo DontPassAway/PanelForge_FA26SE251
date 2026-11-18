@@ -18,7 +18,7 @@ public sealed class AiAgentSettings
     public int RunStaleAfterSeconds { get; set; } = 300;
     public int ServiceTimeoutSeconds { get; set; } = 10;
     /// <summary>Copilot sync: timeout một lần gọi và số lượt tối đa mỗi phút cho MỘT Series.</summary>
-    public int CopilotTimeoutSeconds { get; set; } = 15;
+    public int CopilotTimeoutSeconds { get; set; } = 30;
     public int CopilotCallsPerMinutePerSeries { get; set; } = 10;
 
     /// <summary>Sinh ảnh thumbnail: Gemini (dùng key Workspace, nhận ảnh tham chiếu) hoặc Cloudflare (Workers AI text-to-image, token ở AI service).</summary>

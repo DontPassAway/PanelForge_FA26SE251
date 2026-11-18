@@ -197,7 +197,7 @@ public static class CopilotRules
         if (task == CopilotTasks.LettererShorten)
         {
             if (text.Length >= source.Length) errors.Add("text phải ngắn hơn bản gốc.");
-            if (maxChars is { } m && text.Length > m) errors.Add($"text dài {text.Length} ký tự, vượt giới hạn {m}.");
+            if (maxChars is { } m && text.Length > m) errors.Add($"text dài {text.Length} ký tự, vượt giới hạn {m}; cần bớt ít nhất {text.Length - m} ký tự.");
         }
         else if (text.Length > Math.Max(source.Length * 2, 200))
             errors.Add("text dài bất thường so với bản gốc.");
