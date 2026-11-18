@@ -8,6 +8,9 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Commands.RunThumbnail;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.ScriptLines.Common;
+using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
@@ -96,6 +99,13 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         try
         {
             await _db.SaveChangesAsync(ct);
+            // BR-12: trang do Layout tạo trên chương dùng lưới phải có ô công đoạn. Lỗi thì ném để transaction rollback cả lần Accept.
+            if (cmd.Decision == AiSuggestionStatus.Accepted && suggestion.Kind == AiSuggestionKind.Layout
+                && await WorkScopeGuard.UsesGridAsync(_db, chapter.Id, ct))
+            {
+                var cells = await new GenerateStageTasksCommandHandler(_db).Handle(new GenerateStageTasksCommand(chapter.Id, cmd.UserId), ct);
+                if (!cells.IsSuccess) throw new InvalidOperationException(cells.ErrorMessage);
+            }
             // BR-01/BR-11: đề xuất đã áp vào dòng/khung kịch bản phải thành một ScriptVersion (snapshot đọc DB nên sau khi lưu)
             if (cmd.Decision == AiSuggestionStatus.Accepted &&
                 suggestion.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.Layout)
@@ -124,6 +134,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
     private async Task<Applied> ApplyAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
     {
+        if (await AcceptBlockedAsync(cmd, s, chapter, ct) is { } blocked) return blocked;
+
         // Metadata cấp Series: không phụ thuộc trạng thái/version của Chapter, không tăng versionVector
         if (s.Kind == AiSuggestionKind.SeriesMetadata) return await ApplySeriesMetadataAsync(s, ct);
         // Ảnh panel: không phải nội dung có version (giống UploadArtwork), Accept nhiều thumbnail không làm stale lẫn nhau
@@ -184,6 +196,36 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         return result;
     }
 
+    /// <summary>
+    /// Cổng Accept: cùng luật với sửa tay (BR-07, §5.1). Đề xuất đổi kịch bản đi qua <see cref="ScriptLineRules.AuthorizeAsync"/>
+    /// (Writer, được giao, chưa Frozen); Artist theo ô hoặc việc đang giữ.
+    /// </summary>
+    private async Task<Applied?> AcceptBlockedAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
+    {
+        var role = await _auth.GetMemberRoleAsync(cmd.UserId, s.WorkspaceId, ct);
+        var acceptRoles = AiWorkflowPolicy.AcceptRoles(s.Kind);
+        if (role is null || !acceptRoles.Contains(role.Value))
+            return Applied.Fail(
+                $"Chỉ {string.Join(", ", acceptRoles)} mới được áp dụng đề xuất {s.Kind}; bạn có thể từ chối hoặc yêu cầu sửa.",
+                ResultErrorCodes.Forbidden);
+
+        if (s.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite
+            || (s.Kind == AiSuggestionKind.Layout && role == WorkspaceRole.Writer))
+        {
+            var allowed = await ScriptLineRules.AuthorizeAsync(_db, _auth, cmd.UserId, chapter.Id, expectedVersion: null, ct);
+            return allowed.IsSuccess ? null : Applied.Fail(allowed.ErrorMessage!, allowed.ErrorCode!);
+        }
+
+        if (s.Kind is AiSuggestionKind.Layout or AiSuggestionKind.ImagePrompt)
+        {
+            if (s.Kind == AiSuggestionKind.Layout && chapter.ScriptLockReason is { } locked)
+                return Applied.Fail(locked, ResultErrorCodes.Conflict);
+            if ((await AiWorkflowFacts.EvaluateAssignmentAsync(_db, cmd.UserId, chapter, role.Value, ct)).BlockedReason is { } reason)
+                return Applied.Fail(reason, ResultErrorCodes.Forbidden);
+        }
+        return null;
+    }
+
     private async Task<Applied> ApplyScriptAsync(
         ReviewSuggestionCommand cmd, AiSuggestion s, AiWorkflowRun run, RunSnapshot snapshot, Scene scene,
         ContentRevision? latest, CancellationToken ct)
@@ -197,6 +239,9 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (errors.Count > 0) return Applied.Fail(AiContentValidator.Join(errors), ResultErrorCodes.Validation);
 
         var existing = await _db.ScriptLines.Where(l => l.SceneId == s.SceneId).OrderBy(l => l.LineOrder).ToListAsync(ct);
+        // Thay cả script sẽ xoá dòng và tạo dòng mới chưa gắn Panel: mất liên kết thoại và lọt cờ ảnh hưởng khi đóng băng lại
+        if (existing.Any(l => l.PanelId is not null))
+            return Applied.Fail("Scene có dòng đã gắn Panel, không thể thay cả script bằng đề xuất AI.", ResultErrorCodes.Conflict);
 
         // Chưa có revision nào nhưng Scene đang có dòng → chụp baseline để không mất lịch sử (BR-01)
         var previousId = latest?.Id;
@@ -325,10 +370,15 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (asset is null || asset.Sha256 != sug.Sha256)
             return Applied.Fail("Ảnh của đề xuất không còn trong kho.", ResultErrorCodes.Conflict);
 
-        // Producer nghiệm thu được; Artist phải đang giữ việc InProgress ở đúng stage của ảnh (cùng luật với tải artwork)
-        if (!await _auth.HasWorkspaceRoleAsync(cmd.UserId, s.WorkspaceId, [WorkspaceRole.Producer], ct)
-            && await ThumbnailRules.HeldStageAsync(_db, cmd.UserId, chapter.Id, sug.PageId, sug.PanelId, sug.StageId, ct) is null)
-            return Applied.Fail("Bạn không còn giữ việc (InProgress) cho panel này ở stage của ảnh.", ResultErrorCodes.Forbidden);
+        // Cùng luật tải artwork: người đang giữ việc ở đúng stage, hoặc Producer khi phần đó chưa giao cho ai
+        var isProducer = await _auth.HasWorkspaceRoleAsync(cmd.UserId, s.WorkspaceId, [WorkspaceRole.Producer], ct);
+        var mayAttach = isProducer
+            ? await ThumbnailRules.IsUnassignedAsync(_db, chapter.Id, sug.PageId, sug.PanelId, sug.StageId, ct)
+            : await ThumbnailRules.HeldStageAsync(_db, cmd.UserId, chapter.Id, sug.PageId, sug.PanelId, sug.StageId, ct) is not null;
+        if (!mayAttach)
+            return Applied.Fail(isProducer
+                ? "Ô này đã giao cho người khác; Producer không gắn ảnh đè lên việc đang giao."
+                : "Bạn không còn giữ việc cho panel này ở stage của ảnh, hoặc đầu vào của ô đã lỗi thời.", ResultErrorCodes.Forbidden);
 
         var versions = await _db.AssetReferences.AsNoTracking()
             .Where(r => r.PageId == sug.PageId && r.PanelId == sug.PanelId && r.PipelineStageId == sug.StageId)
@@ -426,7 +476,9 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             return Applied.Fail("Script của Scene không còn khớp script đã Accept (đã bị sửa).", ResultErrorCodes.Conflict);
 
         // V1.2: Scene không chứa Page. Không ghi đè/xoá Panel có sẵn của Scene: layout AI chỉ thêm vào Scene chưa có Panel
-        if (await _db.Panels.AnyAsync(p => p.SceneId == s.SceneId, ct))
+        // Lưu kịch bản tạo khung có Panel chưa mang SceneId, nên phải xét cả dòng đã gắn Panel để không tạo trùng khung
+        if (await _db.Panels.AnyAsync(p => p.SceneId == s.SceneId, ct)
+            || await _db.ScriptLines.AnyAsync(l => l.SceneId == s.SceneId && l.PanelId != null, ct))
             return Applied.Fail("Scene đã có Panel; xoá hoặc gỡ gán thủ công trước khi áp dụng layout AI.", ResultErrorCodes.Conflict);
 
         var maxPage = await _db.Pages.Where(p => p.ChapterId == chapter.Id).MaxAsync(p => (int?)p.PageNumber, ct) ?? 0;

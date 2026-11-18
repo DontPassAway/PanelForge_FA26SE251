@@ -39,7 +39,7 @@ public sealed class GetWorkspaceAiConfigQueryHandler : IRequestHandler<GetWorksp
         }
         catch
         {
-            models = ["gemini-1.5-flash", "gemini-1.5-pro"];
+            models = [.. WorkspaceAiConfig.DefaultAllowedModels];
         }
 
         return Result<WorkspaceAiConfigDto>.Success(new WorkspaceAiConfigDto(

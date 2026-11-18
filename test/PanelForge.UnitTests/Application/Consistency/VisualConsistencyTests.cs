@@ -74,8 +74,8 @@ public class VisualConsistencyTests
 
         public Task<Result<VisualConsistencyReportDto>> RunCheck(decimal? threshold = null)
         {
-            Vision.Setup(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), null, It.IsAny<decimal?>(), It.IsAny<CancellationToken>()))
-                .Returns(async (Guid panelId, string? _, decimal? t, CancellationToken ct) =>
+            Vision.Setup(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), null, It.IsAny<decimal?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                .Returns(async (Guid panelId, string? _, decimal? t, Guid? _, CancellationToken ct) =>
                 {
                     var limit = t ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
                     Guid? findingId = null;
@@ -119,7 +119,7 @@ public class VisualConsistencyTests
         report.TotalEvaluated.Should().Be(1);
         report.PassedCount.Should().Be(1);
         report.DeviationCount.Should().Be(0);
-        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(f.Panel.Id, null, It.IsAny<decimal?>(), It.IsAny<CancellationToken>()), Times.Once);
+        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(f.Panel.Id, null, It.IsAny<decimal?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class VisualConsistencyTests
         f.Db.SaveChanges();
 
         (await f.GetReport()).Value!.DeviationCount.Should().Be(0, "GET chỉ đọc finding thật, không tự chạy kiểm");
-        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<decimal?>(), It.IsAny<CancellationToken>()), Times.Never);
+        f.Vision.Verify(v => v.CheckPanelConsistencyAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<decimal?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
 
         (await f.RunCheck()).IsSuccess.Should().BeTrue();
         legacy.Status.Should().NotBe(ConsistencyFindingStatus.Open);

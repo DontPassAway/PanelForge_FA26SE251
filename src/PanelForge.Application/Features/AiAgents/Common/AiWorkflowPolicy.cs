@@ -22,6 +22,20 @@ internal static class AiWorkflowPolicy
         _ => []
     };
 
+    /// <summary>
+    /// Vai trò được ÁP DỤNG đề xuất (Accept): ai sửa được loại nội dung đó bằng tay. Vai trò còn lại trong <see cref="ReviewRoles"/>
+    /// chỉ Reject hoặc RequestChanges (BR-07, Q24: Producer/Editor không sửa kịch bản).
+    /// </summary>
+    public static WorkspaceRole[] AcceptRoles(AiSuggestionKind kind) => kind switch
+    {
+        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.Lettering => [WorkspaceRole.Writer],
+        AiSuggestionKind.Layout => [WorkspaceRole.Writer, WorkspaceRole.Artist],
+        AiSuggestionKind.ImagePrompt => [WorkspaceRole.Artist],
+        AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer],
+        AiSuggestionKind.Thumbnail => [WorkspaceRole.Producer, WorkspaceRole.Artist],
+        _ => []
+    };
+
     public static WorkspaceRole[] ReviewRoles(AiSuggestionKind kind) => kind switch
     {
         AiSuggestionKind.Script => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor],

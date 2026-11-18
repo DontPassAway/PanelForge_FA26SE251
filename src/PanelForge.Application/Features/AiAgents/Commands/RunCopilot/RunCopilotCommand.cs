@@ -83,6 +83,10 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         if (!chapter.IsContentEditable)
             return Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc).", ResultErrorCodes.Conflict);
 
+        // Đề xuất thoại hiện ghi vào ScriptLine nên không áp dụng được khi kịch bản Frozen: không tốn token
+        if (chapter.ScriptLockReason is { } scriptLocked)
+            return Fail(scriptLocked, ResultErrorCodes.Conflict);
+
         if (role != WorkspaceRole.Producer
             && (await AiWorkflowFacts.EvaluateAssignmentAsync(_db, cmd.UserId, chapter, role.Value, ct)).BlockedReason is { } blocked)
             return Fail(blocked, ResultErrorCodes.Forbidden);

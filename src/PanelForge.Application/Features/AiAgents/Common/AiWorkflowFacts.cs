@@ -4,6 +4,7 @@ using PanelForge.AI.Contracts;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
 
@@ -65,10 +66,14 @@ internal sealed record AiWorkflowFacts(
     Guid? LatestLayoutRevisionId,
     int LayoutPanelsAlive,
     int ScenePageCount,
-    AssignmentGate Assignment)
+    AssignmentGate Assignment,
+    string? ScriptLockReason,
+    int LinkedLineCount)
 {
     private static readonly AssignmentStatus[] WorkingStatuses =
         [AssignmentStatus.Assigned, AssignmentStatus.InProgress, AssignmentStatus.ReworkRequired];
+
+    private static readonly StageTaskStatus[] GridWorkingStatuses = [StageTaskStatus.InProgress, StageTaskStatus.ReworkRequired];
 
     public static async Task<AiWorkflowFacts> LoadAsync(
         IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, Guid userId, Guid workspaceId,
@@ -78,13 +83,14 @@ internal sealed record AiWorkflowFacts(
         var aiEnabled = await db.WorkspaceAiConfigs.AsNoTracking().AnyAsync(c => c.WorkspaceId == workspaceId && c.IsEnabled, ct);
         var hasBible = await db.SeriesBibles.AsNoTracking().AnyAsync(b => b.SeriesId == chapter.SeriesId, ct);
 
-        int lines = 0, dialogue = 0, pages = 0, alive = 0;
+        int lines = 0, dialogue = 0, pages = 0, alive = 0, linked = 0;
         Guid? layoutRevisionId = null;
         if (scene is not null)
         {
             lines = await db.ScriptLines.AsNoTracking().CountAsync(l => l.SceneId == scene.Id, ct);
             dialogue = await db.ScriptLines.AsNoTracking().CountAsync(
                 l => l.SceneId == scene.Id && l.DialogueText != null && l.DialogueText != "", ct);
+            linked = await db.ScriptLines.AsNoTracking().CountAsync(l => l.SceneId == scene.Id && l.PanelId != null, ct);
             pages = await db.Panels.AsNoTracking().Where(p => p.SceneId == scene.Id).Select(p => p.PageId).Distinct().CountAsync(ct);
             var layout = await LatestLayoutAsync(db, scene.Id, ct);
             if (layout is not null)
@@ -100,7 +106,7 @@ internal sealed record AiWorkflowFacts(
             : await EvaluateAssignmentAsync(db, userId, chapter, role.Value, ct);
 
         return new AiWorkflowFacts(workspaceId, role, aiEnabled, chapter.Status, hasBible, lines, dialogue,
-            layoutRevisionId, alive, pages, gate);
+            layoutRevisionId, alive, pages, gate, chapter.ScriptLockReason, linked);
     }
 
     public static Task<ContentRevision?> LatestLayoutAsync(IPanelForgeDbContext db, Guid sceneId, CancellationToken ct) =>
@@ -115,6 +121,9 @@ internal sealed record AiWorkflowFacts(
     internal static async Task<AssignmentGate> EvaluateAssignmentAsync(
         IPanelForgeDbContext db, Guid userId, Chapter chapter, WorkspaceRole role, CancellationToken ct)
     {
+        if (await WorkScopeGuard.UsesGridAsync(db, chapter.Id, ct))
+            return await EvaluateGridAssignmentAsync(db, userId, chapter.Id, role, ct);
+
         var all = await db.Assignments.AsNoTracking()
             .Where(a => a.SeriesId == chapter.SeriesId && a.ChapterId == chapter.Id && a.AssignedRole == role)
             .ToListAsync(ct);
@@ -137,6 +146,33 @@ internal sealed record AiWorkflowFacts(
         return stageOk
             ? new AssignmentGate(true, null)
             : new AssignmentGate(true, $"Stage hiện tại của assignment không dành cho vai trò {role}.");
+    }
+
+    /// <summary>
+    /// Chương dùng lưới V3: luật lưới thay luật V2, giống <see cref="WorkScopeGuard"/>. Artist/Letterer phải giữ ô đang làm, đầu vào còn hiệu lực.
+    /// Writer/Editor chỉ cần là người được giao; chưa giao lô nào cho hai vai trò này thì việc vẫn mở.
+    /// </summary>
+    private static async Task<AssignmentGate> EvaluateGridAssignmentAsync(
+        IPanelForgeDbContext db, Guid userId, Guid chapterId, WorkspaceRole role, CancellationToken ct)
+    {
+        var cells = await (from t in db.StageTasks.AsNoTracking()
+                           join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                           where t.ChapterId == chapterId && l.AssignedRole == role && t.Status != StageTaskStatus.Cancelled
+                           select new { t.Status, t.IsInputOutdated, l.AssigneeUserId }).ToListAsync(ct);
+        var needsHeldCell = role is WorkspaceRole.Artist or WorkspaceRole.Letterer;
+        if (cells.Count == 0)
+            return needsHeldCell
+                ? new AssignmentGate(true, $"Chương dùng lưới giao việc nhưng chưa có ô nào giao cho vai trò {role}.")
+                : AssignmentGate.Open;
+
+        var mine = cells.Where(c => c.AssigneeUserId == userId).ToList();
+        if (mine.Count == 0)
+            return new AssignmentGate(true, $"Chapter đã giao việc vai trò {role} cho thành viên khác trên lưới giao việc.");
+        if (!needsHeldCell || mine.Any(c => GridWorkingStatuses.Contains(c.Status) && !c.IsInputOutdated))
+            return new AssignmentGate(true, null);
+        return new AssignmentGate(true, mine.Any(c => c.IsInputOutdated)
+            ? "Đầu vào của ô việc đã lỗi thời, chờ Producer xử lý Impact Review."
+            : "Bạn chưa có ô việc nào đang làm trên lưới giao việc.");
     }
 
     /// <summary>Danh sách điều kiện còn thiếu cho một loại workflow; rỗng = chạy được. Thứ tự: quyền → cấu hình → trạng thái → context.</summary>
@@ -162,13 +198,22 @@ internal sealed record AiWorkflowFacts(
         if (AiWorkflowPolicy.ProducesApplicableSuggestions(type) && ChapterStatus is not (ChapterStatus.PreProduction or ChapterStatus.InProduction))
             Add("CHAPTER_LOCKED", "State", $"Chapter đang ở trạng thái {ChapterStatus} (chỉ đọc), không thể tạo đề xuất áp dụng được.");
 
+        // Script và Layout đều đổi dòng hoặc neo dòng của kịch bản nên dừng khi Frozen, trước khi tốn token
+        if (ScriptLockReason is not null && type is AiWorkflowType.Script or AiWorkflowType.FullScene or AiWorkflowType.Storyboard)
+            Add("SCRIPT_FROZEN", "State", ScriptLockReason);
+
         if (!HasBible) Add("NO_BIBLE", "Context", "Series chưa có Series Bible.");
 
         switch (type)
         {
+            case AiWorkflowType.Script or AiWorkflowType.FullScene:
+                if (LinkedLineCount > 0)
+                    Add("SCENE_LINES_LINKED", "State", "Scene có dòng đã gắn Panel; thay cả script bằng AI sẽ làm mất liên kết này.");
+                break;
             case AiWorkflowType.Storyboard:
                 if (ScriptLineCount == 0) Add("NO_SCRIPT", "Context", "Scene chưa có script. Chạy workflow Script và Accept trước.");
-                if (ScenePageCount > 0) Add("SCENE_HAS_PAGES", "State", "Scene đã có Page; layout AI chỉ áp dụng vào Scene chưa có Page.");
+                if (ScenePageCount > 0 || LinkedLineCount > 0)
+                    Add("SCENE_HAS_PAGES", "State", "Scene đã có Page hoặc dòng đã gắn Panel; layout AI chỉ áp dụng vào Scene chưa phân khung.");
                 break;
             case AiWorkflowType.Editor:
                 if (ScriptLineCount == 0) Add("NO_SCRIPT", "Context", "Scene chưa có script để review.");

@@ -56,6 +56,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         Guid panelId,
         string? revisionRef = null,
         decimal? threshold = null,
+        Guid? userId = null,
         CancellationToken cancellationToken = default)
     {
         var targetThreshold = threshold ?? ConsistencyChecker.DefaultVisualSimilarityThreshold;
@@ -187,6 +188,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
 
         var input = new ImageConsistencyInput(
             PanelId: panel.Id,
+            UserId: userId,
             RevisionRef: artworkRef?.Id.ToString() ?? revisionRef,
             AssetReferenceId: artworkRef?.Id,
             WorkspaceId: workspaceId,

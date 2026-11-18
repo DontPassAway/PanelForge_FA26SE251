@@ -208,7 +208,6 @@ public class ImageConsistencyServiceTests
     [Fact]
     public async Task PanelsController_CheckImageConsistency_ReturnsOkWithResult()
     {
-        var mockService = new Mock<IImageConsistencyService>();
         var panelId = Guid.NewGuid();
         var expectedResult = new ImageConsistencyResultDto(
             PanelId: panelId,
@@ -221,12 +220,13 @@ public class ImageConsistencyServiceTests
             SummaryReason: "Khớp tốt",
             Deviations: Array.Empty<ImageConsistencyDeviationDto>()
         );
-        mockService.Setup(s => s.CheckPanelConsistencyAsync(panelId, null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedResult);
-        var controller = new PanelsController(Mock.Of<MediatR.IMediator>());
+        var mediator = new Mock<MediatR.IMediator>();
+        mediator.Setup(m => m.Send(It.Is<PanelForge.Application.Features.Consistency.Commands.CheckPanelImageConsistency.CheckPanelImageConsistencyCommand>(c => c.PanelId == panelId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PanelForge.Application.Common.Result<ImageConsistencyResultDto>.Success(expectedResult));
+        var controller = new PanelsController(mediator.Object) { ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() } };
 
         var actionResult = await controller.CheckImageConsistency(
-            panelId, revisionRef: null, threshold: null, mockService.Object, CancellationToken.None);
+            panelId, revisionRef: null, threshold: null, CancellationToken.None);
 
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeEquivalentTo(expectedResult);

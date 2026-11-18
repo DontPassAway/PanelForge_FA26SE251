@@ -58,7 +58,7 @@ public static class AiDemoSeeder
         // Mock không cần API key; Gemini: Admin nhập key qua PUT /api/Admin/workspaces/{id}/ai-config
         db.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(
             WorkspaceId, "Google Gemini", apiKey: null, monthlyTokenQuota: 1_000_000,
-            allowedModelsJson: "[\"gemini-2.5-flash\",\"gemini-2.5-pro\"]"));
+            allowedModelsJson: WorkspaceAiConfig.DefaultAllowedModelsJson));
 
         var series = Series.Create(WorkspaceId, "Thành phố mưa", ReadingDirection.RightToLeft,
             "Thợ học việc An lần theo chiếc chìa khóa bạc bí ẩn giữa thành phố luôn có mưa.", "Mystery", "Manga");

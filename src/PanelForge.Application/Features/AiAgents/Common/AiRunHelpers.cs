@@ -44,7 +44,8 @@ internal static class AiRunHelpers
             s.Id, s.RunId, s.StepId, s.SceneId, s.Kind, s.Status, s.Summary, ToElement(s.PayloadJson), s.PayloadHash,
             s.BaseChapterVersion, s.BaseScriptRevisionId, ReadGuidList(s.BibleRevisionIdsJson), s.ParentSuggestionId,
             s.HasBlockingFindings, s.CreatedAt, decisions.OrderBy(d => d.DecidedAtUtc).Select(ToDto).ToList(),
-            roles, s.Status == AiSuggestionStatus.Pending && viewerRole is { } r && roles.Contains(r));
+            roles, s.Status == AiSuggestionStatus.Pending && viewerRole is { } r && roles.Contains(r),
+            s.Status == AiSuggestionStatus.Pending && viewerRole is { } a && AiWorkflowPolicy.AcceptRoles(s.Kind).Contains(a));
     }
 
     /// <summary>Quyền đọc: thành viên Workspace chứa Series (BR-07, BR-23). Run/suggestion phải thuộc đúng Series trên route.</summary>

@@ -85,7 +85,9 @@ public sealed record AiSuggestionDto(
     /// <summary>Vai trò Workspace được phép quyết định loại đề xuất này (theo chính sách của Backend).</summary>
     IReadOnlyList<WorkspaceRole> DecisionRoles,
     /// <summary>Người gọi API có thể Accept/Reject/RequestChanges ngay lúc này (đúng vai trò + đề xuất còn Pending).</summary>
-    bool CanDecide);
+    bool CanDecide,
+    /// <summary>Vai trò của người gọi được Accept loại đề xuất này (còn Pending). Phân công và trạng thái khoá vẫn do lúc Accept kiểm.</summary>
+    bool CanAccept);
 
 public sealed record ContentRevisionDto(
     Guid Id,

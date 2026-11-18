@@ -52,7 +52,7 @@ public sealed class CopilotTests
         (await h.Db.ScriptLines.SingleAsync(l => l.Id == lineId)).DialogueText.Should().Be(LongLine, "AI không ghi thẳng vào script");
         (await h.RunAsync(result.Value.RunId)).Status.Should().Be(AiRunStatus.Completed);
 
-        var accept = await h.ReviewAsync(result.Value.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, chapterVersion: 0);
+        var accept = await h.ReviewAsync(result.Value.Id, AiSuggestionStatus.Accepted, AiHarness.Writer, chapterVersion: 0);
 
         accept.IsSuccess.Should().BeTrue(accept.ErrorMessage);
         var text = (await h.Db.ScriptLines.SingleAsync(l => l.Id == lineId)).DialogueText!;

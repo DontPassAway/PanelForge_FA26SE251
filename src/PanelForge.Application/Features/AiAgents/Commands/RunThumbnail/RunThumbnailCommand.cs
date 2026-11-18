@@ -7,6 +7,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Assets;
@@ -273,6 +274,15 @@ internal static class ThumbnailRules
     public static async Task<Guid?> HeldStageAsync(IPanelForgeDbContext db, Guid userId, Guid chapterId, Guid pageId, Guid panelId,
         Guid? stageId, CancellationToken ct)
     {
+        // Lưới V3: quyền theo ô (trang × công đoạn), cùng luật tải artwork; ô có đầu vào lỗi thời không được gắn ảnh
+        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+            return await (from t in db.StageTasks.AsNoTracking()
+                          join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                          where t.ChapterId == chapterId && t.PageId == pageId && l.AssigneeUserId == userId && !t.IsInputOutdated
+                                && (t.Status == StageTaskStatus.InProgress || t.Status == StageTaskStatus.ReworkRequired)
+                                && (stageId == null || t.PipelineStageId == stageId)
+                          select (Guid?)t.PipelineStageId).FirstOrDefaultAsync(ct);
+
         var held = await db.Assignments.AsNoTracking()
             .Where(a => a.ChapterId == chapterId && a.AssigneeUserId == userId && a.Status == AssignmentStatus.InProgress
                         && (stageId == null || a.PipelineStageId == stageId)
@@ -282,5 +292,18 @@ internal static class ThumbnailRules
             .Select(a => new { a.EntityType, a.PipelineStageId }).ToListAsync(ct);
         return held.OrderBy(a => a.EntityType == WorkflowEntityType.Panel ? 0 : a.EntityType == WorkflowEntityType.Page ? 1 : 2)
             .Select(a => (Guid?)a.PipelineStageId).FirstOrDefault();
+    }
+
+    /// <summary>Stage chưa giao cho ai ở phần này: Producer mới được gắn ảnh, cùng luật tải artwork.</summary>
+    public static async Task<bool> IsUnassignedAsync(IPanelForgeDbContext db, Guid chapterId, Guid pageId, Guid panelId, Guid stageId, CancellationToken ct)
+    {
+        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+            return !await db.StageTasks.AsNoTracking().AnyAsync(t => t.ChapterId == chapterId && t.PageId == pageId
+                && t.PipelineStageId == stageId && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
+
+        return !await db.Assignments.AsNoTracking().AnyAsync(a => a.ChapterId == chapterId && a.PipelineStageId == stageId
+            && (a.EntityType == WorkflowEntityType.Chapter
+                || (a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == pageId)
+                || (a.EntityType == WorkflowEntityType.Panel && a.TargetEntityId == panelId)), ct);
     }
 }

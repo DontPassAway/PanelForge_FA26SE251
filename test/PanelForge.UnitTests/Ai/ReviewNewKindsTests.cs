@@ -111,8 +111,8 @@ public class ReviewNewKindsTests
     [InlineData("Letterer", false)]
     [InlineData("Reader", false)]
     [InlineData("Artist", true)]
-    [InlineData("Editor", true)]
-    [InlineData("Producer", true)]
+    [InlineData("Editor", false)]
+    [InlineData("Producer", false)]
     public async Task ImagePrompt_DecisionRoles_FollowTheKind(string user, bool allowed)
     {
         var (h, s) = await ArtistSuggestionAsync();
