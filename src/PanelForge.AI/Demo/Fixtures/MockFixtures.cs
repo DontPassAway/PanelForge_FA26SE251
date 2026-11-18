@@ -166,7 +166,9 @@ public static class MockFixtures
             .Select(m => (Key: m.Groups[1].Value, Speaker: m.Groups[2].Value)).ToList();
 
         // Mỗi trang tối đa 4 ô theo thứ tự đọc: ô rộng trên → 2 ô giữa (đọc theo hướng) → ô rộng dưới
-        Slot[] template = rtl
+        Slot[] template = msg.Contains("[[direction:Vertical]]")
+            ? [new(0, 0, 1, 0.25), new(0, 0.25, 1, 0.25), new(0, 0.5, 1, 0.25), new(0, 0.75, 1, 0.25)]
+            : rtl
             ? [new(0, 0, 1, 0.34), new(0.5, 0.34, 0.5, 0.33), new(0, 0.34, 0.5, 0.33), new(0, 0.67, 1, 0.33)]
             : [new(0, 0, 1, 0.34), new(0, 0.34, 0.5, 0.33), new(0.5, 0.34, 0.5, 0.33), new(0, 0.67, 1, 0.33)];
         string[] cameras = ["wide establishing shot", "medium shot", "close-up", "over-the-shoulder shot"];

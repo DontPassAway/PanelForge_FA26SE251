@@ -65,9 +65,8 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         var panelFilter = cmd.PanelIds is { Count: > 0 } ? cmd.PanelIds.ToHashSet() : null;
         if (panelFilter is not null && cmd.WorkflowType != AiWorkflowType.Artist)
             return AiRunHelpers.Fail<RunWorkflowResponse>("panelIds chỉ dùng cho workflow Artist.", ResultErrorCodes.Validation);
-        if (cmd.ReadingDirection is not (ReadingDirection.LeftToRight or ReadingDirection.RightToLeft))
-            return AiRunHelpers.Fail<RunWorkflowResponse>(
-                "Chỉ hỗ trợ readingDirection LeftToRight hoặc RightToLeft.", ResultErrorCodes.Validation);
+        if (!Enum.IsDefined(cmd.ReadingDirection))
+            return AiRunHelpers.Fail<RunWorkflowResponse>("readingDirection không hợp lệ.", ResultErrorCodes.Validation);
         var type = cmd.WorkflowType;
         if (AiWorkflowPolicy.NeedsScene(type) && cmd.SceneId is null)
             return AiRunHelpers.Fail<RunWorkflowResponse>("sceneId là bắt buộc với workflow này.", ResultErrorCodes.Validation);

@@ -36,6 +36,7 @@ public sealed record ReviewSuggestionCommand(
 public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSuggestionCommand, Result<ReviewSuggestionResponse>>
 {
     private const int PageWidthPx = 1200, PageHeightPx = 1800; // mặc định của CreatePageCommand
+    private const int WebtoonWidthPx = 1080, WebtoonHeightPx = 1920; // khổ dọc 9:16 của mẫu khung Webtoon
 
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
@@ -82,6 +83,13 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
         if (cmd.Decision == AiSuggestionStatus.ChangesRequested && string.IsNullOrWhiteSpace(cmd.Reason))
             return AiRunHelpers.Fail<ReviewSuggestionResponse>("RequestChanges phải kèm lý do.", ResultErrorCodes.Validation);
+
+        // Người làm chỉ từ chối hoặc yêu cầu sửa trong phạm vi việc được giao; Producer, Editor duyệt toàn chương (BR-07)
+        if (cmd.Decision != AiSuggestionStatus.Accepted
+            && await _auth.GetMemberRoleAsync(cmd.UserId, suggestion.WorkspaceId, ct) is { } role
+            && role is WorkspaceRole.Writer or WorkspaceRole.Artist or WorkspaceRole.Letterer
+            && (await AiWorkflowFacts.EvaluateAssignmentAsync(_db, cmd.UserId, chapter, role, ct)).BlockedReason is { } outOfScope)
+            return AiRunHelpers.Fail<ReviewSuggestionResponse>(outOfScope, ResultErrorCodes.Forbidden);
 
         var versionSeen = chapter.VersionVector; // trước khi Accept tăng version
         Guid? revisionId = null;
@@ -531,9 +539,12 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
         var maxPage = await _db.Pages.Where(p => p.ChapterId == chapter.Id).MaxAsync(p => (int?)p.PageNumber, ct) ?? 0;
         var mapping = new List<object>();
+        var (format, widthPx, heightPx) = run.ReadingDirection == ReadingDirection.Vertical
+            ? (LayoutFormat.WebtoonLongstrip, WebtoonWidthPx, WebtoonHeightPx)
+            : (LayoutFormat.StandardPage, PageWidthPx, PageHeightPx);
         foreach (var lp in layout.Pages.OrderBy(p => p.PageNumber))
         {
-            var page = Page.CreateNew(chapter.Id, maxPage + lp.PageNumber, LayoutFormat.StandardPage, PageWidthPx, PageHeightPx, 300);
+            var page = Page.CreateNew(chapter.Id, maxPage + lp.PageNumber, format, widthPx, heightPx, 300);
             await _pages.SaveAsync(page, ct);
             _db.Pages.Add(page);
 
@@ -547,9 +558,9 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
                 var b = lpPanel.Bbox;
                 var bbox = AiJson.Serialize(new
                 {
-                    x = (int)Math.Round(b.X * PageWidthPx), y = (int)Math.Round(b.Y * PageHeightPx),
-                    width = (int)Math.Round(b.W * PageWidthPx), height = (int)Math.Round(b.H * PageHeightPx),
-                    unit = "px", pageWidthPx = PageWidthPx, pageHeightPx = PageHeightPx,
+                    x = (int)Math.Round(b.X * widthPx), y = (int)Math.Round(b.Y * heightPx),
+                    width = (int)Math.Round(b.W * widthPx), height = (int)Math.Round(b.H * heightPx),
+                    unit = "px", pageWidthPx = widthPx, pageHeightPx = heightPx,
                     normalized = new { x = b.X, y = b.Y, w = b.W, h = b.H, coordinateSpace = lpPanel.CoordinateSpace }
                 });
                 var panel = Panel.Create(page.Id, lpPanel.PanelNumber, rank, bbox, s.SceneId);
