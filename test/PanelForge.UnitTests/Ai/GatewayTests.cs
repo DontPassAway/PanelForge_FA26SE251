@@ -74,18 +74,27 @@ public class GatewayTests
     {
         var opts = Options.Create(new ProviderOptions());
         http = new FakeHttpFactory(status);
-        return new ChatClientFactory(opts, new LlmResilience(opts), http);
+        return new ChatClientFactory(opts, http);
     }
 
     [Fact]
-    public void Factory_MockNeedsNoKey_GeminiWithoutKeyIsRefused_NeverFallsBackToMock()
+    public void Factory_GeminiWithoutKeyIsRefused()
     {
         var f = Factory(HttpStatusCode.OK, out _);
 
-        f.Create(new AiRunJob(Guid.NewGuid(), "Mock", "m", null, 2)).Should().BeOfType<MockChatClient>();
         var noKey = () => f.Create(new AiRunJob(Guid.NewGuid(), "Gemini", "gemini-2.5-flash", null, 2));
         noKey.Should().Throw<InvalidOperationException>();
         f.Create(new AiRunJob(Guid.NewGuid(), "Gemini", "gemini-2.5-flash", "k", 2)).Should().BeOfType<LlmGateway>();
+    }
+
+    [Fact]
+    public void RateLimitState_IsSeparatePerApiKey()
+    {
+        var f = Factory(HttpStatusCode.OK, out _);
+        f.ResilienceFor("key-old").RegisterRateLimited(TimeSpan.FromMinutes(1));
+
+        f.ResilienceFor("key-old").CooldownRemaining.Should().BePositive();
+        f.ResilienceFor("key-new").CooldownRemaining.Should().Be(TimeSpan.Zero);
     }
 
     [Theory]

@@ -231,13 +231,6 @@ using (var scope = app.Services.CreateScope())
             app.Logger.LogInformation("PaymentDemoSeeder: đã seed KomaForge Studio và giao dịch VietQR mẫu.");
     }
 
-    // Dữ liệu mẫu demo AI: opt-in (AiService:SeedDemoData=true), chạy lặp không tạo trùng, không sửa dữ liệu có sẵn
-    if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("AiService:SeedDemoData"))
-    {
-        var seeded = await AiDemoSeeder.SeedAsync(db);
-        app.Logger.LogInformation("AiDemoSeeder: {Result}", seeded ? "đã seed Studio Moonlight" : "bỏ qua (đã có hoặc thiếu tài khoản dev)");
-    }
-
     if (app.Environment.IsDevelopment())
         await DemoPipelineSeeder.EnsureAsync(db);
 }

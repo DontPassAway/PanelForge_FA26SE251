@@ -33,7 +33,7 @@ public class ImageConsistencyServiceTests
         public readonly Mock<IAiKeyProtector> KeyProtectorMock = new();
         public readonly Mock<IAiUsageService> UsageServiceMock = new();
         public readonly Mock<IAiClient> AiClientMock = new();
-        public readonly AiAgentSettings Settings = new() { Provider = "Gemini", GeminiModel = "gemini-2.5-flash" };
+        public readonly AiAgentSettings Settings = new() { GeminiModel = "gemini-2.5-flash" };
         public readonly Guid WorkspaceId = Guid.NewGuid();
         public readonly Guid SeriesId = Guid.NewGuid();
         public readonly Chapter Chapter;
@@ -189,7 +189,7 @@ public class ImageConsistencyServiceTests
     [Fact]
     public async Task VisionAgent_ParsesModelJson_AndRejectsMissingScore()
     {
-        var req = new VisionCompareRequest(AiProtocol.ProviderMock, "mock", null, "Lan",
+        var req = new VisionCompareRequest(AiProtocol.ProviderGemini, "mock", null, "Lan",
             new ImageReference("sheet", "image/png", Convert.ToBase64String(new byte[] { 1, 2, 3 })),
             new ImageReference("art", "image/png", Convert.ToBase64String(new byte[] { 4, 5, 6 })));
 

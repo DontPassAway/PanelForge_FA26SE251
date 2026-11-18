@@ -130,35 +130,27 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
                     ResultErrorCodes.Conflict);
         }
 
-        // Quyền + trạng thái AI. Mock vẫn phải bật AI cho workspace nhưng không cần key/quota token.
+        // Quyền + trạng thái AI của Workspace.
         var config = await _db.WorkspaceAiConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, ct);
-        string provider, model;
-        if (_settings.IsMock)
+        if (config is null || !config.IsEnabled)
+            return AiRunHelpers.Fail<RunWorkflowResponse>(
+                "Tính năng AI chưa được bật cho Workspace này.", ResultErrorCodes.AiDisabled);
+        var availability = await _usage.CheckAvailabilityAsync(workspaceId.Value, ct);
+        if (!availability.IsAvailable)
         {
-            if (config is null || !config.IsEnabled)
-                return AiRunHelpers.Fail<RunWorkflowResponse>(
-                    "Tính năng AI chưa được bật cho Workspace này.", ResultErrorCodes.AiDisabled);
-            (provider, model) = (AiProtocol.ProviderMock, "mock-fixture-v1");
+            await _usage.RecordAsync(new AiUsageEntry(
+                workspaceId.Value, "AiAgents.RunWorkflow", availability.BlockedReason!.Value,
+                ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
+            return AiRunHelpers.Fail<RunWorkflowResponse>(availability.Message ?? "AI không khả dụng.",
+                availability.BlockedReason == AiUsageStatus.QuotaExceeded
+                    ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
-        else
-        {
-            var availability = await _usage.CheckAvailabilityAsync(workspaceId.Value, ct);
-            if (!availability.IsAvailable)
-            {
-                await _usage.RecordAsync(new AiUsageEntry(
-                    workspaceId.Value, "AiAgents.RunWorkflow", availability.BlockedReason!.Value,
-                    ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
-                return AiRunHelpers.Fail<RunWorkflowResponse>(availability.Message ?? "AI không khả dụng.",
-                    availability.BlockedReason == AiUsageStatus.QuotaExceeded
-                        ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
-            }
-            (provider, model) = (AiProtocol.ProviderGemini, _settings.GeminiModel);
-            var allowed = JsonSerializer.Deserialize<List<string>>(config!.AllowedModelsJson) ?? [];
-            if (!allowed.Contains(model, StringComparer.OrdinalIgnoreCase))
-                return AiRunHelpers.Fail<RunWorkflowResponse>(
-                    $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace; Admin cần thêm qua PUT /api/Admin/workspaces/{{id}}/ai-config.",
-                    ResultErrorCodes.Validation);
-        }
+        var (provider, model) = (AiProtocol.ProviderGemini, _settings.GeminiModel);
+        var allowed = JsonSerializer.Deserialize<List<string>>(config!.AllowedModelsJson) ?? [];
+        if (!allowed.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return AiRunHelpers.Fail<RunWorkflowResponse>(
+                $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace; Admin cần thêm qua PUT /api/Admin/workspaces/{{id}}/ai-config.",
+                ResultErrorCodes.Validation);
 
         var snapshot = await AiSnapshotBuilder.BuildAsync(_db, _pages, chapter, scene, type, DateTime.UtcNow, ct, panelFilter);
         if (snapshot is null)
@@ -176,15 +168,11 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         _db.AiWorkflowRuns.Add(run);
         await _db.SaveChangesAsync(ct);
 
-        string? apiKey = null;
-        if (!_settings.IsMock)
-        {
-            // Key do Backend giải mã và chỉ gửi qua localhost cho lần chạy này; không lưu, không log.
-            apiKey = _keyProtector.Unprotect(config!.ApiKeyEncrypted ?? string.Empty);
-            if (string.IsNullOrWhiteSpace(apiKey))
-                return await FailRunAsync(run, workspaceId.Value, cmd.UserId,
-                    "Không giải mã được API key của Workspace (key ring đã đổi?). Admin cần nhập lại key.", ct);
-        }
+        // Key do Backend giải mã và chỉ gửi qua localhost cho lần chạy này; không lưu, không log.
+        var apiKey = _keyProtector.Unprotect(config!.ApiKeyEncrypted ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return await FailRunAsync(run, workspaceId.Value, cmd.UserId,
+                "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ct);
 
         var ack = await _aiClient.StartRunAsync(
             new AiRunJob(run.Id, provider, model, apiKey, run.MaxRevisionRounds), ct);
@@ -205,10 +193,9 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
     {
         run.MarkFailed(ResultErrorCodes.AiUnavailable, message);
         await _db.SaveChangesAsync(ct);
-        if (!_settings.IsMock)
-            await _usage.RecordAsync(new AiUsageEntry(
-                workspaceId, "AiAgents.RunWorkflow", AiUsageStatus.ProviderUnavailable,
-                Model: run.Model, ErrorMessage: message, UserId: userId), ct);
+        await _usage.RecordAsync(new AiUsageEntry(
+            workspaceId, "AiAgents.RunWorkflow", AiUsageStatus.ProviderUnavailable,
+            Model: run.Model, ErrorMessage: message, UserId: userId), ct);
         return AiRunHelpers.Fail<RunWorkflowResponse>(message, ResultErrorCodes.AiUnavailable);
     }
 }

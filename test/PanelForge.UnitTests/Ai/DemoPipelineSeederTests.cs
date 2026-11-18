@@ -12,8 +12,8 @@ public sealed class DemoPipelineSeederTests
     {
         var h = await AiHarness.CreateAsync();
 
-        (await DemoPipelineSeeder.EnsureAsync(h.Db)).Should().Be(1);
-        (await DemoPipelineSeeder.EnsureAsync(h.Db)).Should().Be(0);
+        (await DemoPipelineSeeder.EnsureAsync(h.Db, default, [AiDemoSeeder.SeriesId])).Should().Be(1);
+        (await DemoPipelineSeeder.EnsureAsync(h.Db, default, [AiDemoSeeder.SeriesId])).Should().Be(0);
 
         var series = await h.Db.Series.SingleAsync(s => s.Id == AiDemoSeeder.SeriesId);
         var pipeline = await h.Db.PipelineDefinitions.Include(p => p.Stages).SingleAsync(p => p.SeriesId == series.Id);

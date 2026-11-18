@@ -97,20 +97,17 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
         if (provider is null)
             return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
-        if (!_settings.IsMock)
+        var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
+        if (!availability.IsAvailable)
         {
-            var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
-            if (!availability.IsAvailable)
-            {
-                await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, availability.BlockedReason!.Value,
-                    ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
-                return Fail(availability.Message ?? "AI không khả dụng.",
-                    availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
-            }
-            var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-            if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
-                return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
+            await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, availability.BlockedReason!.Value,
+                ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
+            return Fail(availability.Message ?? "AI không khả dụng.",
+                availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
+        var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
+        if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
         // ponytail: đếm trên DB nên 2 request song song có thể cùng lọt ở ngưỡng; đủ để chặn lạm dụng.
         var since = DateTime.UtcNow.AddSeconds(-(_settings.ImageTimeoutSeconds + 30));
@@ -144,9 +141,9 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             apiKey = _keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty);
             if (string.IsNullOrEmpty(apiKey))
             {
-                run.MarkFailed(ResultErrorCodes.AiUnavailable, "Không giải mã được API key của Workspace.");
+                run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
                 await _db.SaveChangesAsync(ct);
-                return Fail("Không giải mã được API key Gemini của Workspace. Admin cần nhập lại key.", ResultErrorCodes.AiUnavailable);
+                return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
             }
         }
 
@@ -261,8 +258,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
 internal static class ThumbnailRules
 {
     public static (string? Provider, string Model) ResolveProvider(AiAgentSettings s) =>
-        s.IsMock ? (ImageProviders.Mock, "mock-image-v1")
-        : s.ImageProvider.Equals(ImageProviders.Gemini, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Gemini, s.GeminiImageModel)
+        s.ImageProvider.Equals(ImageProviders.Gemini, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Gemini, s.GeminiImageModel)
         : s.ImageProvider.Equals(ImageProviders.Cloudflare, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Cloudflare, s.CloudflareImageModel)
         : (null, "");
 

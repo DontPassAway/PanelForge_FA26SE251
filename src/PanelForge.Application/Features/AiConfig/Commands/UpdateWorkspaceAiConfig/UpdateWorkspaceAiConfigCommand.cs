@@ -122,7 +122,8 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
             CreatedAt: config.CreatedAt,
             UpdatedAt: config.UpdatedAt,
             MonthlyImageQuota: config.MonthlyImageQuota,
-            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth
+            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
+            ApiKeyUsable: !string.IsNullOrEmpty(_keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty))
         ));
     }
 }

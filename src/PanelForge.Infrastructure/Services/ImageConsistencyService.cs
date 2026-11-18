@@ -220,33 +220,26 @@ public sealed class ImageConsistencyService : IImageConsistencyService
 
         // Cùng cổng với mọi tính năng AI: Workspace bật AI + còn quota (UC-02, E-29). Gọi qua PanelForge.AI như mọi agent khác:
         // một nơi giữ key/gọi provider, cùng timeout/retry/giãn cách. Key chỉ lấy từ Workspace (không còn key dự phòng cấp hệ thống).
-        string provider, model;
-        string? apiKey = null;
-        if (_aiSettings.IsMock) (provider, model) = (AiProtocol.ProviderMock, "mock-fixture-v1");
-        else
-        {
-            var availability = await _usageService.CheckAvailabilityAsync(input.WorkspaceId, cancellationToken);
-            if (!availability.IsAvailable)
-                throw new InvalidOperationException(availability.Message ?? "AI không khả dụng cho Workspace này.");
-            (provider, model) = (AiProtocol.ProviderGemini, _aiSettings.GeminiModel);
-            var config = await _db.WorkspaceAiConfigs.AsNoTracking()
-                .FirstOrDefaultAsync(c => c.WorkspaceId == input.WorkspaceId, cancellationToken);
-            apiKey = string.IsNullOrWhiteSpace(config?.ApiKeyEncrypted) ? null : _keyProtector.Unprotect(config.ApiKeyEncrypted);
-            if (string.IsNullOrWhiteSpace(apiKey))
-                throw new InvalidOperationException("Workspace chưa có API key Gemini hợp lệ (Admin cần nhập/nhập lại key).");
-        }
+        var availability = await _usageService.CheckAvailabilityAsync(input.WorkspaceId, cancellationToken);
+        if (!availability.IsAvailable)
+            throw new InvalidOperationException(availability.Message ?? "AI không khả dụng cho Workspace này.");
+        var (provider, model) = (AiProtocol.ProviderGemini, _aiSettings.GeminiModel);
+        var config = await _db.WorkspaceAiConfigs.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.WorkspaceId == input.WorkspaceId, cancellationToken);
+        var apiKey = string.IsNullOrWhiteSpace(config?.ApiKeyEncrypted) ? null : _keyProtector.Unprotect(config.ApiKeyEncrypted);
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Workspace chưa có API key Gemini hợp lệ (Admin cần nhập/nhập lại key).");
 
         var response = await _aiClient.CompareImagesAsync(new VisionCompareRequest(provider, model, apiKey, input.CharacterName,
             new ImageReference("character-sheet", input.CharacterSheetMimeType, Convert.ToBase64String(input.CharacterSheetBytes)),
             new ImageReference("artwork", input.ArtworkMimeType, Convert.ToBase64String(input.ArtworkBytes))), cancellationToken);
 
         var durationMs = (int)(response.CompletedAtUtc - response.StartedAtUtc).TotalMilliseconds;
-        if (!_aiSettings.IsMock)
-            await _usageService.RecordAsync(new AiUsageEntry(input.WorkspaceId, feature,
-                response.Succeeded ? AiUsageStatus.Succeeded
-                    : response.ErrorCode is "AI_UNAVAILABLE" or "PROVIDER_UNAVAILABLE" ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
-                Model: model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
-                ErrorMessage: response.ErrorMessage, DurationMs: durationMs, UserId: input.UserId), cancellationToken);
+        await _usageService.RecordAsync(new AiUsageEntry(input.WorkspaceId, feature,
+            response.Succeeded ? AiUsageStatus.Succeeded
+                : response.ErrorCode is "AI_UNAVAILABLE" or "PROVIDER_UNAVAILABLE" ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
+            Model: model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
+            ErrorMessage: response.ErrorMessage, DurationMs: durationMs, UserId: input.UserId), cancellationToken);
 
         // Không đoán điểm khi AI lỗi / trả kết quả không đọc được: báo lỗi thay vì "đạt" giả
         if (!response.Succeeded || response.Score is not { } score)

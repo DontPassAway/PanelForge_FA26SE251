@@ -303,7 +303,7 @@ public class NewWorkflowsEndToEndTests
     {
         var decision = new SupervisorDecision(AiProtocol.SchemaVersion, runId, 0, action, "Lý do", null, allowed, false);
         var now = DateTime.UtcNow;
-        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Mock", "mock-fixture-v1", "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
+        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Gemini", "gemini-2.5-flash", "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
             "{}", "{}", AiJson.Serialize(decision), now, now, null, null, 0, null, null);
     }
 
@@ -333,7 +333,7 @@ public class NewWorkflowsEndToEndTests
             .IsSuccess.Should().BeTrue();
 
         var now = DateTime.UtcNow;
-        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Mock", "mock-fixture-v1", "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
+        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Gemini", "gemini-2.5-flash", "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
         var result = await h.RecordHandler().Handle(new RecordAgentStepCommand(runId, writer), default);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
@@ -374,7 +374,7 @@ public class NewWorkflowsEndToEndTests
         var json = """
         {"runId":"a1000000-0000-0000-0000-0000000000a1","seriesId":"a1000000-0000-0000-0000-000000000002","chapterId":"a1000000-0000-0000-0000-000000000003",
          "chapterNumber":3,"sceneId":"a1000000-0000-0000-0000-000000000004","sceneHeading":"H","sceneSummary":null,"brief":"b","readingDirection":"RightToLeft",
-         "chapterVersion":0,"provider":"Mock","model":"mock-fixture-v1","maxRevisionRounds":2,"bible":[],"bibleRevisionIds":[],"baselineScript":[]}
+         "chapterVersion":0,"provider":"Gemini","model":"gemini-2.5-flash","maxRevisionRounds":2,"bible":[],"bibleRevisionIds":[],"baselineScript":[]}
         """;
 
         var ctx = AiJson.Deserialize<AgentContext>(json)!;

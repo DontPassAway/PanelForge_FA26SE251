@@ -36,7 +36,7 @@ public sealed class CopilotShortenRepairTests
 
     private static Task<CopilotResponse> RunAsync(ScriptedChat chat, string task = CopilotTasks.LettererShorten, int? maxChars = 20) =>
         new CopilotAgent(new AgentRunner(chat, Options.Create(new ProviderOptions()))).RunAsync(
-            new CopilotRequest(task, AiProtocol.ProviderMock, "m", null,
+            new CopilotRequest(task, AiProtocol.ProviderGemini, "m", null,
                 new CopilotLine(Guid.NewGuid(), null, Original, null, []), [], maxChars, null), default);
 
     [Fact]

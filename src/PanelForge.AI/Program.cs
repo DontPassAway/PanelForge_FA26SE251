@@ -20,7 +20,6 @@ builder.Services.Configure<BackendOptions>(builder.Configuration.GetSection(Back
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IContextMemoryCache, ContextMemoryCache>();
 
-builder.Services.AddSingleton<LlmResilience>();
 builder.Services.AddSingleton<RunQueue>();
 builder.Services.AddSingleton<ChatClientFactory>();
 builder.Services.AddScoped<MultiAgentWorkflow>();
@@ -67,7 +66,7 @@ app.MapPost("/runs", (AiRunJob job, HttpContext http, RunQueue queue) =>
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
 
     if (job.RunId == Guid.Empty || job.SchemaVersion != AiProtocol.SchemaVersion
-        || job.Provider is not (AiProtocol.ProviderMock or AiProtocol.ProviderGemini)
+        || job.Provider != AiProtocol.ProviderGemini
         || string.IsNullOrWhiteSpace(job.Model)
         || job.MaxRevisionRounds is < 0 or > 5
         || (job.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(job.ApiKey)))
@@ -86,7 +85,7 @@ app.MapPost("/copilot/{task}", async (string task, CopilotRequest req, HttpConte
 {
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
     if (task != req.Task || !PanelForge.AI.Agents.CopilotAgent.Supports(task) || req.SchemaVersion != AiProtocol.SchemaVersion
-        || req.Provider is not (AiProtocol.ProviderMock or AiProtocol.ProviderGemini) || string.IsNullOrWhiteSpace(req.Model)
+        || req.Provider != AiProtocol.ProviderGemini || string.IsNullOrWhiteSpace(req.Model)
         || (req.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(req.ApiKey))
         || (task == CopilotTasks.ImpactRipple ? req.Ripple is not { Changes.Count: > 0 }
             : task == CopilotTasks.BibleStubDraft ? req.Stub is not { Evidence.Count: > 0 }
@@ -130,7 +129,7 @@ app.MapPost("/images/generate", async (ImageGenRequest req, HttpContext http, Im
 app.MapPost("/vision/compare", async (VisionCompareRequest req, HttpContext http, ChatClientFactory factory, CancellationToken ct) =>
 {
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
-    if (req.SchemaVersion != AiProtocol.SchemaVersion || req.Provider is not (AiProtocol.ProviderMock or AiProtocol.ProviderGemini)
+    if (req.SchemaVersion != AiProtocol.SchemaVersion || req.Provider != AiProtocol.ProviderGemini
         || string.IsNullOrWhiteSpace(req.Model) || string.IsNullOrWhiteSpace(req.CharacterName)
         || string.IsNullOrEmpty(req.CharacterSheet.Base64) || string.IsNullOrEmpty(req.Artwork.Base64)
         || (req.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(req.ApiKey)))

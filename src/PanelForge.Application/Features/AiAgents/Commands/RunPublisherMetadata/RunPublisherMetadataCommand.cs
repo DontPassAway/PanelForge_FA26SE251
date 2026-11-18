@@ -86,12 +86,12 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         _db.AiWorkflowRuns.Add(run);
         await _db.SaveChangesAsync(ct);
 
-        var apiKey = CopilotGate.ApiKey(_settings, _keyProtector, p);
+        var apiKey = CopilotGate.ApiKey(_keyProtector, p);
         if (apiKey is "")
         {
-            run.MarkFailed(ResultErrorCodes.AiUnavailable, "Không giải mã được API key của Workspace.");
+            run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
             await _db.SaveChangesAsync(ct);
-            return Fail("Không giải mã được API key của Workspace (key ring đã đổi?). Admin cần nhập lại key.", ResultErrorCodes.AiUnavailable);
+            return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
         }
 
         var response = await _aiClient.RunCopilotAsync(
