@@ -9,7 +9,7 @@ namespace PanelForge.AI.Caching;
 /// <summary>
 /// Bộ nhớ đệm Memory Cache trong tiến trình PanelForge.AI.
 /// Lưu bản tóm tắt Series Bible gần nhất theo (SeriesId, ChapterNumber, Hash bản sửa đổi Bible)
-/// để giảm thiểu 40-60% Token gửi lên Gemini mỗi lần chạy Continuity Agent.
+/// để không phải dựng lại khi Bible chưa đổi. Lượng token giảm đến từ bản nén và chưa được đo; số trong log chỉ là ước tính.
 /// </summary>
 public sealed class ContextMemoryCache : IContextMemoryCache
 {
