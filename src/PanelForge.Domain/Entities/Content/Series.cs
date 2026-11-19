@@ -12,6 +12,12 @@ public class Series : BaseEntity
     public Guid? PipelineDefinitionId { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Synopsis { get; private set; }
+    /// <summary>Metadata phát hành: giới thiệu một câu; null = chưa có.</summary>
+    public string? Logline { get; private set; }
+    /// <summary>Metadata phát hành: câu quảng bá; null = chưa có.</summary>
+    public string? Teaser { get; private set; }
+    /// <summary>Metadata phát hành: độ tuổi (All, 13+, 16+, 18+); null = chưa có.</summary>
+    public string? AgeRating { get; private set; }
     /// <summary>V1.2: story arc của Series (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
     public string? StoryArc { get; private set; }
     public ReadingDirection ReadingDirection { get; private set; }
@@ -134,6 +140,15 @@ public class Series : BaseEntity
         if (!string.IsNullOrWhiteSpace(genre)) Genre = genre.Trim();
         if (!string.IsNullOrWhiteSpace(format)) Format = format.Trim();
         if (releaseScheduleJson != null) ReleaseScheduleJson = releaseScheduleJson.Trim();
+    }
+
+    /// <summary>Ghi metadata phát hành sau khi người có quyền chấp nhận đề xuất.</summary>
+    public void SetReleaseMetadata(string logline, string teaser, string ageRating)
+    {
+        Logline = logline.Trim();
+        Teaser = teaser.Trim();
+        AgeRating = ageRating.Trim();
+        UpdatedAt = DateTime.UtcNow;
     }
 
     /// <summary>Producer/Writer ghi story arc của Series; chuỗi rỗng = xoá.</summary>

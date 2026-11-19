@@ -80,7 +80,7 @@ public sealed class AiAgentsController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/ai/copilot/publisher-metadata — chỉ Producer (Publisher không dùng AI) xin gợi ý logline, synopsis, thể loại, teaser, age rating
-    /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis + genre vào Series.
+    /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis, genre, logline, teaser, ageRating vào Series.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/ai/copilot/publisher-metadata")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]

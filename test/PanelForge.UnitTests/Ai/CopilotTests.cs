@@ -166,6 +166,15 @@ public sealed class CopilotTests
         var after = await h.Db.Series.AsNoTracking().SingleAsync(s => s.Id == AiDemoSeeder.SeriesId);
         after.Genre.Should().Be("Mystery, Drama");
         after.Synopsis.Should().NotBe(before.Synopsis);
+        before.Logline.Should().BeNull();
+        var metadata = System.Text.Json.JsonDocument.Parse(
+            (await h.Db.AiSuggestions.AsNoTracking().SingleAsync(s => s.Id == result.Value.Id)).PayloadJson)
+            .RootElement.EnumerateObject().Single(p => p.Name.Equals("metadata", StringComparison.OrdinalIgnoreCase)).Value;
+        string Field(string name) => metadata.EnumerateObject()
+            .Single(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Value.GetString()!;
+        after.Logline.Should().Be(Field("logline"));
+        after.Teaser.Should().Be(Field("teaser"));
+        after.AgeRating.Should().Be(Field("ageRating"));
         (await h.Db.Chapters.SingleAsync()).VersionVector.Should().Be(0, "metadata Series không đổi nội dung chương");
     }
 

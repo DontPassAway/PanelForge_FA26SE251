@@ -394,8 +394,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     }
 
     /// <summary>
-    /// Publisher Copilot: ghi synopsis + genre vào Series. 409 nếu Series đã bị sửa sau lúc AI chạy (BR-11: không ghi đè thay đổi của người khác).
-    /// Logline/teaser/ageRating không có cột lưu, chỉ nằm trong payload để Publisher dùng.
+    /// Publisher Copilot: ghi synopsis, genre, logline, teaser, ageRating vào Series. 409 nếu Series đã bị sửa sau lúc AI chạy (BR-11: không ghi đè thay đổi của người khác).
     /// </summary>
     private async Task<Applied> ApplySeriesMetadataAsync(AiSuggestion s, CancellationToken ct)
     {
@@ -410,6 +409,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             return Applied.Fail("Synopsis/thể loại của Series đã được sửa sau khi AI đề xuất. Tải lại rồi chạy lại gợi ý.", ResultErrorCodes.Conflict);
 
         series.UpdateDetails(series.Title, sug.Metadata.Synopsis, series.ReadingDirection, sug.Metadata.Genre);
+        series.SetReleaseMetadata(sug.Metadata.Logline, sug.Metadata.Teaser, sug.Metadata.AgeRating);
         return new Applied(null, null, null);
     }
 
