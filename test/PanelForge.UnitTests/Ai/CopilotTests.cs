@@ -34,7 +34,7 @@ public sealed class CopilotTests
     }
 
     private static RunCopilotCommandHandler Handler(AiHarness h) =>
-        new(h.Db, h.Auth, h.Usage.Object, h.KeyProtector.Object, h.AiClient.Object, h.Settings);
+        new(h.Db, h.Auth, h.Usage.Object, h.KeyProtector.Object, h.AiClient.Object, h.Settings, h.Pages.Object);
 
     private static RunCopilotCommand Shorten(Guid lineId, Guid? user = null, int maxChars = 40) =>
         new(AiDemoSeeder.SeriesId, user ?? AiHarness.Letterer, CopilotTasks.LettererShorten, lineId, null, maxChars);
@@ -52,7 +52,7 @@ public sealed class CopilotTests
         (await h.Db.ScriptLines.SingleAsync(l => l.Id == lineId)).DialogueText.Should().Be(LongLine, "AI không ghi thẳng vào script");
         (await h.RunAsync(result.Value.RunId)).Status.Should().Be(AiRunStatus.Completed);
 
-        var accept = await h.ReviewAsync(result.Value.Id, AiSuggestionStatus.Accepted, AiHarness.Letterer, chapterVersion: 0);
+        var accept = await h.ReviewAsync(result.Value.Id, AiSuggestionStatus.Accepted, AiHarness.Writer, chapterVersion: 0);
 
         accept.IsSuccess.Should().BeTrue(accept.ErrorMessage);
         var text = (await h.Db.ScriptLines.SingleAsync(l => l.Id == lineId)).DialogueText!;
@@ -166,6 +166,15 @@ public sealed class CopilotTests
         var after = await h.Db.Series.AsNoTracking().SingleAsync(s => s.Id == AiDemoSeeder.SeriesId);
         after.Genre.Should().Be("Mystery, Drama");
         after.Synopsis.Should().NotBe(before.Synopsis);
+        before.Logline.Should().BeNull();
+        var metadata = System.Text.Json.JsonDocument.Parse(
+            (await h.Db.AiSuggestions.AsNoTracking().SingleAsync(s => s.Id == result.Value.Id)).PayloadJson)
+            .RootElement.EnumerateObject().Single(p => p.Name.Equals("metadata", StringComparison.OrdinalIgnoreCase)).Value;
+        string Field(string name) => metadata.EnumerateObject()
+            .Single(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Value.GetString()!;
+        after.Logline.Should().Be(Field("logline"));
+        after.Teaser.Should().Be(Field("teaser"));
+        after.AgeRating.Should().Be(Field("ageRating"));
         (await h.Db.Chapters.SingleAsync()).VersionVector.Should().Be(0, "metadata Series không đổi nội dung chương");
     }
 

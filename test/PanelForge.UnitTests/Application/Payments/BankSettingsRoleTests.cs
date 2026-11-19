@@ -37,17 +37,17 @@ public class BankSettingsRoleTests
         controllerAttr.Should().NotBeNull();
         controllerAttr!.Roles.Should().Be("Publisher,Admin");
 
-        // 2. Duyệt thanh toán VietQR: Dành riêng cho Admin, Publisher KHÔNG được duyệt (403 Forbidden)
+        // 2. Duyệt thanh toán VietQR: Cho phép Publisher và Admin đối soát & duyệt
         var approveMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.ApprovePayment));
         var approveAttr = approveMethod!.GetCustomAttribute<AuthorizeAttribute>();
         approveAttr.Should().NotBeNull();
-        approveAttr!.Roles.Should().Be("Admin");
+        approveAttr!.Roles.Should().Be("Publisher,Admin");
 
-        // 3. Từ chối thanh toán VietQR: Dành riêng cho Admin, Publisher KHÔNG được từ chối (403 Forbidden)
+        // 3. Từ chối thanh toán VietQR: Cho phép Publisher và Admin từ chối kèm lý do
         var rejectMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.RejectPayment));
         var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
         rejectAttr.Should().NotBeNull();
-        rejectAttr!.Roles.Should().Be("Admin");
+        rejectAttr!.Roles.Should().Be("Publisher,Admin");
 
         // 4. Đọc & Cập nhật ngân hàng: Kế thừa [Authorize(Roles = "Publisher,Admin")] từ Controller level
         var getBankMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.GetBankSettings));

@@ -8,7 +8,6 @@ using Microsoft.Extensions.Options;
 using OpenAI;
 using PanelForge.AI.Agents;
 using PanelForge.AI.Contracts;
-using PanelForge.AI.Demo;
 using PanelForge.AI.Gateway;
 
 namespace PanelForge.AI.Evaluation;
@@ -38,7 +37,7 @@ public sealed record EvalMetrics(int Tp, int Fp, int Tn, int Fn, int Failed)
 /// <summary>
 /// Chấm Continuity Agent trên bộ 80 mẫu có lỗi gieo sẵn (docs/eval). Mỗi mẫu = một ScriptLine, đi qua ĐÚNG đường
 /// production (prompt continuity.md, AgentRunner, ContentRules, LlmGateway) — không qua DB/Backend.
-/// Chạy: dotnet run --project src/PanelForge.AI -- eval [--dataset f] [--bible f] [--out f] [--limit n] [--only SMP-001,..] [--model m] [--mock]
+/// Chạy: dotnet run --project src/PanelForge.AI -- eval [--dataset f] [--bible f] [--out f] [--limit n] [--only SMP-001,..] [--model m]
 /// Key Gemini lấy từ biến môi trường GEMINI_API_KEY.
 /// </summary>
 public static class ContinuityEval
@@ -137,28 +136,22 @@ public static class ContinuityEval
         var model = Arg("--model", "gemini-2.5-flash");
         var limit = int.Parse(Arg("--limit", "0"));
         var only = Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
-        var mock = args.Contains("--mock");
 
         var samples = JsonSerializer.Deserialize<List<EvalSample>>(await File.ReadAllTextAsync(datasetPath))!
             .Where(s => only.Count == 0 || only.Contains(s.Id)).ToList();
         if (limit > 0) samples = samples.Take(limit).ToList();
         var bible = ParseBible(await File.ReadAllTextAsync(biblePath));
 
-        var options = Options.Create(new ProviderOptions { MinCallIntervalMs = mock ? 0 : 6500, Temperature = 0f });
-        IChatClient chat;
-        if (mock) chat = new MockChatClient();
-        else
-        {
+        var options = Options.Create(new ProviderOptions { MinCallIntervalMs = 6500, Temperature = 0f });
             // --endpoint: provider OpenAI-compatible khác (Groq, OpenRouter...) chỉ để so sánh; key từ AI_API_KEY
             var endpoint = Arg("--endpoint", options.Value.GeminiOpenAiEndpoint);
             var key = Environment.GetEnvironmentVariable("AI_API_KEY") ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-            if (string.IsNullOrWhiteSpace(key)) { Console.Error.WriteLine("Thiếu AI_API_KEY/GEMINI_API_KEY (hoặc dùng --mock)."); return 2; }
+            if (string.IsNullOrWhiteSpace(key)) { Console.Error.WriteLine("Thiếu AI_API_KEY/GEMINI_API_KEY."); return 2; }
             var client = new OpenAIClient(new ApiKeyCredential(key), new OpenAIClientOptions { Endpoint = new Uri(endpoint) });
-            chat = new LlmGateway(client.GetChatClient(model).AsIChatClient(), new LlmResilience(options));
-        }
+        IChatClient chat = new LlmGateway(client.GetChatClient(model).AsIChatClient(), new LlmResilience(options));
         var agent = new ContinuityAgent(new AgentRunner(chat, options));
 
-        Console.WriteLine($"Bible: {bible.Count} mục | Mẫu: {samples.Count} | Model: {(mock ? "mock" : model)} | Prompt: {ContinuityAgent.Prompt.Ref}");
+        Console.WriteLine($"Bible: {bible.Count} mục | Mẫu: {samples.Count} | Model: {model} | Prompt: {ContinuityAgent.Prompt.Ref}");
         // --resume: giữ kết quả đã chấm (Predicted != null) của lần trước, chỉ chạy mẫu còn thiếu/lỗi
         var results = new List<EvalResult>();
         if (resumePath.Length > 0)
@@ -200,7 +193,7 @@ public static class ContinuityEval
 
         var report = new
         {
-            ranAt = DateTime.UtcNow, model = mock ? "mock" : model, promptRef = ContinuityAgent.Prompt.Ref,
+            ranAt = DateTime.UtcNow, model, promptRef = ContinuityAgent.Prompt.Ref,
             dataset = Path.GetFileName(datasetPath), bibleEntries = bible.Count, samples = samples.Count, notRun = missing,
             rule = "predicted error = >=1 finding Blocking/Warning",
             overall = Metrics(overall), byCategory = byCategory.ToDictionary(kv => kv.Key, kv => Metrics(kv.Value)),

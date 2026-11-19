@@ -36,7 +36,6 @@ public sealed class ImageGeneratorFactory(IHttpClientFactory http, IOptions<Imag
     {
         ImageProviders.Gemini => new GeminiImageGenerator(http.CreateClient(HttpClientName), options.Value),
         ImageProviders.Cloudflare => new CloudflareImageGenerator(http.CreateClient(HttpClientName), options.Value),
-        ImageProviders.Mock => new MockImageGenerator(),
         _ => null
     };
 }
@@ -157,12 +156,3 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
     }
 }
 
-/// <summary>Chế độ Mock (dev/test, không gọi mạng): trả ảnh PNG 1×1.</summary>
-public sealed class MockImageGenerator : IImageGenerator
-{
-    public static readonly byte[] Png1x1 = Convert.FromBase64String(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-
-    public Task<ImageGenResponse> GenerateAsync(ImageGenRequest req, CancellationToken ct) =>
-        Task.FromResult(ImageGen.Ok(DateTime.UtcNow, Png1x1, "image/png"));
-}

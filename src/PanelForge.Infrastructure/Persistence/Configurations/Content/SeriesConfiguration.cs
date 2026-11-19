@@ -35,6 +35,10 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("synopsis")
                .HasColumnType("text");
 
+        builder.Property(s => s.Logline).HasColumnName("logline").HasColumnType("varchar(200)");
+        builder.Property(s => s.Teaser).HasColumnName("teaser").HasColumnType("varchar(300)");
+        builder.Property(s => s.AgeRating).HasColumnName("age_rating").HasColumnType("varchar(10)");
+
         builder.Property(s => s.CoverImageSha256)
                .HasColumnName("cover_image_sha256")
                .HasColumnType("varchar(64)");

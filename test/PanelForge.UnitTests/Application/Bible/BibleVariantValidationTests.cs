@@ -59,6 +59,7 @@ public class BibleVariantValidationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.StageName.Should().Be("Teen");
+        result.Value.VariantLabel.Should().Be("Teen");
         result.Value.ReviewStatus.Should().Be(BibleRevisionStatus.Draft);
         _entry.Revisions.Should().Contain(r => r.StageName == "Teen");
     }

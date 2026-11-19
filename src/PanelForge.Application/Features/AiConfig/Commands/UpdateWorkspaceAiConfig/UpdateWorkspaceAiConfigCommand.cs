@@ -69,8 +69,8 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
         var allowedModels = request.AllowedModels is { Count: > 0 }
             ? request.AllowedModels
             : (config != null
-                ? (JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? ["gemini-1.5-flash", "gemini-1.5-pro"])
-                : ["gemini-1.5-flash", "gemini-1.5-pro"]);
+                ? (JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [.. WorkspaceAiConfig.DefaultAllowedModels])
+                : [.. WorkspaceAiConfig.DefaultAllowedModels]);
 
         var modelsJson = JsonSerializer.Serialize(allowedModels);
 
@@ -122,7 +122,8 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
             CreatedAt: config.CreatedAt,
             UpdatedAt: config.UpdatedAt,
             MonthlyImageQuota: config.MonthlyImageQuota,
-            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth
+            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
+            ApiKeyUsable: !string.IsNullOrEmpty(_keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty))
         ));
     }
 }

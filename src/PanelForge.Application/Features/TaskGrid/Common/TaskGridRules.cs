@@ -96,9 +96,10 @@ internal static class TaskGridRules
 
     /// <summary>
     /// Thành viên rời Workspace: ô chưa nộp của họ về Unassigned để Producer giao lại; ô đã nộp/đang duyệt giữ nguyên
-    /// để Editor vẫn chấm được bài (BR-01: không bỏ thành quả).
+    /// để Editor vẫn chấm được bài (BR-01: không bỏ thành quả). Báo Owner, Producer, Editor các chương còn sửa được để giao lại.
     /// </summary>
-    public static async Task ReleaseMemberCellsAsync(IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
+    public static async Task ReleaseMemberCellsAsync(
+        IPanelForgeDbContext db, Guid userId, Guid workspaceId, Guid ownerId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
     {
         var cells = await UnfinishedCellsOf(db, userId, seriesIds)
             .Where(t => t.Status == StageTaskStatus.Assigned || t.Status == StageTaskStatus.InProgress ||
@@ -107,6 +108,19 @@ internal static class TaskGridRules
         var lotIds = cells.Select(c => c.LotId).ToList();
         foreach (var c in cells) c.Unassign();
         await RefreshLotsAsync(db, lotIds, cells, ct);
+        if (cells.Count == 0) return;
+
+        var recipients = (await db.WorkspaceMembers.AsNoTracking()
+                .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active
+                            && (m.Role == WorkspaceRole.Producer || m.Role == WorkspaceRole.Editor))
+                .Select(m => m.UserId).ToListAsync(ct))
+            .Append(ownerId).Where(id => id != userId).Distinct().ToList();
+        var chapterIds = cells.Select(c => c.ChapterId).Distinct().ToList();
+        var chapters = await db.Chapters.AsNoTracking().Where(c => chapterIds.Contains(c.Id)).ToListAsync(ct);
+        foreach (var chapter in chapters.Where(c => c.IsContentEditable))
+            foreach (var recipient in recipients)
+                db.Notifications.Add(TaskGridNotifications.NeedsReassign(
+                    recipient, chapter.Id, chapter.ChapterNumber, cells.Count(c => c.ChapterId == chapter.Id)));
     }
 
     /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>

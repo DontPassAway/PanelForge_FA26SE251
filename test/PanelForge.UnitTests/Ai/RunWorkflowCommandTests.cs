@@ -28,7 +28,7 @@ public class RunWorkflowCommandTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Status.Should().Be(AiRunStatus.Queued);
-        result.Value.Provider.Should().Be("Mock");
+        result.Value.Provider.Should().Be("Gemini");
         var run = await h.RunAsync(result.Value.RunId);
         run.WorkspaceId.Should().Be(AiDemoSeeder.WorkspaceId);
         run.RequestedByUserId.Should().Be(AiHarness.Writer);
@@ -42,7 +42,7 @@ public class RunWorkflowCommandTests
 
         // Job giao cho AI service không mang API key khi chạy Mock
         h.LastJob!.RunId.Should().Be(run.Id);
-        h.LastJob.ApiKey.Should().BeNull();
+        h.LastJob!.ApiKey.Should().Be("test-key");
         h.LastJob.ToString().Should().NotContain("sk-");
     }
 
@@ -127,7 +127,6 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_SendsDecryptedKeyOnlyInJob_AndChecksQuota()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.KeyProtector.Setup(k => k.Unprotect(It.IsAny<string>())).Returns("test-key-123");
         var config = await h.Db.WorkspaceAiConfigs.SingleAsync();
         config.UpdateSettings("Google Gemini", "ciphertext", true, 1_000_000, "[\"gemini-2.5-flash\"]");
@@ -148,7 +147,6 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_QuotaExceeded_IsBlocked_AndNotFallenBackToMock()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.Usage.Setup(u => u.CheckAvailabilityAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AiAvailability.Blocked(AiUsageStatus.QuotaExceeded, "Hết hạn mức."));
 
@@ -163,7 +161,6 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_ModelNotAllowedForWorkspace_IsRejected()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.Settings.GeminiModel = "gemini-9-ultra";
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);

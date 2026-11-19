@@ -11,6 +11,7 @@ namespace PanelForge.Domain.Entities.Workflow;
 public class StageTask : BaseEntity
 {
     public const int MaxOutdatedReasonLength = 500;
+    public const string ScriptChangedReason = "Kịch bản của trang đã được sửa sau khi mở lại kịch bản.";
 
     public Guid SeriesId { get; private set; }
     public Guid ChapterId { get; private set; }

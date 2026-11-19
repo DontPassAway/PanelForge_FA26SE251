@@ -49,7 +49,7 @@ public sealed class MultiAgentWorkflow
         var runner = new AgentRunner(chat, _options);
         var steps = new StepWriter(_backend, job, _logger);
 
-        // Gemini: kiểm tra model còn khả dụng trước khi tốn lượt gọi; lỗi → step thất bại rõ ràng, KHÔNG fallback sang Mock
+        // Gemini: kiểm tra model còn khả dụng trước khi tốn lượt gọi; lỗi → step thất bại rõ ràng
         if (job.Provider == AiProtocol.ProviderGemini)
         {
             var probe = await _factory.ProbeGeminiModelAsync(job, ct);

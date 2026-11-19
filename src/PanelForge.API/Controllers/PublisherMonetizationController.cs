@@ -57,12 +57,13 @@ public sealed class PublisherMonetizationController : ControllerBase
     public async Task<IActionResult> ResetPreviewPages([FromRoute] Guid chapterId, CancellationToken ct)
         => ToResult(await _mediator.Send(new ResetChapterPreviewPagesCommand(chapterId), ct));
 
-    /// <summary>PUT /api/publisher/chapters/{chapterId}/language-prices — giá chương trả phí theo từng ngôn ngữ.</summary>
+    /// <summary>PUT /api/publisher/chapters/{chapterId}/language-prices — giá chương trả phí theo từng ngôn ngữ (kèm tùy chọn khóa/giá gốc).</summary>
     [HttpPut("chapters/{chapterId:guid}/language-prices")]
     [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> SetLanguagePrices(
         [FromRoute] Guid chapterId, [FromBody] SetChapterLanguagePricesRequest request, CancellationToken ct)
-        => ToResult(await _mediator.Send(new SetChapterLanguagePricesCommand(chapterId, request.Prices ?? []), ct));
+        => ToResult(await _mediator.Send(new SetChapterLanguagePricesCommand(
+            chapterId, request.Prices ?? [], request.IsLocked, request.BasePriceVnd), ct));
 
     /// <summary>GET /api/publisher/chapters/{chapterId}/pages/{pageId}/image?lang= — ảnh xem trước (cả chương chưa phát hành).</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]

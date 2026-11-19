@@ -35,7 +35,7 @@ public sealed record AgentCall<T>(
 
 /// <summary>
 /// Chạy một agent: ChatClientAgent (Microsoft Agent Framework) trên IChatClient → parse JSON → validate bằng code →
-/// nếu sai cho phép đúng MỘT lần sửa output; sau đó ghi lỗi rõ ràng. Không có tool-call tự do: dữ liệu vào là context đã chụp.
+/// nếu sai cho phép sửa output (mặc định MỘT lần); sau đó ghi lỗi rõ ràng. Không có tool-call tự do: dữ liệu vào là context đã chụp.
 /// </summary>
 public sealed class AgentRunner
 {
@@ -55,14 +55,15 @@ public sealed class AgentRunner
 
     public async Task<AgentCall<T>> RunAsync<T>(
         PromptInfo prompt, string userMessage,
-        Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct)
+        Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct,
+        int maxRepairAttempts = MaxRepairAttempts)
     {
         var started = DateTime.UtcNow;
         long? inTokens = null, outTokens = null;
         var parameters = AiJson.Serialize(new
         {
             temperature = _options.Temperature, maxOutputTokens = _options.MaxOutputTokens,
-            responseFormat = "json", maxRepairAttempts = MaxRepairAttempts
+            responseFormat = "json", maxRepairAttempts
         });
         // Chỉ đạo của Supervisor cho agent này (nếu có): đưa vào cuối tin nhắn, đánh dấu rõ là dữ liệu điều phối
         if (!string.IsNullOrWhiteSpace(Instruction))
@@ -70,7 +71,7 @@ public sealed class AgentRunner
         var message = userMessage;
         IReadOnlyList<string> errors = [];
 
-        for (var attempt = 0; attempt <= MaxRepairAttempts; attempt++)
+        for (var attempt = 0; attempt <= maxRepairAttempts; attempt++)
         {
             try
             {
@@ -115,8 +116,8 @@ public sealed class AgentRunner
         }
 
         return Failure<T>("INVALID_OUTPUT",
-            "AI trả kết quả không hợp lệ (đã thử sửa " + MaxRepairAttempts + " lần):\n• " + string.Join("\n• ", errors.Take(6)),
-            inTokens, outTokens, MaxRepairAttempts, started, parameters);
+            "AI trả kết quả không hợp lệ (đã thử sửa " + maxRepairAttempts + " lần):\n• " + string.Join("\n• ", errors.Take(6)),
+            inTokens, outTokens, maxRepairAttempts, started, parameters);
     }
 
     private static AgentCall<T> Failure<T>(

@@ -38,15 +38,27 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
 
         if (chapter == null)
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
-        if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
+
+        var isPricingOnlyUpdate =
+            (command.IsLocked.HasValue || command.PriceVnd.HasValue) &&
+            !command.IncrementVersion &&
+            command.Outline == null &&
+            (command.Title == null || string.Equals(command.Title.Trim(), chapter.Title ?? string.Empty, StringComparison.Ordinal)) &&
+            (command.TargetReleaseDate == null || command.TargetReleaseDate == chapter.TargetReleaseDate);
+
+        if (!isPricingOnlyUpdate && ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
             return Result<ChapterDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+
         // BR-11: client gửi version đã đọc thì phải khớp, không thì người khác vừa sửa → 409 thay vì đè
         if (command.ExpectedChapterVersion is { } expected && expected != chapter.VersionVector)
             return Result<ChapterDto>.Failure(
                 $"Chương vừa được người khác cập nhật (expected={expected}, actual={chapter.VersionVector}). Tải lại rồi thử lại.",
                 ResultErrorCodes.Conflict);
 
-        chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
+        if (!isPricingOnlyUpdate)
+        {
+            chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
+        }
         chapter.UpdatedBy = command.UserId.ToString();
 
         if (command.IsLocked.HasValue || command.PriceVnd.HasValue)

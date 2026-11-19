@@ -195,7 +195,7 @@ public sealed class ChaptersController : ControllerBase
     /// Cập nhật tên, ngày phát hành mục tiêu hoặc duyệt tăng Version của chương (Release Calendar).
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor, WorkspaceRole.Publisher)]
     [ProducesResponseType(typeof(ChapterDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

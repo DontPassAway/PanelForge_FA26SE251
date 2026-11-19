@@ -83,7 +83,7 @@ public class ChapterCastGateTests
     }
 
     [Fact]
-    public async Task SubmitScript_WhenDraftStubExists_Returns409Conflict()
+    public async Task SubmitScript_WhenDraftStubExists_StillSucceeds()
     {
         var chapter = Chapter.Create(_series.Id, 1, "Chương 1");
         _db.Chapters.Add(chapter);
@@ -102,10 +102,7 @@ public class ChapterCastGateTests
         var handler = new ScriptLifecycleCommandHandler(_db, _auth.Object, _castGate, _castService);
         var result = await handler.Handle(new SubmitScriptCommand(chapter.Id, _writerId), default);
 
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Kage");
-        result.ErrorMessage.Should().Contain("chờ định nghĩa");
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]

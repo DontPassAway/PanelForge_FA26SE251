@@ -29,12 +29,39 @@ public static class ContentRules
                 errors.Add($"Dòng {line.Order} phải có dialogue hoặc stageDirection.");
             if (line.SpeakerId is { } sp && !validSpeakerIds.Contains(sp))
                 errors.Add($"speakerId của dòng {line.Order} không thuộc Bible của Series.");
+            CheckScriptStructure(errors, line);
         }
         if (orders.Count > 0 && !orders.OrderBy(o => o).SequenceEqual(Enumerable.Range(1, orders.Count)))
             errors.Add("order của các dòng phải liên tục từ 1.");
         foreach (var id in draft.BibleRevisionIds)
             if (!bibleRevisionIds.Contains(id)) errors.Add($"bibleRevisionId {id} không nằm trong snapshot của run.");
         return errors;
+    }
+
+    private static void CheckScriptStructure(List<string> errors, ScriptDraftLine line)
+    {
+        if (line.SpeakerLabel?.Trim().Length > 100) errors.Add($"Tên người nói của dòng {line.Order} vượt 100 ký tự.");
+        var kind = line.Kind ?? (string.IsNullOrWhiteSpace(line.Dialogue) ? "Action" : "Dialogue");
+        var spoken = kind is "Dialogue" or "Thought";
+        if (!spoken && kind is not ("Action" or "Narration" or "Sfx"))
+        {
+            errors.Add($"kind của dòng {line.Order} không hợp lệ (Action, Dialogue, Thought, Narration, Sfx).");
+            return;
+        }
+        if (line.Kind is not null && string.IsNullOrWhiteSpace(spoken ? line.Dialogue : line.StageDirection))
+            errors.Add($"Dòng {line.Order} loại {kind} thiếu nội dung.");
+        if (kind == "Action" && !string.IsNullOrWhiteSpace(line.SpeakerLabel))
+            errors.Add($"Dòng {line.Order} loại Action không được có người nói.");
+        if (line.Refs is not { Count: > 0 }) return;
+        if (spoken) errors.Add($"Dòng {line.Order}: chỉ Action, Narration, Sfx được gắn tham chiếu Bible.");
+        var text = line.StageDirection ?? line.Dialogue ?? "";
+        foreach (var r in line.Refs)
+        {
+            if (string.IsNullOrWhiteSpace(r.SurfaceText) || !text.Contains(r.SurfaceText.Trim(), StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Dòng {line.Order}: tham chiếu '{r.SurfaceText}' không có trong nội dung dòng.");
+            if (r.BibleEntryId is null && (string.IsNullOrWhiteSpace(r.NewName) || r.NewCategory is not ("Character" or "Location" or "Prop")))
+                errors.Add($"Dòng {line.Order}: tham chiếu '{r.SurfaceText}' cần code Bible hoặc newName kèm category Character, Location, Prop.");
+        }
     }
 
     /// <param name="bibleByRevision">revisionId → (entryId, văn bản Bible dùng làm căn cứ: tên + mô tả).</param>

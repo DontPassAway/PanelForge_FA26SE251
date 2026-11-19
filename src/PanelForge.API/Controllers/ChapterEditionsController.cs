@@ -95,10 +95,10 @@ public sealed class ChapterEditionsController : ControllerBase
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/editions/{lang}/publish
-    /// Producer phát hành ấn bản dịch đã nghiệm thu (Approved).
+    /// Producer / Publisher phát hành ấn bản dịch đã nghiệm thu (Approved).
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/editions/{lang}/publish")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Publisher)]
     public async Task<IActionResult> PublishEdition(
         Guid chapterId, string lang, CancellationToken ct)
     {

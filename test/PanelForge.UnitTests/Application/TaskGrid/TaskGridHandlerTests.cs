@@ -20,6 +20,8 @@ using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
+using PanelForge.Application.Features.TaskGrid.Common;
+using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
@@ -48,6 +50,7 @@ public class TaskGridHandlerTests
         public readonly Chapter Chapter;
         public readonly PipelineStage Pencil, Ink, Color, Lettering, Review;
         public readonly List<Page> Pages = [];
+        public readonly List<Panel> Panels = [];
         public readonly List<StageTask> Tasks = [];
         public readonly List<StageTaskLot> Lots = [];
         public readonly List<StageTaskSubmission> Submissions = [];
@@ -64,6 +67,9 @@ public class TaskGridHandlerTests
         private readonly List<WorkspaceMember> _members;
 
         public void AddMember(Guid userId, WorkspaceRole role) => _members.Add(WorkspaceMember.Create(_workspaceId, userId, role));
+        public void RemoveMember(Guid userId) => _members.RemoveAll(m => m.UserId == userId);
+        public Task<Result<AutoAssignPlanDto>> Plan() =>
+            new GetAutoAssignPlanQueryHandler(Db.Object).Handle(new GetAutoAssignPlanQuery(Chapter.Id), default);
 
         public Fixture()
         {
@@ -108,14 +114,14 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.Users).Returns(DbSetMockHelper.CreateDbSetMock(Users));
             // Mỗi trang một panel và ảnh cả trang ở mọi công đoạn, để điều kiện nộp (CF2) của ô cấp Trang được thoả.
             // CreatedAt ở tương lai: vẫn tính là "bản mới" sau lần bị trả về.
-            var panels = Pages.Select(p => Panel.Create(p.Id, 1, 1, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}")).ToList();
+            Panels.AddRange(Pages.Select(p => Panel.Create(p.Id, 1, 1, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}")));
             Artwork = Pages.SelectMany(p => new[] { Pencil, Ink, Color, Lettering, Review }.Select(s =>
             {
                 var r = AssetReference.Create(Guid.NewGuid(), workspaceId, Chapter.Id, p.Id, s.Id, 1, null, "art.png", Guid.NewGuid());
                 r.CreatedAt = DateTime.UtcNow.AddYears(1);
                 return r;
             })).ToList();
-            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(panels));
+            Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(Panels));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(Artwork));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
@@ -127,6 +133,7 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(_members));
             Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+            Db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace>()));
         }
 
         public Task<Result<GenerateStageTasksResultDto>> Generate() =>
@@ -159,6 +166,129 @@ public class TaskGridHandlerTests
                 Lot(Color, ArtistId, Cell(Color, 0)), Lot(Lettering, LettererId, Cell(Lettering, 0)));
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         }
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_SplitsContiguousPages_KeepsSameArtistAcrossStages_AndCanBeApplied()
+    {
+        var f = new Fixture();
+        var secondArtist = Guid.NewGuid();
+        f.AddMember(secondArtist, WorkspaceRole.Artist);
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 3, default, 1200, 1800, 300));
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 4, default, 1200, 1800, 300));
+        await f.Generate();
+
+        var plan = (await f.Plan()).Value!;
+
+        var pencil = plan.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).ToList();
+        pencil.Select(l => l.PageNumbers).Should().BeEquivalentTo(new[] { new[] { 1, 2 }, new[] { 3, 4 } });
+        pencil.Select(l => l.AssigneeUserId).Should().BeEquivalentTo(new[] { f.ArtistId, secondArtist });
+        var ink = plan.Lots.Where(l => l.PipelineStageId == f.Ink.Id).ToList();
+        ink.Single(l => l.PageNumbers.Contains(1)).AssigneeUserId.Should().Be(pencil.Single(l => l.PageNumbers.Contains(1)).AssigneeUserId);
+        plan.Lots.Single(l => l.PipelineStageId == f.Review.Id).AssigneeUserId.Should().Be(f.EditorId);
+        plan.Lots.Should().NotContain(l => l.AssigneeUserId == f.PendingArtistId);
+        plan.Skipped.Should().BeEmpty();
+        f.Lots.Should().BeEmpty("lập phương án không được ghi gì");
+
+        var applied = await f.Assign(false, plan.Lots.Select(l =>
+            new StageTaskLotRequest(l.PipelineStageId, l.AssigneeUserId, l.TaskIds)).ToArray());
+        applied.IsSuccess.Should().BeTrue(applied.ErrorMessage);
+        f.Tasks.Should().OnlyContain(t => t.Status == StageTaskStatus.Assigned);
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_PrefersLessLoadedMember_AndReportsStageWithoutCandidate()
+    {
+        var f = new Fixture();
+        var secondArtist = Guid.NewGuid();
+        f.AddMember(secondArtist, WorkspaceRole.Artist);
+        f.RemoveMember(f.LettererId);
+        await f.Generate();
+        (await f.Assign(false, f.Lot(f.Color, f.ArtistId, f.Cell(f.Color, 0), f.Cell(f.Color, 1)))).IsSuccess.Should().BeTrue();
+
+        var plan = (await f.Plan()).Value!;
+
+        var pencil = plan.Lots.Single(l => l.PipelineStageId == f.Pencil.Id);
+        pencil.AssigneeUserId.Should().Be(secondArtist, "người kia đang giữ 2 ô Color");
+        pencil.TaskIds.Should().HaveCount(2);
+        pencil.OpenWorkUnits.Should().Be(0);
+        plan.Lots.Single(l => l.PipelineStageId == f.Ink.Id).AssigneeUserId.Should().Be(secondArtist, "Ink nối đúng người vẽ Pencil");
+        plan.Skipped.Single().PipelineStageId.Should().Be(f.Lettering.Id);
+        plan.Skipped.Single().TaskCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_BalancesByPanelCount()
+    {
+        var f = new Fixture();
+        f.AddMember(Guid.NewGuid(), WorkspaceRole.Artist);
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 3, default, 1200, 1800, 300));
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 4, default, 1200, 1800, 300));
+        for (var i = 2; i <= 6; i++)
+            f.Panels.Add(Panel.Create(f.Pages[0].Id, i, i, "{\"x\":0,\"y\":0,\"width\":10,\"height\":10}"));
+        await f.Generate();
+
+        var pencil = (await f.Plan()).Value!.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).ToList();
+
+        pencil.Select(l => l.WorkUnits).Should().BeEquivalentTo(new[] { 6, 3 }, "trang 1 có 6 panel, nặng bằng ba trang còn lại cộng lại");
+        pencil.Select(l => l.PageNumbers.Count).Should().BeEquivalentTo(new[] { 1, 3 });
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_TieGoesToMemberAssignedLongestAgo_NotLowestId()
+    {
+        var f = new Fixture();
+        var secondArtist = Guid.NewGuid();
+        f.AddMember(secondArtist, WorkspaceRole.Artist);
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 3, default, 1200, 1800, 300));
+        f.Lots.Add(StageTaskLot.Create(f.Chapter.SeriesId, Guid.NewGuid(), f.Pencil.Id, f.ArtistId, WorkspaceRole.Artist,
+            f.ProducerId, null, null));
+        await f.Generate();
+
+        var pencil = (await f.Plan()).Value!.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).ToList();
+
+        pencil.Single(l => l.AssigneeUserId == secondArtist).PageNumbers.Should().Equal(1, 2);
+        pencil.Single(l => l.AssigneeUserId == f.ArtistId).PageNumbers.Should().Equal(3);
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_SuggestsDueDateBackFromReleaseDate()
+    {
+        var f = new Fixture();
+        f.Chapter.UpdateDetails("Chương 1", new DateOnly(2027, 1, 20));
+        f.Ink.UpdateDetails("Ink", null, WorkspaceRole.Artist, false, 2);
+        f.Color.UpdateDetails("Color", null, WorkspaceRole.Artist, true, 3);
+        f.Lettering.UpdateDetails("Lettering", null, WorkspaceRole.Letterer, false, 1);
+        f.Review.UpdateDetails("Review", null, WorkspaceRole.Editor, true, 2);
+        await f.Generate();
+
+        var plan = (await f.Plan()).Value!;
+
+        plan.Lots.First(l => l.PipelineStageId == f.Pencil.Id).SuggestedDueDate
+            .Should().Be(new DateTime(2027, 1, 12, 23, 59, 0, DateTimeKind.Utc), "trừ 2 + 3 + 1 + 2 ngày của các công đoạn sau");
+        plan.Lots.Single(l => l.PipelineStageId == f.Review.Id).SuggestedDueDate
+            .Should().Be(new DateTime(2027, 1, 20, 23, 59, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task ReleaseMemberCells_NotifiesCoordinators_AndPlanProposesReplacement()
+    {
+        var f = new Fixture();
+        var producer = Guid.NewGuid();
+        var replacement = Guid.NewGuid();
+        f.AddMember(producer, WorkspaceRole.Producer);
+        f.AddMember(replacement, WorkspaceRole.Artist);
+        await f.AssignPageOne();
+        var seriesIds = new[] { f.Chapter.SeriesId };
+        f.RemoveMember(f.ArtistId);
+        f.Notifications.Clear();
+
+        await TaskGridRules.ReleaseMemberCellsAsync(f.Db.Object, f.ArtistId, f.WorkspaceId, f.ProducerId, seriesIds, default);
+
+        f.Notifications.Where(n => n.Title == "Có 3 ô cần giao lại").Select(n => n.UserId)
+            .Should().BeEquivalentTo(new[] { f.ProducerId, producer, f.EditorId });
+        var plan = (await f.Plan()).Value!;
+        plan.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).Should().OnlyContain(l => l.AssigneeUserId == replacement);
     }
 
     [Fact]
@@ -383,12 +513,22 @@ public class TaskGridHandlerTests
         await f.Start(pencil, f.ArtistId);
         var helper = Guid.NewGuid();
         f.AddMember(helper, WorkspaceRole.Artist);
+        f.AddMember(f.ProducerId, WorkspaceRole.Producer);
         var handler = new AssignStageTaskLotsCommandHandler(f.Db.Object);
         StageTaskLotRequest Lot() => new(f.Pencil.Id, helper, [pencil.Id]);
+        var seen = new Dictionary<Guid, uint> { [pencil.Id] = pencil.RowVersion };
 
         (await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false), default))
             .ErrorCode.Should().Be(ResultErrorCodes.Conflict, "không có cờ reassign thì chỉ giao được ô chưa giao");
-        var moved = await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false, Reassign: true), default);
+        (await handler.Handle(new(f.Chapter.Id, f.EditorId, [Lot()], false, true, true, seen), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Forbidden, "Editor không đổi người ô đã giao");
+        (await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false, Reassign: true), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict, "ô đang làm dở cần xác nhận");
+        (await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false, true, true,
+                new Dictionary<Guid, uint> { [pencil.Id] = pencil.RowVersion + 1 }), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict, "ô đã đổi so với lúc xem");
+        pencil.Status.Should().Be(StageTaskStatus.InProgress, "các lần bị từ chối không đổi gì");
+        var moved = await handler.Handle(new(f.Chapter.Id, f.ProducerId, [Lot()], false, true, true, seen), default);
 
         moved.IsSuccess.Should().BeTrue(moved.ErrorMessage);
         pencil.Status.Should().Be(StageTaskStatus.Assigned, "người mới bấm Bắt đầu lại");

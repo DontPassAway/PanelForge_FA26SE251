@@ -15,7 +15,8 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 /// Người nhận phải là thành viên Active của Workspace, đúng vai trò của công đoạn. <c>DryRun</c> chỉ kiểm tra.
 /// </summary>
 public sealed record AssignStageTaskLotsCommand(
-    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun, bool Reassign = false) : IRequest<Result<AssignStageTaskLotsResultDto>>, ITransactionalCommand;
+    Guid ChapterId, Guid UserId, IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun, bool Reassign = false,
+    bool ConfirmStartedWork = false, IReadOnlyDictionary<Guid, uint>? ExpectedRowVersions = null) : IRequest<Result<AssignStageTaskLotsResultDto>>, ITransactionalCommand;
 
 public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignStageTaskLotsCommand, Result<AssignStageTaskLotsResultDto>>
 {
@@ -43,6 +44,23 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
         var tasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id && allTaskIds.Contains(t.Id)).ToListAsync(ct);
         if (tasks.Count != allTaskIds.Count) return Fail("Có ô không thuộc chương này.", ResultErrorCodes.NotFound);
+
+        if (cmd.Reassign)
+        {
+            // Đổi người ô đã giao thuộc quyền Producer; Editor chỉ giao ô chưa có người
+            var isProducer = await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w => w.Id == workspaceId && w.OwnerId == cmd.UserId, ct)
+                || await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == cmd.UserId
+                    && m.Status == WorkspaceMemberStatus.Active && m.Role == WorkspaceRole.Producer, ct);
+            if (!isProducer) return Fail("Chỉ Producer được đổi người cho ô đã giao.", ResultErrorCodes.Forbidden);
+
+            var started = tasks.Where(t => t.Status is StageTaskStatus.InProgress or StageTaskStatus.ReworkRequired).ToList();
+            if (started.Count > 0 && !cmd.ConfirmStartedWork)
+                return Fail($"{started.Count} ô đang có người làm dở. Cần xác nhận đổi người; người đang làm sẽ bị gỡ khỏi các ô này.",
+                    ResultErrorCodes.Conflict);
+            if (started.FirstOrDefault(t => cmd.ExpectedRowVersions is null
+                    || !cmd.ExpectedRowVersions.TryGetValue(t.Id, out var seen) || seen != t.RowVersion) is { } changed)
+                return Fail($"Ô {changed.Id} vừa thay đổi hoặc thiếu phiên bản. Tải lại lưới rồi thử lại.", ResultErrorCodes.Conflict);
+        }
 
         var stageIds = cmd.Lots.Select(l => l.PipelineStageId).Distinct().ToList();
         var stages = await _db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);

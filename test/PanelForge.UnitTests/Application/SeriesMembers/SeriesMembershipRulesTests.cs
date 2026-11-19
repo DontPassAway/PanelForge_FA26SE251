@@ -47,15 +47,12 @@ public class SeriesMembershipRulesTests
     }
 
     [Fact]
-    public async Task SeriesAccess_RequiresSeriesMembership_AndActiveWorkspaceMembership()
+    public async Task SeriesAccess_AllowsActiveWorkspaceMember_WithoutSeriesMembership()
     {
         _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
 
-        // Thành viên Workspace nhưng chưa vào Series → không truy cập được Series
-        (await Auth.IsSeriesMemberAsync(_artist.Id, _series.Id)).Should().BeFalse();
-
-        _seriesMembers.Add(SeriesMember.Create(_series.Id, _artist.Id, WorkspaceRole.Artist));
         (await Auth.IsSeriesMemberAsync(_artist.Id, _series.Id)).Should().BeTrue();
+        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Artist])).Should().BeTrue();
     }
 
     [Theory]

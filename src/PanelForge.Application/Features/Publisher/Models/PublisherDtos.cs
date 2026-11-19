@@ -94,7 +94,8 @@ public sealed record PublisherSeriesDetailDto(
     string Status,
     string? Logline,
     string? Synopsis,
-    IReadOnlyList<PublisherManagedChapterDto> Chapters
+    IReadOnlyList<PublisherManagedChapterDto> Chapters,
+    string? Teaser = null
 );
 
 public sealed record PublisherSeriesDto(

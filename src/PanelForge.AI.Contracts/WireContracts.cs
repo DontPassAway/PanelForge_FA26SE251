@@ -109,10 +109,3 @@ public sealed record ArtistContext(
     Guid LayoutRevisionId,
     IReadOnlyList<ArtistPanelContext> Panels,
     IReadOnlyList<StyleRuleContext> StyleRules);
-
-/// <summary>AI service -> Backend: stream từng token/ký tự của agent theo thời gian thực.</summary>
-public sealed record StreamTokenPayload(
-    string Agent,
-    int StepIndex,
-    string DeltaText,
-    bool IsFinal = false);

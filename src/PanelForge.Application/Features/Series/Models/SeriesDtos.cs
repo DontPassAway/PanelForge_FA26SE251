@@ -54,7 +54,10 @@ public sealed record SeriesDetailDto(
     string? AvatarUrl = null,
     string? BannerUrl = null,
     string OriginalLanguage = ContentLanguages.Original,
-    IReadOnlyList<string>? ReleaseLanguages = null
+    IReadOnlyList<string>? ReleaseLanguages = null,
+    string? Logline = null,
+    string? Teaser = null,
+    string? AgeRating = null
 );
 
 public sealed record UpdateSeriesLanguagesRequest(

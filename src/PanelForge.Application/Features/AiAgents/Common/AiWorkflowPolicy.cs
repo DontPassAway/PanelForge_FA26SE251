@@ -22,6 +22,23 @@ internal static class AiWorkflowPolicy
         _ => []
     };
 
+    /// <summary>
+    /// Vai trò được ÁP DỤNG đề xuất (Accept): ai sửa được loại nội dung đó bằng tay. Vai trò còn lại trong <see cref="ReviewRoles"/>
+    /// chỉ Reject hoặc RequestChanges (BR-07, Q24: Producer/Editor không sửa kịch bản).
+    /// </summary>
+    public static WorkspaceRole[] AcceptRoles(AiSuggestionKind kind) => kind switch
+    {
+        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite => [WorkspaceRole.Writer],
+        AiSuggestionKind.Lettering => [WorkspaceRole.Letterer],
+        AiSuggestionKind.BibleStub => [WorkspaceRole.Writer],
+        AiSuggestionKind.ImpactRipple => [WorkspaceRole.Producer],
+        AiSuggestionKind.Layout => [WorkspaceRole.Writer, WorkspaceRole.Artist],
+        AiSuggestionKind.ImagePrompt => [WorkspaceRole.Artist],
+        AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer],
+        AiSuggestionKind.Thumbnail => [WorkspaceRole.Producer, WorkspaceRole.Artist],
+        _ => []
+    };
+
     public static WorkspaceRole[] ReviewRoles(AiSuggestionKind kind) => kind switch
     {
         AiSuggestionKind.Script => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor],
@@ -29,6 +46,8 @@ internal static class AiWorkflowPolicy
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Editor],
         AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
         AiSuggestionKind.Thumbnail => [WorkspaceRole.Producer, WorkspaceRole.Artist],
+        AiSuggestionKind.BibleStub => [WorkspaceRole.Writer],
+        AiSuggestionKind.ImpactRipple => [WorkspaceRole.Producer],
         AiSuggestionKind.Lettering or AiSuggestionKind.LineRewrite =>
             [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Letterer, WorkspaceRole.Editor],
         _ => []
@@ -53,6 +72,8 @@ internal static class AiWorkflowPolicy
         CopilotTasks.LettererShorten => [WorkspaceRole.Letterer],
         // Publisher chỉ kiểm duyệt thuần túy, không dùng AI → chỉ Producer xin gợi ý metadata.
         CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer],
+        CopilotTasks.BibleStubDraft => [WorkspaceRole.Writer],
+        CopilotTasks.ImpactRipple => [WorkspaceRole.Producer],
         _ => []
     };
 

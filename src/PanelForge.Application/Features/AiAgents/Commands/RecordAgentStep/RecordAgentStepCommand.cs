@@ -80,13 +80,11 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
             return AiRunHelpers.Fail<AgentStepAck>("Step thất bại phải có errorCode.", ResultErrorCodes.Validation);
         }
 
-        var isMock = run.Provider == AiProtocol.ProviderMock;
         var step = AiAgentStep.Create(
             run.Id, r.StepIndex, agent, r.Round, parent?.Id, r.Succeeded ? AiStepStatus.Succeeded : AiStepStatus.Failed,
             r.Provider, r.Model, r.PromptVersion, r.PromptRef, r.ParametersJson, r.InputJson, outputJson,
             r.StartedAtUtc, r.CompletedAtUtc,
-            // Mock không tiêu thụ token provider: không ghi số token do client tự khai
-            isMock ? null : r.PromptTokens, isMock ? null : r.CompletionTokens,
+            r.PromptTokens, r.CompletionTokens,
             r.RepairAttempts, r.ErrorCode, r.ErrorMessage);
         _db.AiAgentSteps.Add(step);
         run.Touch();
@@ -192,7 +190,6 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
     /// <summary>Ghi usage đúng một lần cho Gemini (mỗi step đã có lưu → retry callback không tới được đây); Mock không ghi.</summary>
     private async Task RecordUsageAsync(AiWorkflowRun run, AiAgentStep step, CancellationToken ct)
     {
-        if (run.Provider == AiProtocol.ProviderMock) return;
         if (step.PromptTokens is null && step.CompletionTokens is null) return;
 
         var status = step.Status == AiStepStatus.Succeeded ? AiUsageStatus.Succeeded

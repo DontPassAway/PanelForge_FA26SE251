@@ -14,6 +14,7 @@ public interface IImageConsistencyService
         Guid panelId,
         string? revisionRef = null,
         decimal? threshold = null,
+        Guid? userId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

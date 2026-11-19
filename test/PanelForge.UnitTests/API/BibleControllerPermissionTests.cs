@@ -118,15 +118,12 @@ public class BibleControllerPermissionTests
     }
 
     [Fact]
-    public void SetBibleEntryCrowd_AllowsOnlyWriter_AndRejectsProducer()
+    public void SetBibleEntryCrowd_AllowsWriterProducerEditor_AndRejectsArtist()
     {
         var method = GetAction(nameof(BibleController.SetBibleEntryCrowd));
         var roles = GetAllowedRoles(method);
 
-        roles.Should().ContainSingle()
-            .Which.Should().Be(WorkspaceRole.Writer, "BIB-13: Chỉ Writer mới có quyền bật/tắt cờ Quần chúng");
-        roles.Should().NotContain(WorkspaceRole.Producer);
-        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().BeEquivalentTo([WorkspaceRole.Writer, WorkspaceRole.Producer, WorkspaceRole.Editor]);
         roles.Should().NotContain(WorkspaceRole.Artist);
     }
 

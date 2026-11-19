@@ -51,11 +51,10 @@ public sealed record ThumbnailSuggestion(
 
 public static class ImageProviders
 {
-    public const string Mock = AiProtocol.ProviderMock;
     public const string Gemini = AiProtocol.ProviderGemini;
     public const string Cloudflare = "Cloudflare";
 
-    public static bool IsKnown(string? p) => p is Mock or Gemini or Cloudflare;
+    public static bool IsKnown(string? p) => p is Gemini or Cloudflare;
 }
 
 /// <summary>Backend → AI service: so MỘT ảnh panel với character sheet của MỘT nhân vật (vision). ApiKey không log.</summary>
