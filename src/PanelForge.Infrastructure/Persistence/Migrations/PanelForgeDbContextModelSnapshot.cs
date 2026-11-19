@@ -2978,7 +2978,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasColumnName("release_languages")
-                        .HasDefaultValueSql("'[\"vi\",\"en\",\"ja\"]'::jsonb");
+                        .HasDefaultValueSql("'[\"vi\",\"en\"]'::jsonb");
 
                     b.Property<string>("ReleaseScheduleJson")
                         .HasColumnType("jsonb")

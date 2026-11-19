@@ -38,7 +38,7 @@ public class ChapterEditionTests
             WorkspaceMember.Create(studio.Id, _lettererId, WorkspaceRole.Letterer));
 
         _series = DomainSeries.Create(studio.Id, "Moon Blade", ReadingDirection.RightToLeft, genre: "Fantasy");
-        _series.SetLanguages("vi", ["vi", "en", "ja"]);
+        _series.SetLanguages("vi", ["vi", "en"]);
         _db.Series.Add(_series);
 
         _chapter = Chapter.Create(_series.Id, 1, "Khởi đầu").InProduction();

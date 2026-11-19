@@ -122,26 +122,26 @@ public class LanguageEditionsAndInsightsTests
         _chapter.SetPricing(true, 10000m);
         _series.SetDefaultPreviewPages(1);
         await _db.SaveChangesAsync();
-        PublishEdition(ContentLanguages.Japanese);
+        PublishEdition(ContentLanguages.English);
         var reader = AddUser();
         _db.ChapterEntitlements.Add(ChapterEntitlement.Create(reader, _chapter.Id, _series.Id, _studio.Id, 10000m, language: "vi"));
         await _db.SaveChangesAsync();
 
         (await Read(reader, "vi")).Value!.Pages.Should().OnlyContain(p => p.IsUnlocked);
-        var ja = (await Read(reader, "ja")).Value!;
-        ja.Pages[1].IsUnlocked.Should().BeFalse();
-        ja.Pages[1].ImageUrl.Should().BeNull("trang ngoài xem trước của bản ja chưa mua thì server không trả ảnh");
-        ja.Pages[0].ImageUrl.Should().EndWith("?lang=ja", "trang xem trước của bản ja dùng ảnh dịch");
+        var en = (await Read(reader, "en")).Value!;
+        en.Pages[1].IsUnlocked.Should().BeFalse();
+        en.Pages[1].ImageUrl.Should().BeNull("trang ngoài xem trước của bản en chưa mua thì server không trả ảnh");
+        en.Pages[0].ImageUrl.Should().EndWith("?lang=en", "trang xem trước của bản en dùng ảnh dịch");
     }
 
     [Fact]
     public async Task TranslatedPageImageUrl_CarriesLanguage()
     {
-        PublishEdition(ContentLanguages.Japanese);
+        PublishEdition(ContentLanguages.English);
 
-        var dto = (await Read(null, "ja")).Value!;
+        var dto = (await Read(null, "en")).Value!;
 
-        dto.Pages.Should().OnlyContain(p => p.ImageUrl != null && p.ImageUrl.EndsWith("?lang=ja"));
+        dto.Pages.Should().OnlyContain(p => p.ImageUrl != null && p.ImageUrl.EndsWith("?lang=en"));
     }
 
     // ─── Đánh giá + dashboard ─────────────────────────────────────────────────

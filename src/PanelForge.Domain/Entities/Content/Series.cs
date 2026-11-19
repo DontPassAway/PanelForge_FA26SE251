@@ -30,8 +30,8 @@ public class Series : BaseEntity
     /// <summary>Ngôn ngữ kịch bản gốc (BR-34, mặc định 'vi').</summary>
     public string OriginalLanguage { get; private set; } = ContentLanguages.Original;
 
-    /// <summary>Các ngôn ngữ phát hành (BR-34, luôn chứa OriginalLanguage, mặc định ['vi', 'en', 'ja']).</summary>
-    public List<string> ReleaseLanguages { get; private set; } = [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+    /// <summary>Các ngôn ngữ phát hành (BR-34, luôn chứa OriginalLanguage, mặc định ['vi', 'en']).</summary>
+    public List<string> ReleaseLanguages { get; private set; } = [ContentLanguages.Vietnamese, ContentLanguages.English];
 
     /// <summary>
     /// Publisher: mặc định N trang đầu mỗi chương trả phí là trang xem trước cho người chưa mua (0 = khóa toàn bộ).

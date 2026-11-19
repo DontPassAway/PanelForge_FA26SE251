@@ -24,7 +24,7 @@ public sealed class GetChapterEditionsQueryHandler : IRequestHandler<GetChapterE
 
         // Đảm bảo các ấn bản theo ReleaseLanguages của Series tồn tại
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
-        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English];
 
         var existing = await _db.ChapterEditions
             .Include(e => e.TranslatorUser)
