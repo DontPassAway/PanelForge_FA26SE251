@@ -46,16 +46,16 @@ public sealed class TaskGridController : ControllerBase
     public async Task<IActionResult> Get(Guid chapterId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new GetChapterTaskGridQuery(chapterId), ct));
 
-    /// <summary>POST /generate — Producer sinh các ô còn thiếu (gọi lại an toàn).</summary>
+    /// <summary>POST /generate — Producer/Editor sinh các ô còn thiếu (gọi lại an toàn).</summary>
     [HttpPost("generate")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(GenerateStageTasksResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Generate(Guid chapterId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new GenerateStageTasksCommand(chapterId, CurrentUserId), ct));
 
-    /// <summary>POST /lots — Producer giao nhiều lô một lần, tất cả hoặc không; dryRun = chỉ kiểm tra.</summary>
+    /// <summary>POST /lots — Producer/Editor giao nhiều lô một lần, tất cả hoặc không; dryRun = chỉ kiểm tra.</summary>
     [HttpPost("lots")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(AssignStageTaskLotsResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> AssignLots(Guid chapterId, [FromBody] AssignStageTaskLotsRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new AssignStageTaskLotsCommand(chapterId, CurrentUserId, body.Lots, body.DryRun, body.Reassign), ct));
@@ -95,23 +95,23 @@ public sealed class TaskGridController : ControllerBase
     public async Task<IActionResult> Submissions(Guid chapterId, Guid taskId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new GetStageTaskSubmissionsQuery(chapterId, taskId), ct));
 
-    /// <summary>POST /tasks/{taskId}/reopen — Producer mở lại ô đã duyệt; ô hạ nguồn đã bắt đầu bị gắn cờ lỗi thời.</summary>
+    /// <summary>POST /tasks/{taskId}/reopen — Producer/Editor mở lại ô đã duyệt; ô hạ nguồn đã bắt đầu bị gắn cờ lỗi thời.</summary>
     [HttpPost("tasks/{taskId:guid}/reopen")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reopen(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ReopenStageTaskCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
 
-    /// <summary>POST /tasks/{taskId}/resolve-impact — Producer xử lý Impact Review (keep / rework).</summary>
+    /// <summary>POST /tasks/{taskId}/resolve-impact — Producer/Editor xử lý Impact Review (keep / rework).</summary>
     [HttpPost("tasks/{taskId:guid}/resolve-impact")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResolveImpact(Guid chapterId, Guid taskId, [FromBody] ResolveStageTaskImpactRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ResolveStageTaskImpactCommand(chapterId, taskId, CurrentUserId, body.Keep), ct));
 
-    /// <summary>PATCH /lots/{lotId} — Producer sửa brief / hạn của lô.</summary>
+    /// <summary>PATCH /lots/{lotId} — Producer/Editor sửa brief / hạn của lô.</summary>
     [HttpPatch("lots/{lotId:guid}")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(StageTaskLotDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateLot(Guid chapterId, Guid lotId, [FromBody] UpdateStageTaskLotRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new UpdateStageTaskLotCommand(chapterId, lotId, CurrentUserId, body.Brief, body.DueDate, body.ClearDueDate, body.ExpectedRowVersion), ct));
@@ -137,9 +137,9 @@ public sealed class TaskGridController : ControllerBase
     public async Task<IActionResult> ReleaseReview(Guid chapterId, Guid taskId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ClaimStageTaskReviewCommand(chapterId, taskId, CurrentUserId, Open: false), ct));
 
-    /// <summary>POST /tasks/unassign — Producer gỡ người khỏi danh sách ô, tất cả hoặc không.</summary>
+    /// <summary>POST /tasks/unassign — Producer/Editor gỡ người khỏi danh sách ô, tất cả hoặc không.</summary>
     [HttpPost("tasks/unassign")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(IReadOnlyList<StageTaskDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Unassign(Guid chapterId, [FromBody] UnassignStageTasksRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new UnassignStageTasksCommand(chapterId, body.TaskIds, CurrentUserId), ct));
