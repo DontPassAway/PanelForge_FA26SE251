@@ -61,7 +61,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> IsMemberAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
-        if (await IsAdminAsync(userId, cancellationToken)) return false;
+        if (await IsAdminAsync(userId, cancellationToken)) return true;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return false;
@@ -73,7 +73,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<WorkspaceRole?> GetMemberRoleAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
     {
-        if (await IsAdminAsync(userId, cancellationToken)) return null;
+        if (await IsAdminAsync(userId, cancellationToken)) return WorkspaceRole.Producer;
 
         var workspace = await _dbContext.StudioWorkspaces.FirstOrDefaultAsync(w => w.Id == workspaceId, cancellationToken);
         if (workspace == null) return null;
@@ -147,7 +147,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
     public async Task<bool> IsSeriesMemberAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
     {
-        if (await IsAdminAsync(userId, cancellationToken)) return false;
+        if (await IsAdminAsync(userId, cancellationToken)) return true;
 
         var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
         if (!workspaceId.HasValue) return false;
@@ -155,18 +155,23 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Thành viên Series (chưa bị xóa mềm) VÀ còn là thành viên Active của Workspace: membership Series sót lại
-        // sau khi bị gỡ/khoá khỏi Workspace không còn mở được Chapter/Page/Panel/Assignment
-        return await _dbContext.SeriesMembers
+        // Thành viên Series được phân công riêng (chưa bị xóa mềm) VÀ còn là thành viên Active của Workspace
+        var isExplicitSeriesMember = await _dbContext.SeriesMembers
                    .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken)
                && await _dbContext.WorkspaceMembers
                    .AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId
                                   && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
+        if (isExplicitSeriesMember) return true;
+
+        // Thành viên Active của Workspace được quyền truy cập Series thuộc Workspace
+        return await _dbContext.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId
+                           && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
     }
 
     public async Task<bool> HasSeriesRoleAsync(Guid userId, Guid seriesId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)
     {
-        if (await IsAdminAsync(userId, cancellationToken)) return false;
+        if (await IsAdminAsync(userId, cancellationToken)) return true;
 
         var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
         if (!workspaceId.HasValue) return false;
@@ -174,21 +179,24 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Phải là thành viên Series; quyền chuyên môn lấy theo role Workspace (một role duy nhất, không lệch với Series)
-        var isSeriesMember = await _dbContext.SeriesMembers
-            .AnyAsync(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted, cancellationToken);
-        if (!isSeriesMember) return false;
+        // Quyền chuyên môn: ưu tiên role phân công Series (nếu có), fallback về role trong Workspace
+        var seriesMemberRole = await _dbContext.SeriesMembers
+            .Where(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted)
+            .Select(sm => (WorkspaceRole?)sm.Role)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        var workspaceRole = await _dbContext.WorkspaceMembers
+        var wsMemberRole = await _dbContext.WorkspaceMembers
             .Where(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)
             .Select(m => (WorkspaceRole?)m.Role)
             .FirstOrDefaultAsync(cancellationToken);
-        return workspaceRole is { } r && allowedRoles.Contains(r);
+
+        var effectiveRole = seriesMemberRole ?? wsMemberRole;
+        return effectiveRole is { } r && allowedRoles.Contains(r);
     }
 
     public async Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
     {
-        if (await IsAdminAsync(userId, cancellationToken)) return null;
+        if (await IsAdminAsync(userId, cancellationToken)) return WorkspaceRole.Producer;
 
         var workspaceId = await GetWorkspaceIdOfSeriesAsync(seriesId, cancellationToken);
         if (!workspaceId.HasValue) return null;
@@ -210,9 +218,9 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var wsMember = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
 
-        if (wsMember?.Role == WorkspaceRole.Producer)
+        if (wsMember != null)
         {
-            return WorkspaceRole.Producer;
+            return wsMember.Role;
         }
 
         return null;

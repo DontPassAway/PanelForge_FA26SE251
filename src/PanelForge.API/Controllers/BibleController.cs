@@ -439,10 +439,10 @@ public sealed class BibleController : ControllerBase
 
     /// <summary>
     /// POST /api/series/{seriesId}/bible/entries/{entryId}/crowd
-    /// Writer bật/tắt cờ Quần chúng cho mục Bible (BIB-13, 7A, Q19).
+    /// Bật/tắt cờ Quần chúng cho mục Bible (BIB-13, 7A, Q19).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/entries/{entryId:guid}/crowd")]
-    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [RequireWorkspaceRole(WorkspaceRole.Writer, WorkspaceRole.Producer, WorkspaceRole.Editor)]
     [ProducesResponseType(typeof(BibleEntryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
