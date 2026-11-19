@@ -48,8 +48,12 @@ public class GatewayTests
         var callsWhenOpen = inner.Calls;
 
         var third = async () => await gateway.GetResponseAsync(msgs);
-        await third.Should().ThrowAsync<BrokenCircuitException>();
+        var paused = (await third.Should().ThrowAsync<ProviderPausedException>()).Which;
         inner.Calls.Should().Be(callsWhenOpen, "mạch mở: không gọi provider nữa");
+        paused.Cause.Should().Be("không kết nối được", "báo lại lỗi thật thay vì chỉ nói mạch mở");
+        var (code, message) = LlmGateway.Classify(paused);
+        code.Should().Be("PROVIDER_UNAVAILABLE");
+        message.Should().Contain("30 giây").And.Contain("không kết nối được");
 
         LlmGateway.Classify(new BrokenCircuitException()).Code.Should().Be("PROVIDER_UNAVAILABLE");
         LlmGateway.Classify(new HttpRequestException()).Code.Should().Be("PROVIDER_UNAVAILABLE");

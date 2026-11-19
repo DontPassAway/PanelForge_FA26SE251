@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Net;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using PanelForge.AI.Contracts;
@@ -19,8 +20,12 @@ public sealed class ChatClientFactory
     private readonly ConcurrentDictionary<string, LlmResilience> _resilienceByKey = new();
     private readonly IHttpClientFactory _httpFactory;
 
-    public ChatClientFactory(IOptions<ProviderOptions> options, IHttpClientFactory httpFactory)
+    private readonly ILogger<LlmResilience>? _resilienceLogger;
+
+    public ChatClientFactory(IOptions<ProviderOptions> options, IHttpClientFactory httpFactory,
+        ILogger<LlmResilience>? resilienceLogger = null)
     {
+        _resilienceLogger = resilienceLogger;
         _options = options.Value;
         _optionsAccessor = options;
         _httpFactory = httpFactory;
@@ -40,7 +45,7 @@ public sealed class ChatClientFactory
     /// <summary>Giới hạn tần suất và circuit breaker tính theo từng key: đổi key mới không bị key cũ chặn.</summary>
     public LlmResilience ResilienceFor(string apiKey) =>
         _resilienceByKey.GetOrAdd(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey.Trim()))),
-            _ => new LlmResilience(_optionsAccessor));
+            _ => new LlmResilience(_optionsAccessor, _resilienceLogger));
 
     /// <summary>
     /// Kiểm tra model Gemini còn khả dụng (models.get) TRƯỚC khi chạy workflow.
