@@ -1407,12 +1407,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_handed_off");
 
-                    b.Property<bool>("IsLocked")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_locked");
-
                     b.Property<bool>("IsScriptFrozen")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1427,21 +1421,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("outline");
 
-                    b.Property<bool>("PreviewPagesCustomized")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("preview_pages_customized");
-
                     b.Property<Guid?>("PreviousSubmittedVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_submitted_version_id");
-
-                    b.Property<decimal>("PriceVnd")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(15,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("price_vnd");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamptz")
@@ -1662,6 +1644,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(10)")
                         .HasColumnName("language_code");
 
+                    b.Property<DateTime?>("MonetizationConfiguredAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("monetization_configured_at");
+
+                    b.Property<Guid?>("MonetizationConfiguredById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("monetization_configured_by_id");
+
                     b.Property<decimal>("PriceVnd")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(12,2)")
@@ -1707,7 +1697,14 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_chapter_edition");
 
-                    b.ToTable("chapter_editions", (string)null);
+                    b.ToTable("chapter_editions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_chapter_editions_free_has_no_price", "is_paid OR price_vnd = 0");
+
+                            t.HasCheckConstraint("ck_chapter_editions_preview_non_negative", "free_preview_pages >= 0");
+
+                            t.HasCheckConstraint("ck_chapter_editions_price_non_negative", "price_vnd >= 0");
+                        });
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterReview", b =>
@@ -2348,12 +2345,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<bool>("IsPreview")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_preview");
-
                     b.Property<string>("LayoutFormat")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -2918,12 +2909,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text")
                         .HasColumnName("created_by");
-
-                    b.Property<int>("DefaultPreviewPageCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0)
-                        .HasColumnName("default_preview_page_count");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamptz")
@@ -3832,65 +3817,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("chapter_entitlements", (string)null);
-                });
-
-            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterLanguagePrice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChapterId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("chapter_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasColumnType("varchar(8)")
-                        .HasColumnName("language");
-
-                    b.Property<decimal>("PriceVnd")
-                        .HasColumnType("numeric(15,2)")
-                        .HasColumnName("price_vnd");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChapterId", "Language")
-                        .IsUnique()
-                        .HasDatabaseName("ix_chapter_language_prices_chapter_language")
-                        .HasFilter("is_deleted = false");
-
-                    b.ToTable("chapter_language_prices", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>
@@ -6510,17 +6436,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
 
                     b.Navigation("Workspace");
-                });
-
-            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ChapterLanguagePrice", b =>
-                {
-                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", "Chapter")
-                        .WithMany()
-                        .HasForeignKey("ChapterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Chapter");
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PaymentTransaction", b =>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -39,17 +40,20 @@ public sealed class PublishChapterCommandHandler : IRequestHandler<PublishChapte
         if (!chapter.IsHandedOff)
             return Result<ChapterReviewDto>.Failure("Chương chưa được Producer bàn giao cho Publisher.", ResultErrorCodes.Conflict);
 
-        chapter.Publish(publishAt);
-        chapter.UpdatedBy = cmd.UserId.ToString();
-
-        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Published
+        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Published — D4: phải đã cấu hình Free/Trả phí hợp lệ.
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
         var origLang = series?.OriginalLanguage ?? ContentLanguages.Original;
         var origEdition = await _db.ChapterEditions.FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == origLang, ct);
-        if (origEdition is not null)
-        {
-            origEdition.Publish();
-        }
+        if (origEdition is null)
+            return Result<ChapterReviewDto>.Failure(
+                $"Chương chưa có ấn bản ngôn ngữ gốc '{origLang}' để phát hành.", ResultErrorCodes.Conflict);
+        var pageCount = await _db.Pages.CountAsync(p => p.ChapterId == chapter.Id, ct);
+        if (EditionMonetizationGate.PublishBlocker(origEdition, pageCount) is { } blocker)
+            return Result<ChapterReviewDto>.Failure(blocker, ResultErrorCodes.Conflict);
+
+        chapter.Publish(publishAt);
+        chapter.UpdatedBy = cmd.UserId.ToString();
+        origEdition.Publish();
 
         var review = ChapterReview.Create(
             chapter.Id, ChapterReviewAction.PublisherPublished, cmd.UserId, chapter.VersionVector, scheduledAt: publishAt);

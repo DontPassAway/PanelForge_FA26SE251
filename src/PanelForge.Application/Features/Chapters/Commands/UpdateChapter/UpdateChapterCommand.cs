@@ -15,8 +15,6 @@ public sealed record UpdateChapterCommand(
     DateOnly? TargetReleaseDate,
     bool IncrementVersion,
     string? Outline = null,
-    bool? IsLocked = null,
-    decimal? PriceVnd = null,
     long? ExpectedChapterVersion = null
 ) : IRequest<Result<ChapterDto>>;
 
@@ -39,14 +37,7 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
         if (chapter == null)
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
 
-        var isPricingOnlyUpdate =
-            (command.IsLocked.HasValue || command.PriceVnd.HasValue) &&
-            !command.IncrementVersion &&
-            command.Outline == null &&
-            (command.Title == null || string.Equals(command.Title.Trim(), chapter.Title ?? string.Empty, StringComparison.Ordinal)) &&
-            (command.TargetReleaseDate == null || command.TargetReleaseDate == chapter.TargetReleaseDate);
-
-        if (!isPricingOnlyUpdate && ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
+        if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
             return Result<ChapterDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         // BR-11: client gửi version đã đọc thì phải khớp, không thì người khác vừa sửa → 409 thay vì đè
@@ -55,16 +46,8 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
                 $"Chương vừa được người khác cập nhật (expected={expected}, actual={chapter.VersionVector}). Tải lại rồi thử lại.",
                 ResultErrorCodes.Conflict);
 
-        if (!isPricingOnlyUpdate)
-        {
-            chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
-        }
+        chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();
-
-        if (command.IsLocked.HasValue || command.PriceVnd.HasValue)
-        {
-            chapter.SetPricing(command.IsLocked ?? chapter.IsLocked, command.PriceVnd ?? chapter.PriceVnd);
-        }
 
         if (command.IncrementVersion)
         {
@@ -93,8 +76,6 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: chapter.ScriptContentHash,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,

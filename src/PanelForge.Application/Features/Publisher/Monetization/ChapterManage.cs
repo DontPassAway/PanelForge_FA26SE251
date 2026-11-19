@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -5,61 +6,56 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Catalog;
+using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Content;
-using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Publisher.Monetization;
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
-/// <param name="IsCustom">Publisher đặt giá riêng cho ngôn ngữ này; false = dùng giá chung của chương.</param>
-public sealed record ChapterLanguagePriceDto(string Language, decimal PriceVnd, bool IsCustom);
-
-/// <param name="TranslatedPages">Số trang đã có ảnh dịch (bản gốc vi = mọi trang).</param>
-/// <param name="IsAvailable">Bản ngôn ngữ đã phát hành cho Reader (đủ ảnh mọi trang).</param>
-/// <param name="EditionStatus">Trạng thái ấn bản ngôn ngữ (Draft | InReview | EditorApproved | Approved | Published).</param>
+/// <summary>Trạng thái và quy định thương mại của một ấn bản ngôn ngữ (BR-33, BR-34).</summary>
+/// <param name="TranslatedPages">Số trang đã có bản dịch (ấn bản đã nộp trở đi = mọi trang).</param>
+/// <param name="IsAvailable">Ấn bản đã phát hành cho Reader.</param>
+/// <param name="EditionStatus">Draft | InReview | EditorApproved | Approved | Published; null = chưa có ấn bản.</param>
+/// <param name="IsMonetizationConfigured">D4: Publisher đã chốt Free/Trả phí; false → chưa được phát hành / hẹn giờ.</param>
+/// <param name="IsPaid">Trả phí (true) hay Free (false); chỉ có nghĩa khi đã cấu hình.</param>
+/// <param name="PriceVnd">Giá mở khóa VNĐ (Free = 0).</param>
+/// <param name="FreePreviewPages">N trang đầu người chưa mua được xem (Free = 0).</param>
 public sealed record ChapterLanguageStatusDto(
     string Language,
     int TranslatedPages,
     bool IsAvailable,
-    string? EditionStatus = null);
+    string? EditionStatus,
+    bool IsMonetizationConfigured,
+    bool IsPaid,
+    decimal PriceVnd,
+    int FreePreviewPages);
 
-/// <param name="IsPreview">Trang xem trước hiệu lực (sau khi áp mặc định Series nếu chương chưa chọn tay):
-/// người chưa mua chương trả phí vẫn xem được; các trang khác khóa đến khi mua chương.</param>
-/// <param name="ImageUrls">Ảnh xem trước cho Publisher theo ngôn ngữ (vi luôn có nếu trang có artwork; en/ja khi đã upload).</param>
+/// <param name="ImageUrls">Ảnh xem trước cho Publisher theo ngôn ngữ (null nếu trang chưa có artwork).</param>
 public sealed record ManagedPageDto(
     Guid PageId,
     int PageNumber,
-    bool IsPreview,
     IReadOnlyDictionary<string, string?> ImageUrls);
 
-/// <param name="ChapterIsLocked">Chương trả phí: trang xem trước chỉ có tác dụng với chương trả phí; chương miễn phí mở toàn bộ.</param>
-/// <param name="PreviewPagesCustomized">Publisher đã chọn tay trang xem trước (không theo mặc định Series).</param>
+/// <param name="Languages">Mỗi ngôn ngữ một ấn bản với loại Free/Trả phí, giá và N trang xem trước riêng.</param>
+/// <param name="Pages">Trang theo thứ tự đọc; trang xem trước của một ấn bản = <c>FreePreviewPages</c> trang đầu.</param>
 public sealed record ChapterManageDto(
     Guid ChapterId,
     Guid SeriesId,
     decimal ChapterNumber,
     string? Title,
     bool IsPublished,
-    bool ChapterIsLocked,
-    decimal BasePriceVnd,
-    bool PreviewPagesCustomized,
-    int SeriesDefaultPreviewPageCount,
-    IReadOnlyList<ChapterLanguagePriceDto> LanguagePrices,
     IReadOnlyList<ChapterLanguageStatusDto> Languages,
-    IReadOnlyList<ManagedPageDto> Pages);
+    IReadOnlyList<ManagedPageDto> Pages,
+    decimal MinPriceVnd = SetEditionMonetizationCommandHandler.MinPriceVnd,
+    decimal MaxPriceVnd = SetEditionMonetizationCommandHandler.MaxPriceVnd);
 
-/// <param name="PreviewPageIds">Các trang xem trước; trang không có trong danh sách bị khóa với người chưa mua.</param>
-public sealed record SetChapterPreviewPagesRequest(IReadOnlyList<Guid>? PreviewPageIds);
-
-/// <param name="PriceVnd">null hoặc 0 = bỏ giá riêng, dùng giá chung của chương.</param>
-public sealed record LanguagePriceItem(string Language, decimal? PriceVnd);
-
-public sealed record SetChapterLanguagePricesRequest(
-    IReadOnlyList<LanguagePriceItem>? Prices,
-    bool? IsLocked = null,
-    decimal? BasePriceVnd = null);
+/// <param name="IsPaid">Trả phí (true) hay Free (false) — bắt buộc chọn rõ (D4).</param>
+/// <param name="PriceVnd">Trả phí: giá VNĐ nguyên trong khoảng cho phép. Free: 0.</param>
+/// <param name="FreePreviewPages">Trả phí: 0 ≤ N &lt; tổng số trang. Free: bỏ qua (lưu 0).</param>
+/// <param name="Reason">Bắt buộc khi đổi loại hoặc giá của ấn bản đã phát hành (D4); ghi vào Audit.</param>
+public sealed record SetEditionMonetizationRequest(bool IsPaid, decimal PriceVnd, int FreePreviewPages, string? Reason = null);
 
 // ─── Query: màn Manage của một chương ────────────────────────────────────────
 
@@ -87,198 +83,156 @@ public static class ChapterManageReader
             .Where(c => c.Id == chapterId)
             .Select(c => new
             {
-                c.Id, c.SeriesId, c.ChapterNumber, c.Title, c.IsLocked, c.PriceVnd, c.PreviewPagesCustomized,
-                IsPublished = c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now,
-                c.Series.DefaultPreviewPageCount
+                c.Id, c.SeriesId, c.ChapterNumber, c.Title,
+                IsPublished = c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now
             })
             .FirstOrDefaultAsync(ct);
         if (chapter is null)
             return Result<ChapterManageDto>.Failure("Không tìm thấy chương.", ResultErrorCodes.NotFound);
 
-        var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(db, chapterId, ct);
+        var orderedPages = await db.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == chapterId)
+            .OrderBy(p => p.PageNumber)
+            .Select(p => new { p.Id, p.PageNumber })
+            .ToListAsync(ct);
         var withArtwork = (await db.Pages.AsNoTracking()
             .Where(p => p.ChapterId == chapterId && db.AssetReferences.Any(r => r.PageId == p.Id))
             .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
         var editions = await db.ChapterEditions.AsNoTracking()
             .Where(e => e.ChapterId == chapterId && !e.IsDeleted)
             .ToListAsync(ct);
-        var customPrices = await db.ChapterLanguagePrices.AsNoTracking()
-            .Where(p => p.ChapterId == chapterId && !p.IsDeleted)
-            .ToDictionaryAsync(p => p.Language, p => p.PriceVnd, ct);
 
-        var pageCount = previews.Count;
+        var pageCount = orderedPages.Count;
         var languages = ContentLanguages.All.Select(lang =>
         {
             var ed = editions.FirstOrDefault(e => e.LanguageCode == lang);
-            var isAvailable = ed?.Status == EditionStatus.Published;
             var translated = ed is not null && ed.Status != EditionStatus.Draft ? pageCount : 0;
-            return new ChapterLanguageStatusDto(lang, translated, isAvailable, ed?.Status.ToString());
+            return new ChapterLanguageStatusDto(
+                lang, translated, ed?.Status == EditionStatus.Published, ed?.Status.ToString(),
+                ed?.IsMonetizationConfigured ?? false,
+                ed?.IsPaid ?? false,
+                ed?.PriceVnd ?? 0m,
+                ed?.FreePreviewPages ?? 0);
         }).ToList();
 
-        var pages = previews.Select(p =>
-        {
-            var urls = ContentLanguages.All.ToDictionary(
+        var pages = orderedPages.Select(p => new ManagedPageDto(
+            p.Id, p.PageNumber,
+            ContentLanguages.All.ToDictionary(
                 lang => lang,
-                lang => withArtwork.Contains(p.PageId)
-                    ? PreviewImageUrl(chapterId, p.PageId, lang)
-                    : null);
-            return new ManagedPageDto(p.PageId, p.PageNumber, p.IsPreview, urls);
-        }).ToList();
+                lang => withArtwork.Contains(p.Id) ? PreviewImageUrl(chapterId, p.Id, lang) : null))).ToList();
 
         return Result<ChapterManageDto>.Success(new ChapterManageDto(
             chapter.Id, chapter.SeriesId, chapter.ChapterNumber, chapter.Title, chapter.IsPublished,
-            chapter.IsLocked, chapter.PriceVnd, chapter.PreviewPagesCustomized,
-            chapter.DefaultPreviewPageCount,
-            ContentLanguages.All.Select(l => customPrices.TryGetValue(l, out var price)
-                ? new ChapterLanguagePriceDto(l, price, true)
-                : new ChapterLanguagePriceDto(l, chapter.PriceVnd, false)).ToList(),
-            languages,
-            pages));
+            languages, pages));
     }
 }
 
-// ─── Command: Publisher chọn trang xem trước ─────────────────────────────────
+// ─── Command: Publisher quy định thương mại của một ấn bản ngôn ngữ ───────────
 
 /// <summary>
-/// Publisher chọn các trang xem trước của chương (người chưa mua chương trả phí xem được các trang này, trang khác khóa).
-/// Chương chuyển sang "chọn tay": không theo mặc định "N trang đầu" của Series nữa.
+/// BR-33 / D4 (§6.1.5 <c>SetEditionMonetization</c>): Publisher đặt loại Free/Trả phí, <c>price_vnd</c> và
+/// <c>free_preview_pages</c> cho ấn bản (chương, ngôn ngữ). Được phép ở mọi trạng thái ấn bản; ghi Audit.
+/// Trả phí: giá &gt; 0 và N &lt; tổng số trang. Free: giá 0. Đổi loại hoặc giá của ấn bản đã phát hành cần lý do.
+/// Không ảnh hưởng người đã mở khóa (quyền đọc lưu riêng ở entitlement).
 /// </summary>
-public sealed record SetChapterPreviewPagesCommand(Guid ChapterId, IReadOnlyList<Guid> PreviewPageIds)
+public sealed record SetEditionMonetizationCommand(
+    Guid ChapterId, string Language, bool IsPaid, decimal PriceVnd, int FreePreviewPages, string? Reason, Guid UserId)
     : IRequest<Result<ChapterManageDto>>;
 
-public sealed class SetChapterPreviewPagesCommandHandler
-    : IRequestHandler<SetChapterPreviewPagesCommand, Result<ChapterManageDto>>
+public sealed class SetEditionMonetizationCommandHandler
+    : IRequestHandler<SetEditionMonetizationCommand, Result<ChapterManageDto>>
 {
+    public const string AuditAction = "SET_EDITION_MONETIZATION";
+    public const decimal MinPriceVnd = 1000m;
+    public const decimal MaxPriceVnd = 1_000_000m;
+
     private readonly IPanelForgeDbContext _db;
 
-    public SetChapterPreviewPagesCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public SetEditionMonetizationCommandHandler(IPanelForgeDbContext db) => _db = db;
 
-    public async Task<Result<ChapterManageDto>> Handle(SetChapterPreviewPagesCommand cmd, CancellationToken ct)
+    public async Task<Result<ChapterManageDto>> Handle(SetEditionMonetizationCommand cmd, CancellationToken ct)
     {
-        var chapter = await _db.Chapters.FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
+        var language = ContentLanguages.Normalize(cmd.Language);
+        if (language is null)
+            return Invalid($"Ngôn ngữ '{cmd.Language}' không được hỗ trợ.");
+
+        var chapter = await _db.Chapters.AsNoTracking()
+            .Where(c => c.Id == cmd.ChapterId)
+            .Select(c => new
+            {
+                c.Id, c.ChapterNumber, c.Series.WorkspaceId,
+                c.Series.OriginalLanguage, c.Series.ReleaseLanguages
+            })
+            .FirstOrDefaultAsync(ct);
         if (chapter is null)
             return Result<ChapterManageDto>.Failure("Không tìm thấy chương.", ResultErrorCodes.NotFound);
 
-        var previewIds = cmd.PreviewPageIds.ToHashSet();
-        var pages = await _db.Pages.Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
-        if (previewIds.Any(id => pages.All(p => p.Id != id)))
-            return Result<ChapterManageDto>.Failure("Có trang không thuộc chương này.", ResultErrorCodes.NotFound);
+        if (language != chapter.OriginalLanguage && !chapter.ReleaseLanguages.Contains(language))
+            return Invalid($"Ngôn ngữ '{language}' không nằm trong ngôn ngữ phát hành của bộ truyện.");
 
-        foreach (var page in pages) page.SetPreview(previewIds.Contains(page.Id));
-        chapter.MarkPreviewPagesCustomized();
+        var pageCount = await _db.Pages.CountAsync(p => p.ChapterId == chapter.Id, ct);
+        var freePreviewPages = cmd.IsPaid ? cmd.FreePreviewPages : 0;
+        if (cmd.IsPaid)
+        {
+            if (cmd.PriceVnd != decimal.Truncate(cmd.PriceVnd))
+                return Invalid("Giá VNĐ phải là số nguyên đồng.");
+            if (cmd.PriceVnd is < MinPriceVnd or > MaxPriceVnd)
+                return Invalid($"Giá ấn bản trả phí phải từ {MinPriceVnd:N0}đ đến {MaxPriceVnd:N0}đ.");
+            if (freePreviewPages < 0)
+                return Invalid("Số trang xem trước không được âm.");
+            if (freePreviewPages >= pageCount)
+                return Invalid(pageCount == 0
+                    ? "Chương chưa có trang nên chưa thể đặt Trả phí."
+                    : $"Số trang xem trước phải nhỏ hơn tổng số trang của chương ({pageCount}) để còn ít nhất một trang khóa.");
+        }
+        else if (cmd.PriceVnd != 0)
+        {
+            return Invalid("Ấn bản Free có giá 0đ.");
+        }
+
+        var edition = await _db.ChapterEditions
+            .FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == language && !e.IsDeleted, ct);
+        if (edition is null)
+        {
+            edition = ChapterEdition.Create(chapter.Id, language, EditionStatus.Draft);
+            _db.ChapterEditions.Add(edition);
+        }
+
+        var wasConfigured = edition.IsMonetizationConfigured;
+        var before = new { isPaid = edition.IsPaid, priceVnd = edition.PriceVnd, freePreviewPages = edition.FreePreviewPages };
+        if (wasConfigured && before.isPaid == cmd.IsPaid && before.priceVnd == cmd.PriceVnd
+            && before.freePreviewPages == freePreviewPages)
+            return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
+
+        var reason = cmd.Reason?.Trim();
+        var commercialChange = wasConfigured && (before.isPaid != cmd.IsPaid || before.priceVnd != cmd.PriceVnd);
+        if (edition.Status == EditionStatus.Published && commercialChange && string.IsNullOrEmpty(reason))
+            return Invalid("Ấn bản đã phát hành: cần nhập lý do khi đổi loại Free/Trả phí hoặc giá.");
+
+        edition.SetMonetization(cmd.IsPaid, cmd.PriceVnd, freePreviewPages, cmd.UserId);
+
+        _db.AuditLogs.Add(AuditLog.Create(
+            action: AuditAction,
+            entityName: nameof(ChapterEdition),
+            entityId: edition.Id.ToString(),
+            workspaceId: chapter.WorkspaceId,
+            userId: cmd.UserId,
+            changesJson: JsonSerializer.Serialize(new
+            {
+                language,
+                from = wasConfigured ? before : null,
+                to = new { isPaid = cmd.IsPaid, priceVnd = edition.PriceVnd, freePreviewPages = edition.FreePreviewPages }
+            }),
+            details: $"Chương {chapter.ChapterNumber} [{language}]: "
+                     + (cmd.IsPaid ? $"Trả phí {edition.PriceVnd:N0}đ, xem trước {edition.FreePreviewPages} trang" : "Free")
+                     + (string.IsNullOrEmpty(reason) ? "" : $". Lý do: {reason}")));
 
         await _db.SaveChangesAsync(ct);
         return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
     }
-}
 
-/// <summary>Bỏ chọn tay: chương quay về theo mặc định "N trang đầu xem trước" của Series.</summary>
-public sealed record ResetChapterPreviewPagesCommand(Guid ChapterId) : IRequest<Result<ChapterManageDto>>;
-
-public sealed class ResetChapterPreviewPagesCommandHandler
-    : IRequestHandler<ResetChapterPreviewPagesCommand, Result<ChapterManageDto>>
-{
-    private readonly IPanelForgeDbContext _db;
-
-    public ResetChapterPreviewPagesCommandHandler(IPanelForgeDbContext db) => _db = db;
-
-    public async Task<Result<ChapterManageDto>> Handle(ResetChapterPreviewPagesCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _db.Chapters.FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-        if (chapter is null)
-            return Result<ChapterManageDto>.Failure("Không tìm thấy chương.", ResultErrorCodes.NotFound);
-
-        chapter.MarkPreviewPagesCustomized(false);
-        await _db.SaveChangesAsync(ct);
-        return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
-    }
-}
-
-// ─── Command: giá chương theo ngôn ngữ ───────────────────────────────────────
-
-/// <summary>Publisher đặt giá mở khóa chương trả phí riêng cho từng ngôn ngữ (bỏ trống = giá chung), kèm tùy chọn bật/tắt khóa trả phí và giá chung.</summary>
-public sealed record SetChapterLanguagePricesCommand(
-    Guid ChapterId,
-    IReadOnlyList<LanguagePriceItem> Prices,
-    bool? IsLocked = null,
-    decimal? BasePriceVnd = null)
-    : IRequest<Result<ChapterManageDto>>;
-
-public sealed class SetChapterLanguagePricesCommandHandler
-    : IRequestHandler<SetChapterLanguagePricesCommand, Result<ChapterManageDto>>
-{
-    public const decimal MinChapterPriceVnd = 1000m;
-    public const decimal MaxChapterPriceVnd = 1_000_000m;
-
-    private readonly IPanelForgeDbContext _db;
-
-    public SetChapterLanguagePricesCommandHandler(IPanelForgeDbContext db) => _db = db;
-
-    public async Task<Result<ChapterManageDto>> Handle(SetChapterLanguagePricesCommand cmd, CancellationToken ct)
-    {
-        var chapter = await _db.Chapters
-            .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
-        if (chapter is null)
-            return Result<ChapterManageDto>.Failure("Không tìm thấy chương.", ResultErrorCodes.NotFound);
-
-        if (cmd.IsLocked.HasValue || cmd.BasePriceVnd.HasValue)
-        {
-            var nextLocked = cmd.IsLocked ?? chapter.IsLocked;
-            var nextBasePrice = nextLocked
-                ? (cmd.BasePriceVnd ?? (chapter.PriceVnd >= MinChapterPriceVnd ? chapter.PriceVnd : 10000m))
-                : 0m;
-            if (nextLocked && (nextBasePrice < MinChapterPriceVnd || nextBasePrice > MaxChapterPriceVnd))
-            {
-                return Result<ChapterManageDto>.Failure(
-                    $"Giá chương phải từ {MinChapterPriceVnd:N0}đ đến {MaxChapterPriceVnd:N0}đ.", ResultErrorCodes.Validation);
-            }
-            chapter.SetPricing(nextLocked, nextBasePrice);
-        }
-
-        if (!chapter.IsLocked)
-        {
-            if (cmd.IsLocked == false)
-            {
-                var existingFree = await _db.ChapterLanguagePrices.Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
-                if (existingFree.Count > 0) _db.ChapterLanguagePrices.RemoveRange(existingFree);
-                await _db.SaveChangesAsync(ct);
-                return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
-            }
-            return Result<ChapterManageDto>.Failure(
-                "Chương miễn phí không có giá mở khóa. Giá theo ngôn ngữ chỉ áp dụng cho chương trả phí.",
-                ResultErrorCodes.Validation);
-        }
-
-        var items = new List<(string Language, decimal? Price)>();
-        foreach (var item in cmd.Prices)
-        {
-            var lang = ContentLanguages.Normalize(item.Language);
-            if (lang is null || string.IsNullOrWhiteSpace(item.Language))
-                return Result<ChapterManageDto>.Failure($"Ngôn ngữ '{item.Language}' không được hỗ trợ.", ResultErrorCodes.Validation);
-            var price = item.PriceVnd is > 0 ? item.PriceVnd : null;
-            if (price is < MinChapterPriceVnd or > MaxChapterPriceVnd)
-                return Result<ChapterManageDto>.Failure(
-                    $"Giá chương phải từ {MinChapterPriceVnd:N0}đ đến {MaxChapterPriceVnd:N0}đ.", ResultErrorCodes.Validation);
-            items.Add((lang, price));
-        }
-        if (items.Select(i => i.Language).Distinct().Count() != items.Count)
-            return Result<ChapterManageDto>.Failure("Ngôn ngữ bị trùng.", ResultErrorCodes.Validation);
-
-        var existing = await _db.ChapterLanguagePrices.Where(p => p.ChapterId == chapter.Id).ToListAsync(ct);
-        foreach (var (lang, price) in items)
-        {
-            var row = existing.FirstOrDefault(p => p.Language == lang);
-            if (price is null)
-            {
-                if (row is not null) _db.ChapterLanguagePrices.Remove(row);
-            }
-            else if (row is null) _db.ChapterLanguagePrices.Add(ChapterLanguagePrice.Create(chapter.Id, lang, price.Value));
-            else row.SetPrice(price.Value);
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return await ChapterManageReader.ReadAsync(_db, chapter.Id, ct);
-    }
+    private static Result<ChapterManageDto> Invalid(string message) =>
+        Result<ChapterManageDto>.Failure(message, ResultErrorCodes.Validation);
 }
 
 // ─── Query: ảnh xem trước cho Publisher (không cần chương đã phát hành) ──────

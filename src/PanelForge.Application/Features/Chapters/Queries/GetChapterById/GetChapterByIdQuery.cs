@@ -71,8 +71,6 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: chapter.ScriptContentHash,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,

@@ -25,18 +25,6 @@ public class Chapter : BaseEntity
     public DateTime? HandedOffAt { get; private set; }
     public Guid? HandedOffById { get; private set; }
 
-    /// <summary>Khóa chương trả phí (false = miễn phí, true = chương trả phí cần mở khóa/VIP).</summary>
-    public bool IsLocked { get; private set; } = false;
-
-    /// <summary>Giá mở khóa chương tính bằng VNĐ (0 nếu miễn phí).</summary>
-    public decimal PriceVnd { get; private set; } = 0m;
-
-    /// <summary>
-    /// Publisher đã chọn tay trang xem trước của chương → không áp mặc định "N trang đầu" của Series nữa.
-    /// </summary>
-    public bool PreviewPagesCustomized { get; private set; }
-
-    public void MarkPreviewPagesCustomized(bool customized = true) => PreviewPagesCustomized = customized;
 
     /// <summary>D12: vòng đời kịch bản Draft ↔ InReview → Frozen.</summary>
     public ScriptStatus ScriptStatus { get; private set; } = ScriptStatus.Draft;
@@ -100,14 +88,6 @@ public class Chapter : BaseEntity
     public void IncrementVersion() => VersionVector++;
 
     public void SetCover(string? sha256) => CoverImageSha256 = sha256;
-
-    /// <summary>Thiết lập khóa trả phí và giá tiền mở khóa của chương.</summary>
-    public void SetPricing(bool isLocked, decimal priceVnd)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(priceVnd);
-        IsLocked = isLocked;
-        PriceVnd = isLocked ? priceVnd : 0m;
-    }
 
     public void AttachScript(ChapterScript script)
     {

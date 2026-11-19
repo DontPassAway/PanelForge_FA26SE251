@@ -30,11 +30,12 @@ public class ChapterViewTests
 
         _free = Chapter.Create(_series.Id, 1, "Miễn phí");
         _paid = Chapter.Create(_series.Id, 2, "Trả phí");
-        _paid.SetPricing(true, 10000m);
         _draft = Chapter.Create(_series.Id, 3, "Nháp");
         Publish(_free);
         Publish(_paid);
         _db.Chapters.AddRange(_free, _paid, _draft);
+        TestEditions.Monetize(_db, _free.Id, isPaid: false);
+        TestEditions.Monetize(_db, _paid.Id, isPaid: true, priceVnd: 10000m);
         _db.SaveChanges();
     }
 

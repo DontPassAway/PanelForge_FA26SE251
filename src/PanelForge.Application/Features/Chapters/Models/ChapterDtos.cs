@@ -27,8 +27,6 @@ public sealed record ChapterDto(
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null,
     string? ScriptContentHash = null,
-    bool IsLocked = false,
-    decimal PriceVnd = 0m,
     // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
     ScriptStatus ScriptStatus = ScriptStatus.Draft,
     DateTime? ScriptSubmittedAt = null,
@@ -81,8 +79,6 @@ public sealed record ChapterDetailDto(
     // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
     string? CoverUrl = null,
     string? ScriptContentHash = null,
-    bool IsLocked = false,
-    decimal PriceVnd = 0m,
     // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
     ScriptStatus ScriptStatus = ScriptStatus.Draft,
     DateTime? ScriptSubmittedAt = null,
@@ -98,9 +94,7 @@ public sealed record CreateChapterRequest(
     decimal ChapterNumber,
     string? Title = null,
     DateOnly? TargetReleaseDate = null,
-    string? Outline = null,
-    bool? IsLocked = null,
-    decimal? PriceVnd = null
+    string? Outline = null
 );
 
 public sealed record UpdateChapterRequest(
@@ -108,7 +102,5 @@ public sealed record UpdateChapterRequest(
     DateOnly? TargetReleaseDate,
     bool IncrementVersion = false,
     string? Outline = null,
-    bool? IsLocked = null,
-    decimal? PriceVnd = null,
     long? ExpectedChapterVersion = null
 );

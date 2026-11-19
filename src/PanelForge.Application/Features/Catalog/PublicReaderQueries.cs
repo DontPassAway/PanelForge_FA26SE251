@@ -84,7 +84,7 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
             {
                 c.Id, c.SeriesId, SeriesTitle = c.Series.Title, c.Series.ReadingDirection,
                 c.ChapterNumber, c.Title, c.PublishedAt, c.CoverImageSha256,
-                c.IsLocked, c.PriceVnd, c.Series.WorkspaceId
+                c.Series.WorkspaceId
             })
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
@@ -94,34 +94,34 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
         if (!available.Contains(language))
             return Result<PublicChapterReadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.NotFound);
 
+        // BR-33: loại/giá/N theo từng ấn bản ngôn ngữ; mua ngôn ngữ nào mở đúng ngôn ngữ đó.
         var languages = new List<PublicChapterLanguageDto>();
         foreach (var lang in available)
         {
-            var price = chapter.IsLocked
-                ? await ChapterReadAccess.ChapterPriceAsync(_db, chapter.Id, chapter.PriceVnd, lang, ct)
-                : 0m;
+            var langTerms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, lang, ct);
             var unlocked = await ChapterReadAccess.CanReadAsync(
-                _db, userId, chapter.Id, chapter.WorkspaceId, chapter.IsLocked, ct, lang);
-            languages.Add(new PublicChapterLanguageDto(lang, price, unlocked));
+                _db, userId, chapter.Id, chapter.WorkspaceId, langTerms.IsLocked, ct, lang);
+            languages.Add(new PublicChapterLanguageDto(lang, langTerms.IsPaid ? langTerms.PriceVnd : 0m, unlocked));
         }
 
-        // Chương trả phí chưa mua bản ngôn ngữ này: vẫn trả danh sách trang, nhưng chỉ trang xem trước có ảnh.
+        // Ấn bản trả phí chưa mua: vẫn trả danh sách trang, nhưng chỉ N trang đầu có ảnh.
         var current = languages.First(l => l.Language == language);
+        var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, language, ct);
 
         var hasImage = (await _db.Pages.AsNoTracking()
             .Where(p => p.ChapterId == chapter.Id && _db.AssetReferences.Any(r => r.PageId == p.Id))
             .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
 
-        // Trang ngoài phần xem trước của chương chưa mua: không trả đường dẫn ảnh (ảnh cũng 403).
-        var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(_db, chapter.Id, ct);
+        // Trang ngoài N trang đầu của ấn bản (chưa mua): không trả đường dẫn ảnh (ảnh cũng 403).
+        var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(_db, chapter.Id, language, ct);
 
         var dto = new PublicChapterReadDto(
             chapter.Id, chapter.SeriesId, chapter.SeriesTitle, chapter.ReadingDirection, chapter.ChapterNumber,
             chapter.Title, chapter.PublishedAt,
             previews.Select(p =>
             {
-                var isPreview = chapter.IsLocked && p.IsPreview;
-                var isLocked = chapter.IsLocked && !p.IsPreview;
+                var isPreview = terms.IsLocked && p.IsPreview;
+                var isLocked = terms.IsLocked && !p.IsPreview;
                 var unlocked = !isLocked || current.IsUnlocked;
                 return new PublicPageDto(
                     p.PageId, p.PageNumber,
@@ -131,10 +131,10 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
                     IsPreview: isPreview);
             }).ToList(),
             GetPublicChapterCoverQueryHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
-            IsLocked: chapter.IsLocked,
+            IsLocked: terms.IsLocked,
             PriceVnd: current.PriceVnd,
             IsUnlocked: current.IsUnlocked,
-            IsFree: !chapter.IsLocked,
+            IsFree: !terms.IsLocked,
             Language: language,
             Languages: languages);
         return Result<PublicChapterReadDto>.Success(dto);
@@ -266,25 +266,20 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
         var now = DateTime.UtcNow;
         var chapter = await _db.Chapters.AsNoTracking()
             .Where(c => c.Id == q.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
-            .Select(c => new { c.Id, c.IsLocked, c.Series.WorkspaceId })
+            .Select(c => new { c.Id, c.Series.WorkspaceId })
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
 
+        // D9b: ngôn ngữ chưa phát hành → 404, không tự rơi về ngôn ngữ gốc.
         var language = ContentLanguages.Normalize(q.Language) ?? ContentLanguages.Original;
         var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct);
         if (!available.Contains(language))
-        {
-            var origLang = await _db.Chapters.AsNoTracking()
-                .Where(c => c.Id == chapter.Id)
-                .Select(c => c.Series.OriginalLanguage)
-                .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
-            language = origLang;
-        }
+            return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.NotFound);
 
         var pageExists = await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == q.PageId && p.ChapterId == q.ChapterId, ct);
         if (!pageExists) return NotFound();
         if (!await ChapterReadAccess.CanViewPageAsync(
-                _db, _currentUser.UserId, chapter.Id, q.PageId, chapter.WorkspaceId, chapter.IsLocked, language, ct))
+                _db, _currentUser.UserId, chapter.Id, q.PageId, chapter.WorkspaceId, language, ct))
             return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LockedPageMessage, ResultErrorCodes.Forbidden);
 
         var image = await LoadImageAsync(_db, _storage, _pages, _compositor, q.ChapterId, q.PageId, language, ct);

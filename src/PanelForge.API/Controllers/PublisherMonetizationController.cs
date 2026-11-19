@@ -9,7 +9,7 @@ namespace PanelForge.API.Controllers;
 
 /// <summary>
 /// Publisher quản lý kinh doanh theo bộ truyện: dashboard (lượt xem, lượt mua, đánh giá, doanh thu — lọc theo ngôn ngữ),
-/// và Manage từng chương (giá theo ngôn ngữ, ảnh trang bản dịch, khóa trang trả phí, mặc định khóa N trang cuối).
+/// và Manage từng chương (giá theo ngôn ngữ, ảnh trang bản dịch, N trang đầu xem trước theo từng ấn bản — BR-33).
 /// Chỉ Publisher/Admin; Producer không còn khóa trang hay xem doanh thu.
 /// </summary>
 [ApiController]
@@ -30,40 +30,26 @@ public sealed class PublisherMonetizationController : ControllerBase
     public async Task<IActionResult> GetInsights([FromRoute] Guid seriesId, [FromQuery] string? language, CancellationToken ct)
         => ToResult(await _mediator.Send(new GetSeriesInsightsQuery(seriesId, language), ct));
 
-    /// <summary>PUT /api/publisher/series/{seriesId}/monetization-settings — mặc định N trang đầu xem trước mỗi chương trả phí.</summary>
-    [HttpPut("series/{seriesId:guid}/monetization-settings")]
-    [ProducesResponseType(typeof(SeriesMonetizationSettingsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpdateSettings(
-        [FromRoute] Guid seriesId, [FromBody] UpdateSeriesMonetizationSettingsRequest request, CancellationToken ct)
-        => ToResult(await _mediator.Send(
-            new UpdateSeriesMonetizationSettingsCommand(seriesId, request.DefaultPreviewPageCount), ct));
-
-    /// <summary>GET /api/publisher/chapters/{chapterId}/manage — trang, trang xem trước, ảnh dịch, giá theo ngôn ngữ.</summary>
+    /// <summary>GET /api/publisher/chapters/{chapterId}/manage — trang, ảnh dịch, quy định thương mại từng ấn bản ngôn ngữ.</summary>
     [HttpGet("chapters/{chapterId:guid}/manage")]
     [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetManage([FromRoute] Guid chapterId, CancellationToken ct)
         => ToResult(await _mediator.Send(new GetChapterManageQuery(chapterId), ct));
 
-    /// <summary>PUT /api/publisher/chapters/{chapterId}/preview-pages — chọn trang xem trước cho người chưa mua (chương chuyển sang chọn tay).</summary>
-    [HttpPut("chapters/{chapterId:guid}/preview-pages")]
+    /// <summary>
+    /// PUT /api/publisher/chapters/{chapterId}/editions/{lang}/monetization — BR-33 / D4 (<c>SetEditionMonetization</c>):
+    /// loại Free/Trả phí, giá VNĐ và N trang đầu xem trước của ấn bản. Chỉ tài khoản Publisher (BR-33.3: 403 với mọi
+    /// vai trò khác, kể cả Admin/Producer). Đổi loại hoặc giá ấn bản đã phát hành cần lý do; mọi thay đổi ghi Audit.
+    /// </summary>
+    [HttpPut("chapters/{chapterId:guid}/editions/{lang}/monetization")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SetPreviewPages(
-        [FromRoute] Guid chapterId, [FromBody] SetChapterPreviewPagesRequest request, CancellationToken ct)
-        => ToResult(await _mediator.Send(new SetChapterPreviewPagesCommand(chapterId, request.PreviewPageIds ?? []), ct));
-
-    /// <summary>DELETE /api/publisher/chapters/{chapterId}/preview-pages — bỏ chọn tay, quay về mặc định của bộ truyện.</summary>
-    [HttpDelete("chapters/{chapterId:guid}/preview-pages")]
-    [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> ResetPreviewPages([FromRoute] Guid chapterId, CancellationToken ct)
-        => ToResult(await _mediator.Send(new ResetChapterPreviewPagesCommand(chapterId), ct));
-
-    /// <summary>PUT /api/publisher/chapters/{chapterId}/language-prices — giá chương trả phí theo từng ngôn ngữ (kèm tùy chọn khóa/giá gốc).</summary>
-    [HttpPut("chapters/{chapterId:guid}/language-prices")]
-    [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SetLanguagePrices(
-        [FromRoute] Guid chapterId, [FromBody] SetChapterLanguagePricesRequest request, CancellationToken ct)
-        => ToResult(await _mediator.Send(new SetChapterLanguagePricesCommand(
-            chapterId, request.Prices ?? [], request.IsLocked, request.BasePriceVnd), ct));
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetEditionMonetization(
+        [FromRoute] Guid chapterId, [FromRoute] string lang,
+        [FromBody] SetEditionMonetizationRequest request, CancellationToken ct)
+        => ToResult(await _mediator.Send(new SetEditionMonetizationCommand(
+            chapterId, lang, request.IsPaid, request.PriceVnd, request.FreePreviewPages, request.Reason, CurrentUserId), ct));
 
     /// <summary>GET /api/publisher/chapters/{chapterId}/pages/{pageId}/image?lang= — ảnh xem trước (cả chương chưa phát hành).</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]

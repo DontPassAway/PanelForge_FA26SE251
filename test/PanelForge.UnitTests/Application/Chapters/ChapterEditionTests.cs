@@ -208,6 +208,7 @@ public class ChapterEditionTests
         // Mark chapter approved
         await new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
         edition.Approve(Guid.NewGuid(), _producerId);
+        edition.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _producerId); // D4
         _db.SaveChanges();
 
         var handler = new PublishEditionCommandHandler(_db);

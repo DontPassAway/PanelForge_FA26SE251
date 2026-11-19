@@ -62,8 +62,6 @@ public sealed class GetChaptersBySeriesQueryHandler : IRequestHandler<GetChapter
                 c.ScriptReopenRequestedAt,
                 SetChapterCoverCommandHandler.CoverUrl(c.Id, c.CoverImageSha256),
                 c.ScriptContentHash,
-                c.IsLocked,
-                c.PriceVnd,
                 c.ScriptStatus,
                 c.ScriptSubmittedAt,
                 c.LastSubmittedVersionId,
