@@ -63,7 +63,8 @@ public sealed class RemoveWorkspaceMemberCommandHandler : IRequestHandler<Remove
             }
 
             // Lưới V3: không để lô mồ côi đứng tên người đã rời Studio
-            await TaskGrid.Common.TaskGridRules.ReleaseMemberCellsAsync(_dbContext, command.TargetUserId, seriesIds, cancellationToken);
+            await TaskGrid.Common.TaskGridRules.ReleaseMemberCellsAsync(
+                _dbContext, command.TargetUserId, command.WorkspaceId, workspace.OwnerId, seriesIds, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

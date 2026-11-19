@@ -76,6 +76,19 @@ public sealed record ReopenStageTaskResultDto(StageTaskDto Task, IReadOnlyList<G
 /// <param name="Lots">Lô đã tạo; rỗng khi DryRun.</param>
 public sealed record AssignStageTaskLotsResultDto(bool DryRun, int TaskCount, IReadOnlyList<StageTaskLotDto> Lots);
 
+/// <summary>Phương án giao tự động, chưa lưu. Xác nhận bằng POST /lots với TaskIds và AssigneeUserId của từng lô.</summary>
+/// <param name="UnassignedCount">Tổng số ô chưa giao của chương, gồm cả ô ở Skipped và ô của công đoạn đang tắt.</param>
+public sealed record AutoAssignPlanDto(
+    Guid ChapterId, int UnassignedCount, IReadOnlyList<AutoAssignLotDto> Lots, IReadOnlyList<AutoAssignSkippedDto> Skipped);
+
+/// <param name="PageNumbers">Số trang của lô; rỗng với ô cấp Chương.</param>
+/// <param name="OpenTaskCount">Số ô chưa xong người này đang giữ trong Workspace, trước phương án.</param>
+public sealed record AutoAssignLotDto(
+    Guid PipelineStageId, string StageName, Guid AssigneeUserId, string AssigneeName, WorkspaceRole AssignedRole,
+    IReadOnlyList<Guid> TaskIds, IReadOnlyList<int> PageNumbers, int OpenTaskCount);
+
+public sealed record AutoAssignSkippedDto(Guid PipelineStageId, string StageName, int TaskCount, string Reason);
+
 public sealed record GenerateStageTasksResultDto(int Created, int Cancelled, int Total);
 
 // ─── Clean Cutover ────────────────────────────────────────────────────────────

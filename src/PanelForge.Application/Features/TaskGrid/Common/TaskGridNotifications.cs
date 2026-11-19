@@ -29,6 +29,11 @@ internal static class TaskGridNotifications
         userId, NotificationType.AssignmentUnassigned, "Bạn đã được gỡ khỏi việc", $"Producer gỡ bạn khỏi {Cells(taskCount)}.",
         chapterId: chapterId);
 
+    public static Notification NeedsReassign(Guid userId, Guid chapterId, decimal chapterNumber, int taskCount) => Notification.Create(
+        userId, NotificationType.AssignmentUpdated, $"Có {Cells(taskCount)} cần giao lại",
+        $"Chương {chapterNumber}: một thành viên đã rời Studio. Mở lưới giao việc và dùng Giao tự động để xem người thay.",
+        chapterId: chapterId);
+
     public static Notification Approved(Guid userId, Guid chapterId, string stageName) => Notification.Create(
         userId, NotificationType.AssignmentApproved, "Ô việc của bạn đã được duyệt", stageName, chapterId: chapterId);
 

@@ -20,6 +20,8 @@ using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
+using PanelForge.Application.Features.TaskGrid.Common;
+using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
@@ -64,6 +66,9 @@ public class TaskGridHandlerTests
         private readonly List<WorkspaceMember> _members;
 
         public void AddMember(Guid userId, WorkspaceRole role) => _members.Add(WorkspaceMember.Create(_workspaceId, userId, role));
+        public void RemoveMember(Guid userId) => _members.RemoveAll(m => m.UserId == userId);
+        public Task<Result<AutoAssignPlanDto>> Plan() =>
+            new GetAutoAssignPlanQueryHandler(Db.Object).Handle(new GetAutoAssignPlanQuery(Chapter.Id), default);
 
         public Fixture()
         {
@@ -159,6 +164,74 @@ public class TaskGridHandlerTests
                 Lot(Color, ArtistId, Cell(Color, 0)), Lot(Lettering, LettererId, Cell(Lettering, 0)));
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         }
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_SplitsContiguousPages_KeepsSameArtistAcrossStages_AndCanBeApplied()
+    {
+        var f = new Fixture();
+        var secondArtist = Guid.NewGuid();
+        f.AddMember(secondArtist, WorkspaceRole.Artist);
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 3, default, 1200, 1800, 300));
+        f.Pages.Add(Page.CreateNew(f.Chapter.Id, 4, default, 1200, 1800, 300));
+        await f.Generate();
+
+        var plan = (await f.Plan()).Value!;
+
+        var pencil = plan.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).ToList();
+        pencil.Select(l => l.PageNumbers).Should().BeEquivalentTo(new[] { new[] { 1, 2 }, new[] { 3, 4 } });
+        pencil.Select(l => l.AssigneeUserId).Should().BeEquivalentTo(new[] { f.ArtistId, secondArtist });
+        var ink = plan.Lots.Where(l => l.PipelineStageId == f.Ink.Id).ToList();
+        ink.Single(l => l.PageNumbers.Contains(1)).AssigneeUserId.Should().Be(pencil.Single(l => l.PageNumbers.Contains(1)).AssigneeUserId);
+        plan.Lots.Single(l => l.PipelineStageId == f.Review.Id).AssigneeUserId.Should().Be(f.EditorId);
+        plan.Lots.Should().NotContain(l => l.AssigneeUserId == f.PendingArtistId);
+        plan.Skipped.Should().BeEmpty();
+        f.Lots.Should().BeEmpty("lập phương án không được ghi gì");
+
+        var applied = await f.Assign(false, plan.Lots.Select(l =>
+            new StageTaskLotRequest(l.PipelineStageId, l.AssigneeUserId, l.TaskIds)).ToArray());
+        applied.IsSuccess.Should().BeTrue(applied.ErrorMessage);
+        f.Tasks.Should().OnlyContain(t => t.Status == StageTaskStatus.Assigned);
+    }
+
+    [Fact]
+    public async Task AutoAssignPlan_PrefersLessLoadedMember_AndReportsStageWithoutCandidate()
+    {
+        var f = new Fixture();
+        var secondArtist = Guid.NewGuid();
+        f.AddMember(secondArtist, WorkspaceRole.Artist);
+        f.RemoveMember(f.LettererId);
+        await f.Generate();
+        (await f.Assign(false, f.Lot(f.Pencil, f.ArtistId, f.Cell(f.Pencil, 0), f.Cell(f.Pencil, 1)))).IsSuccess.Should().BeTrue();
+
+        var plan = (await f.Plan()).Value!;
+
+        var ink = plan.Lots.Single(l => l.PipelineStageId == f.Ink.Id);
+        ink.AssigneeUserId.Should().Be(secondArtist);
+        ink.TaskIds.Should().HaveCount(2);
+        plan.Skipped.Single().PipelineStageId.Should().Be(f.Lettering.Id);
+        plan.Skipped.Single().TaskCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ReleaseMemberCells_NotifiesCoordinators_AndPlanProposesReplacement()
+    {
+        var f = new Fixture();
+        var producer = Guid.NewGuid();
+        var replacement = Guid.NewGuid();
+        f.AddMember(producer, WorkspaceRole.Producer);
+        f.AddMember(replacement, WorkspaceRole.Artist);
+        await f.AssignPageOne();
+        var seriesIds = new[] { f.Chapter.SeriesId };
+        f.RemoveMember(f.ArtistId);
+        f.Notifications.Clear();
+
+        await TaskGridRules.ReleaseMemberCellsAsync(f.Db.Object, f.ArtistId, f.WorkspaceId, f.ProducerId, seriesIds, default);
+
+        f.Notifications.Where(n => n.Title == "Có 3 ô cần giao lại").Select(n => n.UserId)
+            .Should().BeEquivalentTo(new[] { f.ProducerId, producer, f.EditorId });
+        var plan = (await f.Plan()).Value!;
+        plan.Lots.Where(l => l.PipelineStageId == f.Pencil.Id).Should().OnlyContain(l => l.AssigneeUserId == replacement);
     }
 
     [Fact]
