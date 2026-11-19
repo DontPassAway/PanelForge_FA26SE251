@@ -83,7 +83,6 @@ public interface IPanelForgeDbContext
     DbSet<ReaderWallet> ReaderWallets { get; }
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
-    DbSet<ChapterLanguagePrice> ChapterLanguagePrices { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
     DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }
 

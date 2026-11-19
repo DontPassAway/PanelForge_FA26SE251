@@ -20,7 +20,9 @@ public sealed record ChapterEditionDto(
     DateTime? PublishedAt,
     long Version,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    // D4: Publisher đã chốt Free/Trả phí (Producer chỉ xem cấu hình)
+    bool IsMonetizationConfigured = false
 );
 
 public sealed record SubmitEditionTranslationRequest();
@@ -60,6 +62,7 @@ public static class ChapterEditionMapping
             PublishedAt: e.PublishedAt,
             Version: e.Version,
             CreatedAt: e.CreatedAt,
-            UpdatedAt: e.UpdatedAt
+            UpdatedAt: e.UpdatedAt,
+            IsMonetizationConfigured: e.IsMonetizationConfigured
         );
 }

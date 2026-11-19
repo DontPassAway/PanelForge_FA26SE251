@@ -7,46 +7,6 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Publisher.Monetization;
 
-// ─── Settings: mặc định N trang đầu xem trước cho người chưa mua chương trả phí ──
-
-public sealed record SeriesMonetizationSettingsDto(Guid SeriesId, int DefaultPreviewPageCount, int MaxDefaultPreviewPageCount);
-
-public sealed record UpdateSeriesMonetizationSettingsRequest(int DefaultPreviewPageCount);
-
-/// <summary>
-/// Publisher cấu hình theo từng bộ truyện: mặc định N trang đầu mỗi chương trả phí là trang xem trước (0 = khóa toàn bộ).
-/// Áp ngay cho mọi chương chưa chọn tay trang xem trước; chương đã chọn tay giữ nguyên.
-/// </summary>
-public sealed record UpdateSeriesMonetizationSettingsCommand(Guid SeriesId, int DefaultPreviewPageCount)
-    : IRequest<Result<SeriesMonetizationSettingsDto>>;
-
-public sealed class UpdateSeriesMonetizationSettingsCommandHandler
-    : IRequestHandler<UpdateSeriesMonetizationSettingsCommand, Result<SeriesMonetizationSettingsDto>>
-{
-    private readonly IPanelForgeDbContext _db;
-
-    public UpdateSeriesMonetizationSettingsCommandHandler(IPanelForgeDbContext db) => _db = db;
-
-    public async Task<Result<SeriesMonetizationSettingsDto>> Handle(UpdateSeriesMonetizationSettingsCommand cmd, CancellationToken ct)
-    {
-        var series = await _db.Series.FirstOrDefaultAsync(s => s.Id == cmd.SeriesId, ct);
-        if (series is null)
-            return Result<SeriesMonetizationSettingsDto>.Failure("Không tìm thấy bộ truyện.", ResultErrorCodes.NotFound);
-
-        if (cmd.DefaultPreviewPageCount is < 0 or > Domain.Entities.Content.Series.MaxDefaultPreviewPageCount)
-            return Result<SeriesMonetizationSettingsDto>.Failure(
-                $"Số trang xem trước mặc định từ 0 đến {Domain.Entities.Content.Series.MaxDefaultPreviewPageCount}.",
-                ResultErrorCodes.Validation);
-
-        series.SetDefaultPreviewPages(cmd.DefaultPreviewPageCount);
-        await _db.SaveChangesAsync(ct);
-        return Result<SeriesMonetizationSettingsDto>.Success(ToDto(series));
-    }
-
-    public static SeriesMonetizationSettingsDto ToDto(Domain.Entities.Content.Series s) =>
-        new(s.Id, s.DefaultPreviewPageCount, Domain.Entities.Content.Series.MaxDefaultPreviewPageCount);
-}
-
 // ─── Reader: đánh giá 1–5 sao cho bộ truyện ─────────────────────────────────
 
 public sealed record RateSeriesRequest(int Stars, string? Language = null);

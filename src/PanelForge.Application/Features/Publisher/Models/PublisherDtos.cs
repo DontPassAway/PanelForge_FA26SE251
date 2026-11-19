@@ -29,8 +29,10 @@ public sealed record PublisherChapterDto(
     DateTime? ScriptReopenRequestedAt = null,
     string? CoverUrl = null,
     string? ScriptContentHash = null,
+    // BR-33: Free/Trả phí và giá của ấn bản ngôn ngữ gốc; IsMonetizationConfigured=false → chưa đặt giá (D4)
     bool IsLocked = false,
-    decimal PriceVnd = 0m
+    decimal PriceVnd = 0m,
+    bool IsMonetizationConfigured = false
 );
 
 public sealed record PublisherLatestChapterDto(
@@ -75,8 +77,10 @@ public sealed record PublisherManagedChapterDto(
     int PagesCount,
     DateTime? ApprovedAt,
     string? ApprovedBy,
+    // BR-33: Free/Trả phí và giá của ấn bản ngôn ngữ gốc; IsMonetizationConfigured=false → chưa đặt giá (D4)
     bool IsLocked = false,
-    decimal PriceVnd = 0m
+    decimal PriceVnd = 0m,
+    bool IsMonetizationConfigured = false
 );
 
 public sealed record PublisherSeriesDetailDto(

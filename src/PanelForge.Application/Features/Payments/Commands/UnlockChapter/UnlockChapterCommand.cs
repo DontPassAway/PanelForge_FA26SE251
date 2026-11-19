@@ -65,7 +65,12 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         }
 
         // Trường hợp chương miễn phí hoặc có đặc quyền VIP
-        if (!chapter.IsLocked || isVip)
+        // BR-33: loại & giá theo ấn bản ngôn ngữ đang mở khóa; ấn bản chưa cấu hình (D4) không mở khóa được.
+        var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, language, ct);
+        if (!terms.IsConfigured)
+            return Result<UnlockChapterResponse>.Failure("Ấn bản này chưa được Publisher đặt giá.", ResultErrorCodes.Validation);
+
+        if (!terms.IsPaid || isVip)
         {
             var freeEntitlement = ChapterEntitlement.Create(
                 userId: command.UserId,
@@ -93,11 +98,8 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             ));
         }
 
-        // Trường hợp chương trả phí cần trừ tiền ví
-        // Giá luôn lấy từ chương (server là nguồn sự thật) — không tin giá client gửi lên.
-        const int defaultLockedPriceVnd = 10000;
-        var languagePrice = await ChapterReadAccess.ChapterPriceAsync(_db, chapter.Id, chapter.PriceVnd, language, ct);
-        int priceVnd = languagePrice > 0 ? (int)languagePrice : defaultLockedPriceVnd;
+        // Ấn bản trả phí: trừ đúng price_vnd hiện hành của ấn bản (BR-33.4) — không tin giá client gửi lên.
+        int priceVnd = (int)terms.PriceVnd;
 
         if (wallet.BalanceVnd < priceVnd)
         {

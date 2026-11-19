@@ -180,9 +180,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                         c.ChapterNumber,
                         c.Title,
                         c.PublishedAt,
-                        c.CoverImageSha256,
-                        c.IsLocked,
-                        c.PriceVnd
+                        c.CoverImageSha256
                     })
                     .ToList()
             })
@@ -221,10 +219,8 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
             .Where(e => chapterIds.Contains(e.ChapterId) && e.Status == EditionStatus.Published && !e.IsDeleted)
             .Select(e => new { e.ChapterId, e.LanguageCode })
             .ToListAsync(ct);
-        var prices = await _dbContext.ChapterLanguagePrices.AsNoTracking()
-            .Where(p => chapterIds.Contains(p.ChapterId) && !p.IsDeleted)
-            .Select(p => new { p.ChapterId, p.Language, p.PriceVnd })
-            .ToListAsync(ct);
+        // BR-33: loại/giá theo từng ấn bản ngôn ngữ.
+        var terms = await ChapterReadAccess.EditionTermsAsync(_dbContext, chapterIds, ct);
 
         var chapterDtos = series.Chapters.Select(c =>
         {
@@ -239,22 +235,27 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
                 langs.Add(ContentLanguages.Original);
             }
 
-            var languageDtos = langs.Select(l => new PublicChapterLanguageDto(
-                l,
-                c.IsLocked ? prices.FirstOrDefault(p => p.ChapterId == c.Id && p.Language == l)?.PriceVnd ?? c.PriceVnd : 0m,
-                !c.IsLocked || canReadAll || owned.Contains((c.Id, l)))).ToList();
+            var languageDtos = langs.Select(l =>
+            {
+                var t = ChapterReadAccess.TermsOf(terms, c.Id, l);
+                return new PublicChapterLanguageDto(
+                    l,
+                    t.IsPaid ? t.PriceVnd : 0m,
+                    !t.IsLocked || canReadAll || owned.Contains((c.Id, l)));
+            }).ToList();
 
             var current = languageDtos.FirstOrDefault(l => l.Language == language) ?? languageDtos[0];
+            var currentTerms = ChapterReadAccess.TermsOf(terms, c.Id, current.Language);
             return new PublicChapterDto(
                 Id: c.Id,
                 ChapterNumber: c.ChapterNumber,
                 Title: c.Title,
                 PublishedAt: c.PublishedAt,
                 CoverUrl: GetPublicChapterCoverQueryHandler.CoverUrl(c.Id, c.CoverImageSha256),
-                IsLocked: c.IsLocked,
+                IsLocked: currentTerms.IsLocked,
                 PriceVnd: current.PriceVnd,
                 IsUnlocked: current.IsUnlocked,
-                IsFree: !c.IsLocked,
+                IsFree: !currentTerms.IsLocked,
                 Languages: languageDtos
             );
         }).ToList();

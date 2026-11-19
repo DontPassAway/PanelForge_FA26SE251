@@ -54,19 +54,24 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 var chapter = await _db.Chapters
                     .AsNoTracking()
                     .Where(c => c.Id == req.ChapterId.Value && !c.IsDeleted)
-                    .Select(c => new { c.Id, c.SeriesId, c.Series.WorkspaceId, c.IsLocked, c.PriceVnd })
+                    .Select(c => new { c.Id, c.SeriesId, c.Series.WorkspaceId })
                     .FirstOrDefaultAsync(ct);
 
                 if (chapter == null)
                     return Result<TopupResponse>.Failure("Không tìm thấy chương truyện.", ResultErrorCodes.NotFound);
-                if (!chapter.IsLocked || chapter.PriceVnd <= 0)
-                    return Result<TopupResponse>.Failure("Chương này miễn phí, không cần thanh toán.", ResultErrorCodes.Validation);
 
                 language = ContentLanguages.Normalize(req.Language);
                 if (language is null)
                     return Result<TopupResponse>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
                 if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct)).Contains(language))
                     return Result<TopupResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.Validation);
+
+                // BR-33: giá lấy từ ấn bản ngôn ngữ đang mua (server là nguồn sự thật).
+                var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, language, ct);
+                if (!terms.IsPurchasable)
+                    return Result<TopupResponse>.Failure(
+                        terms.IsConfigured ? "Ấn bản này miễn phí, không cần thanh toán." : "Ấn bản này chưa được Publisher đặt giá.",
+                        ResultErrorCodes.Validation);
 
                 var alreadyUnlocked = await _db.ChapterEntitlements
                     .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && e.Language == language && !e.IsDeleted, ct);
@@ -76,7 +81,7 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 chapterId = chapter.Id;
                 seriesId = chapter.SeriesId;
                 workspaceId = chapter.WorkspaceId;
-                amountVnd = (int)await ChapterReadAccess.ChapterPriceAsync(_db, chapter.Id, chapter.PriceVnd, language, ct);
+                amountVnd = (int)terms.PriceVnd;
                 break;
             }
             case PaymentTransactionType.VipSubscription:

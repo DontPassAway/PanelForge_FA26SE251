@@ -56,6 +56,24 @@ internal sealed class ChapterEditionConfiguration : IEntityTypeConfiguration<Cha
                .HasDefaultValue(0)
                .IsRequired();
 
+        builder.Property(e => e.MonetizationConfiguredAt)
+               .HasColumnName("monetization_configured_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(e => e.MonetizationConfiguredById)
+               .HasColumnName("monetization_configured_by_id")
+               .HasColumnType("uuid");
+
+        builder.Ignore(e => e.IsMonetizationConfigured);
+
+        // BR-33: Free = giá 0; giá và N không âm (schema §6.1.5).
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_chapter_editions_free_has_no_price", "is_paid OR price_vnd = 0");
+            t.HasCheckConstraint("ck_chapter_editions_price_non_negative", "price_vnd >= 0");
+            t.HasCheckConstraint("ck_chapter_editions_preview_non_negative", "free_preview_pages >= 0");
+        });
+
         builder.Property(e => e.CurrentSnapshotId)
                .HasColumnName("current_snapshot_id")
                .HasColumnType("uuid");

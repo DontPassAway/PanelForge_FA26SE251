@@ -8,14 +8,13 @@ public static class ContentLanguages
 {
     public const string Vietnamese = "vi";
     public const string English = "en";
-    public const string Japanese = "ja";
 
     /// <summary>Ngôn ngữ của bản Studio sản xuất.</summary>
     public const string Original = Vietnamese;
 
-    public static readonly IReadOnlyList<string> All = [Vietnamese, English, Japanese];
+    public static readonly IReadOnlyList<string> All = [Vietnamese, English];
 
-    public static readonly IReadOnlyList<string> Translations = [English, Japanese];
+    public static readonly IReadOnlyList<string> Translations = [English];
 
     public static bool IsSupported(string? language) =>
         language is not null && All.Contains(language.Trim().ToLowerInvariant());

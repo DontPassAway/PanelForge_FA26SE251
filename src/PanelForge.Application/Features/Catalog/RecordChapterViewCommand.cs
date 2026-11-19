@@ -33,7 +33,7 @@ public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChap
         var now = DateTime.UtcNow;
         var chapter = await _db.Chapters.AsNoTracking()
             .Where(c => c.Id == cmd.ChapterId && c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now)
-            .Select(c => new { c.Id, c.SeriesId, c.IsLocked, c.Series.WorkspaceId })
+            .Select(c => new { c.Id, c.SeriesId, c.Series.WorkspaceId })
             .FirstOrDefaultAsync(ct);
         if (chapter is null)
             return Result<bool>.Failure("Không tìm thấy chương đã phát hành.", ResultErrorCodes.NotFound);

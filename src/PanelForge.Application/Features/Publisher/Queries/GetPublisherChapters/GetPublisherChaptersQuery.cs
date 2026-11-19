@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Catalog;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
@@ -116,10 +117,12 @@ public sealed class GetPublisherChaptersQueryHandler
                 c.ScriptReopenRequestedAt,
                 c.CoverImageSha256,
                 c.ScriptContentHash,
-                c.IsLocked,
-                c.PriceVnd
+                c.Series.OriginalLanguage
             })
             .ToListAsync(ct);
+
+        // BR-33: giá hiển thị = ấn bản ngôn ngữ gốc của chương.
+        var terms = await ChapterReadAccess.EditionTermsAsync(_db, rawItems.Select(c => c.Id).ToList(), ct);
 
         var items = rawItems.Select(c => new PublisherChapterDto(
             Id: c.Id,
@@ -148,8 +151,9 @@ public sealed class GetPublisherChaptersQueryHandler
             ScriptReopenRequestedAt: c.ScriptReopenRequestedAt,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(c.Id, c.CoverImageSha256),
             ScriptContentHash: c.ScriptContentHash,
-            IsLocked: c.IsLocked,
-            PriceVnd: c.PriceVnd
+            IsLocked: ChapterReadAccess.TermsOf(terms, c.Id, c.OriginalLanguage) is { IsConfigured: true, IsPaid: true },
+            PriceVnd: ChapterReadAccess.TermsOf(terms, c.Id, c.OriginalLanguage) is { IsPaid: true } t ? t.PriceVnd : 0m,
+            IsMonetizationConfigured: ChapterReadAccess.TermsOf(terms, c.Id, c.OriginalLanguage).IsConfigured
         )).ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);

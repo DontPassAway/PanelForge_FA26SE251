@@ -31,7 +31,7 @@ public sealed class LibreTranslateService : ITranslationService
             ?? "http://localhost:5000";
     }
 
-    public async Task<string> TranslateAsync(
+    public async Task<TranslationResult> TranslateAsync(
         string text,
         string sourceLanguage,
         string targetLanguage,
@@ -40,7 +40,7 @@ public sealed class LibreTranslateService : ITranslationService
         if (string.IsNullOrWhiteSpace(text) ||
             string.Equals(sourceLanguage, targetLanguage, StringComparison.OrdinalIgnoreCase))
         {
-            return text;
+            return new TranslationResult(text, IsFallback: false);
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -69,11 +69,13 @@ public sealed class LibreTranslateService : ITranslationService
                     "Translation service returned non-success status code {StatusCode}: {ErrorBody}. Returning original text.",
                     response.StatusCode,
                     errorBody);
-                return text;
+                return new TranslationResult(text, IsFallback: true);
             }
 
             var result = await response.Content.ReadFromJsonAsync<LibreTranslateResponse>(JsonOptions, cts.Token);
-            return !string.IsNullOrEmpty(result?.TranslatedText) ? result.TranslatedText : text;
+            return !string.IsNullOrEmpty(result?.TranslatedText)
+                ? new TranslationResult(result.TranslatedText, IsFallback: false)
+                : new TranslationResult(text, IsFallback: true);
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -82,7 +84,7 @@ public sealed class LibreTranslateService : ITranslationService
                 "Translation request timed out for source '{Source}' to '{Target}'. Returning original text.",
                 sourceLanguage,
                 targetLanguage);
-            return text;
+            return new TranslationResult(text, IsFallback: true);
         }
         catch (HttpRequestException ex)
         {
@@ -91,14 +93,14 @@ public sealed class LibreTranslateService : ITranslationService
                 "Translation service connection error for source '{Source}' to '{Target}'. Returning original text.",
                 sourceLanguage,
                 targetLanguage);
-            return text;
+            return new TranslationResult(text, IsFallback: true);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex,
                 "Unexpected error occurred during translation. Returning original text.");
-            return text;
+            return new TranslationResult(text, IsFallback: true);
         }
     }
 

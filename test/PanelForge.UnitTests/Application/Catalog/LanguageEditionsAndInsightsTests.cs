@@ -27,6 +27,7 @@ public class LanguageEditionsAndInsightsTests
     private readonly StudioWorkspace _studio;
     private readonly DomainSeries _series;
     private readonly Chapter _chapter;
+    private readonly ChapterEdition _vi;
     private readonly List<Page> _pages = [];
 
     public LanguageEditionsAndInsightsTests()
@@ -41,8 +42,8 @@ public class LanguageEditionsAndInsightsTests
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_chapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_chapter);
 
-        // BR-34: ChapterEdition cho bản gốc vi
-        _db.ChapterEditions.Add(ChapterEdition.Create(_chapter.Id, "vi", EditionStatus.Published));
+        // BR-34: ChapterEdition cho bản gốc vi (BR-33: Publisher đã cấu hình Free)
+        _vi = TestEditions.Monetize(_db, _chapter.Id, isPaid: false);
 
         var asset = Asset.Create(_studio.Id, new string('a', 64), 1024, "image/png");
         _db.Assets.Add(asset);
@@ -68,10 +69,15 @@ public class LanguageEditionsAndInsightsTests
         return user.Id;
     }
 
-    private void PublishEdition(string language)
+    private void PublishEdition(string language, bool isPaid = false, decimal priceVnd = 0m, int freePreviewPages = 0)
     {
-        var edition = ChapterEdition.Create(_chapter.Id, language, EditionStatus.Published);
-        _db.ChapterEditions.Add(edition);
+        TestEditions.Monetize(_db, _chapter.Id, isPaid, priceVnd, freePreviewPages, language);
+        _db.SaveChanges();
+    }
+
+    private void MakeOriginalPaid(decimal priceVnd, int freePreviewPages = 0)
+    {
+        _vi.SetMonetization(true, priceVnd, freePreviewPages, Guid.Empty);
         _db.SaveChanges();
     }
 
@@ -101,10 +107,8 @@ public class LanguageEditionsAndInsightsTests
     [Fact]
     public async Task PaidChapter_IsBoughtPerLanguage_AtLanguagePrice()
     {
-        _chapter.SetPricing(true, 10000m);
-        _db.ChapterLanguagePrices.Add(ChapterLanguagePrice.Create(_chapter.Id, "en", 15000m));
-        await _db.SaveChangesAsync();
-        PublishEdition(ContentLanguages.English);
+        MakeOriginalPaid(10000m);
+        PublishEdition(ContentLanguages.English, isPaid: true, priceVnd: 15000m);
         var reader = AddUser(balance: 20000m);
 
         var unlock = await new UnlockChapterCommandHandler(_db).Handle(
@@ -119,29 +123,27 @@ public class LanguageEditionsAndInsightsTests
     [Fact]
     public async Task ChapterPurchase_InOneLanguage_LeavesOtherEditionInPreview()
     {
-        _chapter.SetPricing(true, 10000m);
-        _series.SetDefaultPreviewPages(1);
-        await _db.SaveChangesAsync();
-        PublishEdition(ContentLanguages.Japanese);
+        MakeOriginalPaid(10000m, freePreviewPages: 1);
+        PublishEdition(ContentLanguages.English, isPaid: true, priceVnd: 10000m, freePreviewPages: 1);
         var reader = AddUser();
         _db.ChapterEntitlements.Add(ChapterEntitlement.Create(reader, _chapter.Id, _series.Id, _studio.Id, 10000m, language: "vi"));
         await _db.SaveChangesAsync();
 
         (await Read(reader, "vi")).Value!.Pages.Should().OnlyContain(p => p.IsUnlocked);
-        var ja = (await Read(reader, "ja")).Value!;
-        ja.Pages[1].IsUnlocked.Should().BeFalse();
-        ja.Pages[1].ImageUrl.Should().BeNull("trang ngoài xem trước của bản ja chưa mua thì server không trả ảnh");
-        ja.Pages[0].ImageUrl.Should().EndWith("?lang=ja", "trang xem trước của bản ja dùng ảnh dịch");
+        var en = (await Read(reader, "en")).Value!;
+        en.Pages[1].IsUnlocked.Should().BeFalse();
+        en.Pages[1].ImageUrl.Should().BeNull("trang ngoài xem trước của bản en chưa mua thì server không trả ảnh");
+        en.Pages[0].ImageUrl.Should().EndWith("?lang=en", "trang xem trước của bản en dùng ảnh dịch");
     }
 
     [Fact]
     public async Task TranslatedPageImageUrl_CarriesLanguage()
     {
-        PublishEdition(ContentLanguages.Japanese);
+        PublishEdition(ContentLanguages.English);
 
-        var dto = (await Read(null, "ja")).Value!;
+        var dto = (await Read(null, "en")).Value!;
 
-        dto.Pages.Should().OnlyContain(p => p.ImageUrl != null && p.ImageUrl.EndsWith("?lang=ja"));
+        dto.Pages.Should().OnlyContain(p => p.ImageUrl != null && p.ImageUrl.EndsWith("?lang=en"));
     }
 
     // ─── Đánh giá + dashboard ─────────────────────────────────────────────────
@@ -198,30 +200,5 @@ public class LanguageEditionsAndInsightsTests
         vi.Totals.Views.Should().Be(2);
         vi.Totals.RevenueVnd.Should().Be(0m);
         vi.Totals.RatingCount.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task LanguagePrices_OnlyForPaidChapters_AndCanBeCleared()
-    {
-        var handler = new SetChapterLanguagePricesCommandHandler(_db);
-        (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", 15000m)]), default))
-            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
-
-        _chapter.SetPricing(true, 10000m);
-        await _db.SaveChangesAsync();
-        var set = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", 15000m)]), default)).Value!;
-        set.LanguagePrices.Single(p => p.Language == "en").Should().Be(new ChapterLanguagePriceDto("en", 15000m, true));
-
-        var cleared = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", null)]), default)).Value!;
-        cleared.LanguagePrices.Single(p => p.Language == "en").Should().Be(new ChapterLanguagePriceDto("en", 10000m, false));
-
-        var toggledFree = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [], IsLocked: false, BasePriceVnd: 0m), default)).Value!;
-        toggledFree.ChapterIsLocked.Should().BeFalse();
-        toggledFree.BasePriceVnd.Should().Be(0m);
-
-        var toggledPaid = (await handler.Handle(new SetChapterLanguagePricesCommand(_chapter.Id, [new LanguagePriceItem("en", 18000m)], IsLocked: true, BasePriceVnd: 12000m), default)).Value!;
-        toggledPaid.ChapterIsLocked.Should().BeTrue();
-        toggledPaid.BasePriceVnd.Should().Be(12000m);
-        toggledPaid.LanguagePrices.Single(p => p.Language == "en").Should().Be(new ChapterLanguagePriceDto("en", 18000m, true));
     }
 }

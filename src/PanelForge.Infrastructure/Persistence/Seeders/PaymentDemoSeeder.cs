@@ -63,23 +63,28 @@ public static class PaymentDemoSeeder
         // 3. Chapters (Chương 1 Free, Chương 2 Locked giá 10,000 VND)
         var ch1 = Chapter.Create(MacKiemLucSeriesId, 1, "Kiếm Khởi Long Nhai");
         SetId(ch1, Chapter1Id);
-        ch1.SetPricing(isLocked: false, priceVnd: 0m);
         ch1.SubmitScript(Guid.Empty);
         ch1.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch1.Approve();
         ch1.HandOff(Guid.Empty); // Publish đòi bàn giao trước
         ch1.Publish(DateTime.UtcNow.AddDays(-10));
         db.Chapters.Add(ch1);
+        // BR-33: loại/giá thuộc ấn bản ngôn ngữ (D4: đã cấu hình rõ Free).
+        var ed1 = ChapterEdition.Create(ch1.Id, series.OriginalLanguage, EditionStatus.Published);
+        ed1.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: Guid.Empty);
+        db.ChapterEditions.Add(ed1);
 
         var ch2 = Chapter.Create(MacKiemLucSeriesId, 2, "Huyết Chiến Hắc Long");
         SetId(ch2, Chapter2Id);
-        ch2.SetPricing(isLocked: true, priceVnd: 10000m);
         ch2.SubmitScript(Guid.Empty);
         ch2.StartProduction(Guid.Empty, null); // PreProduction → InProduction trước khi duyệt
         ch2.Approve();
         ch2.HandOff(Guid.Empty);
         ch2.Publish(DateTime.UtcNow.AddDays(-5));
         db.Chapters.Add(ch2);
+        var ed2 = ChapterEdition.Create(ch2.Id, series.OriginalLanguage, EditionStatus.Published);
+        ed2.SetMonetization(isPaid: true, priceVnd: 10000m, freePreviewPages: 0, configuredById: Guid.Empty);
+        db.ChapterEditions.Add(ed2);
 
         // 4. Ví độc giả của Frank Reader
         if (!await db.ReaderWallets.IgnoreQueryFilters().AnyAsync(w => w.UserId == ReaderUser, ct))

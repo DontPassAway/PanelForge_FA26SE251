@@ -17,9 +17,7 @@ public sealed record CreateChapterCommand(
     decimal ChapterNumber,
     string? Title = null,
     DateOnly? TargetReleaseDate = null,
-    string? Outline = null,
-    bool? IsLocked = null,
-    decimal? PriceVnd = null
+    string? Outline = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterCommand, Result<ChapterDto>>
@@ -61,10 +59,6 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             {
                 chapter.SetOutline(command.Outline);
             }
-            if (command.IsLocked.HasValue || command.PriceVnd.HasValue)
-            {
-                chapter.SetPricing(command.IsLocked ?? false, command.PriceVnd ?? 0m);
-            }
             chapter.CreatedBy = command.UserId.ToString();
         }
         catch (ArgumentOutOfRangeException ex)
@@ -81,7 +75,7 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
 
         // BR-34: Khởi tạo các ấn bản ngôn ngữ (ChapterEdition) theo cấu hình ReleaseLanguages của Series
         var series = await _dbContext.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == command.SeriesId, cancellationToken);
-        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English];
         foreach (var lang in releaseLangs)
         {
             var edition = ChapterEdition.Create(chapter.Id, lang, EditionStatus.Draft);
@@ -111,8 +105,6 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: null,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,

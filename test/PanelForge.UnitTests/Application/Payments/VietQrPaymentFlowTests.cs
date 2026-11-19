@@ -40,9 +40,10 @@ public class VietQrPaymentFlowTests
         _db.Series.Add(_series);
 
         _paidChapter = Chapter.Create(_series.Id, 2, "Trả phí");
-        _paidChapter.SetPricing(true, 15000m);
         _freeChapter = Chapter.Create(_series.Id, 1, "Miễn phí");
         _db.Chapters.AddRange(_paidChapter, _freeChapter);
+        TestEditions.Monetize(_db, _paidChapter.Id, isPaid: true, priceVnd: 15000m);
+        TestEditions.Monetize(_db, _freeChapter.Id, isPaid: false);
         _db.SaveChanges();
     }
 

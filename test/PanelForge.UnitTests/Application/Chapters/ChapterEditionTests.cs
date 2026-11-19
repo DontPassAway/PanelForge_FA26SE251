@@ -38,7 +38,7 @@ public class ChapterEditionTests
             WorkspaceMember.Create(studio.Id, _lettererId, WorkspaceRole.Letterer));
 
         _series = DomainSeries.Create(studio.Id, "Moon Blade", ReadingDirection.RightToLeft, genre: "Fantasy");
-        _series.SetLanguages("vi", ["vi", "en", "ja"]);
+        _series.SetLanguages("vi", ["vi", "en"]);
         _db.Series.Add(_series);
 
         _chapter = Chapter.Create(_series.Id, 1, "Khởi đầu").InProduction();
@@ -208,6 +208,7 @@ public class ChapterEditionTests
         // Mark chapter approved
         await new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
         edition.Approve(Guid.NewGuid(), _producerId);
+        edition.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _producerId); // D4
         _db.SaveChanges();
 
         var handler = new PublishEditionCommandHandler(_db);
