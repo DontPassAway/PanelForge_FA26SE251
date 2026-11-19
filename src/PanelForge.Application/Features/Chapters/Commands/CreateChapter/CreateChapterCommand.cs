@@ -75,7 +75,7 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
 
         // BR-34: Khởi tạo các ấn bản ngôn ngữ (ChapterEdition) theo cấu hình ReleaseLanguages của Series
         var series = await _dbContext.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == command.SeriesId, cancellationToken);
-        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
+        var releaseLangs = series?.ReleaseLanguages ?? [ContentLanguages.Vietnamese, ContentLanguages.English];
         foreach (var lang in releaseLangs)
         {
             var edition = ChapterEdition.Create(chapter.Id, lang, EditionStatus.Draft);

@@ -100,17 +100,16 @@ public class PreviewPageAccessTests
     [Fact]
     public async Task TypePriceAndPreview_ArePerLanguageEdition()
     {
-        TestEditions.Monetize(_db, _chapter.Id, isPaid: true, priceVnd: 15000m, freePreviewPages: 4, language: ContentLanguages.English);
-        TestEditions.Monetize(_db, _chapter.Id, isPaid: false, language: ContentLanguages.Japanese);
+        TestEditions.Monetize(_db, _chapter.Id, isPaid: false, language: ContentLanguages.English);
         await _db.SaveChangesAsync();
 
-        var en = await Read(null, ContentLanguages.English);
-        en.PriceVnd.Should().Be(15000m);
-        en.Pages.Count(p => p.IsPreview).Should().Be(4);
+        var vi = await Read(null, ContentLanguages.Vietnamese);
+        vi.PriceVnd.Should().Be(10000m);
+        vi.Pages.Count(p => p.IsPreview).Should().Be(2);
 
-        var ja = await Read(null, ContentLanguages.Japanese);
-        ja.IsFree.Should().BeTrue();
-        ja.Pages.Should().OnlyContain(p => p.IsUnlocked && !p.IsLocked);
+        var en = await Read(null, ContentLanguages.English);
+        en.IsFree.Should().BeTrue();
+        en.Pages.Should().OnlyContain(p => p.IsUnlocked && !p.IsLocked);
     }
 
     [Fact]
@@ -174,14 +173,14 @@ public class PreviewPageAccessTests
     [Fact]
     public async Task UnconfiguredEdition_IsFullyLocked_AndCannotBeBought()
     {
-        var ja = ChapterEdition.Create(_chapter.Id, ContentLanguages.Japanese, EditionStatus.Published);
-        _db.ChapterEditions.Add(ja);
+        var en = ChapterEdition.Create(_chapter.Id, ContentLanguages.English, EditionStatus.Published);
+        _db.ChapterEditions.Add(en);
         await _db.SaveChangesAsync();
         var reader = AddUser(balance: 50000m);
 
-        (await Read(reader, ContentLanguages.Japanese)).Pages.Should().OnlyContain(p => p.IsLocked && p.ImageUrl == null);
+        (await Read(reader, ContentLanguages.English)).Pages.Should().OnlyContain(p => p.IsLocked && p.ImageUrl == null);
         var unlock = await new UnlockChapterCommandHandler(_db).Handle(
-            new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: ContentLanguages.Japanese)), default);
+            new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: ContentLanguages.English)), default);
         unlock.ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 
@@ -265,22 +264,22 @@ public class PreviewPageAccessTests
     [Fact]
     public async Task Publisher_CanConfigureMissingEdition_WhichIsCreatedAsDraft()
     {
-        var result = await Configure(true, 8000m, 4, ContentLanguages.Japanese);
+        var result = await Configure(true, 8000m, 4, ContentLanguages.English);
 
         result.IsSuccess.Should().BeTrue();
-        var ja = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == ContentLanguages.Japanese);
-        ja.Status.Should().Be(EditionStatus.Draft);
-        ja.IsMonetizationConfigured.Should().BeTrue();
-        ja.PriceVnd.Should().Be(8000m);
-        ja.FreePreviewPages.Should().Be(4);
+        var en = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == ContentLanguages.English);
+        en.Status.Should().Be(EditionStatus.Draft);
+        en.IsMonetizationConfigured.Should().BeTrue();
+        en.PriceVnd.Should().Be(8000m);
+        en.FreePreviewPages.Should().Be(4);
     }
 
     [Fact]
     public async Task LanguageOutsideReleaseLanguages_IsRejected()
     {
-        _series.SetLanguages(ContentLanguages.Vietnamese, [ContentLanguages.Vietnamese, ContentLanguages.English]);
+        _series.SetLanguages(ContentLanguages.Vietnamese, [ContentLanguages.Vietnamese]);
         await _db.SaveChangesAsync();
 
-        (await Configure(true, 10000m, 1, ContentLanguages.Japanese)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        (await Configure(true, 10000m, 1, ContentLanguages.English)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 }

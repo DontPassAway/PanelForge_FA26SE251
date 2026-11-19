@@ -51,7 +51,8 @@ public class LibreTranslateServiceTests
 
         var result = await service.TranslateAsync("Hello world", "en", "vi");
 
-        result.Should().Be("Xin chào thế giới");
+        result.Text.Should().Be("Xin chào thế giới");
+        result.IsFallback.Should().BeFalse();
         handler.CallCount.Should().Be(1);
         handler.LastRequest?.Method.Should().Be(HttpMethod.Post);
         handler.LastRequest?.RequestUri?.ToString().Should().EndWith("/translate");
@@ -74,7 +75,8 @@ public class LibreTranslateServiceTests
         var originalText = "Text with error";
         var result = await service.TranslateAsync(originalText, "en", "vi");
 
-        result.Should().Be(originalText);
+        result.Text.Should().Be(originalText);
+        result.IsFallback.Should().BeTrue();
         handler.CallCount.Should().Be(1);
     }
 
@@ -89,7 +91,8 @@ public class LibreTranslateServiceTests
         var originalText = "Text with connection drop";
         var result = await service.TranslateAsync(originalText, "en", "vi");
 
-        result.Should().Be(originalText);
+        result.Text.Should().Be(originalText);
+        result.IsFallback.Should().BeTrue();
         handler.CallCount.Should().Be(1);
     }
 
@@ -104,7 +107,8 @@ public class LibreTranslateServiceTests
         var originalText = "Text that times out";
         var result = await service.TranslateAsync(originalText, "en", "vi");
 
-        result.Should().Be(originalText);
+        result.Text.Should().Be(originalText);
+        result.IsFallback.Should().BeTrue();
         handler.CallCount.Should().Be(1);
     }
 
@@ -119,7 +123,8 @@ public class LibreTranslateServiceTests
 
         var result = await service.TranslateAsync(emptyText, "en", "vi");
 
-        result.Should().Be(emptyText);
+        result.Text.Should().Be(emptyText);
+        result.IsFallback.Should().BeFalse();
         handler.CallCount.Should().Be(0);
     }
 
@@ -137,7 +142,8 @@ public class LibreTranslateServiceTests
         var originalText = "No translation needed";
         var result = await service.TranslateAsync(originalText, src, tgt);
 
-        result.Should().Be(originalText);
+        result.Text.Should().Be(originalText);
+        result.IsFallback.Should().BeFalse();
         handler.CallCount.Should().Be(0);
     }
 }

@@ -58,13 +58,13 @@ public sealed class TranslationsController : ControllerBase
         var sourceLang = request.SourceLanguage.Trim().ToLowerInvariant();
         var targetLang = request.TargetLanguage.Trim().ToLowerInvariant();
 
-        var translatedText = await _translationService.TranslateAsync(
+        var result = await _translationService.TranslateAsync(
             request.Text,
             sourceLang,
             targetLang,
             cancellationToken);
 
-        return Ok(new TranslateResponse(translatedText, sourceLang, targetLang));
+        return Ok(new TranslateResponse(result.Text, sourceLang, targetLang, result.IsFallback));
     }
 }
 
@@ -76,4 +76,5 @@ public sealed record TranslateRequest(
 public sealed record TranslateResponse(
     string TranslatedText,
     string SourceLanguage,
-    string TargetLanguage);
+    string TargetLanguage,
+    bool IsFallback = false);

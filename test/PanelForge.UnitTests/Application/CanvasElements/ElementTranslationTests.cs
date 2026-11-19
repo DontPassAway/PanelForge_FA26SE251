@@ -2,6 +2,8 @@ using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
 using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementTranslation;
 using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Domain.Entities.Content;
@@ -147,6 +149,92 @@ public class ElementTranslationTests
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         page.Elements[elementId].Texts["en"].Should().Be("Hello");
+    }
+
+    private (Page page, Guid elementId, Guid lettererId, ChapterEdition edition) SetupApprovedChapterWithGridAndEdition(
+        EditionStatus editionStatus)
+    {
+        var lettererId = Guid.NewGuid();
+        _db.WorkspaceMembers.Add(WorkspaceMember.Create(_studio.Id, lettererId, WorkspaceRole.Letterer));
+
+        var (page, elementId) = SetupPageWithBalloon();
+        _db.Pages.Add(page);
+
+        var stage = PipelineStage.Create(Guid.NewGuid(), "Lettering", "lettering", 4, allowedRole: WorkspaceRole.Letterer, isApprovalGate: true);
+        _db.PipelineStages.Add(stage);
+
+        var lot = StageTaskLot.Create(_series.Id, _chapter.Id, stage.Id, lettererId, WorkspaceRole.Letterer, _user, "Chèn chữ", null);
+        _db.StageTaskLots.Add(lot);
+
+        var task = StageTask.Create(_series.Id, _chapter.Id, stage.Id, page.Id);
+        task.RestoreFromLegacy(lot.Id, StageTaskStatus.Approved, DateTime.UtcNow);
+        _db.StageTasks.Add(task);
+
+        _chapter.InProduction().Approve();
+
+        var edition = ChapterEdition.Create(_chapter.Id, "en", editionStatus);
+        _db.ChapterEditions.Add(edition);
+        _db.SaveChanges();
+
+        return (page, elementId, lettererId, edition);
+    }
+
+    [Fact]
+    public async Task Handler_AllowsLettererWhenEditionDraftAndChapterApprovedWithAllV3StageTasksApproved()
+    {
+        var (page, elementId, lettererId, edition) = SetupApprovedChapterWithGridAndEdition(EditionStatus.Draft);
+        var handler = new UpdateElementTranslationCommandHandler(_repo.Object, _db);
+
+        var result = await handler.Handle(
+            new UpdateElementTranslationCommand(page.Id, elementId, "en", "Hello world", lettererId), default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        page.Elements[elementId].Texts["en"].Should().Be("Hello world");
+        edition.TranslatorUserId.Should().Be(lettererId, "ghi nhận người sửa bản dịch làm TranslatorUserId để giữ BR-06");
+    }
+
+    [Fact]
+    public async Task Handler_DeniesWhenEditionInReviewEvenWhenChapterApproved()
+    {
+        var (page, elementId, lettererId, _) = SetupApprovedChapterWithGridAndEdition(EditionStatus.InReview);
+        var handler = new UpdateElementTranslationCommandHandler(_repo.Object, _db);
+
+        var result = await handler.Handle(
+            new UpdateElementTranslationCommand(page.Id, elementId, "en", "Updated while in review", lettererId), default);
+
+        result.IsSuccess.Should().BeFalse();
+        page.Elements[elementId].Texts.Should().NotContainKey("en");
+    }
+
+    [Fact]
+    public async Task Handler_DeniesForOriginalLanguageWhenChapterApproved()
+    {
+        var (page, elementId, lettererId, _) = SetupApprovedChapterWithGridAndEdition(EditionStatus.Draft);
+        var handler = new UpdateElementTranslationCommandHandler(_repo.Object, _db);
+
+        var result = await handler.Handle(
+            new UpdateElementTranslationCommand(page.Id, elementId, "vi", "Sửa chữ gốc qua endpoint dịch", lettererId), default);
+
+        result.IsSuccess.Should().BeFalse();
+        page.Elements[elementId].Content.Should().Be("Xin chào thế giới");
+    }
+
+    [Fact]
+    public async Task OriginalContentAndGeometryCommands_RemainBlockedWhenChapterApprovedAndEditionDraft()
+    {
+        var (page, elementId, lettererId, _) = SetupApprovedChapterWithGridAndEdition(EditionStatus.Draft);
+
+        var textHandler = new UpdateElementTextCommandHandler(_repo.Object, _db);
+        var textResult = await textHandler.Handle(
+            new UpdateElementTextCommand(page.Id, elementId, "Sửa chữ gốc", null, lettererId), default);
+        textResult.IsSuccess.Should().BeFalse();
+        page.Elements[elementId].Content.Should().Be("Xin chào thế giới");
+
+        var moveHandler = new MoveElementCommandHandler(_repo.Object, _db);
+        var moveResult = await moveHandler.Handle(
+            new MoveElementCommand(page.Id, elementId, 100, 100, 220, 120, null, lettererId), default);
+        moveResult.IsSuccess.Should().BeFalse();
+        page.Elements[elementId].X.Should().Be(50);
     }
 
     [Fact]

@@ -64,6 +64,12 @@ public class ChapterEdition : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void RecordTranslator(Guid translatorUserId)
+    {
+        TranslatorUserId = translatorUserId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void ReviewApprove()
     {
         Status = EditionStatus.EditorApproved;

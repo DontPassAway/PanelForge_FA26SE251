@@ -54,7 +54,7 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
         builder.Property(s => s.ReleaseLanguages)
                .HasColumnName("release_languages")
                .HasColumnType("jsonb")
-               .HasDefaultValueSql("'[\"vi\",\"en\",\"ja\"]'::jsonb")
+               .HasDefaultValueSql("'[\"vi\",\"en\"]'::jsonb")
                .HasConversion(
                    v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
                    v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>())

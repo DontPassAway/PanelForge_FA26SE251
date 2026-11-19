@@ -23,7 +23,7 @@ public class TranslationsControllerTests
     {
         _mockTranslationService
             .Setup(s => s.TranslateAsync("Hello", "en", "vi", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Xin chào");
+            .ReturnsAsync(new TranslationResult("Xin chào", IsFallback: false));
 
         var request = new TranslateRequest("Hello", "en", "vi");
         var result = await _controller.Translate(request, CancellationToken.None);
@@ -37,6 +37,27 @@ public class TranslationsControllerTests
         response!.TranslatedText.Should().Be("Xin chào");
         response.SourceLanguage.Should().Be("en");
         response.TargetLanguage.Should().Be("vi");
+        response.IsFallback.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Translate_WhenServiceFallsBack_ReturnsOkWithIsFallbackTrue()
+    {
+        _mockTranslationService
+            .Setup(s => s.TranslateAsync("Hello", "en", "vi", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TranslationResult("Hello", IsFallback: true));
+
+        var request = new TranslateRequest("Hello", "en", "vi");
+        var result = await _controller.Translate(request, CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200);
+
+        var response = okResult.Value as TranslateResponse;
+        response.Should().NotBeNull();
+        response!.TranslatedText.Should().Be("Hello");
+        response.IsFallback.Should().BeTrue();
     }
 
     [Theory]
@@ -46,7 +67,7 @@ public class TranslationsControllerTests
     {
         _mockTranslationService
             .Setup(s => s.TranslateAsync("Text", "en", "vi", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Văn bản");
+            .ReturnsAsync(new TranslationResult("Văn bản", IsFallback: false));
 
         var request = new TranslateRequest("Text", source, target);
         var result = await _controller.Translate(request, CancellationToken.None);
@@ -58,6 +79,7 @@ public class TranslationsControllerTests
         response.Should().NotBeNull();
         response!.SourceLanguage.Should().Be("en");
         response.TargetLanguage.Should().Be("vi");
+        response.IsFallback.Should().BeFalse();
     }
 
     [Fact]
