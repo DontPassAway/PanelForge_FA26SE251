@@ -66,8 +66,17 @@ public class ChapterPublishFlowTests
     private Task<Result<ChapterReviewDto>> HandOff(Guid? userId = null) =>
         new HandOffChapterCommandHandler(_db).Handle(new HandOffChapterCommand(_chapter.Id, userId ?? _producerId), default);
 
-    private Task<Result<ChapterReviewDto>> Publish(DateTime? at = null) =>
-        new PublishChapterCommandHandler(_db).Handle(new PublishChapterCommand(_chapter.Id, _publisherId, at), default);
+    /// <summary>Publisher phát hành; mặc định đã chốt ấn bản gốc là Free trước (D4).</summary>
+    private Task<Result<ChapterReviewDto>> Publish(DateTime? at = null, bool configureOriginalEdition = true)
+    {
+        if (configureOriginalEdition)
+        {
+            foreach (var ed in _db.ChapterEditions.Where(e => e.ChapterId == _chapter.Id).ToList().Where(e => !e.IsMonetizationConfigured))
+                ed.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _publisherId);
+            _db.SaveChanges();
+        }
+        return new PublishChapterCommandHandler(_db).Handle(new PublishChapterCommand(_chapter.Id, _publisherId, at), default);
+    }
 
     private Task<Result<ChapterReviewDto>> Reopen(Guid userId, string? comment) =>
         new ReopenChapterCommandHandler(_db).Handle(new ReopenChapterCommand(_chapter.Id, userId, comment), default);
@@ -480,5 +489,17 @@ public class ChapterPublishFlowTests
         var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
         rejectAttr.Should().NotBeNull();
         rejectAttr!.Roles.Should().Be("Publisher,Admin");
+    }
+
+    [Fact]
+    public async Task Publish_WithoutFreeOrPaidConfigured_IsBlocked_D4()
+    {
+        await Approve();
+        await HandOff();
+
+        var result = await Publish(configureOriginalEdition: false);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
     }
 }

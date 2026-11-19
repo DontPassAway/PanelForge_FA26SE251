@@ -55,6 +55,10 @@ public sealed class PublishEditionCommandHandler
                 $"Ấn bản '{normLang}' đang ở trạng thái {edition.Status}, chỉ có thể phát hành khi đã được Producer nghiệm thu (Approved) (BR-34).",
                 ResultErrorCodes.Conflict);
 
+        var pageCount = await _db.Pages.CountAsync(p => p.ChapterId == chapter.Id, ct);
+        if (EditionMonetizationGate.PublishBlocker(edition, pageCount) is { } blocker)
+            return Result<ChapterEditionDto>.Failure(blocker, ResultErrorCodes.Conflict);
+
         edition.Publish();
 
         var review = ChapterReview.Create(
@@ -73,5 +77,23 @@ public sealed class PublishEditionCommandHandler
 
         return Result<ChapterEditionDto>.Success(ChapterEditionMapping.ToDto(
             edition, edition.TranslatorUser?.FullName, approver?.FullName));
+    }
+}
+
+/// <summary>
+/// D4: điều kiện thương mại bắt buộc trước khi Publisher phát hành / hẹn giờ một ấn bản ngôn ngữ.
+/// </summary>
+public static class EditionMonetizationGate
+{
+    /// <returns>Lý do chặn (tiếng Việt) hoặc null nếu đủ điều kiện.</returns>
+    public static string? PublishBlocker(ChapterEdition edition, int pageCount)
+    {
+        if (!edition.IsMonetizationConfigured)
+            return $"Ấn bản '{edition.LanguageCode}' chưa được Publisher chọn Free hoặc Trả phí (D4).";
+        if (edition.IsPaid && edition.PriceVnd <= 0)
+            return $"Ấn bản '{edition.LanguageCode}' trả phí phải có giá lớn hơn 0 (D4).";
+        if (edition.IsPaid && edition.FreePreviewPages >= pageCount)
+            return $"Ấn bản '{edition.LanguageCode}' trả phí phải xem trước ít hơn tổng số trang ({pageCount}) (D4).";
+        return null;
     }
 }

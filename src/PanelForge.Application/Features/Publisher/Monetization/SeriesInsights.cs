@@ -44,8 +44,7 @@ public sealed record SeriesInsightsDto(
     string? Language,
     InsightStatsDto Totals,
     IReadOnlyList<LanguageInsightDto> ByLanguage,
-    IReadOnlyList<ChapterInsightDto> Chapters,
-    int DefaultPreviewPageCount);
+    IReadOnlyList<ChapterInsightDto> Chapters);
 
 /// <summary>
 /// Publisher chọn một bộ truyện → dashboard tổng (lượt xem, lượt mua, đánh giá, doanh thu) và danh sách chương
@@ -75,7 +74,7 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
             .Select(s => new
             {
                 s.Id, s.Title, s.CoverImageSha256, s.WorkspaceId, WorkspaceName = s.Workspace.Name,
-                s.DefaultPreviewPageCount
+                s.OriginalLanguage
             })
             .FirstOrDefaultAsync(ct);
         if (series is null)
@@ -87,10 +86,11 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
             .OrderBy(c => c.ChapterNumber)
             .Select(c => new
             {
-                c.Id, c.ChapterNumber, c.Title, c.Status, c.PublishedAt, c.IsLocked, c.PriceVnd
+                c.Id, c.ChapterNumber, c.Title, c.Status, c.PublishedAt
             })
             .ToListAsync(ct);
         var chapterIds = chapters.Select(c => c.Id).ToList();
+        var editionTerms = await ChapterReadAccess.EditionTermsAsync(_db, chapterIds, ct);
 
         // Số liệu thô theo (chương, ngôn ngữ) — mỗi bảng một truy vấn gom nhóm.
         var views = await _db.ChapterViews.AsNoTracking()
@@ -158,12 +158,18 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
             {
                 langs.Add(ContentLanguages.Original);
             }
-            var previews = await ChapterReadAccess.ResolvePreviewPagesAsync(_db, c.Id, ct);
+            // Loại/giá/N theo ấn bản đang lọc; "tất cả" thì lấy ấn bản ngôn ngữ gốc (BR-33).
+            var terms = ChapterReadAccess.TermsOf(editionTerms, c.Id, filter ?? series.OriginalLanguage);
+            var previewCount = terms is { IsConfigured: true, IsPaid: true }
+                ? ChapterReadAccess.Resolve(terms.FreePreviewPages,
+                    Enumerable.Range(1, pageCount).Select(n => (Guid.Empty, n)).ToList()).Count(p => p.IsPreview)
+                : 0;
 
             chapterDtos.Add(new ChapterInsightDto(
                 c.Id, c.ChapterNumber, c.Title, c.Status.ToString(),
                 c.Status == ChapterStatus.HandedOffAndPublished && c.PublishedAt <= now,
-                c.IsLocked, c.PriceVnd, pageCount, previews.Count(p => p.IsPreview), langs,
+                terms is { IsConfigured: true, IsPaid: true }, terms.IsPaid ? terms.PriceVnd : 0m,
+                pageCount, previewCount, langs,
                 Stats(c.Id, filter, includeRatings: false)));
         }
 
@@ -173,7 +179,6 @@ public sealed class GetSeriesInsightsQueryHandler : IRequestHandler<GetSeriesIns
             series.WorkspaceId, series.WorkspaceName, filter,
             Stats(null, filter, includeRatings: true),
             ContentLanguages.All.Select(l => new LanguageInsightDto(l, Stats(null, l, includeRatings: true))).ToList(),
-            chapterDtos,
-            series.DefaultPreviewPageCount));
+            chapterDtos));
     }
 }

@@ -35,8 +35,6 @@ internal static class ChapterDetailDtoFactory
             ScriptReopenRequestedById: chapter.ScriptReopenRequestedById,
             ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt,
             ScriptContentHash: chapter.ScriptContentHash,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,

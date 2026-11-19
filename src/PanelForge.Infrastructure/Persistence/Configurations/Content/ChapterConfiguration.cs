@@ -61,23 +61,6 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("handed_off_by_id")
                .HasColumnType("uuid");
 
-        builder.Property(c => c.IsLocked)
-               .HasColumnName("is_locked")
-               .HasColumnType("boolean")
-               .HasDefaultValue(false)
-               .IsRequired();
-
-        builder.Property(c => c.PreviewPagesCustomized)
-               .HasColumnName("preview_pages_customized")
-               .HasColumnType("boolean")
-               .HasDefaultValue(false)
-               .IsRequired();
-
-        builder.Property(c => c.PriceVnd)
-               .HasColumnName("price_vnd")
-               .HasColumnType("numeric(15,2)")
-               .HasDefaultValue(0m)
-               .IsRequired();
 
         // Public catalog (BR-23/24) lọc theo trạng thái Published
         builder.HasIndex(c => new { c.Status, c.SeriesId })

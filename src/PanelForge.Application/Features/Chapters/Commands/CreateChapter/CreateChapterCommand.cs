@@ -17,9 +17,7 @@ public sealed record CreateChapterCommand(
     decimal ChapterNumber,
     string? Title = null,
     DateOnly? TargetReleaseDate = null,
-    string? Outline = null,
-    bool? IsLocked = null,
-    decimal? PriceVnd = null
+    string? Outline = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterCommand, Result<ChapterDto>>
@@ -60,10 +58,6 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             if (!string.IsNullOrWhiteSpace(command.Outline))
             {
                 chapter.SetOutline(command.Outline);
-            }
-            if (command.IsLocked.HasValue || command.PriceVnd.HasValue)
-            {
-                chapter.SetPricing(command.IsLocked ?? false, command.PriceVnd ?? 0m);
             }
             chapter.CreatedBy = command.UserId.ToString();
         }
@@ -111,8 +105,6 @@ public sealed class CreateChapterCommandHandler : IRequestHandler<CreateChapterC
             ScriptFrozenById: chapter.ScriptFrozenById,
             CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: null,
-            IsLocked: chapter.IsLocked,
-            PriceVnd: chapter.PriceVnd,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
             LastSubmittedVersionId: chapter.LastSubmittedVersionId,

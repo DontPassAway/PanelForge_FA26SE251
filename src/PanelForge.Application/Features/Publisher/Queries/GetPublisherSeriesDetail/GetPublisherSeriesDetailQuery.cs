@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Catalog;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -55,13 +56,13 @@ public sealed class GetPublisherSeriesDetailQueryHandler
                 c.PublishedAt,
                 PageCount = c.Pages.Count,
                 c.UpdatedAt,
-                c.CreatedAt,
-                c.IsLocked,
-                c.PriceVnd
+                c.CreatedAt
             })
             .ToListAsync(ct);
 
         var chapterIds = chapters.Select(c => c.Id).ToList();
+        // BR-33: giá hiển thị = ấn bản ngôn ngữ gốc của chương.
+        var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapterIds, ct);
 
         var reviews = await _db.ChapterReviews
             .AsNoTracking()
@@ -101,6 +102,7 @@ public sealed class GetPublisherSeriesDetailQueryHandler
                 approvedBy = producerName;
             }
 
+            var original = ChapterReadAccess.TermsOf(terms, c.Id, series.OriginalLanguage);
             return new PublisherManagedChapterDto(
                 ChapterId: c.Id,
                 Id: c.Id,
@@ -113,8 +115,9 @@ public sealed class GetPublisherSeriesDetailQueryHandler
                 PagesCount: c.PageCount,
                 ApprovedAt: approvedAt,
                 ApprovedBy: approvedBy,
-                IsLocked: c.IsLocked,
-                PriceVnd: c.PriceVnd
+                IsLocked: original is { IsConfigured: true, IsPaid: true },
+                PriceVnd: original.IsPaid ? original.PriceVnd : 0m,
+                IsMonetizationConfigured: original.IsConfigured
             );
         }).ToList();
 

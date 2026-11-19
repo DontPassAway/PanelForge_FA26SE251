@@ -142,23 +142,4 @@ public class ChapterReadOnlyTests
         updated.IsSuccess.Should().BeTrue(updated.ErrorMessage);
         updated.Value!.Heading.Should().Be("Bến cảng đêm");
     }
-
-    [Fact]
-    public async Task PricingOnlyUpdate_OnApprovedChapter_ShouldSucceed()
-    {
-        var result = await new UpdateChapterCommandHandler(_db).Handle(
-            new UpdateChapterCommand(
-                _chapter.Id,
-                _userId,
-                _chapter.Title,
-                _chapter.TargetReleaseDate,
-                IncrementVersion: false,
-                IsLocked: true,
-                PriceVnd: 15000m),
-            default);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.IsLocked.Should().BeTrue();
-        result.Value.PriceVnd.Should().Be(15000m);
-    }
 }

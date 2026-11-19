@@ -1,6 +1,9 @@
 using FluentAssertions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Catalog;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
+using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
+using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Application.Features.Publisher.Monetization;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
@@ -15,8 +18,9 @@ using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 namespace PanelForge.UnitTests.Application.Catalog;
 
 /// <summary>
-/// Chương trả phí: người chưa mua chỉ xem trang xem trước (Publisher chọn tay, hoặc mặc định N trang đầu của Series);
-/// trang khác không có ImageUrl và ảnh trả 403. Mua chương / VIP / staff mở mọi trang. Chương miễn phí mở toàn bộ.
+/// BR-33 / D4: quy định thương mại thuộc ấn bản ngôn ngữ (Free/Trả phí, giá, N trang đầu xem trước), chỉ ghi qua
+/// <c>SetEditionMonetization</c>. Người chưa mua ấn bản trả phí chỉ xem N trang đầu (trang khác không có ImageUrl, ảnh 403).
+/// Ấn bản chưa cấu hình không phát hành được và không mua được.
 /// </summary>
 public class PreviewPageAccessTests
 {
@@ -24,21 +28,23 @@ public class PreviewPageAccessTests
     private readonly StudioWorkspace _studio;
     private readonly DomainSeries _series;
     private readonly Chapter _chapter;
+    private readonly ChapterEdition _vi;
     private readonly List<Page> _pages = [];
+    private readonly Guid _publisherId = Guid.NewGuid();
 
     public PreviewPageAccessTests()
     {
         _studio = StudioWorkspace.Create("Studio Moon", Guid.NewGuid());
         _db.StudioWorkspaces.Add(_studio);
         _series = DomainSeries.Create(_studio.Id, "Moon Blade", ReadingDirection.RightToLeft, "Synopsis", "Fantasy");
-        _series.SetDefaultPreviewPages(2);
         _db.Series.Add(_series);
 
         _chapter = Chapter.Create(_series.Id, 1, "Trả phí");
-        _chapter.SetPricing(true, 10000m);
         typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_chapter, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_chapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_chapter);
+
+        _vi = TestEditions.Monetize(_db, _chapter.Id, isPaid: true, priceVnd: 10000m, freePreviewPages: 2);
 
         for (var n = 1; n <= 5; n++)
         {
@@ -49,20 +55,20 @@ public class PreviewPageAccessTests
         _db.SaveChanges();
     }
 
-    private Guid AddUser(SystemRole role = SystemRole.User, bool vip = false)
+    private Guid AddUser(SystemRole role = SystemRole.User, bool vip = false, decimal balance = 0m)
     {
         var user = User.Create($"{Guid.NewGuid():N}@test.local", "Reader", role: role);
         _db.Users.Add(user);
-        _db.ReaderWallets.Add(ReaderWallet.Create(user.Id, 0m, isVip: vip,
+        _db.ReaderWallets.Add(ReaderWallet.Create(user.Id, balance, isVip: vip,
             vipExpiresAt: vip ? DateTime.UtcNow.AddDays(5) : null));
         _db.SaveChanges();
         return user.Id;
     }
 
-    private async Task<PublicChapterReadDto> Read(Guid? userId)
+    private async Task<PublicChapterReadDto> Read(Guid? userId, string? language = null)
     {
         var result = await new GetPublicChapterQueryHandler(_db, new FakeCurrentUser(userId))
-            .Handle(new GetPublicChapterQuery(_chapter.Id), default);
+            .Handle(new GetPublicChapterQuery(_chapter.Id, language), default);
         result.IsSuccess.Should().BeTrue();
         return result.Value!;
     }
@@ -71,16 +77,40 @@ public class PreviewPageAccessTests
         new GetPublicPageImageQueryHandler(_db, null!, null!, null!, new FakeCurrentUser(userId))
             .Handle(new GetPublicPageImageQuery(_chapter.Id, page.Id), default);
 
+    private Task<Result<ChapterManageDto>> Configure(
+        bool isPaid, decimal price, int preview, string language = ContentLanguages.Vietnamese, string? reason = null) =>
+        new SetEditionMonetizationCommandHandler(_db).Handle(
+            new SetEditionMonetizationCommand(_chapter.Id, language, isPaid, price, preview, reason, _publisherId), default);
+
+    // ─── Đọc / ảnh trang ─────────────────────────────────────────────────────
+
     [Fact]
-    public async Task Guest_SeesDefaultFirstNPreviewPages_OthersLockedWithoutImage()
+    public async Task Guest_SeesFirstNPagesOfEdition_OthersLockedWithoutImage()
     {
         var dto = await Read(null);
 
         dto.IsUnlocked.Should().BeFalse();
+        dto.PriceVnd.Should().Be(10000m);
         dto.Pages.Where(p => p.IsPreview).Select(p => p.PageNumber).Should().Equal(1, 2);
         dto.Pages.Where(p => p.IsLocked).Select(p => p.PageNumber).Should().Equal(3, 4, 5);
         dto.Pages.Where(p => p.IsLocked).Should().OnlyContain(p => !p.IsUnlocked && p.ImageUrl == null);
         dto.Pages.Where(p => p.IsPreview).Should().OnlyContain(p => p.IsUnlocked);
+    }
+
+    [Fact]
+    public async Task TypePriceAndPreview_ArePerLanguageEdition()
+    {
+        TestEditions.Monetize(_db, _chapter.Id, isPaid: true, priceVnd: 15000m, freePreviewPages: 4, language: ContentLanguages.English);
+        TestEditions.Monetize(_db, _chapter.Id, isPaid: false, language: ContentLanguages.Japanese);
+        await _db.SaveChangesAsync();
+
+        var en = await Read(null, ContentLanguages.English);
+        en.PriceVnd.Should().Be(15000m);
+        en.Pages.Count(p => p.IsPreview).Should().Be(4);
+
+        var ja = await Read(null, ContentLanguages.Japanese);
+        ja.IsFree.Should().BeTrue();
+        ja.Pages.Should().OnlyContain(p => p.IsUnlocked && !p.IsLocked);
     }
 
     [Fact]
@@ -94,7 +124,7 @@ public class PreviewPageAccessTests
     }
 
     [Fact]
-    public async Task BuyingChapter_UnlocksEveryPage()
+    public async Task BuyingEdition_UnlocksEveryPage()
     {
         var reader = AddUser();
         _db.ChapterEntitlements.Add(ChapterEntitlement.Create(reader, _chapter.Id, _series.Id, _studio.Id, 10000m));
@@ -119,60 +149,138 @@ public class PreviewPageAccessTests
     }
 
     [Fact]
-    public async Task FreeChapter_HasNoLockedOrPreviewPages()
+    public async Task FreeEdition_HasNoLockedOrPreviewPages()
     {
-        _chapter.SetPricing(false, 0m);
-        await _db.SaveChangesAsync();
+        (await Configure(false, 0m, 0, reason: "Mở miễn phí")).IsSuccess.Should().BeTrue();
 
         var dto = await Read(null);
 
+        dto.IsFree.Should().BeTrue();
         dto.Pages.Should().OnlyContain(p => !p.IsLocked && !p.IsPreview && p.IsUnlocked);
     }
 
     [Fact]
-    public void DefaultPreview_NeverCoversEveryPage()
+    public void Resolve_TakesFirstPages_AndNeverCoversEveryPage()
     {
-        var pages = Enumerable.Range(1, 3).Select(n => (Guid.NewGuid(), n, false)).ToList();
+        var pages = Enumerable.Range(1, 3).Select(n => (Guid.NewGuid(), n)).ToList();
 
-        ChapterReadAccess.Resolve(false, 10, pages).Count(p => p.IsPreview).Should().Be(2);
-        ChapterReadAccess.Resolve(false, 0, pages).Should().OnlyContain(p => !p.IsPreview);
+        ChapterReadAccess.Resolve(1, pages).Select(p => p.IsPreview).Should().Equal(true, false, false);
+        ChapterReadAccess.Resolve(10, pages).Count(p => p.IsPreview).Should().Be(2);
+        ChapterReadAccess.Resolve(0, pages).Should().OnlyContain(p => !p.IsPreview);
+    }
+
+    // ─── D4: chưa cấu hình ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task UnconfiguredEdition_IsFullyLocked_AndCannotBeBought()
+    {
+        var ja = ChapterEdition.Create(_chapter.Id, ContentLanguages.Japanese, EditionStatus.Published);
+        _db.ChapterEditions.Add(ja);
+        await _db.SaveChangesAsync();
+        var reader = AddUser(balance: 50000m);
+
+        (await Read(reader, ContentLanguages.Japanese)).Pages.Should().OnlyContain(p => p.IsLocked && p.ImageUrl == null);
+        var unlock = await new UnlockChapterCommandHandler(_db).Handle(
+            new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: ContentLanguages.Japanese)), default);
+        unlock.ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 
     [Fact]
-    public async Task Publisher_PicksPreviewPages_ThenResetsToSeriesDefault()
+    public async Task PublishEdition_BlockedUntilPublisherConfiguresFreeOrPaid()
     {
-        var set = await new SetChapterPreviewPagesCommandHandler(_db).Handle(
-            new SetChapterPreviewPagesCommand(_chapter.Id, [_pages[0].Id, _pages[3].Id]), default);
+        var en = ChapterEdition.Create(_chapter.Id, ContentLanguages.English, EditionStatus.Approved);
+        _db.ChapterEditions.Add(en);
+        await _db.SaveChangesAsync();
+        var publish = () => new PublishEditionCommandHandler(_db).Handle(
+            new PublishEditionCommand(_chapter.Id, ContentLanguages.English, _publisherId), default);
 
-        set.IsSuccess.Should().BeTrue();
-        set.Value!.PreviewPagesCustomized.Should().BeTrue();
-        set.Value.Pages.Where(p => p.IsPreview).Select(p => p.PageNumber).Should().Equal(1, 4);
-        (await Read(null)).Pages.Where(p => p.IsUnlocked).Select(p => p.PageNumber).Should().Equal(1, 4);
+        (await publish()).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
 
-        var reset = await new ResetChapterPreviewPagesCommandHandler(_db).Handle(
-            new ResetChapterPreviewPagesCommand(_chapter.Id), default);
-        reset.Value!.PreviewPagesCustomized.Should().BeFalse();
-        reset.Value.Pages.Where(p => p.IsPreview).Select(p => p.PageNumber).Should().Equal(1, 2);
+        (await Configure(true, 15000m, 1, ContentLanguages.English)).IsSuccess.Should().BeTrue();
+        (await publish()).IsSuccess.Should().BeTrue();
+        en.Status.Should().Be(EditionStatus.Published);
+    }
+
+    // ─── SetEditionMonetization ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Publisher_SetsPreviewCount_ReaderSeesFirstNPages_AndAuditIsWritten()
+    {
+        var result = await Configure(true, 10000m, 3);
+
+        result.IsSuccess.Should().BeTrue();
+        var vi = result.Value!.Languages.Single(l => l.Language == ContentLanguages.Vietnamese);
+        vi.FreePreviewPages.Should().Be(3);
+        vi.IsMonetizationConfigured.Should().BeTrue();
+        (await Read(null)).Pages.Where(p => p.IsUnlocked).Select(p => p.PageNumber).Should().Equal(1, 2, 3);
+
+        var audit = _db.AuditLogs.Single(a => a.Action == SetEditionMonetizationCommandHandler.AuditAction);
+        audit.EntityId.Should().Be(_vi.Id.ToString());
+        audit.UserId.Should().Be(_publisherId);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(5)]
+    [InlineData(9)]
+    public async Task PaidEdition_PreviewCount_MustLeaveAtLeastOneLockedPage(int n)
+    {
+        (await Configure(true, 10000m, n)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        _vi.FreePreviewPages.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(true, 500)]
+    [InlineData(true, 1500.5)]
+    [InlineData(false, 5000)]
+    public async Task Price_MustMatchType(bool isPaid, decimal price)
+    {
+        (await Configure(isPaid, price, 0, reason: "x")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 
     [Fact]
-    public async Task Publisher_CannotPickPageFromAnotherChapter()
+    public async Task PublishedEdition_ChangingTypeOrPrice_RequiresReason_PreviewCountDoesNot()
     {
-        var result = await new SetChapterPreviewPagesCommandHandler(_db).Handle(
-            new SetChapterPreviewPagesCommand(_chapter.Id, [Guid.NewGuid()]), default);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        (await Configure(true, 12000m, 2)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        (await Configure(false, 0m, 0, reason: "   ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        (await Configure(true, 10000m, 1)).IsSuccess.Should().BeTrue("chỉ đổi số trang xem trước");
+        (await Configure(true, 12000m, 1, reason: "Tăng giá")).IsSuccess.Should().BeTrue();
+        _db.AuditLogs.Last(a => a.Action == SetEditionMonetizationCommandHandler.AuditAction)
+            .Details.Should().Contain("Tăng giá");
     }
 
     [Fact]
-    public async Task SeriesSettings_ValidatesPreviewCount()
+    public async Task PriceChange_DoesNotAffectReadersWhoAlreadyBought()
     {
-        var handler = new UpdateSeriesMonetizationSettingsCommandHandler(_db);
+        var reader = AddUser();
+        _db.ChapterEntitlements.Add(ChapterEntitlement.Create(reader, _chapter.Id, _series.Id, _studio.Id, 10000m));
+        await _db.SaveChangesAsync();
 
-        (await handler.Handle(new UpdateSeriesMonetizationSettingsCommand(_series.Id, -1), default))
-            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        var ok = await handler.Handle(new UpdateSeriesMonetizationSettingsCommand(_series.Id, 3), default);
-        ok.Value!.DefaultPreviewPageCount.Should().Be(3);
-        (await Read(null)).Pages.Count(p => p.IsPreview).Should().Be(3);
+        (await Configure(true, 20000m, 0, reason: "Tăng giá")).IsSuccess.Should().BeTrue();
+
+        (await Read(reader)).IsUnlocked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Publisher_CanConfigureMissingEdition_WhichIsCreatedAsDraft()
+    {
+        var result = await Configure(true, 8000m, 4, ContentLanguages.Japanese);
+
+        result.IsSuccess.Should().BeTrue();
+        var ja = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == ContentLanguages.Japanese);
+        ja.Status.Should().Be(EditionStatus.Draft);
+        ja.IsMonetizationConfigured.Should().BeTrue();
+        ja.PriceVnd.Should().Be(8000m);
+        ja.FreePreviewPages.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task LanguageOutsideReleaseLanguages_IsRejected()
+    {
+        _series.SetLanguages(ContentLanguages.Vietnamese, [ContentLanguages.Vietnamese, ContentLanguages.English]);
+        await _db.SaveChangesAsync();
+
+        (await Configure(true, 10000m, 1, ContentLanguages.Japanese)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 }

@@ -70,12 +70,6 @@ internal sealed class PageConfiguration : IEntityTypeConfiguration<Page>
                .HasColumnName("content_ready_by_id")
                .HasColumnType("uuid");
 
-        builder.Property(p => p.IsPreview)
-               .HasColumnName("is_preview")
-               .HasColumnType("boolean")
-               .HasDefaultValue(false)
-               .IsRequired();
-
         builder.Property(p => p.CurrentStageId)
                .HasColumnName("current_stage_id")
                .HasColumnType("uuid");

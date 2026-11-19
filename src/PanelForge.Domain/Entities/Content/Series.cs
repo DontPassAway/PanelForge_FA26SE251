@@ -33,22 +33,6 @@ public class Series : BaseEntity
     /// <summary>Các ngôn ngữ phát hành (BR-34, luôn chứa OriginalLanguage, mặc định ['vi', 'en', 'ja']).</summary>
     public List<string> ReleaseLanguages { get; private set; } = [ContentLanguages.Vietnamese, ContentLanguages.English, ContentLanguages.Japanese];
 
-    /// <summary>
-    /// Publisher: mặc định N trang đầu mỗi chương trả phí là trang xem trước cho người chưa mua (0 = khóa toàn bộ).
-    /// Chương Publisher đã chọn trang xem trước bằng tay (<see cref="Chapter.PreviewPagesCustomized"/>) không theo mặc định này.
-    /// </summary>
-    public int DefaultPreviewPageCount { get; private set; }
-
-    public const int MaxDefaultPreviewPageCount = 50;
-
-    public void SetDefaultPreviewPages(int previewPageCount)
-    {
-        if (previewPageCount is < 0 or > MaxDefaultPreviewPageCount)
-            throw new ArgumentOutOfRangeException(nameof(previewPageCount),
-                $"Số trang xem trước mặc định từ 0 đến {MaxDefaultPreviewPageCount}.");
-        DefaultPreviewPageCount = previewPageCount;
-    }
-
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
     public PipelineDefinition? PipelineDefinition { get; private set; }
