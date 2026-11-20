@@ -48,8 +48,11 @@ public sealed record StageTaskLotRequest(
     Guid PipelineStageId, Guid AssigneeUserId, IReadOnlyList<Guid> TaskIds, string? Brief = null, DateTime? DueDate = null);
 
 /// <param name="DryRun">true = chỉ kiểm tra, không lưu.</param>
-/// <param name="Reassign">true = cho chuyển cả ô Assigned/InProgress/ReworkRequired (không lỗi thời) sang lô mới.</param>
-public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun = false, bool Reassign = false);
+/// <param name="Reassign">true = cho chuyển cả ô Assigned/InProgress/ReworkRequired (không lỗi thời) sang lô mới. Chỉ Producer.</param>
+/// <param name="ConfirmStartedWork">Bắt buộc true khi đổi người ở ô InProgress/ReworkRequired (người đang làm bị gỡ khỏi ô).</param>
+/// <param name="ExpectedRowVersions">taskId → rowVersion lúc người dùng xem; bắt buộc cho ô InProgress/ReworkRequired khi Reassign.</param>
+public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotRequest> Lots, bool DryRun = false, bool Reassign = false,
+    bool ConfirmStartedWork = false, IReadOnlyDictionary<Guid, uint>? ExpectedRowVersions = null);
 
 /// <summary>Sửa hạn / brief của lô (Producer). Trường null = giữ nguyên; ClearDueDate = true để bỏ hạn.</summary>
 public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate, bool ClearDueDate = false, uint? ExpectedRowVersion = null);
@@ -75,6 +78,23 @@ public sealed record ReopenStageTaskResultDto(StageTaskDto Task, IReadOnlyList<G
 
 /// <param name="Lots">Lô đã tạo; rỗng khi DryRun.</param>
 public sealed record AssignStageTaskLotsResultDto(bool DryRun, int TaskCount, IReadOnlyList<StageTaskLotDto> Lots);
+
+/// <summary>Phương án giao tự động, chưa lưu. Xác nhận bằng POST /lots với TaskIds và AssigneeUserId của từng lô.</summary>
+/// <param name="UnassignedCount">Tổng số ô chưa giao của chương, gồm cả ô ở Skipped và ô của công đoạn đang tắt.</param>
+public sealed record AutoAssignPlanDto(
+    Guid ChapterId, int UnassignedCount, IReadOnlyList<AutoAssignLotDto> Lots, IReadOnlyList<AutoAssignSkippedDto> Skipped);
+
+/// <param name="PageNumbers">Số trang của lô; rỗng với ô cấp Chương.</param>
+/// <param name="OpenTaskCount">Số ô chưa xong người này đang giữ trong Workspace, trước phương án.</param>
+/// <param name="WorkUnits">Khối lượng của lô: tổng số panel các trang (mỗi ô tối thiểu 1).</param>
+/// <param name="OpenWorkUnits">Khối lượng việc chưa xong người này đang giữ trong Workspace, trước phương án.</param>
+/// <param name="SuggestedDueDate">Hạn gợi ý (UTC) tính ngược từ ngày phát hành dự kiến của chương; null nếu chương chưa có ngày.</param>
+public sealed record AutoAssignLotDto(
+    Guid PipelineStageId, string StageName, Guid AssigneeUserId, string AssigneeName, WorkspaceRole AssignedRole,
+    IReadOnlyList<Guid> TaskIds, IReadOnlyList<int> PageNumbers, int OpenTaskCount,
+    int WorkUnits, int OpenWorkUnits, DateTime? SuggestedDueDate);
+
+public sealed record AutoAssignSkippedDto(Guid PipelineStageId, string StageName, int TaskCount, string Reason);
 
 public sealed record GenerateStageTasksResultDto(int Created, int Cancelled, int Total);
 

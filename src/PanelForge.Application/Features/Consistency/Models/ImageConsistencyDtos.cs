@@ -30,7 +30,9 @@ public sealed record ImageConsistencyResultDto(
     string? ArtworkUrl = null,
     string? CharacterSheetUrl = null,
     /// <summary>true = KHÔNG gọi AI (panel chưa có ảnh, không gắn nhân vật, hoặc nhân vật chưa có character sheet); xem SummaryReason.</summary>
-    bool Skipped = false
+    bool Skipped = false,
+    /// <summary>Kết quả từng nhân vật có mặt trong Panel; null khi không gọi AI.</summary>
+    IReadOnlyList<ImageConsistencyResultDto>? Characters = null
 );
 
 /// <summary>

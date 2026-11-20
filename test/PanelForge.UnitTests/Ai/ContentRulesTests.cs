@@ -151,7 +151,7 @@ public class ContentRulesTests
         var entry = new BibleEntryContext(Guid.NewGuid(), "CHIA_KHOA", "Prop", "Chìa khóa bạc",
             "Đạo cụ mở tủ đồng hồ.", Guid.NewGuid(), 1, 1, """{"availableFromChapter": 5}""");
         var ctx = new AgentContext(RunId, Guid.NewGuid(), Guid.NewGuid(), 3, SceneId, "H", null, "b", "RightToLeft",
-            0, "Mock", "m", 2, [entry], [entry.RevisionId], []);
+            0, "Gemini", "m", 2, [entry], [entry.RevisionId], []);
         var maps = new PanelForge.AI.Agents.KeyMaps(ctx);
 
         var block = PanelForge.AI.Agents.PromptText.BibleBlock(ctx, maps);

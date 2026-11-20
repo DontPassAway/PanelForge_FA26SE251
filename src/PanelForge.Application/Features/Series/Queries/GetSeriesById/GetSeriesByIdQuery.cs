@@ -70,7 +70,10 @@ public sealed class GetSeriesByIdQueryHandler : IRequestHandler<GetSeriesByIdQue
             AvatarUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Avatar, series.AvatarImageSha256),
             BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256),
             OriginalLanguage: series.OriginalLanguage,
-            ReleaseLanguages: series.ReleaseLanguages
+            ReleaseLanguages: series.ReleaseLanguages,
+            Logline: series.Logline,
+            Teaser: series.Teaser,
+            AgeRating: series.AgeRating
         );
 
         return Result<SeriesDetailDto>.Success(detail);

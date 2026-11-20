@@ -98,7 +98,7 @@ public static class MockFixtures
             {
                 new { speaker = (string?)null, dialogue = (string?)null,
                       stageDirection = "Nửa đêm, mưa vẫn gõ đều trên mái tiệm đồng hồ. An quét bụi giữa những chiếc đồng hồ ngừng chạy." },
-                new { speaker = "AN", dialogue = "Đếm đến trăm tiếng mưa nữa là mình đóng cửa.", stageDirection = (string?)null },
+                new { kind = "Dialogue", speaker = "AN", parenthetical = "lẩm bẩm", text = "Đếm đến trăm tiếng mưa nữa là mình đóng cửa." },
                 new { speaker = "BA_LAN", dialogue = "An ơi, ra giúp bà một chút.", stageDirection = "Bà Lan đứng ngoài hiên, mắt dán vào ổ khóa chiếc tủ cũ." },
                 line4,
                 line5
@@ -166,7 +166,9 @@ public static class MockFixtures
             .Select(m => (Key: m.Groups[1].Value, Speaker: m.Groups[2].Value)).ToList();
 
         // Mỗi trang tối đa 4 ô theo thứ tự đọc: ô rộng trên → 2 ô giữa (đọc theo hướng) → ô rộng dưới
-        Slot[] template = rtl
+        Slot[] template = msg.Contains("[[direction:Vertical]]")
+            ? [new(0, 0, 1, 0.25), new(0, 0.25, 1, 0.25), new(0, 0.5, 1, 0.25), new(0, 0.75, 1, 0.25)]
+            : rtl
             ? [new(0, 0, 1, 0.34), new(0.5, 0.34, 0.5, 0.33), new(0, 0.34, 0.5, 0.33), new(0, 0.67, 1, 0.33)]
             : [new(0, 0, 1, 0.34), new(0, 0.34, 0.5, 0.33), new(0.5, 0.34, 0.5, 0.33), new(0, 0.67, 1, 0.33)];
         string[] cameras = ["wide establishing shot", "medium shot", "close-up", "over-the-shoulder shot"];
@@ -238,6 +240,27 @@ public static class MockFixtures
                 teaser = "Chương mới: chiếc chìa khóa cuối cùng đã xuất hiện (Mock).",
                 ageRating = "13+",
                 reason = "Có yếu tố căng thẳng nhẹ, không có nội dung người lớn (Mock)."
+            });
+        }
+        if (msg.Contains($"[[task:{CopilotTasks.ImpactRipple}]]"))
+        {
+            var rework = msg.Contains("role=Letterer") || msg.Contains("type=Action");
+            return Json(new
+            {
+                decision = rework ? CopilotRules.ImpactRework : CopilotRules.ImpactKeep,
+                reason = rework ? "Thay đổi chạm tới phần công đoạn này đã làm (Mock)." : "Chỉ đổi lời thoại, nét vẽ không bị ảnh hưởng (Mock)."
+            });
+        }
+        if (msg.Contains($"[[task:{CopilotTasks.BibleStubDraft}]]"))
+        {
+            var first = Regex.Match(msg, @"^- lineId=([0-9a-fA-F-]+) \| ""(.*)""\s*$", RegexOptions.Multiline);
+            var quote = first.Groups[2].Value;
+            return Json(new
+            {
+                description = $"Được nhắc trong kịch bản: {quote} (Mock).",
+                subtitle = (string?)null,
+                citations = new[] { new { claim = "Chi tiết từ dòng kịch bản", lineId = first.Groups[1].Value, quote } },
+                reason = "Chỉ dùng dòng có nhắc tới mục này (Mock)."
             });
         }
         var text = Regex.Match(msg, @"^dialogue=""(.*)""\s*$", RegexOptions.Multiline).Groups[1].Value.Trim();

@@ -33,7 +33,7 @@ public class ImageConsistencyServiceTests
         public readonly Mock<IAiKeyProtector> KeyProtectorMock = new();
         public readonly Mock<IAiUsageService> UsageServiceMock = new();
         public readonly Mock<IAiClient> AiClientMock = new();
-        public readonly AiAgentSettings Settings = new() { Provider = "Gemini", GeminiModel = "gemini-2.5-flash" };
+        public readonly AiAgentSettings Settings = new() { GeminiModel = "gemini-2.5-flash" };
         public readonly Guid WorkspaceId = Guid.NewGuid();
         public readonly Guid SeriesId = Guid.NewGuid();
         public readonly Chapter Chapter;
@@ -189,7 +189,7 @@ public class ImageConsistencyServiceTests
     [Fact]
     public async Task VisionAgent_ParsesModelJson_AndRejectsMissingScore()
     {
-        var req = new VisionCompareRequest(AiProtocol.ProviderMock, "mock", null, "Lan",
+        var req = new VisionCompareRequest(AiProtocol.ProviderGemini, "mock", null, "Lan",
             new ImageReference("sheet", "image/png", Convert.ToBase64String(new byte[] { 1, 2, 3 })),
             new ImageReference("art", "image/png", Convert.ToBase64String(new byte[] { 4, 5, 6 })));
 
@@ -206,9 +206,28 @@ public class ImageConsistencyServiceTests
     }
 
     [Fact]
+    public async Task CheckPanel_ComparesEveryCharacter_AndReturnsLowestScore()
+    {
+        var fixture = new TestFixture(Reply(0.9m, "Khớp"));
+        var bible = await fixture.Db.SeriesBibles.SingleAsync();
+        var second = bible.AddEntry(BibleEntryCategory.Character, "RIVAL", "Rival", "The rival",
+            referenceImageUrl: "data:image/png;base64,iVBORw0KGgo=");
+        var line = await fixture.Db.ScriptLines.SingleAsync();
+        fixture.Db.ScriptLineBibleLinks.Add(ScriptLineBibleLink.Create(line.Id, second.Id));
+        await fixture.Db.SaveChangesAsync();
+        fixture.AiClientMock.Setup(c => c.CompareImagesAsync(It.Is<VisionCompareRequest>(r => r.CharacterName == "Rival"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Reply(0.4m, "Lệch"));
+
+        var result = await fixture.CreateService().CheckPanelConsistencyAsync(fixture.Panel.Id, threshold: 0.75m);
+
+        result.Characters.Should().HaveCount(2);
+        result.CharacterName.Should().Be("Rival");
+        result.Passed.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task PanelsController_CheckImageConsistency_ReturnsOkWithResult()
     {
-        var mockService = new Mock<IImageConsistencyService>();
         var panelId = Guid.NewGuid();
         var expectedResult = new ImageConsistencyResultDto(
             PanelId: panelId,
@@ -221,12 +240,13 @@ public class ImageConsistencyServiceTests
             SummaryReason: "Khớp tốt",
             Deviations: Array.Empty<ImageConsistencyDeviationDto>()
         );
-        mockService.Setup(s => s.CheckPanelConsistencyAsync(panelId, null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedResult);
-        var controller = new PanelsController(Mock.Of<MediatR.IMediator>());
+        var mediator = new Mock<MediatR.IMediator>();
+        mediator.Setup(m => m.Send(It.Is<PanelForge.Application.Features.Consistency.Commands.CheckPanelImageConsistency.CheckPanelImageConsistencyCommand>(c => c.PanelId == panelId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PanelForge.Application.Common.Result<ImageConsistencyResultDto>.Success(expectedResult));
+        var controller = new PanelsController(mediator.Object) { ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() } };
 
         var actionResult = await controller.CheckImageConsistency(
-            panelId, revisionRef: null, threshold: null, mockService.Object, CancellationToken.None);
+            panelId, revisionRef: null, threshold: null, CancellationToken.None);
 
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeEquivalentTo(expectedResult);

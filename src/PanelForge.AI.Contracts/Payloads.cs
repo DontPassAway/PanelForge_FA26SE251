@@ -17,7 +17,14 @@ public sealed record SupervisorDecision(
 
 // ── Writer ───────────────────────────────────────────────────────────────────
 /// <summary>LineId do ứng dụng cấp (không phải model). Khi Accept, ScriptLine được tạo với đúng Id này.</summary>
-public sealed record ScriptDraftLine(Guid LineId, int Order, Guid? SpeakerId, string? Dialogue, string? StageDirection);
+/// <summary>Tham chiếu Series Bible trên dòng: mục có sẵn (BibleEntryId) hoặc mục nháp tạo khi Accept (NewName, NewCategory).</summary>
+public sealed record ScriptDraftRef(string SurfaceText, Guid? BibleEntryId = null, string? NewName = null, string? NewCategory = null);
+
+/// <param name="Kind">Action, Dialogue, Thought, Narration hoặc Sfx; null ở bản nháp cũ.</param>
+/// <param name="SpeakerLabel">Tên người nói như trên trang script, có thể kèm sắc thái: "An (thì thầm)".</param>
+public sealed record ScriptDraftLine(
+    Guid LineId, int Order, Guid? SpeakerId, string? Dialogue, string? StageDirection,
+    string? Kind = null, string? SpeakerLabel = null, IReadOnlyList<ScriptDraftRef>? Refs = null);
 
 public sealed record ScriptDraft(
     int SchemaVersion,

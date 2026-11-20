@@ -160,7 +160,7 @@ internal static class ScriptLineRules
 
     /// <summary>
     /// Ghi lịch sử append-only (BR-01) cùng lần Save với thay đổi: nếu Scene chưa có revision mà đã có dòng thì chụp baseline trước;
-    /// rồi thêm revision Script mới = toàn bộ dòng sau thay đổi. Tăng VersionVector để đề xuất AI cũ thành stale (409).
+    /// rồi thêm revision Script mới = toàn bộ dòng sau thay đổi. Đề xuất AI cũ thành stale (409) nhờ revision mới này.
     /// </summary>
     public static async Task<ContentRevision> RecordRevisionAsync(
         IPanelForgeDbContext db, Chapter chapter, Guid sceneId, string summary,
@@ -192,8 +192,8 @@ internal static class ScriptLineRules
         var revision = ContentRevision.Create(chapter.Id, sceneId, ContentRevisionKind.Script, next, summary,
             payload, hash, previousId, null, mappingJson);
         db.ContentRevisions.Add(revision);
-        // Quy chu?n: Khi Writer luu k?ch b?n trong phin th KHNG tang VersionVector.
-        // Ch? khi k?ch b?n du?c g?i cho Editor duy?t v Editor yu c?u tr? l?i vi?t l?i th m?i tang.
+        // Quy ước version: lưu tay trong phiên không tăng VersionVector, xung đột với AI được phát hiện qua revision Script.
+        // VersionVector chỉ tăng khi Accept đề xuất AI hoặc khi kịch bản bị trả lại để viết lại.
         return revision;
     }
 

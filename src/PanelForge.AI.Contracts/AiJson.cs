@@ -26,7 +26,6 @@ public static class AiProtocol
     public const int SchemaVersion = 1;
 
     public const string ServiceKeyHeader = "X-Service-Key";
-    public const string ProviderMock = "Mock";
     public const string ProviderGemini = "Gemini";
 
     public const string AgentSupervisor = "Supervisor";

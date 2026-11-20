@@ -138,11 +138,12 @@ public sealed class GetPublisherSeriesDetailQueryHandler
             ProducerName: producerName,
             Genres: genreList,
             Genre: series.Genre ?? "Action",
-            AgeRating: "All",
+            AgeRating: series.AgeRating ?? "All",
             Status: "Ongoing",
-            Logline: series.StoryArc,
+            Logline: series.Logline ?? series.StoryArc,
             Synopsis: series.Synopsis,
-            Chapters: managedChapters
+            Chapters: managedChapters,
+            Teaser: series.Teaser
         );
 
         return Result<PublisherSeriesDetailDto>.Success(dto);

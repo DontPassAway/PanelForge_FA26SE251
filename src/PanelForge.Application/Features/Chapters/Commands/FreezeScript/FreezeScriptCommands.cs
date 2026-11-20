@@ -197,7 +197,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         foreach (var task in await _dbContext.StageTasks
                      .Where(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled &&
                                  t.PageId != null && pageIds.Contains(t.PageId.Value)).ToListAsync(ct))
-            task.MarkInputOutdated("Kịch bản của trang đã được sửa sau khi mở lại kịch bản.");
+            task.MarkInputOutdated(StageTask.ScriptChangedReason);
     }
 }
 

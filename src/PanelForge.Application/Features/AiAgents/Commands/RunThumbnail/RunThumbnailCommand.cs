@@ -7,6 +7,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Assets;
@@ -96,20 +97,17 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
         if (provider is null)
             return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
-        if (!_settings.IsMock)
+        var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
+        if (!availability.IsAvailable)
         {
-            var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
-            if (!availability.IsAvailable)
-            {
-                await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, availability.BlockedReason!.Value,
-                    ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
-                return Fail(availability.Message ?? "AI không khả dụng.",
-                    availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
-            }
-            var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-            if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
-                return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
+            await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, availability.BlockedReason!.Value,
+                ErrorMessage: availability.Message, UserId: cmd.UserId), ct);
+            return Fail(availability.Message ?? "AI không khả dụng.",
+                availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
+        var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
+        if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
         // ponytail: đếm trên DB nên 2 request song song có thể cùng lọt ở ngưỡng; đủ để chặn lạm dụng.
         var since = DateTime.UtcNow.AddSeconds(-(_settings.ImageTimeoutSeconds + 30));
@@ -143,9 +141,9 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             apiKey = _keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty);
             if (string.IsNullOrEmpty(apiKey))
             {
-                run.MarkFailed(ResultErrorCodes.AiUnavailable, "Không giải mã được API key của Workspace.");
+                run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
                 await _db.SaveChangesAsync(ct);
-                return Fail("Không giải mã được API key Gemini của Workspace. Admin cần nhập lại key.", ResultErrorCodes.AiUnavailable);
+                return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
             }
         }
 
@@ -260,8 +258,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
 internal static class ThumbnailRules
 {
     public static (string? Provider, string Model) ResolveProvider(AiAgentSettings s) =>
-        s.IsMock ? (ImageProviders.Mock, "mock-image-v1")
-        : s.ImageProvider.Equals(ImageProviders.Gemini, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Gemini, s.GeminiImageModel)
+        s.ImageProvider.Equals(ImageProviders.Gemini, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Gemini, s.GeminiImageModel)
         : s.ImageProvider.Equals(ImageProviders.Cloudflare, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Cloudflare, s.CloudflareImageModel)
         : (null, "");
 
@@ -273,6 +270,15 @@ internal static class ThumbnailRules
     public static async Task<Guid?> HeldStageAsync(IPanelForgeDbContext db, Guid userId, Guid chapterId, Guid pageId, Guid panelId,
         Guid? stageId, CancellationToken ct)
     {
+        // Lưới V3: quyền theo ô (trang × công đoạn), cùng luật tải artwork; ô có đầu vào lỗi thời không được gắn ảnh
+        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+            return await (from t in db.StageTasks.AsNoTracking()
+                          join l in db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                          where t.ChapterId == chapterId && t.PageId == pageId && l.AssigneeUserId == userId && !t.IsInputOutdated
+                                && (t.Status == StageTaskStatus.InProgress || t.Status == StageTaskStatus.ReworkRequired)
+                                && (stageId == null || t.PipelineStageId == stageId)
+                          select (Guid?)t.PipelineStageId).FirstOrDefaultAsync(ct);
+
         var held = await db.Assignments.AsNoTracking()
             .Where(a => a.ChapterId == chapterId && a.AssigneeUserId == userId && a.Status == AssignmentStatus.InProgress
                         && (stageId == null || a.PipelineStageId == stageId)
@@ -282,5 +288,18 @@ internal static class ThumbnailRules
             .Select(a => new { a.EntityType, a.PipelineStageId }).ToListAsync(ct);
         return held.OrderBy(a => a.EntityType == WorkflowEntityType.Panel ? 0 : a.EntityType == WorkflowEntityType.Page ? 1 : 2)
             .Select(a => (Guid?)a.PipelineStageId).FirstOrDefault();
+    }
+
+    /// <summary>Stage chưa giao cho ai ở phần này: Producer mới được gắn ảnh, cùng luật tải artwork.</summary>
+    public static async Task<bool> IsUnassignedAsync(IPanelForgeDbContext db, Guid chapterId, Guid pageId, Guid panelId, Guid stageId, CancellationToken ct)
+    {
+        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+            return !await db.StageTasks.AsNoTracking().AnyAsync(t => t.ChapterId == chapterId && t.PageId == pageId
+                && t.PipelineStageId == stageId && t.LotId != null && t.Status != StageTaskStatus.Cancelled, ct);
+
+        return !await db.Assignments.AsNoTracking().AnyAsync(a => a.ChapterId == chapterId && a.PipelineStageId == stageId
+            && (a.EntityType == WorkflowEntityType.Chapter
+                || (a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == pageId)
+                || (a.EntityType == WorkflowEntityType.Panel && a.TargetEntityId == panelId)), ct);
     }
 }

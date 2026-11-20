@@ -27,24 +27,19 @@ internal static class CopilotGate
         if (config is null || !config.IsEnabled)
             return Result<CopilotProvider>.Failure("Tính năng AI chưa được bật cho Workspace này.", ResultErrorCodes.AiDisabled);
 
-        string provider, model;
-        if (settings.IsMock) (provider, model) = (AiProtocol.ProviderMock, "mock-fixture-v1");
-        else
+        var availability = await usage.CheckAvailabilityAsync(workspaceId, ct);
+        if (!availability.IsAvailable)
         {
-            var availability = await usage.CheckAvailabilityAsync(workspaceId, ct);
-            if (!availability.IsAvailable)
-            {
-                await usage.RecordAsync(new AiUsageEntry(workspaceId, feature, availability.BlockedReason!.Value,
-                    ErrorMessage: availability.Message, UserId: userId), ct);
-                return Result<CopilotProvider>.Failure(availability.Message ?? "AI không khả dụng.",
-                    availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
-            }
-            (provider, model) = (AiProtocol.ProviderGemini, settings.GeminiModel);
-            var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-            if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
-                return Result<CopilotProvider>.Failure(
-                    $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
+            await usage.RecordAsync(new AiUsageEntry(workspaceId, feature, availability.BlockedReason!.Value,
+                ErrorMessage: availability.Message, UserId: userId), ct);
+            return Result<CopilotProvider>.Failure(availability.Message ?? "AI không khả dụng.",
+                availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
+        var (provider, model) = (AiProtocol.ProviderGemini, settings.GeminiModel);
+        var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
+        if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return Result<CopilotProvider>.Failure(
+                $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
         // ponytail: đếm trên DB nên 2 request song song có thể cùng lọt ở ngưỡng; đủ để chặn lạm dụng.
         var since = DateTime.UtcNow.AddMinutes(-1);
@@ -58,9 +53,9 @@ internal static class CopilotGate
         return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config));
     }
 
-    /// <summary>Key chỉ giải mã trong bộ nhớ cho lần gọi này. Null = Mock; rỗng = giải mã thất bại.</summary>
-    public static string? ApiKey(AiAgentSettings settings, IAiKeyProtector protector, CopilotProvider p) =>
-        settings.IsMock ? null : protector.Unprotect(p.Config.ApiKeyEncrypted ?? string.Empty) ?? "";
+    /// <summary>Key chỉ giải mã trong bộ nhớ cho lần gọi này; rỗng = Studio chưa có key dùng được.</summary>
+    public static string ApiKey(IAiKeyProtector protector, CopilotProvider p) =>
+        protector.Unprotect(p.Config.ApiKeyEncrypted ?? string.Empty) ?? "";
 
     /// <summary>Ghi step (provenance BR-10) + usage cho một lần gọi Copilot; chưa SaveChanges.</summary>
     public static async Task<AiAgentStep> RecordStepAsync(
@@ -76,18 +71,20 @@ internal static class CopilotGate
             response.RepairAttempts, response.ErrorCode, response.ErrorMessage);
         db.AiAgentSteps.Add(step);
 
-        if (!settings.IsMock)
-        {
-            var record = await usage.RecordAsync(new AiUsageEntry(run.WorkspaceId, $"AiAgents.Copilot.{task}",
-                response.Succeeded ? AiUsageStatus.Succeeded
-                    : response.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
-                Model: p.Model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
-                ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId), ct);
-            step.LinkUsageRecord(record.Id);
-        }
+        var record = await usage.RecordAsync(new AiUsageEntry(run.WorkspaceId, $"AiAgents.Copilot.{task}",
+            response.Succeeded ? AiUsageStatus.Succeeded
+                : response.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
+            Model: p.Model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
+            ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId), ct);
+        step.LinkUsageRecord(record.Id);
         return step;
     }
 
     public static string FailureCode(CopilotResponse r) =>
-        r.ErrorCode == ResultErrorCodes.AiUnavailable ? ResultErrorCodes.AiUnavailable : ResultErrorCodes.Validation;
+        r.ErrorCode switch
+        {
+            ResultErrorCodes.AiUnavailable or "PROVIDER_UNAVAILABLE" or "PROVIDER_ERROR" or "RUN_TIMEOUT" => ResultErrorCodes.AiUnavailable,
+            "INVALID_OUTPUT" => ResultErrorCodes.AiInvalidOutput, // lỗi của model, không phải dữ liệu người dùng nhập
+            _ => ResultErrorCodes.Validation
+        };
 }

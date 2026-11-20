@@ -11,19 +11,6 @@ public sealed class AiStreamPublisher : IAiStreamPublisher
 
     public AiStreamPublisher(IHubContext<AiStreamHub> hub) => _hub = hub;
 
-    public async Task PublishTokenChunkAsync(Guid runId, StreamTokenPayload payload, CancellationToken ct = default)
-    {
-        var group = $"run_{runId.ToString().ToLowerInvariant()}";
-        await _hub.Clients.Group(group).SendAsync("TokenChunk", new
-        {
-            runId,
-            agent = payload.Agent,
-            stepIndex = payload.StepIndex,
-            deltaText = payload.DeltaText,
-            isFinal = payload.IsFinal
-        }, ct);
-    }
-
     public async Task PublishStepRecordedAsync(Guid runId, AgentStepReport report, string runStatus, CancellationToken ct = default)
     {
         var group = $"run_{runId.ToString().ToLowerInvariant()}";

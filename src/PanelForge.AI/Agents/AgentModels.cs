@@ -6,7 +6,10 @@ namespace PanelForge.AI.Agents;
 // ── Output THÔ của model (dùng khoá L1/B1 và code, không dùng GUID) ───────────────
 // Code của service đổi sang contract có GUID do ứng dụng cấp; model không bao giờ tự bịa ID.
 public sealed record WriterOutput(List<WriterLine>? Lines, string? RevisionNotes);
-public sealed record WriterLine(string? Speaker, string? Dialogue, string? StageDirection);
+public sealed record WriterRef(string? Code, string? NewName, string? Category, string? Text);
+public sealed record WriterLine(
+    string? Speaker, string? Dialogue, string? StageDirection,
+    string? Kind = null, string? Text = null, string? NewSpeaker = null, string? Parenthetical = null, List<WriterRef>? Refs = null);
 
 public sealed record ContinuityOutput(List<ContinuityOutFinding>? Findings, string? Summary);
 public sealed record ContinuityOutFinding(
@@ -72,7 +75,8 @@ public static class PromptText
     {
         var sb = new StringBuilder();
         foreach (var l in draft.Lines.OrderBy(l => l.Order))
-            sb.AppendLine($"[L{l.Order}] speaker={keys.CodeOf(l.SpeakerId) ?? "-"} | dialogue=\"{Flat(l.Dialogue)}\" | stage=\"{Flat(l.StageDirection)}\"");
+            sb.AppendLine($"[L{l.Order}] speaker={keys.CodeOf(l.SpeakerId) ?? "-"} | dialogue=\"{Flat(l.Dialogue)}\" | stage=\"{Flat(l.StageDirection)}\""
+                + (l.Kind is null ? "" : $" | kind={l.Kind} | label=\"{Flat(l.SpeakerLabel)}\""));
         return sb.ToString().TrimEnd();
     }
 

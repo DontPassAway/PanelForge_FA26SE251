@@ -111,6 +111,7 @@ public static class DependencyInjection
         services.AddDataProtection();
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
+        services.AddHttpClient(AiProviderValidator.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IAiUsageService, AiUsageService>();
         services.AddScoped<IImageConsistencyService, ImageConsistencyService>();
 

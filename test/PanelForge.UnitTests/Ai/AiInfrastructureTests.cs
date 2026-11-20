@@ -37,7 +37,7 @@ public class AiInfrastructureTests
                 == new HttpClient(handler, false) { BaseAddress = new Uri("http://127.0.0.1:5055/") }),
             new AiAgentSettings { ServiceKey = key }, NullLogger<AiClient>.Instance);
 
-    private static readonly AiRunJob Job = new(Guid.NewGuid(), "Mock", "mock-fixture-v1", null, 2);
+    private static readonly AiRunJob Job = new(Guid.NewGuid(), "Gemini", "gemini-2.5-flash", null, 2);
 
     [Fact]
     public async Task AiClient_WhenServiceDown_ReturnsAiUnavailable_InsteadOfThrowing()
@@ -110,7 +110,7 @@ public class AiInfrastructureTests
 
     // ── Domain: bất biến của run/suggestion/decision ─────────────────────────
     private static AiWorkflowRun NewRun() => AiWorkflowRun.Create(
-        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Mock", "m", "brief",
+        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Gemini", "m", "brief",
         ReadingDirection.RightToLeft, 2, 0, null, "{}", "[]");
 
     [Fact]

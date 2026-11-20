@@ -2890,6 +2890,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AgeRating")
+                        .HasColumnType("varchar(10)")
+                        .HasColumnName("age_rating");
+
                     b.Property<string>("AvatarImageSha256")
                         .HasColumnType("varchar(64)")
                         .HasColumnName("avatar_image_sha256");
@@ -2942,6 +2946,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("Logline")
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("logline");
+
                     b.Property<string>("OriginalLanguage")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2976,6 +2984,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("Synopsis")
                         .HasColumnType("text")
                         .HasColumnName("synopsis");
+
+                    b.Property<string>("Teaser")
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("teaser");
 
                     b.Property<string>("Title")
                         .IsRequired()

@@ -8,8 +8,6 @@ public sealed class AiAgentSettings
 {
     public const string SectionName = "AiService";
 
-    /// <summary>Mock (mặc định, không cần API key) hoặc Gemini.</summary>
-    public string Provider { get; set; } = "Mock";
     public string GeminiModel { get; set; } = "gemini-2.5-flash";
     public string ServiceUrl { get; set; } = "http://127.0.0.1:5055";
     public string? ServiceKey { get; set; }
@@ -18,7 +16,7 @@ public sealed class AiAgentSettings
     public int RunStaleAfterSeconds { get; set; } = 300;
     public int ServiceTimeoutSeconds { get; set; } = 10;
     /// <summary>Copilot sync: timeout một lần gọi và số lượt tối đa mỗi phút cho MỘT Series.</summary>
-    public int CopilotTimeoutSeconds { get; set; } = 15;
+    public int CopilotTimeoutSeconds { get; set; } = 30;
     public int CopilotCallsPerMinutePerSeries { get; set; } = 10;
 
     /// <summary>Sinh ảnh thumbnail: Gemini (dùng key Workspace, nhận ảnh tham chiếu) hoặc Cloudflare (Workers AI text-to-image, token ở AI service).</summary>
@@ -33,5 +31,4 @@ public sealed class AiAgentSettings
     /// Tắt mặc định; FullScene vẫn chạy được qua API khi gọi trực tiếp.</summary>
     public bool ShowFullSceneWorkflow { get; set; }
 
-    public bool IsMock => string.Equals(Provider, "Mock", StringComparison.OrdinalIgnoreCase);
 }

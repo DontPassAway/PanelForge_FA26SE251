@@ -17,7 +17,11 @@ public class WorkspaceAiConfig : BaseEntity
     /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
     public long MonthlyImageQuota { get; private set; } = 0;
     public long UsedImagesCurrentMonth { get; private set; } = 0;
-    public string AllowedModelsJson { get; private set; } = "[\"gemini-1.5-flash\",\"gemini-1.5-pro\"]";
+    /// <summary>Model mặc định phải gồm model văn bản và ảnh mà AI service đang chạy, nếu không mọi lượt chạy bị chặn.</summary>
+    public static readonly IReadOnlyList<string> DefaultAllowedModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-image"];
+    public const string DefaultAllowedModelsJson = "[\"gemini-2.5-flash\",\"gemini-2.5-pro\",\"gemini-2.5-flash-image\"]";
+
+    public string AllowedModelsJson { get; private set; } = DefaultAllowedModelsJson;
     public DateTime? LastResetAt { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
@@ -40,7 +44,7 @@ public class WorkspaceAiConfig : BaseEntity
             MonthlyTokenQuota = Math.Max(0, monthlyTokenQuota),
             UsedTokensCurrentMonth = 0,
             AllowedModelsJson = string.IsNullOrWhiteSpace(allowedModelsJson)
-                ? "[\"gemini-1.5-flash\",\"gemini-1.5-pro\"]"
+                ? DefaultAllowedModelsJson
                 : allowedModelsJson.Trim(),
             LastResetAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,

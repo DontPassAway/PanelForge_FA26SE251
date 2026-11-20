@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.AiAgents.Commands.RunImpactSuggestion;
+using PanelForge.Application.Features.AiAgents.Commands.RunBibleStubDraft;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunCopilot;
 using PanelForge.Application.Features.AiAgents.Commands.RunPublisherMetadata;
@@ -51,7 +53,7 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new RunWorkflowCommand(
             seriesId, CurrentUserId, body.ChapterId, body.SceneId, body.Brief, body.ReadingDirection,
-            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds), ct);
+            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId), ct);
         return result.IsSuccess
             ? Accepted($"/api/series/{seriesId}/ai/runs/{result.Value!.RunId}", result.Value)
             : ToError(result);
@@ -71,13 +73,14 @@ public sealed class AiAgentsController : ControllerBase
     public async Task<IActionResult> RunCopilot([FromRoute] Guid seriesId, [FromBody] RunCopilotRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new RunCopilotCommand(
-            seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars), ct);
+            seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars,
+            body.PageId, body.ElementId, body.RevisionOfSuggestionId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>
     /// POST /api/series/{seriesId}/ai/copilot/publisher-metadata — chỉ Producer (Publisher không dùng AI) xin gợi ý logline, synopsis, thể loại, teaser, age rating
-    /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis + genre vào Series.
+    /// khi phát hành một Chapter. 200 + AiSuggestionDto (kind SeriesMetadata, Pending); Accept ghi synopsis, genre, logline, teaser, ageRating vào Series.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/ai/copilot/publisher-metadata")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
@@ -89,6 +92,30 @@ public sealed class AiAgentsController : ControllerBase
         [FromRoute] Guid seriesId, [FromBody] RunPublisherMetadataRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(new RunPublisherMetadataCommand(seriesId, body.ChapterId, CurrentUserId, body.Instruction), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/ai/impact/{taskId} — Producer xin gợi ý Keep/Rework cho ô bị ảnh hưởng do sửa kịch bản.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/ai/impact/{taskId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunImpactSuggestion([FromRoute] Guid chapterId, [FromRoute] Guid taskId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunImpactSuggestionCommand(chapterId, taskId, CurrentUserId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/series/{seriesId}/ai/bible/entries/{entryId}/stub-draft — Writer xin hồ sơ nháp có trích dẫn cho mục Bible stub.</summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/bible/entries/{entryId:guid}/stub-draft")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RunBibleStubDraft(
+        [FromRoute] Guid seriesId, [FromRoute] Guid entryId, [FromBody] RunBibleStubDraftRequest? body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunBibleStubDraftCommand(seriesId, entryId, CurrentUserId, body?.Instruction), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -247,6 +274,7 @@ public sealed class AiAgentsController : ControllerBase
             ResultErrorCodes.Unauthorized => Unauthorized(body),
             ResultErrorCodes.AiQuotaExceeded => StatusCode(StatusCodes.Status429TooManyRequests, body),
             ResultErrorCodes.AiUnavailable => AiUnavailable(result),
+            ResultErrorCodes.AiInvalidOutput => UnprocessableEntity(body),
             _ => BadRequest(body)
         };
     }
