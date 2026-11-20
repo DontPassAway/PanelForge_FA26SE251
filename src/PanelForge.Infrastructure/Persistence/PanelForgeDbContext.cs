@@ -100,6 +100,8 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
     public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();
     public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
+    public DbSet<PanelForge.Domain.Entities.Content.ReaderLibraryItem> ReaderLibraryItems => Set<PanelForge.Domain.Entities.Content.ReaderLibraryItem>();
+    public DbSet<PanelForge.Domain.Entities.Content.ReaderReadingProgress> ReaderReadingProgress => Set<PanelForge.Domain.Entities.Content.ReaderReadingProgress>();
 
     public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
         Database.IsRelational()
