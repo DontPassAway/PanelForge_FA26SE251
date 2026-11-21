@@ -29,7 +29,9 @@ public sealed record OverdueChangeRequestDto(
     ChangeRequestStatus Status, DateTime DueDate, string Description);
 
 /// <param name="Remaining">Số việc chưa Approved vào cuối ngày <paramref name="Date"/> (UTC).</param>
-public sealed record BurndownPointDto(DateOnly Date, int Remaining);
+/// <param name="CreatedToday">Số việc tạo trong ngày (UTC).</param>
+/// <param name="ApprovedToday">Số việc Approved trong ngày (UTC).</param>
+public sealed record BurndownPointDto(DateOnly Date, int Remaining, int? CreatedToday = null, int? ApprovedToday = null);
 
 public sealed record SeriesProgressDto(
     Guid SeriesId, DateTime GeneratedAt, IReadOnlyList<ChapterProgressDto> Chapters, IReadOnlyList<WorkloadDto> Workload,
@@ -159,9 +161,12 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
             var from = first < today.AddDays(-(MaxBurndownDays - 1)) ? today.AddDays(-(MaxBurndownDays - 1)) : first;
             for (var d = from; d <= today; d = d.AddDays(1))
             {
+                var startOfDay = d.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
                 var endOfDay = d.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
                 burndown.Add(new BurndownPointDto(d,
-                    assignments.Count(a => a.CreatedAt < endOfDay) - assignments.Count(a => a.CompletedAt != null && a.CompletedAt < endOfDay)));
+                    assignments.Count(a => a.CreatedAt < endOfDay) - assignments.Count(a => a.CompletedAt != null && a.CompletedAt < endOfDay),
+                    assignments.Count(a => a.CreatedAt >= startOfDay && a.CreatedAt < endOfDay),
+                    assignments.Count(a => a.CompletedAt >= startOfDay && a.CompletedAt < endOfDay)));
             }
         }
 

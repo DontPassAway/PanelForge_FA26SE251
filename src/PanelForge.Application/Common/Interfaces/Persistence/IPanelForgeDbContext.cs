@@ -86,6 +86,7 @@ public interface IPanelForgeDbContext
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
     DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }
     DbSet<PanelForge.Domain.Entities.Content.ReaderLibraryItem> ReaderLibraryItems { get; }
+    DbSet<PanelForge.Domain.Entities.Content.PageKeepOutZones> PageKeepOutZones { get; }
     DbSet<PanelForge.Domain.Entities.Content.ReaderReadingProgress> ReaderReadingProgress { get; }
 
     /// <summary>SELECT ... FOR UPDATE dòng Chapter; chỉ có tác dụng bên trong IUnitOfWork.ExecuteInTransactionAsync.</summary>

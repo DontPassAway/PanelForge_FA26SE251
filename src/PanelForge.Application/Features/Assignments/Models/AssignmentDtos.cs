@@ -40,7 +40,8 @@ public sealed record AssignmentDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     IReadOnlyList<Guid>? DependsOnAssignmentIds = null,
-    string? ImpactReviewReason = null)
+    string? ImpactReviewReason = null,
+    Guid? PageId = null)   // Trang của việc Page/Panel; chỉ điền ở GET /api/chapters/{chapterId}/assignments
 {
     public static AssignmentDto From(Assignment a) => new(
         a.Id, a.SeriesId, a.ChapterId, a.EntityType, a.TargetEntityId, a.PipelineStageId,

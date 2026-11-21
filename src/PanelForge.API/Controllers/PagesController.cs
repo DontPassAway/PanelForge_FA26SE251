@@ -22,6 +22,8 @@ using PanelForge.Application.Features.Pages.Queries.ComparePageVersions;
 using PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 using PanelForge.Application.Features.Pages.Queries.GetPageHistory;
 using PanelForge.Application.Features.Consistency.Commands.CheckPageVisualContinuity;
+using PanelForge.Application.Features.Pages.Commands.ReplaceKeepOutZones;
+using PanelForge.Application.Features.Pages.Queries.GetKeepOutZones;
 
 namespace PanelForge.API.Controllers;
 
@@ -390,6 +392,34 @@ public sealed class PagesController : ControllerBase
         ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage }),
         _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
     });
+
+    /// <summary>GET /api/pages/{pageId}/keep-out-zones — vùng cấm chữ của trang (toạ độ 0..1).</summary>
+    [HttpGet("api/pages/{pageId:guid}/keep-out-zones")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(PageKeepOutZonesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetKeepOutZones(Guid pageId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetKeepOutZonesQuery(pageId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.ErrorMessage });
+    }
+
+    /// <summary>PUT /api/pages/{pageId}/keep-out-zones — ghi đè cả bộ; 409 khi ExpectedVersion lệch hoặc chương chỉ đọc.</summary>
+    [HttpPut("api/pages/{pageId:guid}/keep-out-zones")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(PageKeepOutZonesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ReplaceKeepOutZones(
+        Guid pageId, [FromBody] ReplaceKeepOutZonesRequest body, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ReplaceKeepOutZonesCommand(pageId, body.Zones, body.ExpectedVersion, GetCurrentUserId()), cancellationToken);
+        if (result.IsSuccess) return Ok(result.Value);
+        if (result.ErrorCode == ResultErrorCodes.NotFound) return NotFound(new { error = result.ErrorMessage });
+        return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
+    }
 }
 
 /// <summary>Body khôi phục Page: version stream client đang thấy (BR-11).</summary>

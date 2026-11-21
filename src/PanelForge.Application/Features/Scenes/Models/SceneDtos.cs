@@ -27,7 +27,10 @@ public sealed record SceneScriptLineSummaryDto(
     NarrationMode NarrationMode = NarrationMode.Present,
     ScriptLineKind Kind = ScriptLineKind.Action,
     string? SpeakerLabel = null,
-    string? Text = null
+    string? Text = null,
+    Guid? PageId = null,      // suy từ Panel; null khi dòng chưa gán Panel
+    int? PageNumber = null,
+    int? PanelNumber = null
 );
 
 public sealed record SceneDetailDto(

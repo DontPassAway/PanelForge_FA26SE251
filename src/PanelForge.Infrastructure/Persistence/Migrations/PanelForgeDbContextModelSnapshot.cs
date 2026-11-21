@@ -2378,6 +2378,65 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("pages", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PageKeepOutZones", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("page_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
+                    b.Property<string>("ZonesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("zones_json");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PageId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_page_keep_out_zones_page_id");
+
+                    b.ToTable("page_keep_out_zones", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Panel", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6345,6 +6404,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Chapter");
 
                     b.Navigation("CurrentStage");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.PageKeepOutZones", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.Page", null)
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Panel", b =>
