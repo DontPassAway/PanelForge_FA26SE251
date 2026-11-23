@@ -66,15 +66,18 @@ public sealed class AgentRunner
         model?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true ? "low" : "none";
 
     /// <param name="light">Bước nhẹ: tắt/giảm thinking và hạ trần token đầu ra.</param>
+    /// <param name="lowReasoning">
+    /// Bước nặng có output dài (Writer): thinking "low" để token thinking không ăn hết MaxOutputTokens và cắt cụt JSON.
+    /// </param>
     public async Task<AgentCall<T>> RunAsync<T>(
         PromptInfo prompt, string userMessage,
         Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct,
-        int maxRepairAttempts = MaxRepairAttempts, bool light = false)
+        int maxRepairAttempts = MaxRepairAttempts, bool light = false, bool lowReasoning = false)
     {
         var started = DateTime.UtcNow;
         long? inTokens = null, outTokens = null;
         var maxOutputTokens = light ? Math.Min(LightMaxOutputTokens, _options.MaxOutputTokens) : _options.MaxOutputTokens;
-        var effort = light ? LightReasoningEffort(_model) : null;
+        var effort = light ? LightReasoningEffort(_model) : lowReasoning ? "low" : null;
         var parameters = AiJson.Serialize(new
         {
             temperature = _options.Temperature, maxOutputTokens,

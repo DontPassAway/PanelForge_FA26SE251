@@ -28,7 +28,7 @@ public class AgentRunnerReasoningTests
         }
     }
 
-    private static async Task<JsonElement> SendAsync(string model, bool light)
+    private static async Task<JsonElement> SendAsync(string model, bool light, bool lowReasoning = false)
     {
         var handler = new CaptureHandler();
         var client = new OpenAIClient(new ApiKeyCredential("test"), new OpenAIClientOptions
@@ -40,7 +40,7 @@ public class AgentRunnerReasoningTests
         var runner = new AgentRunner(chat, Options.Create(new ProviderOptions()), model);
         var prompt = new PromptInfo("t", "sys", "t@1", "ref");
 
-        var call = await runner.RunAsync<string>(prompt, "hi", t => (t, []), CancellationToken.None, light: light);
+        var call = await runner.RunAsync<string>(prompt, "hi", t => (t, []), CancellationToken.None, light: light, lowReasoning: lowReasoning);
 
         Assert.True(call.Succeeded);
         return handler.Body!.RootElement;
@@ -58,6 +58,15 @@ public class AgentRunnerReasoningTests
 
         Assert.Equal(effort, body.GetProperty("reasoning_effort").GetString());
         Assert.Equal(AgentRunner.LightMaxOutputTokens, Cap(body));
+    }
+
+    [Fact]
+    public async Task Low_reasoning_step_sends_low_and_keeps_full_cap()
+    {
+        var body = await SendAsync("gemini-2.5-flash", light: false, lowReasoning: true);
+
+        Assert.Equal("low", body.GetProperty("reasoning_effort").GetString());
+        Assert.Equal(new ProviderOptions().MaxOutputTokens, Cap(body));
     }
 
     [Fact]

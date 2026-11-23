@@ -51,7 +51,7 @@ public sealed class WriterAgent
             blockingFindings = findingsInput
         });
 
-        var call = await _runner.RunAsync<ScriptDraft>(Prompt, sb.ToString(), text => Parse(text, ctx, keys, round), ct);
+        var call = await _runner.RunAsync<ScriptDraft>(Prompt, sb.ToString(), text => Parse(text, ctx, keys, round), ct, lowReasoning: true);
         return (call, inputJson);
     }
 
