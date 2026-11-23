@@ -2,9 +2,12 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.Application.Features.Payments.Commands.AdminRefundWallet;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
+using PanelForge.Application.Features.Payments.Commands.ReportTransactionIssue;
 using PanelForge.Application.Features.Payments.Commands.SubscribeVip;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
+using PanelForge.Application.Features.Payments.Commands.VerifyGooglePlayPurchase;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Application.Features.Payments.Queries.GetMyWallet;
 using PanelForge.Application.Features.Payments.Queries.GetTransactionStatus;
@@ -104,6 +107,65 @@ public class WalletController : ControllerBase
     {
         var result = await _mediator.Send(new GetTransactionStatusQuery(orderCode), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.ErrorMessage });
+    }
+
+    /// <summary>
+    /// POST /api/wallet/google-play/verify
+    /// Xác thực giao dịch Google Play Billing (In-App Purchase) trên Android CH Play và cộng tiền vào Ví (có chống cộng trùng).
+    /// </summary>
+    [HttpPost("google-play/verify")]
+    [ProducesResponseType(typeof(VerifyGooglePlayPurchaseResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> VerifyGooglePlayPurchase(
+        [FromBody] VerifyGooglePlayPurchaseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new VerifyGooglePlayPurchaseCommand(userId, request.ProductId, request.PurchaseToken, request.PackageName),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+    }
+
+    /// <summary>
+    /// POST /api/wallet/transactions/{orderCode}/dispute
+    /// Độc giả gửi báo cáo lỗi giao dịch để Admin kiểm tra đối soát.
+    /// </summary>
+    [HttpPost("transactions/{orderCode}/dispute")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReportTransactionIssue(
+        [FromRoute] string orderCode,
+        [FromBody] ReportTransactionIssueRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new ReportTransactionIssueCommand(userId, orderCode, request.Reason),
+            cancellationToken);
+        return result.IsSuccess ? Ok(new { message = result.Value }) : BadRequest(new { message = result.ErrorMessage });
+    }
+
+    /// <summary>
+    /// POST /api/wallet/admin/refund
+    /// Chỉ Quản trị viên (Admin) được hoàn tiền vào Ví độc giả khi xảy ra sự cố kỹ thuật.
+    /// </summary>
+    [Authorize(Roles = "Admin")]
+    [HttpPost("admin/refund")]
+    [ProducesResponseType(typeof(AdminRefundWalletResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AdminRefund(
+        [FromBody] AdminRefundWalletRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminUserId = GetCurrentUserId();
+        if (adminUserId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new AdminRefundWalletCommand(adminUserId, request.TargetUserId, request.AmountVnd, request.Reason, request.ReferenceOrderCode),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
     }
 }
 
