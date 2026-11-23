@@ -84,7 +84,8 @@ public class PaymentTransaction : BaseEntity
         };
     }
 
-    public void Approve(Guid confirmedByUserId, DateTime? confirmedAt = null)
+    /// <param name="confirmedByUserId">null khi hệ thống tự duyệt (webhook SePay).</param>
+    public void Approve(Guid? confirmedByUserId, DateTime? confirmedAt = null)
     {
         if (Status != PaymentTransactionStatus.Pending)
             throw new InvalidOperationException($"Chỉ có thể duyệt giao dịch ở trạng thái Pending, hiện là {Status}.");
@@ -104,6 +105,15 @@ public class PaymentTransaction : BaseEntity
         ConfirmedByUserId = confirmedByUserId;
         ConfirmedAt = DateTime.UtcNow;
         RejectionReason = reason?.Trim();
+    }
+
+    /// <summary>Đơn Expired nhưng tiền đã thực sự vào tài khoản (webhook SePay) → mở lại để duyệt.</summary>
+    public void Reopen()
+    {
+        if (Status == PaymentTransactionStatus.Expired)
+        {
+            Status = PaymentTransactionStatus.Pending;
+        }
     }
 
     public void Expire()

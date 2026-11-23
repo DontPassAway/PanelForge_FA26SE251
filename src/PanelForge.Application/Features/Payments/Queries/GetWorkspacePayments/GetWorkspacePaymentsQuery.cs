@@ -99,7 +99,8 @@ public sealed class GetWorkspacePaymentsQueryHandler : IRequestHandler<GetWorksp
                 t.QrImageUrl,
                 t.CreatedAt,
                 t.ConfirmedAt,
-                t.ConfirmedByUser != null ? t.ConfirmedByUser.FullName : null,
+                t.ConfirmedByUser != null ? t.ConfirmedByUser.FullName
+                    : t.Status == PaymentTransactionStatus.Approved ? "SePay (tự động)" : null,
                 t.RejectionReason
             ))
             .ToListAsync(ct);
