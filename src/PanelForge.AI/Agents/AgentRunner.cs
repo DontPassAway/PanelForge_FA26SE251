@@ -44,26 +44,41 @@ public sealed class AgentRunner
     /// <summary>Chỉ đạo của Supervisor cho lần chạy agent kế tiếp (workflow gán trước mỗi bước, tuần tự nên không đua).</summary>
     public string? Instruction { get; set; }
 
+    /// <summary>Trần token đầu ra cho bước nhẹ (Supervisor, Copilot): output là một JSON nhỏ.</summary>
+    public const int LightMaxOutputTokens = 2048;
+
     private readonly IChatClient _chat;
     private readonly ProviderOptions _options;
+    private readonly string? _model;
 
-    public AgentRunner(IChatClient chat, IOptions<ProviderOptions> options)
+    public AgentRunner(IChatClient chat, IOptions<ProviderOptions> options, string? model = null)
     {
         _chat = chat;
         _options = options.Value;
+        _model = model;
     }
 
+    /// <summary>
+    /// Mức "thinking" cho bước nhẹ. Token thinking của Gemini 2.5 bị tính phí và trừ vào MaxOutputTokens;
+    /// bước chỉ chọn hành động/viết lại một dòng không cần. 2.5 Pro không tắt hẳn được → "low".
+    /// </summary>
+    internal static string LightReasoningEffort(string? model) =>
+        model?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true ? "low" : "none";
+
+    /// <param name="light">Bước nhẹ: tắt/giảm thinking và hạ trần token đầu ra.</param>
     public async Task<AgentCall<T>> RunAsync<T>(
         PromptInfo prompt, string userMessage,
         Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct,
-        int maxRepairAttempts = MaxRepairAttempts)
+        int maxRepairAttempts = MaxRepairAttempts, bool light = false)
     {
         var started = DateTime.UtcNow;
         long? inTokens = null, outTokens = null;
+        var maxOutputTokens = light ? Math.Min(LightMaxOutputTokens, _options.MaxOutputTokens) : _options.MaxOutputTokens;
+        var effort = light ? LightReasoningEffort(_model) : null;
         var parameters = AiJson.Serialize(new
         {
-            temperature = _options.Temperature, maxOutputTokens = _options.MaxOutputTokens,
-            responseFormat = "json", maxRepairAttempts
+            temperature = _options.Temperature, maxOutputTokens,
+            responseFormat = "json", maxRepairAttempts, reasoningEffort = effort
         });
         // Chỉ đạo của Supervisor cho agent này (nếu có): đưa vào cuối tin nhắn, đánh dấu rõ là dữ liệu điều phối
         if (!string.IsNullOrWhiteSpace(Instruction))
@@ -80,8 +95,13 @@ public sealed class AgentRunner
                     options: new ChatClientAgentRunOptions(new ChatOptions
                     {
                         Temperature = _options.Temperature,
-                        MaxOutputTokens = _options.MaxOutputTokens,
-                        ResponseFormat = ChatResponseFormat.Json
+                        MaxOutputTokens = maxOutputTokens,
+                        ResponseFormat = ChatResponseFormat.Json,
+                        // Gemini OpenAI-compat nhận reasoning_effort "none"/"low"
+                        Reasoning = effort is null ? null : new ReasoningOptions
+                        {
+                            Effort = effort == "none" ? ReasoningEffort.None : ReasoningEffort.Low
+                        }
                     }), cancellationToken: ct);
 
                 if (response.Usage is { } usage)

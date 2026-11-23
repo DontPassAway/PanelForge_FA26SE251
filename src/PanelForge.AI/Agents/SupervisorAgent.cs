@@ -36,7 +36,7 @@ public sealed class SupervisorAgent
         sb.AppendLine().AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
 
         var inputJson = AiJson.Serialize(new { round, blockingFindings = blocking, allowedActions = allowed, history });
-        var call = await _runner.RunAsync<SupervisorDecision>(Prompt, sb.ToString(), text => Parse(text, ctx, allowed, round), ct);
+        var call = await _runner.RunAsync<SupervisorDecision>(Prompt, sb.ToString(), text => Parse(text, ctx, allowed, round), ct, light: true);
         return (call, inputJson);
     }
 

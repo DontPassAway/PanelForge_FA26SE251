@@ -64,9 +64,10 @@ public static class PromptText
         var sb = new StringBuilder();
         foreach (var (key, b) in keys.Bible)
         {
-            sb.AppendLine($"[{key}] code={b.Code} | category={b.Category} | name={b.Name}")
-              .AppendLine($"description: {Flat(b.Description)}");
-            if (!string.IsNullOrWhiteSpace(b.Details)) sb.AppendLine($"details: {Flat(b.Details)}");
+            // Một dòng mỗi mục: bớt nhãn/xuống dòng lặp lại cho mọi agent dùng Bible
+            sb.Append($"[{key}] code={b.Code} | category={b.Category} | name={b.Name} | description: {Flat(b.Description)}");
+            if (!string.IsNullOrWhiteSpace(b.Details)) sb.Append($" | details: {Flat(b.Details)}");
+            sb.AppendLine();
         }
         return sb.ToString().TrimEnd();
     }

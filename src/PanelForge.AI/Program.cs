@@ -94,7 +94,7 @@ app.MapPost("/copilot/{task}", async (string task, CopilotRequest req, HttpConte
         return Results.Json(new AiRunAck(false, "INVALID_JOB", "Request Copilot không hợp lệ."), statusCode: 400);
 
     var chat = factory.Create(new AiRunJob(Guid.NewGuid(), req.Provider, req.Model, req.ApiKey, 0));
-    var agent = new PanelForge.AI.Agents.CopilotAgent(new PanelForge.AI.Agents.AgentRunner(chat, options));
+    var agent = new PanelForge.AI.Agents.CopilotAgent(new PanelForge.AI.Agents.AgentRunner(chat, options, req.Model));
     return Results.Json(await agent.RunAsync(req, ct), AiJson.Options);
 });
 

@@ -46,7 +46,7 @@ public sealed class MultiAgentWorkflow
     {
         var ctx = await _backend.GetContextAsync(job.RunId, ct);
         var keys = new KeyMaps(ctx);
-        var runner = new AgentRunner(chat, _options);
+        var runner = new AgentRunner(chat, _options, job.Model);
         var steps = new StepWriter(_backend, job, _logger);
 
         // Gemini: kiểm tra model còn khả dụng trước khi tốn lượt gọi; lỗi → step thất bại rõ ràng

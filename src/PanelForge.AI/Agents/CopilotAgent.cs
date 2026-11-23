@@ -63,7 +63,7 @@ public sealed class CopilotAgent
             if (output is null) return (null, [error!]);
             var errors = CopilotRules.Validate(req.Task, line.Dialogue, output.Text, req.MaxChars);
             return errors.Count == 0 ? (output with { Text = output.Text!.Trim(), Reason = output.Reason?.Trim() }, []) : (null, errors);
-        }, ct, req.Task == CopilotTasks.LettererShorten ? ShortenRepairAttempts : AgentRunner.MaxRepairAttempts);
+        }, ct, req.Task == CopilotTasks.LettererShorten ? ShortenRepairAttempts : AgentRunner.MaxRepairAttempts, light: true);
 
         return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
@@ -90,7 +90,7 @@ public sealed class CopilotAgent
             if (output is null) return (null, [error!]);
             var errors = CopilotRules.ValidateImpact(output.Decision, output.Reason);
             return errors.Count == 0 ? (output with { Reason = output.Reason!.Trim() }, []) : (null, errors);
-        }, ct);
+        }, ct, light: true);
 
         return new CopilotResponse(call.Succeeded, null, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
@@ -119,7 +119,7 @@ public sealed class CopilotAgent
             var draft = new BibleStubDraft(o.Description?.Trim() ?? "", o.Subtitle?.Trim(), o.Citations ?? []);
             var errors = CopilotRules.ValidateStubDraft(draft, stub);
             return errors.Count == 0 ? ((draft, o.Reason?.Trim()), []) : (null, errors);
-        }, ct);
+        }, ct, light: true);
 
         return new CopilotResponse(call.Succeeded, null, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
@@ -152,7 +152,7 @@ public sealed class CopilotAgent
                 o.Teaser?.Trim() ?? "", o.AgeRating?.Trim() ?? "");
             var errors = CopilotRules.ValidateMetadata(meta);
             return errors.Count == 0 ? ((meta, o.Reason?.Trim()), []) : (null, errors);
-        }, ct);
+        }, ct, light: true);
 
         return new CopilotResponse(call.Succeeded, null, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
