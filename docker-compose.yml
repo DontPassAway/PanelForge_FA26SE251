@@ -25,6 +25,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__PostgreSQL=Host=postgres-db;Port=5432;Database=panelforge;Username=postgres;Password=12345
       - TranslationService__BaseUrl=http://translation-service:5000
+      # API Key webhook SePay (đặt trong file .env cạnh compose, không commit). Để trống = tắt webhook (trả 503).
+      - SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}
     ports:
       - "7274:8080"
     depends_on:
