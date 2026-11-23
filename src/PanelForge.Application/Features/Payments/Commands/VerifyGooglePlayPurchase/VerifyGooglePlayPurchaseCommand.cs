@@ -18,6 +18,7 @@ public static class GooglePlayProductCatalog
 {
     private static readonly Dictionary<string, int> Products = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["panelforge_topup_10k"] = 10_000,
         ["panelforge_topup_20k"] = 20_000,
         ["panelforge_topup_50k"] = 50_000,
         ["panelforge_topup_100k"] = 100_000,
