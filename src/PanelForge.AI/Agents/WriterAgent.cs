@@ -88,12 +88,17 @@ public sealed class WriterAgent
             var label = effectiveKind == "Action" || name is null ? null
                 : Clean(l.Parenthetical) is { } tone ? $"{name} ({tone})" : name;
             var refs = new List<ScriptDraftRef>();
+            var refText = stage ?? dialogue ?? "";
             foreach (var r in l.Refs ?? [])
             {
+                // Như Backend (ScriptBibleRefs): thẻ có cụm chữ không nằm trong dòng (vd model gắn tên cho đại từ "cậu")
+                // thì bỏ thẻ, không làm hỏng cả bản nháp; thẻ chỉ để tô sáng, không phải nội dung script.
+                var surface = r.Text?.Trim();
+                if (string.IsNullOrEmpty(surface) || !refText.Contains(surface, StringComparison.OrdinalIgnoreCase)) continue;
                 var code = Clean(r.Code);
                 var entry = code is null ? null : ctx.Bible.FirstOrDefault(b => b.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
                 if (code is not null && entry is null) badRefs.Add($"Tham chiếu code '{code}' ở dòng {i + 1} không có trong Bible.");
-                else refs.Add(new ScriptDraftRef(r.Text?.Trim() ?? "", entry?.EntryId, entry is null ? Clean(r.NewName) : null, entry is null ? Clean(r.Category) : null));
+                else refs.Add(new ScriptDraftRef(surface, entry?.EntryId, entry is null ? Clean(r.NewName) : null, entry is null ? Clean(r.Category) : null));
             }
             // LineId do ứng dụng cấp, không phải model
             lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker, dialogue, stage, kind, label, refs.Count > 0 ? refs : null));
