@@ -20,10 +20,12 @@ using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.Register;
 using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
 using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.RevokeSession;
 using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
 using PanelForge.Application.Features.Auth.Queries.CheckEmail;
+using PanelForge.Application.Features.Auth.Queries.GetActiveSessions;
 using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
 using PanelForge.API.Common;
 
@@ -346,10 +348,52 @@ public class AuthController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// GET /api/auth/sessions
+    /// Danh sách thiết bị đang đăng nhập của tài khoản hiện tại cùng giới hạn thiết bị tối đa.
+    /// </summary>
+    [Authorize]
+    [HttpGet("sessions")]
+    [ProducesResponseType(typeof(ActiveSessionsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActiveSessions(CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetActiveSessionsQuery(userId, GetCurrentSessionId()), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// DELETE /api/auth/sessions/{sessionId}
+    /// Đăng xuất từ xa một thiết bị cụ thể của tài khoản hiện tại.
+    /// </summary>
+    [Authorize]
+    [HttpDelete("sessions/{sessionId:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeSession([FromRoute] Guid sessionId, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new RevokeSessionCommand(userId, sessionId, ClientIp()), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.ErrorMessage });
+
+        return Ok(new { message = result.Value });
+    }
+
     private Guid? GetCurrentUserId()
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+    }
+
+    private Guid? GetCurrentSessionId()
+    {
+        var sid = User.FindFirstValue("sid");
+        return Guid.TryParse(sid, out var sessionId) ? sessionId : null;
     }
 
     // Token chỉ nằm trong cookie HttpOnly; body không trả token/refreshToken (JS không đọc được → XSS không lấy được).

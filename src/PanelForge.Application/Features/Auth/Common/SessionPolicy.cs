@@ -5,11 +5,15 @@ namespace PanelForge.Application.Features.Auth.Common;
 
 /// <summary>
 /// Session policy hiệu lực của một user (V1.2): Administrator đặt theo Workspace, user thuộc nhiều Workspace chịu giá trị CHẶT NHẤT
-/// (nhỏ nhất) trong các Workspace đó. Không thuộc Workspace nào (kể cả Admin) = không bị giới hạn thêm ngoài hạn refresh token mặc định.
+/// (nhỏ nhất) trong các Workspace đó. Độc giả không thuộc Workspace nào vẫn chịu giới hạn mặc định tối đa <see cref="DefaultReaderMaxSessions"/>
+/// thiết bị đăng nhập đồng thời để tránh chia sẻ tài khoản trả phí.
 /// Idle timeout đo từ <c>RefreshToken.LastActiveAt</c>, được kiểm và cập nhật ở mỗi request (API AccessTokenGuard) và khi làm mới token.
 /// </summary>
 public sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, int? MaxSessions)
 {
+    /// <summary>Giới hạn mặc định số thiết bị đăng nhập đồng thời cho độc giả (chống chia sẻ tài khoản).</summary>
+    public const int DefaultReaderMaxSessions = 3;
+
     public static async Task<SessionPolicy> ForUserAsync(IPanelForgeDbContext db, Guid userId, CancellationToken ct)
     {
         var limits = await db.WorkspaceMembers.AsNoTracking()
@@ -22,10 +26,12 @@ public sealed record SessionPolicy(TimeSpan? Lifetime, TimeSpan? IdleTimeout, in
             })
             .ToListAsync(ct);
 
+        var workspaceMaxSessions = limits.Select(l => l.MaxConcurrentSessions).Min();
+
         return new SessionPolicy(
             Minutes(limits.Select(l => l.SessionLifetimeMinutes).Min()),
             Minutes(limits.Select(l => l.SessionIdleTimeoutMinutes).Min()),
-            limits.Select(l => l.MaxConcurrentSessions).Min());
+            workspaceMaxSessions ?? DefaultReaderMaxSessions);
     }
 
     private static TimeSpan? Minutes(int? minutes) => minutes.HasValue ? TimeSpan.FromMinutes(minutes.Value) : null;
