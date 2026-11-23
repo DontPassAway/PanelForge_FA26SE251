@@ -47,6 +47,7 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 t.AmountVnd,
                 t.Status,
                 t.CreatedAt,
+                t.BankBin,
                 SeriesTitle = t.Series != null ? t.Series.Title : null,
                 ChapterTitle = t.Chapter != null ? t.Chapter.Title : null,
                 ChapterNumber = t.Chapter != null ? (decimal?)t.Chapter.ChapterNumber : null
@@ -57,7 +58,9 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
         {
             string title = t.Type switch
             {
-                PaymentTransactionType.Topup => $"Nạp tiền Ví qua VietQR ({t.OrderCode})",
+                PaymentTransactionType.Topup => t.BankBin == "GOOGLE_PLAY"
+                    ? $"Nạp tiền Ví qua Google Play ({t.OrderCode})"
+                    : $"Nạp tiền Ví qua VietQR ({t.OrderCode})",
                 PaymentTransactionType.ChapterUnlock => t.ChapterNumber.HasValue
                     ? $"Mở khóa Tập {t.ChapterNumber} - {t.SeriesTitle ?? "Truyện"}"
                     : $"Mở khóa chương truyện ({t.OrderCode})",
@@ -72,7 +75,8 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 Title: title,
                 AmountVnd: signAmount,
                 CreatedAt: t.CreatedAt,
-                BalanceAfter: (int)wallet.BalanceVnd
+                BalanceAfter: (int)wallet.BalanceVnd,
+                OrderCode: t.OrderCode
             );
         }).ToList();
 
