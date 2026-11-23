@@ -122,6 +122,27 @@ public class WorkspaceInvitationTests
     }
 
     [Fact]
+    public async Task AddMember_WhenReinvitingUserWhoRejectedOrWasRemoved_ShouldBePendingAgain()
+    {
+        var user = User.Create("artist@test.com", "Artist", "hash"); // tài khoản đã có mật khẩu
+        user.ConfirmEmail();
+        WorkspaceMember? old = null;
+        var (workspace, actorId) = Arrange(new List<User> { user }, ws =>
+        {
+            old = MemberOf(ws, user);
+            old.IsDeleted = true; // từ chối lời mời / bị xoá trước đó (xoá mềm)
+            return [old];
+        });
+
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Artist), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        old!.IsDeleted.Should().BeFalse();
+        old.Status.Should().Be(WorkspaceMemberStatus.Pending);
+    }
+
+    [Fact]
     public async Task AddMember_WhenEmailSendingFails_ShouldReportInvitationEmailSentFalse()
     {
         var (workspace, actorId) = Arrange(new List<User>());

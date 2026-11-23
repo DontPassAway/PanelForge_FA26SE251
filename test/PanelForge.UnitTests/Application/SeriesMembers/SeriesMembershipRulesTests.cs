@@ -4,6 +4,9 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.SeriesMembers.Commands.AddSeriesMember;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateMemberRole;
+using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
+using PanelForge.Application.Common;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Workspaces;
@@ -34,7 +37,47 @@ public class SeriesMembershipRulesTests
         _db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { _series }));
         _db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(_wsMembers));
         _db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(_seriesMembers));
+        _db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(_assignments));
+        _db.Setup(d => d.Submissions).Returns(DbSetMockHelper.CreateDbSetMock(new List<Submission>()));
+        _db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>()));
+        _db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTaskLot>()));
         _db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+    }
+
+    private readonly List<Assignment> _assignments = [];
+
+    private Assignment OpenAssignmentFor(Guid userId) =>
+        Assignment.Create(_series.Id, Guid.NewGuid(), WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(),
+            userId, WorkspaceRole.Artist, "Pencil trang 1");
+
+    [Fact]
+    public async Task WorkspaceRoleChange_WithOpenWork_IsBlocked()
+    {
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
+        _assignments.Add(OpenAssignmentFor(_artist.Id));
+
+        var result = await new UpdateMemberRoleCommandHandler(_db.Object, ProducerActor().Object)
+            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Writer), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _wsMembers.Single().Role.Should().Be(WorkspaceRole.Artist);
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveMember_CancelsUnsubmittedLegacyAssignments()
+    {
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
+        var open = OpenAssignmentFor(_artist.Id);
+        _assignments.Add(open);
+
+        var result = await new RemoveWorkspaceMemberCommandHandler(_db.Object, ProducerActor().Object)
+            .Handle(new RemoveWorkspaceMemberCommand(_ownerId, _workspace.Id, _artist.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        open.CancelReason.Should().Be("Người nhận đã rời Studio.");
+        _assignments.Should().NotContain(open); // Remove → xoá mềm khi lưu
     }
 
     private WorkspaceAuthorizationService Auth => new(_db.Object);

@@ -65,6 +65,9 @@ public sealed class RemoveWorkspaceMemberCommandHandler : IRequestHandler<Remove
             // Lưới V3: không để lô mồ côi đứng tên người đã rời Studio
             await TaskGrid.Common.TaskGridRules.ReleaseMemberCellsAsync(
                 _dbContext, command.TargetUserId, command.WorkspaceId, workspace.OwnerId, seriesIds, cancellationToken);
+            // V2: việc cũ chưa nộp cũng không được đứng tên người đã rời
+            await Assignments.Common.AssignmentRules.ReleaseMemberAssignmentsAsync(
+                _dbContext, command.TargetUserId, seriesIds, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

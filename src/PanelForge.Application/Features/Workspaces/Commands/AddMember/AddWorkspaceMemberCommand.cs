@@ -98,8 +98,8 @@ public sealed class AddWorkspaceMemberCommandHandler
             if (!existingMember.IsDeleted)
                 return Result<WorkspaceMemberDto>.Failure("Người dùng này đã là thành viên của Workspace.");
 
-            // Thành viên từng bị xóa mềm -> Khôi phục lại với vai trò mới
-            existingMember.Reactivate(command.Role, targetUser.IsPendingInvitation ? WorkspaceMemberStatus.Pending : WorkspaceMemberStatus.Active);
+            // Từng bị xoá / từng từ chối lời mời → mời lại như lần đầu: Pending, phải tự chấp nhận mới vào được Studio
+            existingMember.Reactivate(command.Role, WorkspaceMemberStatus.Pending);
             member = existingMember;
         }
         else

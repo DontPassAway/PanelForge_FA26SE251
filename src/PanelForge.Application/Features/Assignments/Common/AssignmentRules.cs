@@ -16,6 +16,41 @@ internal static class AssignmentRules
             ? "Chương này đã dùng Lưới giao việc V3; hãy giao việc trên lưới."
             : null;
 
+    /// <summary>Số việc chưa xong (V2 chưa Approved + ô lưới V3 chưa Approved/Cancelled) của một người trong các Series.</summary>
+    public static async Task<int> OpenWorkCountAsync(
+        IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct) =>
+        await db.Assignments.CountAsync(a => a.AssigneeUserId == userId && seriesIds.Contains(a.SeriesId)
+                                             && a.Status != AssignmentStatus.Approved, ct)
+        + await TaskGrid.Common.TaskGridRules.UnfinishedCellsOf(db, userId, seriesIds).CountAsync(ct);
+
+    /// <summary>
+    /// Thành viên rời Studio: huỷ việc V2 đang mở của họ nếu chưa có bài nộp và không việc nào phụ thuộc
+    /// (cùng điều kiện với DeleteAssignment). Việc đã có bài nộp giữ lại để Producer đổi người nhận (BR-01).
+    /// </summary>
+    public static async Task ReleaseMemberAssignmentsAsync(
+        IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
+    {
+        var open = await db.Assignments
+            .Where(a => a.AssigneeUserId == userId && seriesIds.Contains(a.SeriesId)
+                        && (a.Status == AssignmentStatus.Assigned || a.Status == AssignmentStatus.InProgress
+                            || a.Status == AssignmentStatus.ReworkRequired || a.Status == AssignmentStatus.Blocked))
+            .ToListAsync(ct);
+        if (open.Count == 0) return;
+
+        var ids = open.Select(a => a.Id).ToList();
+        var submitted = await db.Submissions.Where(s => ids.Contains(s.AssignmentId))
+            .Select(s => s.AssignmentId).Distinct().ToListAsync(ct);
+        var chapterIds = open.Select(a => a.ChapterId).Distinct().ToList();
+        var dependedOn = (await db.Assignments.AsNoTracking().Where(a => chapterIds.Contains(a.ChapterId)).ToListAsync(ct))
+            .Where(a => !ids.Contains(a.Id)).SelectMany(a => a.GetDependsOnAssignmentIds()).ToHashSet();
+
+        foreach (var a in open.Where(a => !submitted.Contains(a.Id) && !dependedOn.Contains(a.Id)))
+        {
+            a.Cancel("Người nhận đã rời Studio.");
+            db.Assignments.Remove(a); // xoá mềm (ISoftDelete)
+        }
+    }
+
     /// <summary>BR-12: Chapter đã Approved/Locked/Published thì không giao hay đổi việc.</summary>
     public static string? ChapterNotEditableReason(Chapter chapter) =>
         chapter.IsContentEditable
