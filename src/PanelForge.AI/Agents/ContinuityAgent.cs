@@ -43,7 +43,7 @@ public sealed class ContinuityAgent
         var bibleByRevision = ctx.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, b.EvidenceText));
         var lineKeys = KeyMaps.LineKeys(draft);
         var call = await _runner.RunAsync<ContinuityReport>(Prompt, sb.ToString(),
-            text => Parse(text, ctx, keys, draft, lineKeys, bibleByRevision), ct);
+            text => Parse(text, ctx, keys, draft, lineKeys, bibleByRevision), ct, lowReasoning: true);
         return (call, inputJson);
     }
 
