@@ -1,3 +1,4 @@
+using PanelForge.Application.Common;
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -125,7 +126,14 @@ public class WalletController : ControllerBase
         var result = await _mediator.Send(
             new VerifyGooglePlayPurchaseCommand(userId, request.ProductId, request.PurchaseToken, request.PackageName),
             cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.PaymentProviderUnavailable =>
+                StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage }),
+            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage }),
+            _ => BadRequest(new { message = result.ErrorMessage }),
+        };
     }
 
     /// <summary>

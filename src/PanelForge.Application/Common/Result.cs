@@ -42,6 +42,8 @@ public static class ResultErrorCodes
     public const string Validation = "VALIDATION_FAILED";
     /// <summary>AI service tắt/không phản hồi → HTTP 503. Chức năng Backend khác vẫn chạy.</summary>
     public const string AiUnavailable = "AI_UNAVAILABLE";
+    /// <summary>Không xác thực được với cổng thanh toán (Google Play chưa cấu hình / không phản hồi) → HTTP 503, client thử lại sau.</summary>
+    public const string PaymentProviderUnavailable = "PAYMENT_PROVIDER_UNAVAILABLE";
     public const string AiInvalidOutput = "AI_INVALID_OUTPUT";
     public const string AiDisabled = "AI_DISABLED";
     public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";

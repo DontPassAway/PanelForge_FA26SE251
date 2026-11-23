@@ -17,6 +17,7 @@ using PanelForge.Infrastructure.Persistence;
 using PanelForge.Infrastructure.Persistence.EventStore.Projections;
 using PanelForge.Infrastructure.Persistence.EventStore;
 using PanelForge.Infrastructure.Services;
+using PanelForge.Infrastructure.ExternalServices.GooglePlay;
 using Weasel.Core;
 
 namespace PanelForge.Infrastructure;
@@ -89,6 +90,10 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddSingleton<ITotpService, OtpNetTotpService>();
         services.AddSingleton<IExternalIdentityVerifier, FirebaseIdentityVerifier>();
+
+        // Google Play Billing: xác thực purchaseToken với Google Play Developer API trước khi cộng Ví.
+        services.AddHttpClient(GooglePlayPurchaseVerifier.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IGooglePlayPurchaseVerifier, GooglePlayPurchaseVerifier>();
 
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();

@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -64,8 +65,13 @@ public sealed class VerifyGooglePlayPurchaseCommandHandler
 {
     private const string ExpectedPackageName = "com.panelforge.reader";
     private readonly IPanelForgeDbContext _db;
+    private readonly IGooglePlayPurchaseVerifier _verifier;
 
-    public VerifyGooglePlayPurchaseCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public VerifyGooglePlayPurchaseCommandHandler(IPanelForgeDbContext db, IGooglePlayPurchaseVerifier verifier)
+    {
+        _db = db;
+        _verifier = verifier;
+    }
 
     public async Task<Result<VerifyGooglePlayPurchaseResponse>> Handle(
         VerifyGooglePlayPurchaseCommand command,
@@ -115,6 +121,18 @@ public sealed class VerifyGooglePlayPurchaseCommandHandler
                     Message: "Giao dịch Google Play này đã được ghi nhận trước đó."));
         }
 
+        // Bắt buộc hỏi Google Play Developer API: chỉ cộng Ví khi Google xác nhận đã thanh toán đúng gói.
+        var check = await _verifier.VerifyProductPurchaseAsync(
+            ExpectedPackageName, command.ProductId.Trim(), token, ct);
+        if (check.Status != GooglePlayPurchaseStatus.Purchased)
+        {
+            var code = check.Status is GooglePlayPurchaseStatus.Unavailable or GooglePlayPurchaseStatus.NotConfigured
+                ? ResultErrorCodes.PaymentProviderUnavailable
+                : ResultErrorCodes.Validation;
+            return Result<VerifyGooglePlayPurchaseResponse>.Failure(
+                check.ErrorMessage ?? "Google Play không xác nhận giao dịch này.", code);
+        }
+
         if (wallet is null)
         {
             wallet = ReaderWallet.Create(command.UserId, 0m);
@@ -140,7 +158,7 @@ public sealed class VerifyGooglePlayPurchaseCommandHandler
             entityName: "PaymentTransaction",
             entityId: tx.Id.ToString(),
             userId: command.UserId,
-            details: $"Nạp {amountVnd:N0} VNĐ qua Google Play Billing ({command.ProductId}, mã {orderCode})."));
+            details: $"Nạp {amountVnd:N0} VNĐ qua Google Play Billing ({command.ProductId}, mã {orderCode}, Google order {check.GoogleOrderId ?? "—"})."));
 
         await _db.SaveChangesAsync(ct);
 

@@ -9,7 +9,8 @@ public sealed record WalletTransactionDto(
     string Title,
     int AmountVnd,
     DateTime CreatedAt,
-    int BalanceAfter
+    int BalanceAfter,
+    string OrderCode = ""
 );
 
 public sealed record UserWalletDto(

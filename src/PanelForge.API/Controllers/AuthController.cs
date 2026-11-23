@@ -392,7 +392,8 @@ public class AuthController : ControllerBase
 
     private Guid? GetCurrentSessionId()
     {
-        var sid = User.FindFirstValue("sid");
+        // JwtTokenGenerator ghi mã phiên vào claim "session_id" ("sid" giữ lại cho token cũ).
+        var sid = User.FindFirstValue("session_id") ?? User.FindFirstValue("sid");
         return Guid.TryParse(sid, out var sessionId) ? sessionId : null;
     }
 

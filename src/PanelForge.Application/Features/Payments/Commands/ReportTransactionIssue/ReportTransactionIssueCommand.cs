@@ -27,9 +27,13 @@ public sealed class ReportTransactionIssueCommandHandler
         if (reason.Length < 5)
             return Result<string>.Failure("Vui lòng mô tả chi tiết sự cố giao dịch (tối thiểu 5 ký tự).", ResultErrorCodes.Validation);
 
-        var normalizedCode = command.OrderCode.Trim().ToUpperInvariant();
+        // Nhận cả mã đơn (OrderCode) lẫn Id giao dịch (Guid trong lịch sử Ví) để client nào gửi cũng tìm được.
+        var raw = command.OrderCode?.Trim() ?? string.Empty;
+        var normalizedCode = raw.ToUpperInvariant();
+        var hasId = Guid.TryParse(raw, out var txId);
         var tx = await _db.PaymentTransactions.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.OrderCode == normalizedCode && t.UserId == command.UserId && !t.IsDeleted, ct);
+            .FirstOrDefaultAsync(t => t.UserId == command.UserId && !t.IsDeleted
+                && (t.OrderCode == normalizedCode || (hasId && t.Id == txId)), ct);
 
         if (tx is null)
             return Result<string>.Failure("Không tìm thấy giao dịch thuộc tài khoản của bạn.", ResultErrorCodes.NotFound);
