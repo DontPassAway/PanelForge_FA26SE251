@@ -303,7 +303,7 @@ public class NewWorkflowsEndToEndTests
     {
         var decision = new SupervisorDecision(AiProtocol.SchemaVersion, runId, 0, action, "Lý do", null, allowed, false);
         var now = DateTime.UtcNow;
-        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Gemini", "gemini-2.5-flash", "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
+        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Gemini", AiHarness.Model, "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
             "{}", "{}", AiJson.Serialize(decision), now, now, null, null, 0, null, null);
     }
 
@@ -333,7 +333,7 @@ public class NewWorkflowsEndToEndTests
             .IsSuccess.Should().BeTrue();
 
         var now = DateTime.UtcNow;
-        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Gemini", "gemini-2.5-flash", "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
+        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Gemini", AiHarness.Model, "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
         var result = await h.RecordHandler().Handle(new RecordAgentStepCommand(runId, writer), default);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);

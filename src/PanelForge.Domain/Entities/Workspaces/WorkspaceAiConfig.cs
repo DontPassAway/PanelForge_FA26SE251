@@ -17,9 +17,15 @@ public class WorkspaceAiConfig : BaseEntity
     /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
     public long MonthlyImageQuota { get; private set; } = 0;
     public long UsedImagesCurrentMonth { get; private set; } = 0;
-    /// <summary>Model mặc định phải gồm model văn bản và ảnh mà AI service đang chạy, nếu không mọi lượt chạy bị chặn.</summary>
-    public static readonly IReadOnlyList<string> DefaultAllowedModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-image"];
-    public const string DefaultAllowedModelsJson = "[\"gemini-2.5-flash\",\"gemini-2.5-pro\",\"gemini-2.5-flash-image\"]";
+    /// <summary>
+    /// Model mặc định phải gồm model văn bản và ảnh mà AI service đang chạy, nếu không mọi lượt chạy bị chặn.
+    /// Dòng 3.x đứng đầu: key của project Google mới bị từ chối dòng 2.5 ("no longer available to new users");
+    /// giữ 2.5 cho key cũ vẫn còn quyền dùng.
+    /// </summary>
+    public static readonly IReadOnlyList<string> DefaultAllowedModels =
+        ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-image"];
+    public const string DefaultAllowedModelsJson =
+        "[\"gemini-3.8-flash\",\"gemini-3.1-pro-preview\",\"gemini-2.5-flash\",\"gemini-2.5-pro\",\"gemini-2.5-flash-image\"]";
 
     public string AllowedModelsJson { get; private set; } = DefaultAllowedModelsJson;
     public DateTime? LastResetAt { get; private set; }
