@@ -36,6 +36,10 @@ namespace PanelForge.UnitTests.Ai;
 /// </summary>
 public sealed class AiHarness
 {
+    /// <summary>Model văn bản mặc định của Backend (AiAgentSettings.GeminiModel); test kiểm hai giá trị luôn khớp.</summary>
+    public const string Model = "gemini-3.8-flash";
+    public const string ModelOnlyJson = "[\"" + Model + "\"]";
+
     public static readonly Guid Producer = Guid.Parse("33333333-3333-3333-3333-333333333333");
     public static readonly Guid Writer = Guid.Parse("44444444-4444-4444-4444-444444444444");
     public static readonly Guid Editor = Guid.Parse("77777777-7777-7777-7777-777777777777");
@@ -167,7 +171,7 @@ public sealed class AiHarness
         var factory = new ChatClientFactory(options, Mock.Of<IHttpClientFactory>(
             f => f.CreateClient(It.IsAny<string>()) == new HttpClient(new ModelProbeOk())));
         var workflow = new MultiAgentWorkflow(new BackendClient(http), factory, options, NullLogger<MultiAgentWorkflow>.Instance);
-        var job = LastJob ?? new AiRunJob(runId, AiProtocol.ProviderGemini, "gemini-2.5-flash", "test-key", 2);
+        var job = LastJob ?? new AiRunJob(runId, AiProtocol.ProviderGemini, Model, "test-key", 2);
         await workflow.RunAsync(job, chat ?? new MockChatClient(), default);
     }
 

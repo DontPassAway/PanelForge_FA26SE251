@@ -111,7 +111,7 @@ Mỗi agent có: prompt `.md` nhúng vào assembly kèm `<!-- version: N -->` + 
 
 DB: Backend tự `Migrate` khi khởi động. Cổng: Backend `5044`, AI `5055` (`Kestrel:Endpoints:Http:Url = http://127.0.0.1:5055`).
 
-Cấu hình Backend (section `AiService`, xem `appsettings.Example.json`): `Provider` (`Mock` mặc định | `Gemini`), `GeminiModel` (`gemini-2.5-flash`), `ServiceUrl`, `ServiceKey` (**user-secrets**, cùng giá trị cho cả hai project), `MaxRevisionRounds` (2), `RunStaleAfterSeconds` (300), `SeedDemoData` (false, opt-in, chỉ Development).
+Cấu hình Backend (section `AiService`, xem `appsettings.Example.json`): `Provider` (`Mock` mặc định | `Gemini`), `GeminiModel` (`gemini-3.8-flash`; key của project Google mới không gọi được dòng 2.5), `ServiceUrl`, `ServiceKey` (**user-secrets**, cùng giá trị cho cả hai project), `MaxRevisionRounds` (2), `RunStaleAfterSeconds` (300), `SeedDemoData` (false, opt-in, chỉ Development).
 
 ```powershell
 cd "D:\Program Files\Downloads\Project SEP490\Backend\PanelForge_FA26SE251"

@@ -73,7 +73,7 @@ public class RunWorkflowCommandTests
     {
         var h = await AiHarness.CreateAsync();
         var config = await h.Db.WorkspaceAiConfigs.SingleAsync();
-        config.UpdateSettings("Google Gemini", null, isEnabled: false, 1_000_000, "[\"gemini-2.5-flash\"]");
+        config.UpdateSettings("Google Gemini", null, isEnabled: false, 1_000_000, AiHarness.ModelOnlyJson);
         await h.Db.SaveChangesAsync();
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
@@ -129,7 +129,7 @@ public class RunWorkflowCommandTests
         var h = await AiHarness.CreateAsync();
         h.KeyProtector.Setup(k => k.Unprotect(It.IsAny<string>())).Returns("test-key-123");
         var config = await h.Db.WorkspaceAiConfigs.SingleAsync();
-        config.UpdateSettings("Google Gemini", "ciphertext", true, 1_000_000, "[\"gemini-2.5-flash\"]");
+        config.UpdateSettings("Google Gemini", "ciphertext", true, 1_000_000, AiHarness.ModelOnlyJson);
         await h.Db.SaveChangesAsync();
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
