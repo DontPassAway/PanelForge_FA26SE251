@@ -34,10 +34,16 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
             .Select(e => e.ChapterId.ToString())
             .ToListAsync(ct);
 
+        // Lịch sử Ví chỉ gồm giao dịch đã thực sự làm đổi số dư: đơn Approved, là nạp ví (VietQR / Google Play /
+        // Admin hoàn tiền) hoặc mở chương / VIP trừ thẳng từ Ví (không có mã VietQR). Đơn Pending/Rejected/Expired
+        // và đơn mở chương / VIP trả trực tiếp bằng VietQR không đi qua Ví nên không xuất hiện.
         var recentTransactions = await _db.PaymentTransactions
             .AsNoTracking()
-            .Where(t => t.UserId == q.UserId && !t.IsDeleted)
-            .OrderByDescending(t => t.CreatedAt)
+            .Where(t => t.UserId == q.UserId && !t.IsDeleted
+                        && t.Status == PaymentTransactionStatus.Approved
+                        && (t.Type == PaymentTransactionType.Topup || t.QrImageUrl == ""))
+            .OrderByDescending(t => t.ConfirmedAt ?? t.CreatedAt)
+            .ThenByDescending(t => t.CreatedAt)
             .Take(50)
             .Select(t => new
             {
@@ -45,8 +51,7 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 t.Type,
                 t.OrderCode,
                 t.AmountVnd,
-                t.Status,
-                t.CreatedAt,
+                OccurredAt = t.ConfirmedAt ?? t.CreatedAt,
                 t.BankBin,
                 SeriesTitle = t.Series != null ? t.Series.Title : null,
                 ChapterTitle = t.Chapter != null ? t.Chapter.Title : null,
@@ -54,13 +59,19 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
             })
             .ToListAsync(ct);
 
-        var txDtos = recentTransactions.Select(t =>
+        // Số dư sau mỗi giao dịch: đi lùi từ số dư hiện tại (giao dịch mới nhất trước).
+        var runningBalance = (int)wallet.BalanceVnd;
+        var txDtos = new List<WalletTransactionDto>(recentTransactions.Count);
+        foreach (var t in recentTransactions)
         {
             string title = t.Type switch
             {
-                PaymentTransactionType.Topup => t.BankBin == "GOOGLE_PLAY"
-                    ? $"Nạp tiền Ví qua Google Play ({t.OrderCode})"
-                    : $"Nạp tiền Ví qua VietQR ({t.OrderCode})",
+                PaymentTransactionType.Topup => t.BankBin switch
+                {
+                    "GOOGLE_PLAY" => $"Nạp tiền Ví qua Google Play ({t.OrderCode})",
+                    "ADMIN_REFUND" => $"Hoàn tiền vào Ví ({t.OrderCode})",
+                    _ => $"Nạp tiền Ví qua VietQR ({t.OrderCode})"
+                },
                 PaymentTransactionType.ChapterUnlock => t.ChapterNumber.HasValue
                     ? $"Mở khóa Tập {t.ChapterNumber} - {t.SeriesTitle ?? "Truyện"}"
                     : $"Mở khóa chương truyện ({t.OrderCode})",
@@ -68,17 +79,18 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 _ => $"Giao dịch {t.OrderCode}"
             };
 
-            int signAmount = (t.Type == PaymentTransactionType.Topup ? (int)t.AmountVnd : -(int)t.AmountVnd);
+            int signAmount = t.Type == PaymentTransactionType.Topup ? (int)t.AmountVnd : -(int)t.AmountVnd;
 
-            return new WalletTransactionDto(
+            txDtos.Add(new WalletTransactionDto(
                 Id: t.Id.ToString(),
                 Title: title,
                 AmountVnd: signAmount,
-                CreatedAt: t.CreatedAt,
-                BalanceAfter: (int)wallet.BalanceVnd,
+                CreatedAt: t.OccurredAt,
+                BalanceAfter: runningBalance,
                 OrderCode: t.OrderCode
-            );
-        }).ToList();
+            ));
+            runningBalance -= signAmount;
+        }
 
         var balanceVndInt = (int)wallet.BalanceVnd;
         return Result<UserWalletDto>.Success(new UserWalletDto(

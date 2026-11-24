@@ -10,7 +10,12 @@ public static class DeviceDetector
         if (string.IsNullOrWhiteSpace(userAgent))
             return "Thiết bị không xác định";
 
-        var ua = userAgent.ToLowerInvariant();
+        var ua = userAgent.Trim().ToLowerInvariant();
+
+        // App PanelForge gửi "PanelForge-Mobile/1.0 (<Android|iOS|Windows|macOS|Linux>; Flutter)".
+        if (ua.StartsWith("panelforge-mobile", StringComparison.Ordinal))
+            return $"PanelForge App ({DetectAppPlatform(ua)})";
+
         string os = "Không xác định";
         if (ua.Contains("windows")) os = "Windows";
         else if (ua.Contains("iphone")) os = "iPhone";
@@ -27,5 +32,20 @@ public static class DeviceDetector
         else if (ua.Contains("opera/") || ua.Contains("opr/")) browser = "Opera";
 
         return $"{browser} ({os})";
+    }
+
+    private static string DetectAppPlatform(string ua)
+    {
+        var open = ua.IndexOf('(');
+        var platform = open >= 0 ? ua[(open + 1)..].Split(';', ')')[0].Trim() : string.Empty;
+        return platform switch
+        {
+            "android" => "Android",
+            "ios" => "iOS",
+            "windows" => "Windows",
+            "macos" => "macOS",
+            "linux" => "Linux",
+            _ => "Không xác định"
+        };
     }
 }
