@@ -133,7 +133,7 @@ public static class ContinuityEval
         // dotnet run đặt cwd = thư mục project → đường dẫn tương đối tính theo gốc Backend
         var outPath = Path.GetFullPath(Arg("--out", Path.Combine("docs", "eval", $"result-{DateTime.Now:yyyyMMdd-HHmmss}.json")), root);
         var resumePath = Arg("--resume", "");
-        var model = Arg("--model", "gemini-2.5-flash");
+        var model = Arg("--model", "gemini-3.8-flash");
         var limit = int.Parse(Arg("--limit", "0"));
         var only = Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
 

@@ -15,14 +15,14 @@ public class RecordAgentStepTests
 {
     private static AgentStepReport Report(
         int index, string agent, int round, int? parent, string output, string provider = "Gemini",
-        string model = "gemini-2.5-flash", long? inTokens = null, long? outTokens = null) =>
+        string model = AiHarness.Model, long? inTokens = null, long? outTokens = null) =>
         new(index, agent, round, parent, true, provider, model, "writer@1", "Prompts/writer.md@v1#sha256:abc", "{}", "{}", output,
             DateTime.UtcNow.AddSeconds(-1), DateTime.UtcNow, inTokens, outTokens, 0, null, null);
 
     /// <summary>Quyết định của Supervisor (step Supervisor) chọn <paramref name="action"/>.</summary>
     private static AgentStepReport Sup(
         Guid runId, int index, string action, int round = 0, int? parent = null, string provider = "Gemini",
-        string model = "gemini-2.5-flash", long? inTokens = null, long? outTokens = null) =>
+        string model = AiHarness.Model, long? inTokens = null, long? outTokens = null) =>
         Report(index, "Supervisor", round, parent,
             AiJson.Serialize(new SupervisorDecision(1, runId, round, action, "lý do", null, [action], false)),
             provider, model, inTokens, outTokens);
@@ -33,7 +33,7 @@ public class RecordAgentStepTests
         if (provider == "Gemini")
         {
             h.KeyProtector.Setup(k => k.Unprotect(It.IsAny<string>())).Returns("k");
-            (await h.Db.WorkspaceAiConfigs.SingleAsync()).UpdateSettings("Google Gemini", "cipher", true, 1_000_000, "[\"gemini-2.5-flash\"]");
+            (await h.Db.WorkspaceAiConfigs.SingleAsync()).UpdateSettings("Google Gemini", "cipher", true, 1_000_000, AiHarness.ModelOnlyJson);
             await h.Db.SaveChangesAsync();
         }
         var runId = await h.StartRunAsync();
@@ -49,7 +49,7 @@ public class RecordAgentStepTests
         h.RecordHandler().Handle(new RecordAgentStepCommand(runId, r), default);
 
     /// <summary>Supervisor chọn Writer (step 1) rồi Writer chạy (step 2).</summary>
-    private static async Task WriterRunsAsync(AiHarness h, Guid runId, string draft, string provider = "Gemini", string model = "gemini-2.5-flash",
+    private static async Task WriterRunsAsync(AiHarness h, Guid runId, string draft, string provider = "Gemini", string model = AiHarness.Model,
         long? inTokens = null, long? outTokens = null)
     {
         (await Send(h, runId, Sup(runId, 1, "Writer", provider: provider, model: model))).IsSuccess.Should().BeTrue();
@@ -173,7 +173,7 @@ public class RecordAgentStepTests
     public async Task FailedStep_IsStored_AndMarksRunFailed_NoSuggestions()
     {
         var (h, runId, _, _) = await ArrangeAsync();
-        var failed = new AgentStepReport(1, "Writer", 0, null, false, "Gemini", "gemini-2.5-flash", "writer@1", "ref", "{}", "{}", null,
+        var failed = new AgentStepReport(1, "Writer", 0, null, false, "Gemini", AiHarness.Model, "writer@1", "ref", "{}", "{}", null,
             DateTime.UtcNow, DateTime.UtcNow, null, null, 1, "INVALID_OUTPUT", "Output không hợp lệ.");
 
         var r = await Send(h, runId, failed);

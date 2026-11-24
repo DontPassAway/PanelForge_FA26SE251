@@ -150,6 +150,9 @@ public sealed class AiManualRuleParityTests
     {
         var settings = new PanelForge.Application.Features.AiAgents.Models.AiAgentSettings();
         WorkspaceAiConfig.DefaultAllowedModels.Should().Contain([settings.GeminiModel, settings.GeminiImageModel]);
+        AiHarness.Model.Should().Be(settings.GeminiModel);
         WorkspaceAiConfig.Create(Guid.NewGuid()).AllowedModelsJson.Should().Be(WorkspaceAiConfig.DefaultAllowedModelsJson);
+        System.Text.Json.JsonSerializer.Deserialize<List<string>>(WorkspaceAiConfig.DefaultAllowedModelsJson)
+            .Should().Equal(WorkspaceAiConfig.DefaultAllowedModels);
     }
 }
