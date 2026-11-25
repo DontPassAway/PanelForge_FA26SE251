@@ -197,7 +197,7 @@ public class TaskGridHandlerTests
     }
 
     [Fact]
-    public async Task AutoAssignPlan_PrefersLessLoadedMember_AndReportsStageWithoutCandidate()
+    public async Task AutoAssignPlan_PrefersLessLoadedMember_AndFallsBackToArtistForLettering()
     {
         var f = new Fixture();
         var secondArtist = Guid.NewGuid();
@@ -213,8 +213,11 @@ public class TaskGridHandlerTests
         pencil.TaskIds.Should().HaveCount(2);
         pencil.OpenWorkUnits.Should().Be(0);
         plan.Lots.Single(l => l.PipelineStageId == f.Ink.Id).AssigneeUserId.Should().Be(secondArtist, "Ink nối đúng người vẽ Pencil");
-        plan.Skipped.Single().PipelineStageId.Should().Be(f.Lettering.Id);
-        plan.Skipped.Single().TaskCount.Should().Be(2);
+        // BR-31: không có Letterer thì Artist tự đặt chữ, Lettering không bị bỏ qua
+        plan.Skipped.Should().BeEmpty();
+        plan.Lots.Where(l => l.PipelineStageId == f.Lettering.Id).SelectMany(l => l.TaskIds).Should().HaveCount(2);
+        plan.Lots.Where(l => l.PipelineStageId == f.Lettering.Id)
+            .Select(l => l.AssigneeUserId).Should().OnlyContain(id => id == f.ArtistId || id == secondArtist);
     }
 
     [Fact]
@@ -334,15 +337,27 @@ public class TaskGridHandlerTests
     }
 
     [Fact]
+    public async Task AssignLots_ArtistCanHoldLettering_BR31()
+    {
+        var f = new Fixture();
+        await f.Generate();
+
+        (await f.Assign(false, f.Lot(f.Lettering, f.ArtistId, f.Cell(f.Lettering, 0)))).IsSuccess.Should().BeTrue();
+        f.Lots.Single().AssigneeUserId.Should().Be(f.ArtistId);
+    }
+
+    [Fact]
     public async Task AssignLots_WrongRole_PendingMember_OrTaskInTwoLots_IsRejected_AllOrNothing()
     {
         var f = new Fixture();
         await f.Generate();
 
+        // Letterer không được giữ công đoạn vẽ (Pencil); chiều ngược lại Artist được đặt chữ (BR-31)
         (await f.Assign(false,
-                f.Lot(f.Pencil, f.ArtistId, f.Cell(f.Pencil, 0)),
-                f.Lot(f.Lettering, f.ArtistId, f.Cell(f.Lettering, 0))))
+                f.Lot(f.Lettering, f.ArtistId, f.Cell(f.Lettering, 0)),
+                f.Lot(f.Pencil, f.LettererId, f.Cell(f.Pencil, 0))))
             .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.Cell(f.Lettering, 0).Status.Should().Be(StageTaskStatus.Unassigned);
         f.Lots.Should().BeEmpty();
         f.Cell(f.Pencil, 0).Status.Should().Be(StageTaskStatus.Unassigned);
 

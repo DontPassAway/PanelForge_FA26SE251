@@ -142,7 +142,7 @@ internal sealed record AiWorkflowFacts(
         var stages = await db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id)).ToListAsync(ct);
         // Stage không đọc được (không xảy ra khi FK còn nguyên) thì không đủ căn cứ để chặn; stage có AllowedRole khác vai trò → chặn
         var stageOk = working.Any(a => stages.FirstOrDefault(s => s.Id == a.PipelineStageId) is not { } s
-                                       || s.AllowedRole is null || s.AllowedRole == role);
+                                       || s.CanBeHeldBy(role));
         return stageOk
             ? new AssignmentGate(true, null)
             : new AssignmentGate(true, $"Stage hiện tại của assignment không dành cho vai trò {role}.");

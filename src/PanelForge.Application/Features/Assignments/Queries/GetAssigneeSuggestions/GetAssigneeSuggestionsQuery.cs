@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Models;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Assignments.Queries.GetAssigneeSuggestions;
@@ -43,10 +44,11 @@ public sealed class GetAssigneeSuggestionsQueryHandler
         if (stage is null)
             return Fail("Stage không thuộc pipeline của Series.", ResultErrorCodes.Validation);
 
-        var allowedRole = stage.AllowedRole;
+        // BR-31: stage Letterer cũng gợi ý Artist (Artist mặc định tự đặt chữ trên trang của mình)
+        var holderRoles = stage.AllowedRole is { } allowedRole ? PipelineStage.RolesAllowedFor(allowedRole).ToList() : null;
         var members = await _db.WorkspaceMembers.AsNoTracking()
             .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active &&
-                        (allowedRole == null || m.Role == allowedRole))
+                        (holderRoles == null || holderRoles.Contains(m.Role)))
             .Select(m => new { m.UserId, m.Role })
             .ToListAsync(ct);
         if (members.Count == 0)
