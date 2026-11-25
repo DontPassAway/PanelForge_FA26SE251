@@ -83,7 +83,7 @@ public class WorkspaceAiConfig : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>null = quay về key Gemini riêng của Workspace.</summary>
+    /// <summary>null = chưa chọn API (TASK-350: không còn key riêng theo Studio).</summary>
     public void UseProviderCredential(Guid? credentialId)
     {
         ProviderCredentialId = credentialId;

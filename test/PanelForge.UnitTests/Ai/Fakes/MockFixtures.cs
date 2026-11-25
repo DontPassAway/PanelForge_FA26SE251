@@ -242,6 +242,17 @@ public static class MockFixtures
                 reason = "Có yếu tố căng thẳng nhẹ, không có nội dung người lớn (Mock)."
             });
         }
+        if (msg.Contains($"[[task:{CopilotTasks.WriterNextLine}]]"))
+        {
+            var kind = Regex.Match(msg, @"^kind=(\w+)", RegexOptions.Multiline).Groups[1].Value;
+            var speaker = Regex.Match(msg, @"^allowedSpeakers=([^|\r\n]*)", RegexOptions.Multiline).Groups[1].Value.Trim();
+            return kind switch
+            {
+                "Dialogue" => Json(new { speaker, text = "Chiếc chìa khóa ấy... bà vẫn giữ nó sao? (Mock)", reason = "Nối tiếp câu hỏi về chiếc chìa khóa (Mock)." }),
+                "Sfx" => Json(new { speaker = (string?)null, text = "CẠCH!", reason = "Tiếng cửa tiệm mở (Mock)." }),
+                _ => Json(new { speaker = (string?)null, text = "An bước lại gần quầy, ánh mắt dừng ở ngăn kéo khoá kín. (Mock)", reason = "Chuyển sang hành động (Mock)." })
+            };
+        }
         if (msg.Contains($"[[task:{CopilotTasks.ImpactRipple}]]"))
         {
             var rework = msg.Contains("role=Letterer") || msg.Contains("type=Action");

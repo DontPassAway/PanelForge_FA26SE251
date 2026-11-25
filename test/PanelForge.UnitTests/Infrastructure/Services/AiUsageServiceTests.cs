@@ -30,6 +30,7 @@ public class AiUsageServiceTests
     private async Task<WorkspaceAiConfig> AddConfigAsync(long quota, bool enabled = true, string? apiKey = "encrypted-key")
     {
         var config = WorkspaceAiConfig.Create(_workspaceId, "OpenAI", apiKey, quota);
+        if (apiKey is not null) config.UseProviderCredential(Guid.NewGuid()); // TASK-350: chỉ API dùng chung mới tính là có key
         config.UpdateSettings("OpenAI", null, enabled, quota, "[\"gpt-4o\"]");
         _db.WorkspaceAiConfigs.Add(config);
         await _db.SaveChangesAsync();
@@ -135,5 +136,16 @@ public class AiUsageServiceTests
 
         result.Value!.TotalCount.Should().Be(1);
         result.Value.Items.Single().Feature.Should().Be("B");
+    }
+
+    [Fact]
+    public async Task Record_WhenEntrySpecifiesProvider_RecordsActualProviderInsteadOfLegacyConfigDefault()
+    {
+        await AddConfigAsync(quota: 1000);
+
+        var record = await _service.RecordAsync(new AiUsageEntry(
+            _workspaceId, "AiAgents.Copilot.writer.rewrite", AiUsageStatus.Succeeded, "@cf/meta/llama", 20, 10, Provider: "Cloudflare"));
+
+        record.Provider.Should().Be("Cloudflare");
     }
 }

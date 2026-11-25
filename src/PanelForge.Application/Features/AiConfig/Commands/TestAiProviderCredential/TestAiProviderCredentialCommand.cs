@@ -24,7 +24,7 @@ public sealed class TestAiProviderCredentialCommandHandler(
         if (key is null)
             return Result<bool>.Failure("Key đã lưu không giải mã được, hãy nhập lại API key.", ResultErrorCodes.Validation);
 
-        var check = await AiCredentials.CheckKeyAsync(validator, credential.ProviderType, credential.AccountId, key, ct);
+        var check = await validator.ProbeAsync(credential.ProviderType, credential.AccountId, key, ct);
         return check.IsSuccess ? check : Result<bool>.Failure(check.ErrorMessage!, ResultErrorCodes.Validation);
     }
 }

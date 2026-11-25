@@ -18,5 +18,12 @@ internal sealed class AiProviderCredentialConfiguration : IEntityTypeConfigurati
         builder.Property(c => c.TextModel).HasColumnName("text_model").HasColumnType("varchar(200)").IsRequired();
         builder.Property(c => c.ImageModel).HasColumnName("image_model").HasColumnType("varchar(200)");
         builder.Property(c => c.IsEnabled).HasColumnName("is_enabled").HasDefaultValue(true).IsRequired();
+        builder.Property(c => c.IsDefaultText).HasColumnName("is_default_text").HasDefaultValue(false).IsRequired();
+        builder.Property(c => c.IsDefaultImage).HasColumnName("is_default_image").HasDefaultValue(false).IsRequired();
+        // Tối đa một API mặc định cho chữ và một cho ảnh (trong các bản ghi chưa xoá)
+        builder.HasIndex(c => c.IsDefaultText).IsUnique().HasFilter("is_default_text AND NOT is_deleted")
+            .HasDatabaseName("ux_ai_provider_credentials_default_text");
+        builder.HasIndex(c => c.IsDefaultImage).IsUnique().HasFilter("is_default_image AND NOT is_deleted")
+            .HasDatabaseName("ux_ai_provider_credentials_default_image");
     }
 }

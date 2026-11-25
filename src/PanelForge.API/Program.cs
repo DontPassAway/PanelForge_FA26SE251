@@ -226,6 +226,8 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IAiStreamPublisher, AiStreamPublisher>();
+builder.Services.Insert(0, ServiceDescriptor.Singleton<Microsoft.AspNetCore.Hosting.IStartupFilter>(
+    new PanelForge.API.Common.Attributes.SocketRemoteIpStartupFilter()));
 
 var app = builder.Build();
 

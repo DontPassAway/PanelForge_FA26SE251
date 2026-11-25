@@ -197,7 +197,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         await _db.SaveChangesAsync(ct);
         await _usage.RecordAsync(new AiUsageEntry(
             workspaceId, "AiAgents.RunWorkflow", AiUsageStatus.ProviderUnavailable,
-            Model: run.Model, ErrorMessage: message, UserId: userId), ct);
+            Model: run.Model, ErrorMessage: message, UserId: userId, Provider: run.Provider), ct);
         return AiRunHelpers.Fail<RunWorkflowResponse>(message, ResultErrorCodes.AiUnavailable);
     }
 }

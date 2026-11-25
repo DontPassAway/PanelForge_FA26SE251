@@ -32,4 +32,5 @@ public sealed record AiUsageEntry(
     decimal? CostUsd = null,
     string? ErrorMessage = null,
     int? DurationMs = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    string? Provider = null);
