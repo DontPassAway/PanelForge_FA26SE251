@@ -11,7 +11,8 @@ Tài liệu dành cho người (hoặc AI agent) cấu hình nốt SePay. Code B
 | Kích hoạt quyền lợi dùng chung | `src/PanelForge.Application/Features/Payments/Common/PaymentFulfillment.cs` | Nạp ví / mở chương / gia hạn VIP. Duyệt tay (`ApprovePaymentCommand`) và webhook cùng gọi |
 | Domain | `PaymentTransaction.Approve(Guid?)`, `PaymentTransaction.Reopen()` | `ConfirmedByUserId = null` nghĩa là SePay tự duyệt. Không có migration |
 | Hiển thị | `GetWorkspacePaymentsQuery` | Cột người duyệt ghi `SePay (tự động)` |
-| Test | `test/PanelForge.UnitTests/Application/Payments/SePayWebhookTests.cs` | 6 test: duyệt nạp ví, mở chương, gửi trùng, thiếu tiền, sai tài khoản, không có mã |
+| Test | `test/PanelForge.UnitTests/Application/Payments/SePayWebhookTests.cs`, `test/PanelForge.UnitTests/API/SePayWebhookControllerTests.cs` | Duyệt nạp ví, mở chương, gửi trùng, thiếu tiền, sai tài khoản, không có mã, đơn Expired, tài khoản ảo (`subAccount`), hai request đồng thời, xác thực API key (`503`/`401`/`200`) |
+| Chống duyệt hai lần | `PaymentTransactionConfiguration`, `ReaderWalletConfiguration` | `updated_at` là concurrency token: hai request cùng duyệt một đơn (SePay gửi lại, hoặc Producer duyệt tay đúng lúc) thì lần lưu sau ra `409`, SePay gửi lại và gặp `IgnoredAlreadyProcessed`. Số dư ví cũng không bị ghi đè khi nạp/trừ cùng lúc |
 
 Mobile đã polling `GET /api/wallet/transactions/{orderCode}/status` mỗi 3 giây nên khi webhook duyệt, app tự thấy đơn hoàn tất. FE và mobile không cần sửa.
 
@@ -27,7 +28,7 @@ Mobile đã polling `GET /api/wallet/transactions/{orderCode}/status` mỗi 3 gi
 | `transferAmount` nhỏ hơn số tiền đơn | `IgnoredAmountTooLow`, đơn giữ Pending để Producer duyệt tay |
 | Khớp hết (đơn Pending hoặc Expired) | `Approved` |
 
-Mọi trường hợp trên đều trả `200 {"success": true, ...}` để SePay không gửi lại. Chưa cấu hình key thì trả `503`, sai key thì `401`.
+Mọi trường hợp trên đều trả `200 {"success": true, ...}` để SePay không gửi lại. Chưa cấu hình key thì trả `503`, sai key thì `401`, đụng một lần lưu khác cùng lúc thì `409` (SePay tự gửi lại).
 
 ## 2. Các bước còn lại
 
@@ -42,11 +43,16 @@ Mọi trường hợp trên đều trả `200 {"success": true, ...}` để SePa
    - Gọi lại khi lỗi (retry): bật.
 
 ### Bước 2. Đặt key vào server (không commit key)
-- Production (VM, Docker Compose): thêm vào `/opt/panelforge/.env`:
-  ```
-  SePay__WebhookApiKey=<key>
-  ```
-  `docker-compose.yml` ở repo đọc biến `SEPAY_WEBHOOK_API_KEY` (`SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}`); compose prod trong kế hoạch deploy dùng `env_file`. Chọn đúng tên biến theo file compose đang dùng, sau đó `docker compose up -d api`.
+- Production (VM, Docker Compose): tên biến trong `.env` phụ thuộc file compose đang dùng, ghi sai tên thì key không vào container và webhook trả `503`.
+  - Dùng `docker-compose.yml` của repo (dòng `SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}`): `.env` cạnh file compose ghi
+    ```
+    SEPAY_WEBHOOK_API_KEY=<key>
+    ```
+  - Dùng compose prod có `env_file: /opt/panelforge/.env` (nạp thẳng vào container): ghi
+    ```
+    SePay__WebhookApiKey=<key>
+    ```
+  Sau đó `docker compose up -d api`. Kiểm tra: gọi webhook không có header phải ra `401` (ra `503` nghĩa là key chưa vào).
 - Local: `dotnet user-secrets set "SePay:WebhookApiKey" "<key>" --project src/PanelForge.API` hoặc biến môi trường `SePay__WebhookApiKey`. Không ghi key vào `appsettings*.json`.
 
 ### Bước 3. Khai tài khoản nhận tiền cho từng Studio

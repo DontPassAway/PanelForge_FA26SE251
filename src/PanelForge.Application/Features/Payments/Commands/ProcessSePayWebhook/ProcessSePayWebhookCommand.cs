@@ -91,6 +91,8 @@ public sealed partial class ProcessSePayWebhookCommandHandler
         if (tx.Status == PaymentTransactionStatus.Expired) tx.Reopen();
         tx.Approve(confirmedByUserId: null, DateTime.UtcNow);
         await PaymentFulfillment.GrantAsync(_db, tx, tx.WorkspaceId ?? Guid.Empty, ct);
+        // Hai lần gửi đến cùng lúc (hoặc Producer duyệt tay đúng lúc này): giao dịch và ví có concurrency token,
+        // lần lưu sau ném DbUpdateConcurrencyException → 409 → SePay gửi lại → lần đó gặp IgnoredAlreadyProcessed.
         await _db.SaveChangesAsync(ct);
 
         return Done(SePayWebhookOutcome.Approved, p, orderCode);

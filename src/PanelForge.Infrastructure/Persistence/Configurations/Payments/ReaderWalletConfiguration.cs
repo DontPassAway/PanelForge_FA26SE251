@@ -46,9 +46,12 @@ internal sealed class ReaderWalletConfiguration : IEntityTypeConfiguration<Reade
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        // Nạp / trừ số dư cùng lúc (webhook SePay, mở chương bằng ví, Google Play): lần lưu sau thấy updated_at đã đổi → 409,
+        // không ghi đè số dư vừa đổi (lost update).
         builder.Property(w => w.UpdatedAt)
                .HasColumnName("updated_at")
-               .HasColumnType("timestamptz");
+               .HasColumnType("timestamptz")
+               .IsConcurrencyToken();
 
         builder.Property(w => w.IsDeleted)
                .HasColumnName("is_deleted")
