@@ -1,0 +1,89 @@
+# Staging BE PanelForge trên Oracle VM (ARM). Chạy trong /opt/panelforge; mã nguồn nhánh stg nằm ở ./src.
+# Biến ${...} lấy từ /opt/panelforge/.env (bootstrap.sh sinh, chmod 600). Không commit .env.
+name: panelforge-stg
+
+services:
+  caddy:
+    image: caddy:2.11.2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      # ":80" = chỉ HTTP theo IP; đổi thành tên miền (vd panelforge-stg.duckdns.org) để Caddy tự cấp HTTPS.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+
+  api:
+    build: ./src
+    image: panelforge-api:stg
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"] # chỉ cho deploy.sh kiểm tra sức khoẻ; bên ngoài đi qua Caddy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      # Sau Caddy: lấy IP thật của client (rate limit) và scheme https (cookie Secure).
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=panelforge;Username=panelforge;Password=${POSTGRES_PASSWORD}
+      JwtSettings__Secret: ${JWT_SECRET}
+      JwtSettings__Issuer: PanelForgeStaging
+      JwtSettings__Audience: PanelForgeStagingClient
+      JwtSettings__ExpiryMinutes: "60"
+      AiService__ServiceUrl: http://ai:5055
+      AiService__ServiceKey: ${AI_SERVICE_KEY}
+      TranslationService__BaseUrl: http://translate:5000
+      AssetStorage__Provider: Local
+      AssetStorage__RootPath: /data/assets
+      SePay__WebhookApiKey: ${SEPAY_WEBHOOK_API_KEY:-}
+      EmailConfiguration__SmtpServer: smtp.gmail.com
+      EmailConfiguration__SmtpPort: "587"
+      EmailConfiguration__SenderName: PanelForge Staging
+      EmailConfiguration__SenderEmail: ${SMTP_SENDER_EMAIL:-}
+      EmailConfiguration__Password: ${SMTP_APP_PASSWORD:-}
+      Firebase__ProjectId: ${FIREBASE_PROJECT_ID:-}
+    volumes:
+      - assets:/data/assets
+      # Khoá Data Protection (mã hoá AI key của Studio): mất khoá = không giải mã được key đã lưu.
+      - dp_keys:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  ai:
+    # Context là thư mục src/ của repo: .dockerignore ở gốc repo loại *.md, mà AI cần Prompts/*.md.
+    build: { context: ./src/src, dockerfile: /opt/panelforge/Dockerfile.ai }
+    image: panelforge-ai:stg
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:5055
+      AiService__ServiceKey: ${AI_SERVICE_KEY}
+      Backend__BaseUrl: http://api:8080
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: panelforge
+      POSTGRES_USER: panelforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [pg_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panelforge -d panelforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  translate:
+    image: libretranslate/libretranslate:v1.9.6
+    restart: unless-stopped
+    environment:
+      LT_LOAD_ONLY: en,vi
+    volumes: [lt_models:/home/libretranslate/.local]
+
+volumes:
+  pg_data:
+  assets:
+  dp_keys:
+  caddy_data:
+  caddy_config:
+  lt_models:
