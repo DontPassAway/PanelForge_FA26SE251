@@ -11,8 +11,13 @@ public sealed record GetWorkspaceBankSettingsQuery(Guid WorkspaceId) : IRequest<
 public sealed class GetWorkspaceBankSettingsQueryHandler : IRequestHandler<GetWorkspaceBankSettingsQuery, Result<WorkspaceBankSettingsDto>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly DefaultBankSettings _defaultBank;
 
-    public GetWorkspaceBankSettingsQueryHandler(IPanelForgeDbContext db) => _db = db;
+    public GetWorkspaceBankSettingsQueryHandler(IPanelForgeDbContext db, DefaultBankSettings defaultBank)
+    {
+        _db = db;
+        _defaultBank = defaultBank;
+    }
 
     public async Task<Result<WorkspaceBankSettingsDto>> Handle(GetWorkspaceBankSettingsQuery q, CancellationToken ct)
     {
@@ -25,10 +30,10 @@ public sealed class GetWorkspaceBankSettingsQueryHandler : IRequestHandler<GetWo
 
         return Result<WorkspaceBankSettingsDto>.Success(new WorkspaceBankSettingsDto(
             WorkspaceId: ws.Id,
-            BankBin: ws.BankBin ?? "970422",
-            BankName: ws.BankName ?? "MB Bank",
-            BankAccountNo: ws.BankAccountNo ?? "0123456789",
-            BankAccountName: ws.BankAccountName ?? "KOMAFORGE STUDIO"
+            BankBin: ws.BankBin ?? _defaultBank.Bin,
+            BankName: ws.BankName ?? _defaultBank.Name,
+            BankAccountNo: ws.BankAccountNo ?? _defaultBank.AccountNo,
+            BankAccountName: ws.BankAccountName ?? _defaultBank.AccountName
         ));
     }
 }

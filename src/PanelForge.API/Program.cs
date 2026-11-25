@@ -20,6 +20,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Infrastructure.Persistence.Seeders;
 using PanelForge.API.Common;
 using PanelForge.Application.Common.Models;
+using PanelForge.Application.Features.Payments.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -222,6 +223,11 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<PanelForgeDbContext>();
     await db.Database.MigrateAsync();
     await MasterDataSeeder.SeedAsync(db);
+
+    // QR của Studio chưa khai ngân hàng sẽ trỏ tới tài khoản này: tài khoản giả ở môi trường thật = độc giả chuyển nhầm tiền.
+    if (!app.Environment.IsDevelopment() && app.Services.GetRequiredService<DefaultBankSettings>().IsPlaceholder)
+        app.Logger.LogWarning("SePay:DefaultBank vẫn là tài khoản giả {AccountNo}. Cấu hình SePay__DefaultBank__* bằng tài khoản thật đã liên kết SePay.",
+            DefaultBankSettings.PlaceholderAccountNo);
 
     if (app.Environment.IsDevelopment())
     {

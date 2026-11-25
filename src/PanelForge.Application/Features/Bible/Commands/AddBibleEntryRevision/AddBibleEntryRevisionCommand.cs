@@ -219,9 +219,6 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             reviewStatus: reviewStatus,
             supersedesRevisionId: command.SupersedesRevisionId
         );
-        // Artist nộp Concept kèm sửa nội dung: phiên bản mới bắt đầu Draft rồi ghi sự kiện nộp Concept như mọi lần nộp khác
-        if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
-            revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
 
         // BIB-09, Q23: Bản thay thế KHÔNG khoá ngay và KHÔNG đánh dấu bản cũ Superseded sớm.
         // Bản cũ vẫn CanonLocked dùng được. Khi Editor khoá bản mới (BIB-10 ConfirmCanon) mới ghi sự kiện Superseded cho bản cũ.
@@ -262,6 +259,16 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure(
                 "Xung đột phiên bản: một người khác vừa lưu thay đổi cho mục này. Vui lòng tải lại và thử lại.",
                 ResultErrorCodes.Conflict);
+        }
+
+        // Artist nộp Concept kèm sửa nội dung: phiên bản mới bắt đầu Draft rồi ghi sự kiện nộp Concept như mọi lần nộp khác.
+        // Ghi sự kiện SAU khi phiên bản đã lưu: revision.CurrentConceptEventId trỏ tới event, event trỏ ngược về revision,
+        // nên thêm cả hai trong cùng một SaveChanges thì EF Core báo vòng phụ thuộc (500).
+        // Nếu lần lưu này lỗi, phiên bản vẫn ở Draft trong hàng đợi vẽ và Artist nộp lại được.
+        if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
+        {
+            revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return Result<BibleEntryRevisionDto>.Success(BibleEntryRevisionDto.From(revision));
