@@ -219,6 +219,25 @@ public class ChapterEditionTests
     }
 
     [Fact]
+    public async Task Publish_OriginalLanguageBeforeChapterRelease_ReturnsConflict_ChapterStaysApproved()
+    {
+        await new ApproveChapterCommandHandler(_db, _pages.Object).Handle(new ApproveChapterCommand(_chapter.Id, _producerId), default);
+        var vi = ChapterEdition.Create(_chapter.Id, "vi", EditionStatus.Approved);
+        vi.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _producerId);
+        _db.ChapterEditions.Add(vi);
+        _db.SaveChanges();
+
+        var result = await new PublishEditionCommandHandler(_db)
+            .Handle(new PublishEditionCommand(_chapter.Id, "vi", _producerId), default);
+
+        // Bản gốc phải đi qua "Phát hành chương" để chương lên Catalog, không được phát hành riêng (BR-24, BR-34)
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("Phát hành chương");
+        vi.Status.Should().Be(EditionStatus.Approved);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
+    }
+
+    [Fact]
     public async Task Reopen_WhenReasonProvided_TransitionsToDraft()
     {
         var edition = _db.ChapterEditions.First(e => e.ChapterId == _chapter.Id && e.LanguageCode == "en");
