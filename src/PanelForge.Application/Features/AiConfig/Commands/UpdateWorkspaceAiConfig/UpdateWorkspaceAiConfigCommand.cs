@@ -124,7 +124,8 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<Upda
             MonthlyImageQuota: config.MonthlyImageQuota,
             UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
             ApiKeyUsable: !string.IsNullOrEmpty(_keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty)),
-            ProviderCredentialId: config.ProviderCredentialId
+            ProviderCredentialId: config.ProviderCredentialId,
+            ImageProviderCredentialId: config.ImageProviderCredentialId
         ));
     }
 }

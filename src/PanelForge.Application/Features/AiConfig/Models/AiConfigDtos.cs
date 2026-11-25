@@ -15,7 +15,8 @@ public sealed record WorkspaceAiConfigDto(
     long MonthlyImageQuota = 0,
     long UsedImagesCurrentMonth = 0,
     bool ApiKeyUsable = false,
-    Guid? ProviderCredentialId = null
+    Guid? ProviderCredentialId = null,
+    Guid? ImageProviderCredentialId = null
 );
 
 public sealed record UpdateWorkspaceAiConfigRequest(

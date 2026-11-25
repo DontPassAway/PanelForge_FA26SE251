@@ -62,6 +62,8 @@ public sealed class AgentRunner
     /// Mức "thinking" cho bước nhẹ. Token thinking của Gemini 2.5 bị tính phí và trừ vào MaxOutputTokens;
     /// bước chỉ chọn hành động/viết lại một dòng không cần. 2.5 Pro không tắt hẳn được → "low".
     /// </summary>
+    internal static bool IsCloudflareModel(string? model) => model?.StartsWith("@cf/", StringComparison.Ordinal) == true;
+
     internal static string LightReasoningEffort(string? model) =>
         model?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true ? "low" : "none";
 
@@ -99,7 +101,9 @@ public sealed class AgentRunner
                     {
                         Temperature = _options.Temperature,
                         MaxOutputTokens = maxOutputTokens,
-                        ResponseFormat = ChatResponseFormat.Json,
+                        // JSON mode của Workers AI làm Llama sinh JSON hỏng cú pháp (vd. {"panels':[{": ...}); với model @cf/
+                        // để model trả văn bản và OutputParser tự tách đối tượng JSON
+                        ResponseFormat = IsCloudflareModel(_model) ? null : ChatResponseFormat.Json,
                         // Gemini OpenAI-compat nhận reasoning_effort "none"/"low"
                         Reasoning = effort is null ? null : new ReasoningOptions
                         {
@@ -115,8 +119,7 @@ public sealed class AgentRunner
 
                 string? json;
                 T? payload;
-                (payload, errors) = parse(response.Text);
-                if (errors.Count == 0 && payload is not null)
+                (payload, errors) = parse(response.Text);                if (errors.Count == 0 && payload is not null)
                 {
                     json = AiJson.Serialize(payload);
                     return new AgentCall<T>(true, payload, json, null, null, inTokens, outTokens, attempt,

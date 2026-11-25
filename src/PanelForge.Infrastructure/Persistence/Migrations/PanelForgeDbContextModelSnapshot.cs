@@ -6014,6 +6014,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid?>("ImageProviderCredentialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("image_provider_credential_id");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -6074,6 +6078,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("workspace_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ImageProviderCredentialId");
 
                     b.HasIndex("ProviderCredentialId");
 
@@ -7083,6 +7089,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiProviderCredential", null)
+                        .WithMany()
+                        .HasForeignKey("ImageProviderCredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PanelForge.Domain.Entities.Ai.AiProviderCredential", null)
                         .WithMany()
                         .HasForeignKey("ProviderCredentialId")

@@ -128,13 +128,18 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
         if (string.IsNullOrWhiteSpace(accountId) || string.IsNullOrWhiteSpace(token))
             return ImageGen.Fail(started, "AI_UNAVAILABLE", "Chưa cấu hình ImageGen:CloudflareAccountId / CloudflareApiToken cho AI service.");
 
-        // Tên model dạng @cf/vendor/name: giữ dấu '/', chỉ escape từng đoạn
-        var model = string.Join('/', req.Model.Split('/').Select(Uri.EscapeDataString));
-        using var msg = new HttpRequestMessage(HttpMethod.Post,
-            $"{options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(accountId)}/ai/run/{model}")
-        {
-            Content = JsonContent.Create(new { prompt = req.Prompt, steps = Math.Clamp(options.CloudflareSteps, 1, 8) })
-        };
+        var runUrl = $"{options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(accountId)}/ai/run";
+        // Model đối tác (vd. pruna/z-image-turbo, không có tiền tố @): endpoint chung, model nằm trong body, số bước để mặc định của model.
+        // Model @cf/vendor/name: model nằm trên URL (giữ dấu '/', chỉ escape từng đoạn).
+        using var msg = IsThirdParty(req.Model)
+            ? new HttpRequestMessage(HttpMethod.Post, runUrl)
+            {
+                Content = JsonContent.Create(new { model = req.Model.Trim(), input = new { prompt = req.Prompt, output_format = "png" } })
+            }
+            : new HttpRequestMessage(HttpMethod.Post, $"{runUrl}/{string.Join('/', req.Model.Split('/').Select(Uri.EscapeDataString))}")
+            {
+                Content = JsonContent.Create(new { prompt = req.Prompt, steps = Math.Clamp(options.CloudflareSteps, 1, 8) })
+            };
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var res = await http.SendAsync(msg, ct);
 
@@ -145,11 +150,16 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
         var text = await res.Content.ReadAsStringAsync(ct);
         JsonNode? json = null;
         try { json = JsonNode.Parse(text); } catch (JsonException) { }
-        if (res.IsSuccessStatusCode && json?["result"]?["image"]?.GetValue<string>() is { Length: > 0 } b64)
+        if (res.IsSuccessStatusCode && json?["result"]?["image"]?.GetValue<string>() is { Length: > 0 } image)
         {
-            var bytes = Convert.FromBase64String(b64);
-            return ImageGen.Ok(started, bytes, bytes is [0x89, 0x50, ..] ? "image/png" : "image/jpeg");
+            // Model đối tác trả presigned URL; FLUX trả base64
+            if (Uri.TryCreate(image, UriKind.Absolute, out var url))
+                return await DownloadAsync(started, url, ct);
+            var bytes = Convert.FromBase64String(image);
+            return ImageGen.Ok(started, bytes, SniffMime(bytes));
         }
+        if (res.IsSuccessStatusCode && json?["state"]?.GetValue<string>() is { } state && state != "Completed")
+            return ImageGen.Fail(started, "PROVIDER_ERROR", $"Cloudflare chưa trả ảnh (trạng thái {state}). Thử lại sau.");
 
         var error = json?["errors"]?[0]?["message"]?.GetValue<string>() ?? "";
         return error.Contains("NSFW", StringComparison.OrdinalIgnoreCase) || error.Contains("safety", StringComparison.OrdinalIgnoreCase)
@@ -158,5 +168,36 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
                 ? "Cloudflare không trả ảnh."
                 : $"{ImageGen.HttpError(res.StatusCode)} {(error.Length > 200 ? error[..200] : error)}".Trim());
     }
+
+    /// <summary>Model Cloudflare chính chủ có tiền tố @cf/ (hoặc @hf/); model đối tác dạng vendor/name.</summary>
+    public static bool IsThirdParty(string model) => !model.TrimStart().StartsWith('@');
+
+    private const long MaxDownloadBytes = 25 * 1024 * 1024;
+
+    /// <summary>Tải ảnh từ presigned URL Cloudflare trả về: chỉ https, không gửi token, giới hạn dung lượng.</summary>
+    private async Task<ImageGenResponse> DownloadAsync(DateTime started, Uri url, CancellationToken ct)
+    {
+        if (url.Scheme != Uri.UriSchemeHttps)
+            return ImageGen.Fail(started, "PROVIDER_ERROR", "Cloudflare trả link ảnh không hợp lệ.");
+
+        using var res = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!res.IsSuccessStatusCode)
+            return ImageGen.Fail(started, "PROVIDER_ERROR", $"Không tải được ảnh từ Cloudflare (HTTP {(int)res.StatusCode}).");
+        if (res.Content.Headers.ContentLength > MaxDownloadBytes)
+            return ImageGen.Fail(started, "PROVIDER_ERROR", "Ảnh Cloudflare trả về quá lớn.");
+
+        var bytes = await res.Content.ReadAsByteArrayAsync(ct);
+        if (bytes.LongLength > MaxDownloadBytes)
+            return ImageGen.Fail(started, "PROVIDER_ERROR", "Ảnh Cloudflare trả về quá lớn.");
+        var mime = res.Content.Headers.ContentType?.MediaType is { } m && m.StartsWith("image/") ? m : SniffMime(bytes);
+        return ImageGen.Ok(started, bytes, mime);
+    }
+
+    private static string SniffMime(byte[] bytes) => bytes switch
+    {
+        [0x89, 0x50, ..] => "image/png",
+        [0x52, 0x49, 0x46, 0x46, _, _, _, _, 0x57, 0x45, 0x42, 0x50, ..] => "image/webp",
+        _ => "image/jpeg"
+    };
 }
 

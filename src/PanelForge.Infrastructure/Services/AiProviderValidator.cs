@@ -1,6 +1,7 @@
 using System.Net;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.AiConfig.Models;
 
 namespace PanelForge.Infrastructure.Services;
 
@@ -59,6 +60,45 @@ public class AiProviderValidator : IAiProviderValidator
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return Result<bool>.Failure("Không kết nối được Cloudflare để kiểm tra token. Hãy thử lại.");
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<AiProviderModelDto>>> ListCloudflareModelsAsync(
+        string accountId, string apiToken, CancellationToken cancellationToken = default)
+    {
+        // ponytail: một trang 500 model là đủ (Workers AI hiện ~100 model); cần thì lặp theo result_info.total_pages
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{CloudflareAccountsUrl}{Uri.EscapeDataString(accountId.Trim())}/ai/models/search?per_page=500");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiToken.Trim());
+        try
+        {
+            using var response = await _httpFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return Result<IReadOnlyList<AiProviderModelDto>>.Failure(
+                    $"Cloudflare từ chối lấy danh sách model (HTTP {(int)response.StatusCode}).");
+
+            var json = System.Text.Json.Nodes.JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            var models = new List<AiProviderModelDto>();
+            foreach (var m in json?["result"]?.AsArray() ?? [])
+            {
+                var id = m?["name"]?.GetValue<string>();
+                var kind = (m?["task"]?["name"]?.GetValue<string>()) switch
+                {
+                    "Text Generation" => "text",
+                    "Text-to-Image" => "image",
+                    _ => null
+                };
+                if (string.IsNullOrWhiteSpace(id) || kind is null) continue;
+                var description = m?["description"]?.GetValue<string>();
+                models.Add(new AiProviderModelDto(id, kind, id.StartsWith("@cf/", StringComparison.Ordinal),
+                    description is { Length: > 200 } ? description[..200] + "…" : description));
+            }
+            return Result<IReadOnlyList<AiProviderModelDto>>.Success(
+                models.OrderBy(m => m.Kind).ThenByDescending(m => m.Free).ThenBy(m => m.Id, StringComparer.Ordinal).ToList());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return Result<IReadOnlyList<AiProviderModelDto>>.Failure("Không lấy được danh sách model từ Cloudflare. Hãy thử lại.");
         }
     }
 }

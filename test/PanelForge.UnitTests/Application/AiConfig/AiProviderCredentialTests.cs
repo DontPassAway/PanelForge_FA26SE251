@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiConfig.Commands.CreateAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiImageProvider;
 using PanelForge.Application.Features.AiConfig.Common;
 using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Domain.Entities.Ai;
@@ -70,6 +71,50 @@ public class AiProviderCredentialTests
 
         r.ApiKey.Should().BeNull();
         r.FromCredential.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResolveImage_UsesSeparateImageCredential_WhileTextKeepsGeminiKey()
+    {
+        var cred = Cloudflare();
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { cred }));
+        var config = WorkspaceAiConfig.Create(Guid.NewGuid(), apiKey: "enc:gemini-key");
+        config.UseImageProviderCredential(cred.Id);
+
+        var text = await AiCredentials.ResolveAsync(_db.Object, _protector.Object, config, "gemini-x", default);
+        var image = await AiCredentials.ResolveImageAsync(_db.Object, _protector.Object, config, "gemini-x", default);
+
+        text.Should().Be(new ResolvedAiCredential(AiProtocol.ProviderGemini, "gemini-x", null, "gemini-key", null, false));
+        image.Should().Be(new ResolvedAiCredential("Cloudflare", "@cf/meta/llama", "@cf/flux", "cf-token", "acc-1", true));
+    }
+
+    [Fact]
+    public async Task ResolveImage_WithDisabledImageCredential_HasNoModelOrKey()
+    {
+        var cred = Cloudflare(enabled: false);
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { cred }));
+        var config = WorkspaceAiConfig.Create(Guid.NewGuid(), apiKey: "enc:gemini-key");
+        config.UseImageProviderCredential(cred.Id);
+
+        var image = await AiCredentials.ResolveImageAsync(_db.Object, _protector.Object, config, "gemini-x", default);
+
+        image.ImageModel.Should().BeNull();
+        image.ApiKey.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetImageProvider_RejectsCredentialWithoutImageModel()
+    {
+        var textOnly = AiProviderCredential.Create("CF chữ", AiProviderCredential.Cloudflare, "acc-1", "enc:t", "@cf/meta/llama", null);
+        var workspace = StudioWorkspace.Create("Studio", Guid.NewGuid());
+        _db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { textOnly }));
+
+        var result = await new SetWorkspaceAiImageProviderCommandHandler(_db.Object)
+            .Handle(new SetWorkspaceAiImageProviderCommand(workspace.Id, textOnly.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

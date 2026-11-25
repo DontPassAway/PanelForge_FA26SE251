@@ -12,6 +12,8 @@ public class WorkspaceAiConfig : BaseEntity
     public string? ApiKeyEncrypted { get; private set; }
     /// <summary>API do Admin khai báo trong bảng ai_provider_credentials. Có giá trị thì thay cho Provider/ApiKeyEncrypted ở trên.</summary>
     public Guid? ProviderCredentialId { get; private set; }
+    /// <summary>API riêng cho sinh ảnh (dùng ImageModel của credential đó). null = sinh ảnh theo API chữ/cấu hình hệ thống như trước.</summary>
+    public Guid? ImageProviderCredentialId { get; private set; }
     public bool IsEnabled { get; private set; } = true;
     public long MonthlyTokenQuota { get; private set; } = 1_000_000;
     public long UsedTokensCurrentMonth { get; private set; } = 0;
@@ -85,6 +87,12 @@ public class WorkspaceAiConfig : BaseEntity
     public void UseProviderCredential(Guid? credentialId)
     {
         ProviderCredentialId = credentialId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UseImageProviderCredential(Guid? credentialId)
+    {
+        ImageProviderCredentialId = credentialId;
         UpdatedAt = DateTime.UtcNow;
     }
 

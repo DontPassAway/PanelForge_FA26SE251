@@ -213,8 +213,8 @@ public class NewWorkflowsEndToEndTests
         steps.Select(s => s.Agent).Should().NotContain([AiAgentType.Writer, AiAgentType.Continuity, AiAgentType.Storyboard, AiAgentType.Editor],
             "không ép cả 7 agent chạy trong mọi run");
         var artistStep = steps[1];
-        artistStep.PromptVersion.Should().Be("artist@1");
-        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v1#sha256:");
+        artistStep.PromptVersion.Should().Be("artist@2");
+        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v2#sha256:");
         artistStep.ParametersJson.Should().Contain("temperature");
         artistStep.PromptTokens.Should().BeNull("Mock không khai token");
 

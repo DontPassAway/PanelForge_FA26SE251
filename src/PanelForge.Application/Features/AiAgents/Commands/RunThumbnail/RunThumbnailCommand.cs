@@ -99,7 +99,10 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (provider is null)
             return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
         // Credential Admin gắn cho Workspace có model ảnh → dùng provider/model/key của nó thay cấu hình hệ thống
-        var cred = await AiCredentials.ResolveAsync(_db, _keyProtector, config, _settings.GeminiModel, ct);
+        var cred = await AiCredentials.ResolveImageAsync(_db, _keyProtector, config, _settings.GeminiModel, ct);
+        if (config.ImageProviderCredentialId is not null && (cred.ImageModel is null || string.IsNullOrEmpty(cred.ApiKey)))
+            return Fail("API sinh ảnh của Studio đang tắt, đã xoá hoặc chưa có model ảnh. Admin hãy kiểm tra mục Cấu hình AI.",
+                ResultErrorCodes.AiUnavailable);
         var useCred = cred.FromCredential && cred.ImageModel is not null;
         if (useCred) (provider, model) = (cred.Provider, cred.ImageModel!);
         var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
@@ -123,7 +126,8 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             return Fail($"Series đang có {running} ảnh đang sinh (tối đa {_settings.ImageJobsPerSeries}). Chờ xong rồi thử lại.",
                 ResultErrorCodes.AiQuotaExceeded);
 
-        var prompt = string.IsNullOrWhiteSpace(cmd.Instruction) ? panelPrompt.Prompt : $"{panelPrompt.Prompt}\n\nYêu cầu thêm: {cmd.Instruction.Trim()}";
+        var prompt = ThumbnailRules.WithStyle(panelPrompt.Prompt, _settings.ThumbnailStylePrefix);
+        if (!string.IsNullOrWhiteSpace(cmd.Instruction)) prompt = $"{prompt}\n\nYêu cầu thêm: {cmd.Instruction.Trim()}";
         if (prompt.Length > MaxPromptChars) prompt = prompt[..MaxPromptChars];
         // Cloudflare text-to-image không nhận ảnh tham chiếu → không đọc kho vô ích
         var references = provider == ImageProviders.Gemini ? await LoadReferencesAsync(panelPrompt.ReferenceIds, ct) : [];
@@ -264,6 +268,15 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
 /// <summary>Luật dùng chung cho sinh thumbnail và Accept thumbnail.</summary>
 internal static class ThumbnailRules
 {
+    /// <summary>Chèn phong cách truyện tranh khi prompt chưa có (prompt Artist v2 đã tự mở đầu bằng phong cách nên không bị lặp).</summary>
+    public static string WithStyle(string prompt, string? stylePrefix) =>
+        string.IsNullOrWhiteSpace(stylePrefix)
+        || prompt.Contains("manga", StringComparison.OrdinalIgnoreCase)
+        || prompt.Contains("comic", StringComparison.OrdinalIgnoreCase)
+        || prompt.Contains("webtoon", StringComparison.OrdinalIgnoreCase)
+            ? prompt
+            : $"{stylePrefix.Trim()} {prompt}";
+
     public static (string? Provider, string Model) ResolveProvider(AiAgentSettings s) =>
         s.ImageProvider.Equals(ImageProviders.Gemini, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Gemini, s.GeminiImageModel)
         : s.ImageProvider.Equals(ImageProviders.Cloudflare, StringComparison.OrdinalIgnoreCase) ? (ImageProviders.Cloudflare, s.CloudflareImageModel)

@@ -24,6 +24,12 @@ public sealed class AiAgentSettings
     public string GeminiImageModel { get; set; } = "gemini-2.5-flash-image";
     public string CloudflareImageModel { get; set; } = "@cf/black-forest-labs/flux-1-schnell";
     public int ImageTimeoutSeconds { get; set; } = 100;
+    /// <summary>
+    /// Phong cách chèn trước prompt ảnh khi prompt chưa nói tới manga/comic (prompt đã duyệt từ trước, model ảnh mặc định ra ảnh chụp).
+    /// Để trống để tắt. Style rules của Series vẫn nằm trong prompt do Artist Agent soạn.
+    /// </summary>
+    public string ThumbnailStylePrefix { get; set; } =
+        "Manga comic panel, black-and-white ink line art, screentone shading, expressive anime-style faces, dynamic comic composition, hand-drawn illustration, not a photograph.";
     /// <summary>Số job sinh ảnh chạy đồng thời tối đa cho MỘT Series.</summary>
     public int ImageJobsPerSeries { get; set; } = 2;
 
