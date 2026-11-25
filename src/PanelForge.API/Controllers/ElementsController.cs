@@ -1,17 +1,21 @@
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementStyle;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
+using PanelForge.Application.Common;
 using PanelForge.Application.Features.CanvasElements.Commands.AcknowledgeOverflow;
 using PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 using PanelForge.Application.Features.CanvasElements.Commands.SetReadingOrder;
 using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementText;
+using PanelForge.Application.Features.CanvasElements.Commands.UpdateElementTranslation;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.CanvasElements.Queries.GetPageSnapshot;
 using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
 using PanelForge.Application.Features.CanvasElements.Commands.RemoveElement;
 using PanelForge.Domain.Entities.Content;
 using System.Security.Claims;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -49,10 +53,15 @@ public sealed class ElementsController : ControllerBase
     public async Task<IActionResult> GetPageSnapshot(
         Guid pageId,
         [FromQuery] bool includeRemoved = false,
+        [FromQuery] long? version = null,
+        [FromQuery] string? lang = null,
         CancellationToken cancellationToken = default)
     {
+        if (version is < 1)
+            return BadRequest(new { message = "version phải ≥ 1." });
+
         var result = await _mediator.Send(
-            new GetPageSnapshotQuery(pageId, includeRemoved),
+            new GetPageSnapshotQuery(pageId, includeRemoved, version, lang),
             cancellationToken);
 
         return result.IsSuccess
@@ -106,7 +115,7 @@ public sealed class ElementsController : ControllerBase
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess) return Failure(result.ErrorMessage);
+        if (!result.IsSuccess) return Failure(result.ErrorMessage, result.ErrorCode);
 
         // 202 Accepted — Event đã được append thành công
         return Accepted(result.Value);
@@ -119,7 +128,7 @@ public sealed class ElementsController : ControllerBase
     /// Body: { "content": "chữ mới (bỏ trống = nguyên văn dòng thoại)", "scriptLineId": "guid? (bỏ trống = giữ dòng hiện tại)" }
     /// </summary>
     [HttpPut("{elementId:guid}/text")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)] // BR-31: Artist mặc định có letter:write
     [ProducesResponseType(typeof(UpdateElementTextResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -130,15 +139,48 @@ public sealed class ElementsController : ControllerBase
         var result = await _mediator.Send(
             new UpdateElementTextCommand(pageId, elementId, request.Content, request.ScriptLineId, GetCurrentUserId(), request.ExpectedElementVersion),
             cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage, result.ErrorCode);
+    }
+
+    // ── PUT — Cập nhật bản dịch bóng thoại theo ngôn ngữ phát hành (BR-34) ───
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/elements/{elementId}/translations/{lang}
+    /// Body: { "text": "bản dịch", "expectedElementVersion": 3 }
+    /// </summary>
+    [HttpPut("{elementId:guid}/translations/{lang}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(UpdateElementTranslationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateElementTranslation(
+        Guid pageId,
+        Guid elementId,
+        string lang,
+        [FromBody] UpdateElementTranslationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateElementTranslationCommand(
+            PageId: pageId,
+            ElementId: elementId,
+            LanguageCode: lang,
+            Text: request.Text,
+            UserId: GetCurrentUserId(),
+            ExpectedElementVersion: request.ExpectedElementVersion
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── POST — Xác nhận cảnh báo tràn chữ kèm lý do (BR-20) ─────────────────
 
     /// <summary>POST /api/pages/{pageId}/elements/{elementId}/overflow-ack — Body: { "reason": "..." } (bắt buộc, ≤ 500 ký tự)</summary>
     [HttpPost("{elementId:guid}/overflow-ack")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AcknowledgeOverflow(
@@ -146,15 +188,15 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new AcknowledgeOverflowCommand(pageId, elementId, request.Reason, GetCurrentUserId()), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ." }) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Accepted(new { message = "Đã xác nhận cảnh báo tràn chữ.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
-    // ── PUT — Ghi đè thứ tự đọc (Letterer) ───────────────────────────────────
+    // ── PUT — Ghi đè thứ tự đọc (Artist / Letterer) ──────────────────────────
 
     /// <summary>PUT /api/pages/{pageId}/elements/{elementId}/reading-order — Body: { "readingOrder": 3 } hoặc null để bỏ ghi đè</summary>
     [HttpPut("{elementId:guid}/reading-order")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -163,7 +205,28 @@ public sealed class ElementsController : ControllerBase
     {
         var result = await _mediator.Send(
             new SetReadingOrderCommand(pageId, elementId, request.ReadingOrder, GetCurrentUserId(), request.ExpectedElementVersion), cancellationToken);
-        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc." }) : Failure(result.ErrorMessage);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật thứ tự đọc.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
+    }
+
+    // ── PUT — Kiểu chữ (Artist / Letterer) ────────────────────────────────────
+
+    /// <summary>
+    /// PUT /api/pages/{pageId}/elements/{elementId}/style — Body: { "style": { fontFamily, fontSize, bold, italic, align, color,
+    /// strokeColor, strokeWidth, lineHeight, preset } | null, "expectedElementVersion": 3 }. null = về kiểu mặc định.
+    /// </summary>
+    [HttpPut("{elementId:guid}/style")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateStyle(
+        Guid pageId, Guid elementId, [FromBody] UpdateElementStyleRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateElementStyleCommand(pageId, elementId, request.Style, GetCurrentUserId(), request.ExpectedElementVersion),
+            cancellationToken);
+        return result.IsSuccess ? Accepted(new { message = "Đã cập nhật kiểu chữ.", elementVersion = result.Value }) : Failure(result.ErrorMessage, result.ErrorCode);
     }
 
     // ── PUT — Di chuyển / Resize Element (Update → ElementMovedEvent APPEND) ─
@@ -183,7 +246,7 @@ public sealed class ElementsController : ControllerBase
     /// </summary>
     [HttpPut("{elementId:guid}/position")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -209,9 +272,9 @@ public sealed class ElementsController : ControllerBase
 
         var result = await _mediator.Send(command, cancellationToken);
 
-        if (!result.IsSuccess) return Failure(result.ErrorMessage);
+        if (!result.IsSuccess) return Failure(result.ErrorMessage, result.ErrorCode);
 
-        return Accepted(new { message = "Element đã được di chuyển thành công." });
+        return Accepted(new { message = "Element đã được di chuyển thành công.", elementVersion = result.Value });
     }
 
     // ── DELETE — Xóa mềm Element (Soft Delete → ElementRemovedEvent APPEND) ──
@@ -251,7 +314,7 @@ public sealed class ElementsController : ControllerBase
         if (!result.IsSuccess)
             return result.ErrorMessage!.Contains("đã bị xóa") && !result.ErrorMessage.Contains("Xung đột")
                 ? NotFound(new { message = result.ErrorMessage })
-                : Failure(result.ErrorMessage);
+                : Failure(result.ErrorMessage, result.ErrorCode);
 
         return Accepted(new
         {
@@ -262,9 +325,15 @@ public sealed class ElementsController : ControllerBase
     }
 
     // ── Helper ─────────────────────────────────────────────────────────────
-    private IActionResult Failure(string? message)
+    private IActionResult Failure(string? message, string? code)
     {
         message ??= "Yêu cầu không hợp lệ.";
+        if (code == ResultErrorCodes.ChapterReadOnly) // BR-12, không có field conflict nên FE không mở hộp thoại tải lại
+            return Conflict(new { message, code });
+        if (code == ResultErrorCodes.Conflict)
+            return Conflict(new { message, code });
+        if (code == ResultErrorCodes.Forbidden) // ngoài phạm vi việc được giao (WorkScopeGuard)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message, code });
         if (message.Contains(Page.DuplicateBindingCode))
             return Conflict(new { message, code = Page.DuplicateBindingCode });
         if (message.Contains(Page.ElementVersionConflictCode))
@@ -308,6 +377,7 @@ public sealed record UpdateElementTextRequest(string? Content, Guid? ScriptLineI
 public sealed record AcknowledgeOverflowRequest(string Reason);
 
 public sealed record SetReadingOrderRequest(int? ReadingOrder, int? ExpectedElementVersion = null);
+public sealed record UpdateElementStyleRequest(TextStyle? Style, int? ExpectedElementVersion = null);
 
 public sealed record MoveElementRequest(
     double NewX,

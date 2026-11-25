@@ -4,6 +4,7 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.PreviewLinks.Commands;
 using PanelForge.Application.Features.PreviewLinks.Common;
+using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Application.Features.PreviewLinks.Queries;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
@@ -54,7 +55,7 @@ public class PreviewLinkTests
             Db.WorkspaceMembers.Add(WorkspaceMember.Create(studio.Id, ProducerId, WorkspaceRole.Producer));
             var series = DomainSeries.Create(studio.Id, "Lantern", ReadingDirection.RightToLeft);
             Db.Series.Add(series);
-            Chapter = Chapter.Create(series.Id, 1, "Lá thư");
+            Chapter = Chapter.Create(series.Id, 1, "Lá thư").InProduction();
             if (approve) Chapter.Approve();
             Db.Chapters.Add(Chapter);
             Page1 = Page.CreateNew(Chapter.Id, 1, default, 1200, 1800, 300);
@@ -106,6 +107,42 @@ public class PreviewLinkTests
         link.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(PreviewLinkRules.DefaultHours), TimeSpan.FromMinutes(1));
         // Trang 1: Ink v2 (stage cuối, mới nhất); trang 2: chỉ có Pencil
         link.SnapshotArtworkIds.Should().HaveCount(2).And.Contain(f.InkV2.Id).And.NotContain(f.InkV1.Id);
+    }
+
+    [Fact]
+    public async Task Create_GridCell_UsesLatestApprovedSubmission_NotRejectedOrNewerUpload()
+    {
+        var f = new Fixture();
+        var cell = StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, f.InkV1.PipelineStageId, f.Page1.Id);
+        f.Db.StageTasks.Add(cell);
+        var approved = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 1, [f.InkV1.Id], autoApproved: false);
+        approved.Approve(f.ProducerId);
+        var rejected = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 2, [f.InkV2.Id], autoApproved: false);
+        rejected.Reject(f.ProducerId, "Sai màu");
+        f.Db.StageTaskSubmissions.AddRange(approved, rejected);
+        f.Db.SaveChanges();
+
+        var (id, _) = await f.CreateLink();
+
+        // BR-06/BR-20: InkV2 bị trả về nên bản cuối của trang 1 là InkV1 (lần nộp đã duyệt), không phải bản upload mới nhất
+        f.Db.PreviewLinks.Single(l => l.Id == id).SnapshotArtworkIds.Should().Contain(f.InkV1.Id).And.NotContain(f.InkV2.Id);
+    }
+
+    [Fact]
+    public async Task Create_GridCellWithOnlyRejectedSubmission_FallsBackToLowerStage()
+    {
+        var f = new Fixture();
+        var cell = StageTask.Create(f.Chapter.SeriesId, f.Chapter.Id, f.InkV1.PipelineStageId, f.Page1.Id);
+        f.Db.StageTasks.Add(cell);
+        var rejected = StageTaskSubmission.Create(cell.Id, f.Chapter.Id, f.ProducerId, 1, [f.InkV1.Id, f.InkV2.Id], autoApproved: false);
+        rejected.Reject(f.ProducerId, "Làm lại");
+        f.Db.StageTaskSubmissions.Add(rejected);
+        f.Db.SaveChanges();
+
+        var (id, _) = await f.CreateLink();
+
+        f.Db.PreviewLinks.Single(l => l.Id == id).SnapshotArtworkIds.Should().Contain(f.Pencil.Id)
+            .And.NotContain(f.InkV1.Id).And.NotContain(f.InkV2.Id);
     }
 
     [Theory]
@@ -165,7 +202,9 @@ public class PreviewLinkTests
     {
         var f = new Fixture();
         var (id, _) = await f.CreateLink();
-        var images = new GetPreviewImageQueryHandler(f.Db, f.Signer, new Moq.Mock<IAssetStorage>().Object);
+        var images = new GetPreviewImageQueryHandler(f.Db, f.Signer, new Moq.Mock<IAssetStorage>().Object,
+            new Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>().Object,
+            new Moq.Mock<IPageLetteringCompositor>().Object);
 
         // Ink v1 không thuộc snapshot (snapshot là v2)
         (await images.Handle(new GetPreviewImageQuery(f.Signer.Create(f.InkV1.Id, id, TimeSpan.Zero), null), default))
@@ -199,6 +238,29 @@ public class PreviewLinkTests
         ok.Value.PreviewLinkId.Should().Be(id);
         ok.Value.RecipientEmail.Should().Be("editor@publisher.com");
         ok.Value.Status.Should().Be(PreviewFeedbackStatus.New);
+        // Số chiếu sẵn cho FE: trang 1, khung 1, artwork v2 (1-based), không nhầm với ChapterVersion (VersionVector)
+        (ok.Value.PageNumber, ok.Value.PanelNumber, ok.Value.ArtworkVersionNumber).Should().Be((1, f.Panel1.PanelNumber, 2));
+
+        var listed = await new GetPreviewFeedbackQueryHandler(f.Db).Handle(new GetPreviewFeedbackQuery(f.Chapter.Id, null), default);
+        listed.Value!.Should().ContainSingle().Which.ArtworkVersionNumber.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Feedback_StoresOptionalReviewerName_AndRejectsTooLongName()
+    {
+        var f = new Fixture();
+        var (_, token) = await f.CreateLink();
+        var handler = new SubmitPreviewFeedbackCommandHandler(f.Db);
+
+        var named = await handler.Handle(
+            new SubmitPreviewFeedbackCommand(token, "Thoại ổn", null, null, null, "  Cố vấn Minh "), default);
+        named.Value!.ReviewerName.Should().Be("Cố vấn Minh");
+        named.Value.Message.Should().Be("Thoại ổn");
+
+        (await handler.Handle(new SubmitPreviewFeedbackCommand(token, "x", null, null, null, "   "), default))
+            .Value!.ReviewerName.Should().BeNull();
+        (await handler.Handle(new SubmitPreviewFeedbackCommand(token, "x", null, null, null, new string('a', 81)), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 
     [Fact]
@@ -235,5 +297,163 @@ public class PreviewLinkTests
         dto.RevokeReason.Should().Be("Chương được mở lại");
         dto.AccessCount.Should().Be(1);
         (await f.Open(token)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+    }
+
+    // ── 5.7 / 3.7: phản hồi "cần sửa" → ChangeRequest ──
+
+    /// <summary>Việc Ink trang 1 đã duyệt (StageProgress Panel 1 Approved), phản hồi panel 1 đã triage NeedsChange.</summary>
+    private static async Task<(PreviewFeedbackDto Feedback, Assignment Ink, StageProgress Row)> NeedsChange(Fixture f)
+    {
+        var ink = Assignment.Create(f.Chapter.SeriesId, f.Chapter.Id, WorkflowEntityType.Page, f.Page1.Id,
+            f.InkV2.PipelineStageId, Guid.NewGuid(), WorkspaceRole.Artist, "Ink trang 1");
+        ink.MarkApproved();
+        var row = StageProgress.Begin(f.Panel1.Id, f.InkV2.PipelineStageId);
+        typeof(StageProgress).GetProperty(nameof(StageProgress.Status))!.SetValue(row, StageProgressStatus.Approved);
+        f.Db.Assignments.Add(ink);
+        f.Db.StageProgresses.Add(row);
+        await f.Db.SaveChangesAsync();
+
+        var (_, token) = await f.CreateLink();
+        var fb = (await new SubmitPreviewFeedbackCommandHandler(f.Db).Handle(
+            new SubmitPreviewFeedbackCommand(token, "Khung 1 tối quá", f.Page1.Id, f.Panel1.Id, null), default)).Value!;
+        await new TriagePreviewFeedbackCommandHandler(f.Db).Handle(new TriagePreviewFeedbackCommand(
+            f.Chapter.Id, fb.Id, f.ProducerId, PreviewFeedbackStatus.NeedsChange, "Tăng sáng khung 1"), default);
+        return (fb, ink, row);
+    }
+
+    private static Task<Result<PreviewFeedbackDto>> ToChangeRequest(Fixture f, Guid feedbackId, Guid assignmentId) =>
+        new CreateChangeRequestFromFeedbackCommandHandler(f.Db).Handle(
+            new CreateChangeRequestFromFeedbackCommand(f.Chapter.Id, feedbackId, f.ProducerId, assignmentId, null, null), default);
+
+    private static Task<Result<PanelForge.Application.Features.Chapters.Models.ChapterReviewDto>> Reopen(Fixture f) =>
+        new ReopenChapterCommandHandler(f.Db).Handle(new ReopenChapterCommand(f.Chapter.Id, f.ProducerId, "Sửa theo phản hồi"), default);
+
+    private static async Task<(Assignment Work, StageProgress Row)> ApprovedWork(
+        Fixture f, Guid stageId, Page page, Panel panel, AssignmentStatus status = AssignmentStatus.Approved)
+    {
+        var work = Assignment.Create(f.Chapter.SeriesId, f.Chapter.Id, WorkflowEntityType.Page, page.Id,
+            stageId, Guid.NewGuid(), WorkspaceRole.Artist, $"Việc trang {page.PageNumber}");
+        var row = StageProgress.Begin(panel.Id, stageId);
+        if (status == AssignmentStatus.Approved)
+        {
+            work.MarkApproved();
+            typeof(StageProgress).GetProperty(nameof(StageProgress.Status))!.SetValue(row, StageProgressStatus.Approved);
+        }
+        else
+        {
+            work.StartWork();
+        }
+        f.Db.Assignments.Add(work);
+        f.Db.StageProgresses.Add(row);
+        await f.Db.SaveChangesAsync();
+        return (work, row);
+    }
+
+    [Fact]
+    public async Task FeedbackOnEarlierStage_FlagsLaterApprovedStagesOfSamePanelForImpactReview_ButNotOtherPages()
+    {
+        var f = new Fixture();
+        var (pencil, pencilRow) = await ApprovedWork(f, f.Pencil.PipelineStageId, f.Page1, f.Panel1);
+        var panel2 = Panel.Create(f.Page2.Id, 1, 1);
+        f.Db.Panels.Add(panel2);
+        var (otherInk, otherRow) = await ApprovedWork(f, f.InkV2.PipelineStageId, f.Page2, panel2);
+        var (fb, ink, inkRow) = await NeedsChange(f);   // Ink trang 1 đã duyệt
+        (await Reopen(f)).IsSuccess.Should().BeTrue();
+
+        var r = await ToChangeRequest(f, fb.Id, pencil.Id);
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        pencil.Status.Should().Be(AssignmentStatus.ReworkRequired);
+        pencilRow.Status.Should().Be(StageProgressStatus.ChangesRequested);
+        // 4.7: Ink của cùng Panel dựa trên Pencil cũ → không tự làm lại, mà "cần kiểm tra ảnh hưởng"; kết quả và duyệt cũ giữ nguyên
+        ink.Status.Should().Be(AssignmentStatus.Approved);
+        ink.ImpactReviewReason.Should().Contain("Pencil");
+        inkRow.Status.Should().Be(StageProgressStatus.Approved);
+        f.Db.Notifications.Should().Contain(n => n.UserId == ink.AssigneeUserId && n.AssignmentId == ink.Id);
+        // Trang khác không bị ảnh hưởng
+        otherInk.Status.Should().Be(AssignmentStatus.Approved);
+        otherInk.ImpactReviewReason.Should().BeNull();
+        otherRow.Status.Should().Be(StageProgressStatus.Approved);
+    }
+
+    [Fact]
+    public async Task FeedbackOnEarlierStage_LaterWorkInProgress_KeepsStatus_ButIsNotified()
+    {
+        var f = new Fixture();
+        var (pencil, _) = await ApprovedWork(f, f.Pencil.PipelineStageId, f.Page1, f.Panel1);
+        var (fb, _, _) = await NeedsChange(f);
+        var (inkInProgress, _) = await ApprovedWork(f, f.InkV1.PipelineStageId, f.Page1, f.Panel1, AssignmentStatus.InProgress);
+        (await Reopen(f)).IsSuccess.Should().BeTrue();
+
+        (await ToChangeRequest(f, fb.Id, pencil.Id)).IsSuccess.Should().BeTrue();
+
+        inkInProgress.Status.Should().Be(AssignmentStatus.InProgress);
+        f.Db.Notifications.Should().Contain(n => n.UserId == inkInProgress.AssigneeUserId && n.AssignmentId == inkInProgress.Id);
+    }
+
+    [Fact]
+    public async Task FeedbackToChangeRequest_SendsApprovedWorkBack_LinksFeedback_AndBlocksChapterApproval()
+    {
+        var f = new Fixture();
+        var (fb, ink, row) = await NeedsChange(f);
+        (await Reopen(f)).IsSuccess.Should().BeTrue();
+
+        var r = await ToChangeRequest(f, fb.Id, ink.Id);
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        var cr = f.Db.ChangeRequests.Single();
+        r.Value!.ChangeRequestId.Should().Be(cr.Id);
+        cr.AssignmentId.Should().Be(ink.Id);
+        cr.ResponsibleUserId.Should().Be(ink.AssigneeUserId);
+        cr.PanelId.Should().Be(f.Panel1.Id);
+        cr.AssetReferenceId.Should().Be(f.InkV2.Id);
+        cr.Description.Should().Contain("Khung 1 tối quá").And.Contain("Tăng sáng khung 1");
+        ink.Status.Should().Be(AssignmentStatus.ReworkRequired);
+        row.Status.Should().Be(StageProgressStatus.ChangesRequested);
+        f.Db.Notifications.Should().Contain(n => n.UserId == ink.AssigneeUserId && n.Type == NotificationType.AssignmentChangesRequested);
+
+        // Mỗi phản hồi chỉ chuyển một lần, và không phân loại lại được
+        (await ToChangeRequest(f, fb.Id, ink.Id)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        (await new TriagePreviewFeedbackCommandHandler(f.Db).Handle(new TriagePreviewFeedbackCommand(
+            f.Chapter.Id, fb.Id, f.ProducerId, PreviewFeedbackStatus.Noted, null), default)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        (await new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommandHandler(
+            f.Db, new Moq.Mock<PanelForge.Application.Common.Interfaces.Persistence.IPageRepository>().Object).Handle(
+            new PanelForge.Application.Features.Chapters.Commands.ApproveChapter.ApproveChapterCommand(f.Chapter.Id, f.ProducerId), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task FeedbackToChangeRequest_RequiresReopenedChapter_NeedsChangeFeedback_AndAssignmentOfThisChapter()
+    {
+        var f = new Fixture();
+        var (fb, ink, _) = await NeedsChange(f);
+        var (_, token) = await f.CreateLink();
+        var fresh = (await new SubmitPreviewFeedbackCommandHandler(f.Db).Handle(
+            new SubmitPreviewFeedbackCommand(token, "Hay", null, null, null), default)).Value!;
+
+        (await ToChangeRequest(f, fb.Id, ink.Id)).ErrorCode.Should().Be(ResultErrorCodes.Conflict); // chương còn Approved
+        await Reopen(f);
+        (await ToChangeRequest(f, fresh.Id, ink.Id)).ErrorCode.Should().Be(ResultErrorCodes.Conflict); // chưa triage NeedsChange
+
+        (await ToChangeRequest(f, fb.Id, Guid.NewGuid())).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        f.Db.ChangeRequests.Should().BeEmpty();
+        ink.Status.Should().Be(AssignmentStatus.Approved);
+    }
+
+    [Fact]
+    public async Task FeedbackToChangeRequest_WorkNotYetApproved_OnlyAddsRequest_ButWorkUnderReviewIsConflict()
+    {
+        var f = new Fixture();
+        var (fb, ink, _) = await NeedsChange(f);
+        await Reopen(f);
+        typeof(Assignment).GetProperty(nameof(Assignment.Status))!.SetValue(ink, AssignmentStatus.UnderReview);
+        (await ToChangeRequest(f, fb.Id, ink.Id)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        typeof(Assignment).GetProperty(nameof(Assignment.Status))!.SetValue(ink, AssignmentStatus.InProgress);
+        (await ToChangeRequest(f, fb.Id, ink.Id)).IsSuccess.Should().BeTrue();
+
+        ink.Status.Should().Be(AssignmentStatus.InProgress);
+        f.Db.ChangeRequests.Should().ContainSingle(c => c.AssignmentId == ink.Id && c.Status == ChangeRequestStatus.Open);
     }
 }

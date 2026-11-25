@@ -40,7 +40,18 @@ public sealed class GetWorkspaceByIdQueryHandler : IRequestHandler<GetWorkspaceB
                  && a.Series.WorkspaceId == query.WorkspaceId,
             cancellationToken);
 
+        var pendingEditorReviews = await _dbContext.Assignments.CountAsync(
+            a => !a.IsDeleted
+                 && (a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)
+                 && a.AssigneeUserId != query.UserId
+                 && a.Series.WorkspaceId == query.WorkspaceId,
+            cancellationToken);
+
         return Result<WorkspaceDto>.Success(WorkspaceMapper.ToDto(
-            workspace, query.UserId, workspace.Members.Count(m => !m.IsDeleted), pendingTasks));
+            workspace,
+            query.UserId,
+            workspace.Members.Count(m => !m.IsDeleted),
+            pendingTasks,
+            pendingEditorReviews: pendingEditorReviews));
     }
 }

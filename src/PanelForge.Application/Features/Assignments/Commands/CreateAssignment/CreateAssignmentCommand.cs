@@ -21,7 +21,8 @@ public sealed record CreateAssignmentCommand(
     string? ReferenceNotes,
     DateTime? DueDate,
     AssignmentPriority Priority,
-    Guid? DependsOnAssignmentId
+    Guid? DependsOnAssignmentId,
+    IReadOnlyList<Guid>? DependsOnAssignmentIds = null
 ) : IRequest<Result<AssignmentDto>>;
 
 public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssignmentCommand, Result<AssignmentDto>>
@@ -44,6 +45,8 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
 
         if (AssignmentRules.ChapterNotEditableReason(chapter) is { } locked)
             return Fail(locked, ResultErrorCodes.Conflict);
+        if (await AssignmentRules.GridActiveReasonAsync(_db, chapter.Id, ct) is { } grid)
+            return Fail(grid, ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
@@ -63,26 +66,35 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, cmd.AssigneeUserId, stage, ct);
         if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode);
 
-        if (await AssignmentRules.ValidateDependencyAsync(_db, chapter.Id, null, cmd.DependsOnAssignmentId, ct) is { } depError)
+        var depIds = cmd.DependsOnAssignmentIds ?? (cmd.DependsOnAssignmentId.HasValue ? [cmd.DependsOnAssignmentId.Value] : null);
+        if (await AssignmentRules.ValidateDependenciesAsync(_db, chapter.Id, null, depIds, ct) is { } depError)
             return Fail(depError);
 
-        var duplicate = await _db.Assignments.AnyAsync(a =>
-            a.ChapterId == chapter.Id && a.EntityType == cmd.EntityType &&
-            a.TargetEntityId == target.Value && a.PipelineStageId == stage.Id, ct);
-        if (duplicate)
-            return Fail("Đối tượng này đã được giao việc ở stage này.", ResultErrorCodes.Conflict);
+        if (await AssignmentRules.ScopeOverlapReasonAsync(_db, chapter.Id, stage, cmd.EntityType, target.Value, ct) is { } overlap)
+            return Fail(overlap, ResultErrorCodes.Conflict);
 
         var assignment = Assignment.Create(
             chapter.SeriesId, chapter.Id, cmd.EntityType, target.Value, stage.Id,
             cmd.AssigneeUserId, role.Value, cmd.Brief,
             referenceNotes: cmd.ReferenceNotes, dueDate: cmd.DueDate, priority: cmd.Priority,
-            dependsOnAssignmentId: cmd.DependsOnAssignmentId);
+            dependsOnAssignmentId: cmd.DependsOnAssignmentId,
+            dependsOnAssignmentIds: depIds);
         assignment.CreatedBy = cmd.UserId.ToString();
 
         _db.Assignments.Add(assignment);
+        await AssignmentRules.EnsureSeriesMemberAsync(_db, chapter.SeriesId, cmd.AssigneeUserId, role.Value, ct);
         // BR-14: thông báo ghi cùng lần Save với Assignment, không bao giờ có việc thiếu thông báo
         _db.Notifications.Add(AssignmentNotifications.Assigned(assignment));
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Hai lần giao việc đồng thời cùng thêm người này vào Series → unique index (series_id, user_id) chặn một bên;
+            // cả Assignment lẫn Membership của lần đó không được lưu (cùng một SaveChanges)
+            return Fail("Người nhận vừa được thêm vào Series bởi một thao tác khác. Vui lòng giao việc lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<AssignmentDto>.Success(AssignmentDto.From(assignment));
     }

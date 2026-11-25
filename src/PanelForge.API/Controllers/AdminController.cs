@@ -8,8 +8,10 @@ using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
+using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
+using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
 using PanelForge.Application.Features.Audit.Queries.ExportAuditLogs;
 using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
@@ -36,6 +38,14 @@ using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPi
 using PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.AiConfig.Commands.CreateAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.UpdateAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.TestAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiProvider;
+using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiImageProvider;
+using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderCredentials;
+using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderModels;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspaceSessionPolicy;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceSessionPolicy;
@@ -43,6 +53,9 @@ using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
 using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
 using PanelForge.Application.Features.AiUsage.Queries.ExportAiUsageRecords;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
+using PanelForge.Application.Features.AiUsage.Models;
+using PanelForge.Application.Features.Audit.Models;
 
 namespace PanelForge.API.Controllers;
 
@@ -59,6 +72,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("users")]
+    [ProducesResponseType(typeof(AdminUserListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllUsers(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -76,6 +90,7 @@ public class AdminController : ControllerBase
     /// </summary>
     [HttpPost("assign-producer")]
     [HttpPost("assign-role")]
+    [ProducesResponseType(typeof(AssignUserRoleResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> AssignProducer(
         [FromBody] AssignRoleRequest request,
         CancellationToken cancellationToken)
@@ -90,6 +105,7 @@ public class AdminController : ControllerBase
     /// Tạo tài khoản người dùng mới bởi Administrator (UC-01).
     /// </summary>
     [HttpPost("users")]
+    [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateUser(
         [FromBody] CreateUserByAdminRequest request,
         CancellationToken cancellationToken)
@@ -108,6 +124,7 @@ public class AdminController : ControllerBase
     /// Cập nhật thông tin và vai trò của tài khoản người dùng (UC-01).
     /// </summary>
     [HttpPut("users/{id:guid}")]
+    [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateUser(
         Guid id,
         [FromBody] UpdateUserByAdminRequest request,
@@ -124,6 +141,7 @@ public class AdminController : ControllerBase
     /// Vô hiệu hóa (Soft delete) người dùng bởi Administrator.
     /// </summary>
     [HttpDelete("users/{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteUser(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeactivateUserCommand(id), cancellationToken);
@@ -157,6 +175,7 @@ public class AdminController : ControllerBase
     /// Đặt lại mật khẩu tài khoản người dùng bởi Administrator.
     /// </summary>
     [HttpPost("users/{id:guid}/reset-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResetUserPassword(
         Guid id,
         [FromBody] ResetPasswordByAdminRequest request,
@@ -169,6 +188,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("system-stats")]
+    [ProducesResponseType(typeof(SystemStatsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSystemStats(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetSystemStatsQuery(), cancellationToken);
@@ -186,6 +206,7 @@ public class AdminController : ControllerBase
     /// Tra cứu toàn bộ Audit Logs hệ thống (UC-15, BR-18).
     /// </summary>
     [HttpGet("audit-logs")]
+    [ProducesResponseType(typeof(AuditLogsPagedResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuditLogs(
         [FromQuery] Guid? workspaceId,
         [FromQuery] string? action,
@@ -213,6 +234,7 @@ public class AdminController : ControllerBase
     /// Header X-Export-Truncated = true nếu kết quả bị cắt.
     /// </summary>
     [HttpGet("audit-logs/export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExportAuditLogs(
         [FromQuery] Guid? workspaceId,
         [FromQuery] string? action,
@@ -236,6 +258,7 @@ public class AdminController : ControllerBase
     /// monthlyTokenQuota, usedTokensCurrentMonth, usagePercent, isEnabled).
     /// </summary>
     [HttpGet("ai-usage")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiUsageReportItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAiUsage(
         [FromQuery] Guid? workspaceId,
         [FromQuery] DateTime? from,
@@ -254,6 +277,7 @@ public class AdminController : ControllerBase
     /// UC-15: danh sách chi tiết từng lần gọi AI (E-29), lọc theo workspace, user, tính năng, trạng thái, khoảng ngày.
     /// </summary>
     [HttpGet("ai-usage/records")]
+    [ProducesResponseType(typeof(AiUsageRecordsPagedResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAiUsageRecords(
         [FromQuery] Guid? workspaceId,
         [FromQuery] Guid? userId,
@@ -278,6 +302,7 @@ public class AdminController : ControllerBase
     /// UC-15 bước 4: export chi tiết AI usage đã lọc ra CSV (tối đa 10.000 dòng mới nhất).
     /// </summary>
     [HttpGet("ai-usage/export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExportAiUsage(
         [FromQuery] Guid? workspaceId,
         [FromQuery] Guid? userId,
@@ -311,6 +336,7 @@ public class AdminController : ControllerBase
     /// Lấy cấu hình AI Provider, Models và Token Quota của Workspace bởi Administrator (UC-02).
     /// </summary>
     [HttpGet("workspaces/{workspaceId:guid}/ai-config")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspaceAiConfig(Guid workspaceId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
@@ -325,6 +351,7 @@ public class AdminController : ControllerBase
     /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace bởi Administrator (UC-02).
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/ai-config")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateWorkspaceAiConfig(
         Guid workspaceId,
         [FromBody] UpdateWorkspaceAiConfigRequest request,
@@ -347,10 +374,101 @@ public class AdminController : ControllerBase
         return Ok(result.Value);
     }
 
+    // ─── UC-02 mở rộng: nhiều API AI (Gemini / Cloudflare Workers AI) ─────────
+
+    /// <summary>GET /api/admin/ai-providers — danh sách API AI đã khai báo (không trả key, chỉ KeyHint).</summary>
+    [HttpGet("ai-providers")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderCredentialDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAiProviders(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAiProviderCredentialsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/ai-providers — thêm API AI; key được gọi thử rồi mã hoá trước khi lưu.</summary>
+    [HttpPost("ai-providers")]
+    [ProducesResponseType(typeof(AiProviderCredentialDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateAiProvider([FromBody] CreateAiProviderCredentialRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CreateAiProviderCredentialCommand(request), cancellationToken);
+        return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/admin/ai-providers/{id} — sửa API AI (ApiKey trống = giữ key cũ).</summary>
+    [HttpPut("ai-providers/{id:guid}")]
+    [ProducesResponseType(typeof(AiProviderCredentialDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateAiProvider(Guid id, [FromBody] UpdateAiProviderCredentialRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateAiProviderCredentialCommand(id, request), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>DELETE /api/admin/ai-providers/{id} — xoá mềm; 409 nếu còn Workspace đang dùng.</summary>
+    [HttpDelete("ai-providers/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteAiProvider(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteAiProviderCredentialCommand(id), cancellationToken);
+        if (result.IsSuccess) return NoContent();
+        return result.ErrorCode == ResultErrorCodes.Conflict ? Conflict(new { message = result.ErrorMessage }) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/admin/ai-providers/{id}/models — model sinh chữ (kind=text) và sinh ảnh (kind=image) của API Cloudflare đã lưu.
+    /// free=true: model @cf/ (phần miễn phí Workers AI); false: model đối tác cần credit.
+    /// </summary>
+    [HttpGet("ai-providers/{id:guid}/models")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderModelDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAiProviderModels(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAiProviderModelsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/ai-providers/{id}/test — gọi thử provider bằng key đã lưu.</summary>
+    [HttpPost("ai-providers/{id:guid}/test")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> TestAiProvider(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new TestAiProviderCredentialCommand(id), cancellationToken);
+        return result.IsSuccess ? Ok(new { ok = true }) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = key Gemini riêng).
+    /// Trả lại cấu hình AI của Workspace.
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-provider")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetWorkspaceAiProvider(Guid workspaceId, [FromBody] SetWorkspaceAiProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetWorkspaceAiProviderCommand(workspaceId, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var config = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        return config.IsSuccess ? Ok(config.Value) : ToError(config);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-image-provider — chọn API riêng cho sinh ảnh (credential phải có model ảnh).
+    /// Body providerCredentialId, null = sinh ảnh theo API chữ như trước. Trả lại cấu hình AI của Workspace.
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-image-provider")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetWorkspaceAiImageProvider(Guid workspaceId, [FromBody] SetWorkspaceAiProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetWorkspaceAiImageProviderCommand(workspaceId, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var config = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        return config.IsSuccess ? Ok(config.Value) : ToError(config);
+    }
+
     // ─── V1.2: Workspace Session Policy (Admin Only) ──────────────────────────
 
     /// <summary>GET /api/admin/workspaces/{workspaceId}/session-policy — thời gian sống, idle timeout, số phiên đồng thời.</summary>
     [HttpGet("workspaces/{workspaceId:guid}/session-policy")]
+    [ProducesResponseType(typeof(WorkspaceSessionPolicyDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspaceSessionPolicy(Guid workspaceId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceSessionPolicyQuery(workspaceId), cancellationToken);
@@ -362,6 +480,7 @@ public class AdminController : ControllerBase
     /// Áp dụng ở lần đăng nhập / làm mới token tiếp theo của các thành viên.
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/session-policy")]
+    [ProducesResponseType(typeof(WorkspaceSessionPolicyDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateWorkspaceSessionPolicy(
         Guid workspaceId,
         [FromBody] UpdateWorkspaceSessionPolicyRequest request,
@@ -430,6 +549,7 @@ public class AdminController : ControllerBase
     // ─── Element Type Master Data ──────────────────────────────────────────────
 
     [HttpGet("element-types")]
+    [ProducesResponseType(typeof(IReadOnlyList<ElementTypeDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetElementTypes(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetElementTypesQuery(), cancellationToken);
@@ -437,6 +557,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("element-types/{id:guid}")]
+    [ProducesResponseType(typeof(ElementTypeDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetElementTypeById(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetElementTypeByIdQuery(id), cancellationToken);
@@ -445,6 +566,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("element-types")]
+    [ProducesResponseType(typeof(ElementTypeDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateElementType(
         [FromBody] CreateElementTypeRequest request, CancellationToken cancellationToken)
     {
@@ -456,6 +578,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("element-types/{id:guid}")]
+    [ProducesResponseType(typeof(ElementTypeDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateElementType(
         Guid id, [FromBody] UpdateElementTypeRequest request, CancellationToken cancellationToken)
     {
@@ -467,6 +590,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("element-types/{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteElementType(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeactivateElementTypeCommand(id), cancellationToken);
@@ -477,6 +601,7 @@ public class AdminController : ControllerBase
     // ─── Export Preset Master Data ─────────────────────────────────────────────
 
     [HttpGet("export-presets")]
+    [ProducesResponseType(typeof(IReadOnlyList<ExportPresetDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetExportPresets(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetExportPresetsQuery(), cancellationToken);
@@ -484,6 +609,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("export-presets/{id:guid}")]
+    [ProducesResponseType(typeof(ExportPresetDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetExportPresetById(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetExportPresetByIdQuery(id), cancellationToken);
@@ -492,6 +618,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("export-presets")]
+    [ProducesResponseType(typeof(ExportPresetDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateExportPreset(
         [FromBody] CreateExportPresetRequest request, CancellationToken cancellationToken)
     {
@@ -503,6 +630,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("export-presets/{id:guid}")]
+    [ProducesResponseType(typeof(ExportPresetDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateExportPreset(
         Guid id, [FromBody] UpdateExportPresetRequest request, CancellationToken cancellationToken)
     {
@@ -514,6 +642,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("export-presets/{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteExportPreset(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeactivateExportPresetCommand(id), cancellationToken);
@@ -524,6 +653,7 @@ public class AdminController : ControllerBase
     // ─── Pipeline Template Master Data ────────────────────────────────────────
 
     [HttpGet("pipeline-templates")]
+    [ProducesResponseType(typeof(IReadOnlyList<PipelineTemplateDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPipelineTemplates(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPipelineTemplatesQuery(), cancellationToken);
@@ -531,6 +661,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("pipeline-templates/{id:guid}")]
+    [ProducesResponseType(typeof(PipelineTemplateDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPipelineTemplateById(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPipelineTemplateByIdQuery(id), cancellationToken);
@@ -539,6 +670,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("pipeline-templates")]
+    [ProducesResponseType(typeof(PipelineTemplateDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreatePipelineTemplate(
         [FromBody] CreatePipelineTemplateRequest request, CancellationToken cancellationToken)
     {
@@ -550,6 +682,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("pipeline-templates/{id:guid}")]
+    [ProducesResponseType(typeof(PipelineTemplateDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdatePipelineTemplate(
         Guid id, [FromBody] UpdatePipelineTemplateRequest request, CancellationToken cancellationToken)
     {
@@ -561,10 +694,38 @@ public class AdminController : ControllerBase
     }
 
     [HttpDelete("pipeline-templates/{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeletePipelineTemplate(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeactivatePipelineTemplateCommand(id), cancellationToken);
         if (!result.IsSuccess) return BadRequest(new { message = result.ErrorMessage });
         return Ok(new { message = result.Value });
+    }
+
+    /// <summary>
+    /// GET /api/admin/workspaces
+    /// Danh sách tất cả Studio Workspaces trong hệ thống cho Administrator (BR-16).
+    /// </summary>
+    [HttpGet("workspaces")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminWorkspaceDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetWorkspaces(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminWorkspacesQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{id}/quota
+    /// Cập nhật dung lượng lưu trữ (Storage Quota) của Studio Workspace bởi Administrator (BR-16).
+    /// </summary>
+    [HttpPut("workspaces/{id:guid}/quota")]
+    [ProducesResponseType(typeof(AdminWorkspaceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateWorkspaceQuota(
+        Guid id,
+        [FromBody] UpdateWorkspaceQuotaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateWorkspaceQuotaCommand(id, request.StorageQuotaBytes), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 }

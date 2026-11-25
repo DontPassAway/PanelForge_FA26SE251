@@ -28,7 +28,7 @@ public class RunWorkflowCommandTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Status.Should().Be(AiRunStatus.Queued);
-        result.Value.Provider.Should().Be("Mock");
+        result.Value.Provider.Should().Be("Gemini");
         var run = await h.RunAsync(result.Value.RunId);
         run.WorkspaceId.Should().Be(AiDemoSeeder.WorkspaceId);
         run.RequestedByUserId.Should().Be(AiHarness.Writer);
@@ -42,7 +42,7 @@ public class RunWorkflowCommandTests
 
         // Job giao cho AI service không mang API key khi chạy Mock
         h.LastJob!.RunId.Should().Be(run.Id);
-        h.LastJob.ApiKey.Should().BeNull();
+        h.LastJob!.ApiKey.Should().Be("test-key");
         h.LastJob.ToString().Should().NotContain("sk-");
     }
 
@@ -73,7 +73,7 @@ public class RunWorkflowCommandTests
     {
         var h = await AiHarness.CreateAsync();
         var config = await h.Db.WorkspaceAiConfigs.SingleAsync();
-        config.UpdateSettings("Google Gemini", null, isEnabled: false, 1_000_000, "[\"gemini-2.5-flash\"]");
+        config.UpdateSettings("Google Gemini", null, isEnabled: false, 1_000_000, AiHarness.ModelOnlyJson);
         await h.Db.SaveChangesAsync();
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
@@ -117,7 +117,7 @@ public class RunWorkflowCommandTests
         run.ErrorCode.Should().Be(ResultErrorCodes.AiUnavailable);
 
         // Chức năng Backend không phụ thuộc AI vẫn hoạt động bình thường
-        var update = await new UpdateSceneCommandHandler(h.Db)
+        var update = await new UpdateSceneCommandHandler(h.Db, Mock.Of<IWorkspaceAuthorizationService>())
             .Handle(new UpdateSceneCommand(AiDemoSeeder.SceneId, AiHarness.Writer, "Heading mới", "Tóm tắt mới"), default);
         update.IsSuccess.Should().BeTrue();
         (await h.Db.Scenes.SingleAsync()).Heading.Should().Be("Heading mới");
@@ -127,10 +127,9 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_SendsDecryptedKeyOnlyInJob_AndChecksQuota()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.KeyProtector.Setup(k => k.Unprotect(It.IsAny<string>())).Returns("test-key-123");
         var config = await h.Db.WorkspaceAiConfigs.SingleAsync();
-        config.UpdateSettings("Google Gemini", "ciphertext", true, 1_000_000, "[\"gemini-2.5-flash\"]");
+        config.UpdateSettings("Google Gemini", "ciphertext", true, 1_000_000, AiHarness.ModelOnlyJson);
         await h.Db.SaveChangesAsync();
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
@@ -148,7 +147,6 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_QuotaExceeded_IsBlocked_AndNotFallenBackToMock()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.Usage.Setup(u => u.CheckAvailabilityAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AiAvailability.Blocked(AiUsageStatus.QuotaExceeded, "Hết hạn mức."));
 
@@ -163,7 +161,6 @@ public class RunWorkflowCommandTests
     public async Task Run_GeminiMode_ModelNotAllowedForWorkspace_IsRejected()
     {
         var h = await AiHarness.CreateAsync();
-        h.Settings.Provider = "Gemini";
         h.Settings.GeminiModel = "gemini-9-ultra";
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);

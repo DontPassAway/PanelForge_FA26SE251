@@ -16,7 +16,26 @@ public sealed record ChapterDto(
     int PagesCount,
     ChapterStatus Status = ChapterStatus.InProduction,
     DateTime? PublishedAt = null,
-    string? Outline = null
+    string? Outline = null,
+    bool IsScriptFrozen = false,
+    DateTime? ScriptFrozenAt = null,
+    Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null,
+    string? ScriptContentHash = null,
+    // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
+    ScriptStatus ScriptStatus = ScriptStatus.Draft,
+    DateTime? ScriptSubmittedAt = null,
+    // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
+    Guid? LastSubmittedVersionId = null,
+    Guid? PreviousSubmittedVersionId = null,
+    bool IsHandedOff = false,
+    DateTime? HandedOffAt = null,
+    Guid? HandedOffById = null
 );
 
 public sealed record ChapterSceneSummaryDto(
@@ -49,18 +68,39 @@ public sealed record ChapterDetailDto(
     IReadOnlyList<ChapterPageSummaryDto> Pages,
     ChapterStatus Status = ChapterStatus.InProduction,
     DateTime? PublishedAt = null,
-    string? Outline = null
+    string? Outline = null,
+    bool IsScriptFrozen = false,
+    DateTime? ScriptFrozenAt = null,
+    Guid? ScriptFrozenById = null,
+    ScriptReopenStatus ScriptReopenStatus = ScriptReopenStatus.None,
+    string? ScriptReopenReason = null,
+    Guid? ScriptReopenRequestedById = null,
+    DateTime? ScriptReopenRequestedAt = null,
+    // Ảnh bìa chương (null = FE dùng badge số tập); có ?v= theo nội dung, tải bằng fetch + Bearer
+    string? CoverUrl = null,
+    string? ScriptContentHash = null,
+    // D12: vòng đời kịch bản Draft ↔ InReview → Frozen
+    ScriptStatus ScriptStatus = ScriptStatus.Draft,
+    DateTime? ScriptSubmittedAt = null,
+    // Phiên bản đã gửi duyệt gần nhất và lần trước (so sánh từng dòng)
+    Guid? LastSubmittedVersionId = null,
+    Guid? PreviousSubmittedVersionId = null,
+    bool IsHandedOff = false,
+    DateTime? HandedOffAt = null,
+    Guid? HandedOffById = null
 );
 
 public sealed record CreateChapterRequest(
     decimal ChapterNumber,
     string? Title = null,
-    DateOnly? TargetReleaseDate = null
+    DateOnly? TargetReleaseDate = null,
+    string? Outline = null
 );
 
 public sealed record UpdateChapterRequest(
     string? Title,
     DateOnly? TargetReleaseDate,
     bool IncrementVersion = false,
-    string? Outline = null
+    string? Outline = null,
+    long? ExpectedChapterVersion = null
 );

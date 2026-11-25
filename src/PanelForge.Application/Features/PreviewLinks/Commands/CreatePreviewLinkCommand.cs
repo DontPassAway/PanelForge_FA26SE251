@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.PreviewLinks.Common;
 using PanelForge.Application.Features.PreviewLinks.Models;
 using PanelForge.Domain.Entities.Preview;
@@ -35,23 +36,14 @@ public sealed class CreatePreviewLinkCommandHandler : IRequestHandler<CreatePrev
 
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
-        if (chapter.Status != ChapterStatus.Approved)
+        if (chapter.Status != ChapterStatus.ChapterApproved)
             return Fail("Chỉ tạo link xem thử cho chương đã duyệt (Approved) và chưa phát hành (BR-17).", ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId)
             .Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
 
-        // Snapshot: mỗi trang lấy bản cả trang ở stage cuối cùng có artwork, phiên bản mới nhất
-        var refs = await (
-            from r in _db.AssetReferences.AsNoTracking()
-            where r.ChapterId == chapter.Id && r.PanelId == null
-            join s in _db.PipelineStages.AsNoTracking() on r.PipelineStageId equals s.Id
-            select new { r.Id, r.PageId, s.StageOrder, r.VersionNumber }).ToListAsync(ct);
-        var livePages = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).Select(p => p.Id).ToListAsync(ct);
-        var snapshot = refs.Where(r => livePages.Contains(r.PageId))
-            .GroupBy(r => r.PageId)
-            .Select(g => g.OrderByDescending(r => r.StageOrder).ThenByDescending(r => r.VersionNumber).First().Id)
-            .ToList();
+        // Snapshot: mọi artwork tạo nên từng trang theo FinalArtwork (ảnh cả trang, hoặc ảnh từng Panel để ghép)
+        var snapshot = (await FinalArtwork.SelectAsync(_db, chapter.Id, ct)).SelectMany(a => a.AssetReferenceIds).ToList();
         if (snapshot.Count == 0)
             return Fail("Chương chưa có artwork nào để xem thử.", ResultErrorCodes.Conflict);
 

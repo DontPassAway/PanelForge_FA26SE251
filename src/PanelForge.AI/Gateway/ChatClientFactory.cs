@@ -1,10 +1,13 @@
 using System.ClientModel;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Net;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using PanelForge.AI.Contracts;
-using PanelForge.AI.Demo;
 
 namespace PanelForge.AI.Gateway;
 
@@ -12,32 +15,46 @@ namespace PanelForge.AI.Gateway;
 public sealed class ChatClientFactory
 {
     private readonly ProviderOptions _options;
-    private readonly LlmResilience _resilience;
+    private readonly IOptions<ProviderOptions> _optionsAccessor;
+    // ponytail: giữ theo vòng đời process, số key thực tế nhỏ nên không cần dọn.
+    private readonly ConcurrentDictionary<string, LlmResilience> _resilienceByKey = new();
     private readonly IHttpClientFactory _httpFactory;
 
-    public ChatClientFactory(IOptions<ProviderOptions> options, LlmResilience resilience, IHttpClientFactory httpFactory)
+    private readonly ILogger<LlmResilience>? _resilienceLogger;
+
+    public ChatClientFactory(IOptions<ProviderOptions> options, IHttpClientFactory httpFactory,
+        ILogger<LlmResilience>? resilienceLogger = null)
     {
+        _resilienceLogger = resilienceLogger;
         _options = options.Value;
-        _resilience = resilience;
+        _optionsAccessor = options;
         _httpFactory = httpFactory;
     }
 
     public IChatClient Create(AiRunJob job)
     {
-        if (job.Provider == AiProtocol.ProviderMock) return new MockChatClient();
-
-        if (job.Provider != AiProtocol.ProviderGemini || string.IsNullOrWhiteSpace(job.ApiKey))
-            throw new InvalidOperationException("Provider không hỗ trợ hoặc thiếu API key.");
+        if (!AiProtocol.CredentialsOk(job.Provider, job.ApiKey, job.AccountId))
+            throw new InvalidOperationException("Provider không hỗ trợ hoặc thiếu API key/AccountId.");
 
         var client = new OpenAIClient(
-            new ApiKeyCredential(job.ApiKey),
-            new OpenAIClientOptions { Endpoint = new Uri(_options.GeminiOpenAiEndpoint) });
-        return new LlmGateway(client.GetChatClient(job.Model).AsIChatClient(), _resilience);
+            new ApiKeyCredential(job.ApiKey!),
+            new OpenAIClientOptions { Endpoint = EndpointFor(job) });
+        return new LlmGateway(client.GetChatClient(job.Model).AsIChatClient(), ResilienceFor(job.ApiKey!));
     }
+
+    /// <summary>Cả Gemini và Cloudflare Workers AI đều có endpoint OpenAI-compatible: chỉ khác địa chỉ gốc.</summary>
+    public Uri EndpointFor(AiRunJob job) => job.Provider == AiProtocol.ProviderCloudflare
+        ? new Uri($"{_options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(job.AccountId!.Trim())}/ai/v1/")
+        : new Uri(_options.GeminiOpenAiEndpoint);
+
+    /// <summary>Giới hạn tần suất và circuit breaker tính theo từng key: đổi key mới không bị key cũ chặn.</summary>
+    public LlmResilience ResilienceFor(string apiKey) =>
+        _resilienceByKey.GetOrAdd(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey.Trim()))),
+            _ => new LlmResilience(_optionsAccessor, _resilienceLogger));
 
     /// <summary>
     /// Kiểm tra model Gemini còn khả dụng (models.get) TRƯỚC khi chạy workflow.
-    /// Trả null nếu khả dụng, ngược lại (mã lỗi, thông điệp) — không bao giờ tự chuyển sang Mock.
+    /// Trả null nếu khả dụng, ngược lại (mã lỗi, thông điệp).
     /// </summary>
     public async Task<(string Code, string Message)?> ProbeGeminiModelAsync(AiRunJob job, CancellationToken ct)
     {

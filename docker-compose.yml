@@ -24,11 +24,33 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__PostgreSQL=Host=postgres-db;Port=5432;Database=panelforge;Username=postgres;Password=12345
+      - TranslationService__BaseUrl=http://translation-service:5000
+      # API Key webhook SePay (đặt trong file .env cạnh compose, không commit). Để trống = tắt webhook (trả 503).
+      - SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}
+      # Tài khoản nhận tiền VietQR khi Studio chưa khai ngân hàng; phải trùng tài khoản liên kết SePay. Mặc định là tài khoản giả cho dev.
+      - SePay__DefaultBank__Bin=${SEPAY_DEFAULT_BANK_BIN:-970422}
+      - SePay__DefaultBank__Name=${SEPAY_DEFAULT_BANK_NAME:-MB Bank}
+      - SePay__DefaultBank__AccountNo=${SEPAY_DEFAULT_BANK_ACCOUNT_NO:-0123456789}
+      - SePay__DefaultBank__AccountName=${SEPAY_DEFAULT_BANK_ACCOUNT_NAME:-KOMAFORGE STUDIO}
     ports:
       - "7274:8080"
+    volumes:
+      - panelforge_assets:/app/App_Data
     depends_on:
       - postgres-db
+      - translation-service
+
+  translation-service:
+    image: libretranslate/libretranslate:latest
+    container_name: panelforge_translation
+    restart: always
+    environment:
+      - LT_LOAD_ONLY=en,vi
+      - LT_DISABLE_WEB_UI=true
+    ports:
+      - "5000:5000"
 
 volumes:
   # Và đổi tên ở đây
   panelforge_data:
+  panelforge_assets:

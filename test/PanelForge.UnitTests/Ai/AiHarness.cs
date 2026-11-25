@@ -36,6 +36,10 @@ namespace PanelForge.UnitTests.Ai;
 /// </summary>
 public sealed class AiHarness
 {
+    /// <summary>Model văn bản mặc định của Backend (AiAgentSettings.GeminiModel); test kiểm hai giá trị luôn khớp.</summary>
+    public const string Model = "gemini-3.8-flash";
+    public const string ModelOnlyJson = "[\"" + Model + "\"]";
+
     public static readonly Guid Producer = Guid.Parse("33333333-3333-3333-3333-333333333333");
     public static readonly Guid Writer = Guid.Parse("44444444-4444-4444-4444-444444444444");
     public static readonly Guid Editor = Guid.Parse("77777777-7777-7777-7777-777777777777");
@@ -44,7 +48,7 @@ public sealed class AiHarness
     public static readonly Guid Letterer = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     public PanelForgeDbContext Db { get; }
-    public AiAgentSettings Settings { get; } = new() { Provider = "Mock", RunStaleAfterSeconds = 300 };
+    public AiAgentSettings Settings { get; } = new() { RunStaleAfterSeconds = 300 };
     public Mock<IAiClient> AiClient { get; } = new();
     public Mock<IAiUsageService> Usage { get; } = new();
     public Mock<IAiKeyProtector> KeyProtector { get; } = new();
@@ -60,6 +64,7 @@ public sealed class AiHarness
         AiClient.Setup(c => c.StartRunAsync(It.IsAny<AiRunJob>(), It.IsAny<CancellationToken>()))
             .Callback<AiRunJob, CancellationToken>((j, _) => LastJob = j)
             .ReturnsAsync(new AiRunAck(true));
+        KeyProtector.Setup(k => k.Unprotect(It.IsAny<string>())).Returns("test-key");
         Usage.Setup(u => u.RecordAsync(It.IsAny<AiUsageEntry>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((AiUsageEntry e, CancellationToken _) =>
                 AiUsageRecord.Create(e.WorkspaceId, e.Feature, "Google Gemini", e.Status));
@@ -139,7 +144,9 @@ public sealed class AiHarness
     }
 
     public ReviewSuggestionCommandHandler ReviewHandler() =>
-        new(Db, Auth, new PassThroughUnitOfWork(), Pages.Object);
+        new(Db, Auth, new PassThroughUnitOfWork(), Pages.Object,
+            new PanelForge.Application.Features.Chapters.Services.ChapterCastService(
+                Db, new PanelForge.Infrastructure.Services.ChapterCastInheritanceResolver(Db)));
 
     public RecordAgentStepCommandHandler RecordHandler() => new(Db, Usage.Object);
 
@@ -161,9 +168,10 @@ public sealed class AiHarness
     {
         var http = new HttpClient(new InProcessBackendHandler(this)) { BaseAddress = new Uri("http://backend/") };
         var options = Options.Create(new ProviderOptions());
-        var factory = new ChatClientFactory(options, new LlmResilience(options), Mock.Of<IHttpClientFactory>());
+        var factory = new ChatClientFactory(options, Mock.Of<IHttpClientFactory>(
+            f => f.CreateClient(It.IsAny<string>()) == new HttpClient(new ModelProbeOk())));
         var workflow = new MultiAgentWorkflow(new BackendClient(http), factory, options, NullLogger<MultiAgentWorkflow>.Instance);
-        var job = LastJob ?? new AiRunJob(runId, "Mock", "mock-fixture-v1", null, 2);
+        var job = LastJob ?? new AiRunJob(runId, AiProtocol.ProviderGemini, Model, "test-key", 2);
         await workflow.RunAsync(job, chat ?? new MockChatClient(), default);
     }
 
@@ -189,6 +197,12 @@ public sealed class AiHarness
             AiDemoSeeder.SeriesId, suggestionId, user ?? Writer, decision, reason, chapterVersion), default);
 
     /// <summary>Đóng vai Backend cho AI service: định tuyến HTTP tới đúng handler (cùng DbContext).</summary>
+    private sealed class ModelProbeOk : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+    }
+
     private sealed class InProcessBackendHandler(AiHarness h) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)

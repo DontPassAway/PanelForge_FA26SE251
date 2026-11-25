@@ -34,17 +34,32 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
                 .ToListAsync(cancellationToken))
             .ToLookup(k => k.ScriptLineId, k => k.BibleEntryId);
 
+        var panelIds = scene.ScriptLines.Where(l => l.PanelId != null).Select(l => l.PanelId!.Value).Distinct().ToList();
+        var panelPages = await _dbContext.Panels.AsNoTracking()
+            .Where(p => panelIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.PageId, p.Page.PageNumber, p.PanelNumber })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
         var scriptLines = scene.ScriptLines
             .OrderBy(l => l.LineOrder)
-            .Select(l => new SceneScriptLineSummaryDto(
-                l.Id,
-                l.LineOrder,
-                l.DialogueText,
-                l.StageDirection,
-                l.SpeakerCharacterId,
-                l.PanelId,
-                links[l.Id].ToList()
-            ))
+            .Select(l =>
+            {
+                var pp = l.PanelId is { } pid ? panelPages.GetValueOrDefault(pid) : null;
+                return new SceneScriptLineSummaryDto(
+                    l.Id,
+                    l.LineOrder,
+                    l.DialogueText,
+                    l.StageDirection,
+                    l.PanelId,
+                    links[l.Id].ToList(),
+                    l.NarrationMode,
+                    l.Kind,
+                    l.SpeakerLabel,
+                    l.Text,
+                    pp?.PageId,
+                    pp?.PageNumber,
+                    pp?.PanelNumber);
+            })
             .ToList();
 
         var detail = new SceneDetailDto(
@@ -56,7 +71,9 @@ public sealed class GetSceneByIdQueryHandler : IRequestHandler<GetSceneByIdQuery
             CreatedAt: scene.CreatedAt,
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
-            ScriptLines: scriptLines
+            ScriptLines: scriptLines,
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         );
 
         return Result<SceneDetailDto>.Success(detail);

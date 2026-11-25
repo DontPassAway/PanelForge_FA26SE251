@@ -1,0 +1,241 @@
+erDiagram
+    USERS {
+        uuid id PK
+        varchar email UK
+        varchar full_name
+        varchar role
+        boolean is_active
+        boolean can_create_studio
+    }
+
+    STUDIO_WORKSPACES {
+        uuid id PK
+        uuid owner_id FK
+        varchar name
+        varchar slug UK
+        varchar status
+        varchar plan_tier
+    }
+
+    WORKSPACE_MEMBERS {
+        uuid id PK
+        uuid workspace_id FK
+        uuid user_id FK
+        varchar role
+        varchar status
+    }
+
+    SERIES {
+        uuid id PK
+        uuid workspace_id FK
+        varchar title
+        varchar slug UK
+        varchar status
+        jsonb release_schedule_json
+    }
+
+    SERIES_MEMBERS {
+        uuid id PK
+        uuid series_id FK
+        uuid user_id FK
+        varchar role
+    }
+
+    CHAPTERS {
+        uuid id PK
+        uuid series_id FK
+        numeric chapter_number
+        varchar title
+        varchar status
+        boolean is_script_frozen
+        varchar cover_image_sha256
+        bigint version_vector
+    }
+
+    CHAPTER_SCRIPTS {
+        uuid id PK
+        uuid chapter_id FK
+        integer version
+        text raw_text
+        boolean is_locked
+    }
+
+    SCENES {
+        uuid id PK
+        uuid chapter_id FK
+        integer scene_number
+        varchar heading
+        text summary
+        varchar default_narration_mode
+        integer version
+    }
+
+    SCRIPT_LINES {
+        uuid id PK
+        uuid scene_id FK
+        uuid panel_id FK
+        uuid speaker_character_id FK
+        integer line_order
+        text dialogue_text
+        text stage_direction
+    }
+
+    PAGES {
+        uuid id PK
+        uuid chapter_id FK
+        integer page_number
+        varchar layout_format
+        integer width_px
+        integer height_px
+        boolean is_content_ready
+    }
+
+    PANELS {
+        uuid id PK
+        uuid page_id FK
+        uuid scene_id FK
+        integer panel_number
+        integer reading_order
+        jsonb bounding_box
+    }
+
+    PIPELINE_DEFINITIONS {
+        uuid id PK
+        uuid workspace_id FK
+        varchar name
+    }
+
+    PIPELINE_STAGES {
+        uuid id PK
+        uuid pipeline_definition_id FK
+        varchar name
+        integer stage_order
+        varchar required_role
+    }
+
+    ASSIGNMENTS {
+        uuid id PK
+        uuid series_id FK
+        uuid chapter_id FK
+        uuid pipeline_stage_id FK
+        uuid assignee_user_id FK
+        varchar entity_type
+        uuid target_entity_id
+        varchar status
+        jsonb depends_on_assignment_ids_json
+    }
+
+    SUBMISSIONS {
+        uuid id PK
+        uuid assignment_id FK
+        uuid chapter_id FK
+        integer attempt_number
+        varchar status
+        jsonb panel_layout_json
+        jsonb canvas_versions_json
+    }
+
+    CHANGE_REQUESTS {
+        uuid id PK
+        uuid assignment_id FK
+        uuid chapter_id FK
+        uuid submission_id FK
+        varchar status
+        varchar severity
+        jsonb region_json
+    }
+
+    SERIES_BIBLES {
+        uuid id PK
+        uuid series_id FK
+        varchar name
+        integer version
+    }
+
+    BIBLE_ENTRIES {
+        uuid id PK
+        uuid series_bible_id FK
+        varchar category
+        varchar code
+        varchar name
+        jsonb details_json
+    }
+
+    BIBLE_ENTRY_REVISIONS {
+        uuid id PK
+        uuid bible_entry_id FK
+        integer revision_number
+        text snapshot_json
+    }
+
+    ASSETS {
+        uuid id PK
+        uuid workspace_id FK
+        varchar sha256
+        bigint size_bytes
+        varchar storage_key
+    }
+
+    ASSET_REFERENCES {
+        uuid id PK
+        uuid asset_id FK
+        uuid chapter_id FK
+        uuid page_id FK
+        uuid panel_id FK
+        integer version_number
+    }
+
+    PREVIEW_LINKS {
+        uuid id PK
+        uuid chapter_id FK
+        uuid workspace_id FK
+        varchar recipient_email
+        varchar token_hash UK
+    }
+
+    AUDIT_LOGS {
+        uuid id PK
+        uuid workspace_id FK
+        uuid user_id FK
+        varchar action
+        varchar entity_name
+        timestamptz timestamp_utc
+    }
+
+    %% Relationships
+    USERS ||--o{ STUDIO_WORKSPACES : "owns"
+    USERS ||--o{ WORKSPACE_MEMBERS : "joined_as"
+    STUDIO_WORKSPACES ||--|{ WORKSPACE_MEMBERS : "has"
+    STUDIO_WORKSPACES ||--o{ SERIES : "manages"
+    SERIES ||--o{ SERIES_MEMBERS : "assigns"
+    USERS ||--o{ SERIES_MEMBERS : "acts_in"
+    SERIES ||--|{ CHAPTERS : "contains"
+    CHAPTERS ||--|| CHAPTER_SCRIPTS : "has"
+    CHAPTERS ||--o{ SCENES : "divides_into"
+    SCENES ||--|{ SCRIPT_LINES : "contains"
+    CHAPTERS ||--|{ PAGES : "lays_out"
+    PAGES ||--|{ PANELS : "frames"
+    SCENES ||--o{ PANELS : "visualized_in"
+    PANELS ||--o{ SCRIPT_LINES : "anchors"
+
+    STUDIO_WORKSPACES ||--o{ PIPELINE_DEFINITIONS : "configures"
+    PIPELINE_DEFINITIONS ||--|{ PIPELINE_STAGES : "sequences"
+    CHAPTERS ||--o{ ASSIGNMENTS : "tracks"
+    PIPELINE_STAGES ||--o{ ASSIGNMENTS : "scopes"
+    USERS ||--o{ ASSIGNMENTS : "works_on"
+    ASSIGNMENTS ||--o{ SUBMISSIONS : "delivers"
+    ASSIGNMENTS ||--o{ CHANGE_REQUESTS : "revises"
+    SUBMISSIONS ||--o{ CHANGE_REQUESTS : "contains"
+
+    SERIES ||--|| SERIES_BIBLES : "documents"
+    SERIES_BIBLES ||--|{ BIBLE_ENTRIES : "indexes"
+    BIBLE_ENTRIES ||--|{ BIBLE_ENTRY_REVISIONS : "versions"
+
+    STUDIO_WORKSPACES ||--o{ ASSETS : "stores"
+    ASSETS ||--|{ ASSET_REFERENCES : "referenced_by"
+    PAGES ||--o{ ASSET_REFERENCES : "displays"
+    PANELS ||--o{ ASSET_REFERENCES : "illustrates"
+
+    CHAPTERS ||--o{ PREVIEW_LINKS : "shares"
+    STUDIO_WORKSPACES ||--o{ AUDIT_LOGS : "logs"
+

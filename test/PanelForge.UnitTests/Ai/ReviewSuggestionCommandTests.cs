@@ -48,11 +48,16 @@ public class ReviewSuggestionCommandTests
 
         // Chương chưa bị Approve / chuyển stage; version tăng
         var chapter = await h.Db.Chapters.SingleAsync();
-        chapter.Status.Should().Be(ChapterStatus.InProduction);
+        chapter.Status.Should().Be(ChapterStatus.PreProduction);
         chapter.VersionVector.Should().Be(1);
         // BR-18: thay đổi được ghi audit cùng lần lưu
         h.Db.AuditLogs.Any(a => a.EntityName == "ContentRevision").Should().BeTrue();
         h.Db.AuditLogs.Any(a => a.EntityName == "AiSuggestionDecision").Should().BeTrue();
+
+        // BR-01/BR-11: kịch bản AI vừa áp thành ScriptVersion mới, để màn hình giữ ExpectedRevisionId cũ bị 409 thay vì đè
+        var version = await h.Db.ScriptVersions.SingleAsync(v => v.ChapterId == chapter.Id);
+        version.Message.Should().Be("Chấp nhận đề xuất AI (Script)");
+        version.LineCount.Should().Be(draft.Lines.Count);
     }
 
     [Fact]
@@ -85,13 +90,13 @@ public class ReviewSuggestionCommandTests
         var runId = await h.CompleteDemoRunAsync();
         var script = await h.SuggestionAsync(runId, AiSuggestionKind.Script);
         var chapter = await h.Db.Chapters.SingleAsync();
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Locked);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.ChapterApproved);
         await h.Db.SaveChangesAsync();
 
         var result = await h.ReviewAsync(script.Id, AiSuggestionStatus.Accepted);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        result.ErrorMessage.Should().Contain("Locked");
+        result.ErrorMessage.Should().Contain("ChapterApproved");
         h.Db.ContentRevisions.Count().Should().Be(0);
         h.Db.ScriptLines.Count().Should().Be(0);
     }
@@ -168,7 +173,7 @@ public class ReviewSuggestionCommandTests
         var decision = await h.Db.AiSuggestionDecisions.SingleAsync(d => d.SuggestionId == layoutSuggestion.Id);
         decision.ResultRevisionId.Should().Be(revision.Id);
         (await h.Db.Chapters.SingleAsync()).VersionVector.Should().Be(2);
-        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.InProduction, "Accept không Approve Chapter");
+        (await h.Db.Chapters.SingleAsync()).Status.Should().Be(ChapterStatus.PreProduction, "Accept không Approve Chapter");
     }
 
     [Fact]

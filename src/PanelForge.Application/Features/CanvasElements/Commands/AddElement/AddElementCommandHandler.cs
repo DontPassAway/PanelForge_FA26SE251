@@ -2,8 +2,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Domain.Events;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.CanvasElements.Commands.AddElement;
 
@@ -28,6 +30,11 @@ public sealed class AddElementCommandHandler
         if (page is null)
             return Result<AddElementResponse>.Failure(
                 $"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_db, page.ChapterId, cancellationToken) is { } readOnly)
+            return Result<AddElementResponse>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_db, command.AddedByUserId, page.Id, command.PanelId, cancellationToken) is { } outOfScope)
+            return Result<AddElementResponse>.Failure(outOfScope, ResultErrorCodes.Forbidden);
 
         // NFR-09: gửi lại sau mất mạng → trả element đã tạo từ lần trước (idempotent), không thêm bản trùng
         if (command.ClientElementId is { } clientId && page.Elements.TryGetValue(clientId, out var existing))

@@ -4,12 +4,14 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignment;
+using PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 using PanelForge.Application.Features.Assignments.Commands.OpenAssignmentReview;
 using PanelForge.Application.Features.Assignments.Commands.RequestAssignmentChanges;
 using PanelForge.Application.Features.Assignments.Commands.StartAssignment;
 using PanelForge.Application.Features.Assignments.Commands.SubmitAssignment;
 using PanelForge.Application.Features.Assignments.Commands.UpdateAssignment;
 using PanelForge.Application.Features.Assignments.Models;
+using PanelForge.Application.Features.Assignments.Queries.GetMyWorkspaceAssignments;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -17,6 +19,7 @@ using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
+using Series = PanelForge.Domain.Entities.Content.Series;
 
 namespace PanelForge.UnitTests.Application.Assignments;
 
@@ -33,6 +36,7 @@ public partial class AssignmentTests
         public readonly PipelineStage ArtistStage;
         public readonly Page Page;
         public readonly PipelineStage InkStage;
+        public readonly PipelineStage ReviewStage;
         public readonly List<Assignment> Assignments = [];
         public readonly List<Page> PagesList = [];
         public readonly List<Panel> Panels = [];
@@ -43,7 +47,11 @@ public partial class AssignmentTests
         public readonly List<AssetReference> AssetReferences = [];
         public readonly List<Submission> Submissions = [];
         public readonly List<ChangeRequest> ChangeRequests = [];
+        public readonly List<ContentRevision> Revisions = [];
+        public readonly List<SeriesMember> SeriesMembers = [];
         public readonly Guid Artist2Id = Guid.NewGuid();
+        public readonly Guid PendingArtistId = Guid.NewGuid();
+        public readonly Guid RejectedArtistId = Guid.NewGuid();
         public readonly Guid EditorId = Guid.NewGuid();
         public readonly Mock<IPanelForgeDbContext> Db = new();
 
@@ -53,8 +61,9 @@ public partial class AssignmentTests
             Series = Series.Create(workspaceId, "Series", ReadingDirection.RightToLeft);
             Chapter = Chapter.Create(Series.Id, 1);
             var def = PipelineDefinition.Create(workspaceId, "Pipeline", seriesId: Series.Id);
-            ArtistStage = PipelineStage.Create(def.Id, "Pencil", "pencil", 1, allowedRole: WorkspaceRole.Artist, isInitial: true);
+            ArtistStage = PipelineStage.Create(def.Id, "Pencil", "pencil", 1, allowedRole: WorkspaceRole.Artist, isApprovalGate: true, isInitial: true);
             InkStage = PipelineStage.Create(def.Id, "Ink", "ink", 2, allowedRole: WorkspaceRole.Artist);
+            ReviewStage = PipelineStage.Create(def.Id, "Review", "review", 3, allowedRole: WorkspaceRole.Editor);
             Page = Page.CreateNew(Chapter.Id, 1, default, 1200, 1800, 300);
 
             var members = new List<WorkspaceMember>
@@ -64,12 +73,14 @@ public partial class AssignmentTests
                 WorkspaceMember.Create(workspaceId, WriterId, WorkspaceRole.Writer),
                 WorkspaceMember.Create(workspaceId, Artist2Id, WorkspaceRole.Artist),
                 WorkspaceMember.Create(workspaceId, EditorId, WorkspaceRole.Editor),
+                WorkspaceMember.Create(workspaceId, PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending),
+                WorkspaceMember.Create(workspaceId, RejectedArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Rejected),
             };
 
             Db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { Series }));
             Db.Setup(d => d.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { Chapter }));
             Db.Setup(d => d.PipelineDefinitions).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineDefinition> { def }));
-            Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { ArtistStage, InkStage }));
+            Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { ArtistStage, InkStage, ReviewStage }));
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(members));
             PagesList.Add(Page);
             Db.Setup(d => d.Pages).Returns(DbSetMockHelper.CreateDbSetMock(PagesList));
@@ -82,6 +93,10 @@ public partial class AssignmentTests
             Db.Setup(d => d.Submissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(ChangeRequests));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
+            Db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTask>()));
+            Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageTaskLot>()));
+            Db.Setup(d => d.ContentRevisions).Returns(DbSetMockHelper.CreateDbSetMock(Revisions));
+            Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -144,7 +159,7 @@ public partial class AssignmentTests
         }
 
         public void LockChapter() =>
-            typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(Chapter, ChapterStatus.Approved);
+            typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(Chapter, ChapterStatus.ChapterApproved);
 
         public CreateAssignmentCommand CreateCmd(
             Guid? stageId = null, Guid? assignee = null, WorkflowEntityType type = WorkflowEntityType.Page, Guid? target = null) =>
@@ -170,15 +185,80 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task Create_AddsAssigneeToSeriesTeam_WithWorkspaceRole()
+    {
+        var f = new Fixture();
+
+        (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
+        (await Create(f, f.CreateCmd(stageId: f.InkStage.Id))).IsSuccess.Should().BeTrue();
+
+        // Giao việc lần hai trong cùng Series không tạo thêm dòng thành viên
+        f.SeriesMembers.Should().ContainSingle(m =>
+            m.SeriesId == f.Series.Id && m.UserId == f.ArtistId && m.Role == WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public async Task Create_ExistingSeriesMember_IsReused()
+    {
+        var f = new Fixture();
+        var existing = SeriesMember.Create(f.Series.Id, f.ArtistId, WorkspaceRole.Artist);
+        f.SeriesMembers.Add(existing);
+
+        (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
+
+        f.SeriesMembers.Should().ContainSingle().Which.Should().BeSameAs(existing);
+    }
+
+    [Fact]
+    public async Task Create_RoleNotAllowedForStage_IsRejected_AndNoMembershipCreated()
+    {
+        var f = new Fixture();
+
+        var result = await Create(f, f.CreateCmd(assignee: f.WriterId)); // stage Pencil chỉ cho Artist
+
+        result.IsSuccess.Should().BeFalse();
+        f.SeriesMembers.Should().BeEmpty();
+        f.Assignments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_ConcurrentMembershipInsert_ReturnsConflict()
+    {
+        var f = new Fixture();
+        f.Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Microsoft.EntityFrameworkCore.DbUpdateException("ix_series_members_series_user"));
+
+        var result = await Create(f, f.CreateCmd());
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_RejectedAssignee_IsNotAddedToSeriesTeam()
+    {
+        var f = new Fixture();
+
+        (await Create(f, f.CreateCmd(assignee: f.PendingArtistId))).IsSuccess.Should().BeFalse();
+
+        f.SeriesMembers.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_ForWholeChapter_DefaultsTargetToChapter()
     {
         var f = new Fixture();
 
-        var result = await Create(f, f.CreateCmd(type: WorkflowEntityType.Chapter) with { TargetEntityId = null });
+        var result = await Create(f, ChapterReview(f));
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.TargetEntityId.Should().Be(f.Chapter.Id);
     }
+
+    private static CreateAssignmentCommand ChapterReview(Fixture f) =>
+        f.CreateCmd(stageId: f.ReviewStage.Id, assignee: f.EditorId, type: WorkflowEntityType.Chapter) with { TargetEntityId = null };
+
+    private static CreateAssignmentCommand PageReview(Fixture f) => f.CreateCmd(stageId: f.ReviewStage.Id, assignee: f.EditorId);
 
     [Fact]
     public async Task Create_AssigneeNotWorkspaceMember_IsRejected()
@@ -193,6 +273,23 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task Create_ForTerminalStage_IsRejected()
+    {
+        var f = new Fixture();
+        var approved = PipelineStage.Create(f.ReviewStage.PipelineDefinitionId, "Approved", "approved", 4,
+            allowedRole: WorkspaceRole.Editor, isTerminal: true);
+        f.Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(
+            new List<PipelineStage> { f.ArtistStage, f.InkStage, f.ReviewStage, approved }));
+
+        var result = await Create(f, f.CreateCmd(stageId: approved.Id, assignee: f.EditorId, type: WorkflowEntityType.Chapter)
+            with { TargetEntityId = null });
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        result.ErrorMessage.Should().Contain("kết thúc");
+        f.Assignments.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_AssigneeRoleNotAllowedForStage_IsRejected()
     {
         var f = new Fixture();
@@ -201,6 +298,98 @@ public partial class AssignmentTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
         result.ErrorMessage.Should().Contain("Artist");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Create_AssigneeNotActiveMember_IsRejected_AndNothingSaved(bool pending)
+    {
+        var f = new Fixture();
+
+        var result = await Create(f, f.CreateCmd(assignee: pending ? f.PendingArtistId : f.RejectedArtistId));
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        result.ErrorMessage.Should().Contain("chưa chấp nhận lời mời");
+        f.Assignments.Should().BeEmpty();
+        f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_ReassignToPendingMember_IsRejected()
+    {
+        var f = new Fixture();
+        var a = (await Create(f, f.CreateCmd())).Value!;
+        var target = f.Assignments.Single(x => x.Id == a.Id);
+
+        var result = await new UpdateAssignmentCommandHandler(f.Db.Object).Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, target.Id, f.ProducerId, "brief mới", null, null, AssignmentPriority.Medium,
+            f.PendingArtistId, null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        target.AssigneeUserId.Should().Be(f.ArtistId);
+    }
+
+    [Fact]
+    public async Task Create_ChapterTask_WhenStageHasPageTask_IsConflict()
+    {
+        var f = new Fixture();
+        (await Create(f, PageReview(f))).IsSuccess.Should().BeTrue();
+
+        var result = await Create(f, ChapterReview(f));
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.Assignments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Create_PageTask_WhenStageHasChapterTask_IsConflict()
+    {
+        var f = new Fixture();
+        (await Create(f, ChapterReview(f))).IsSuccess.Should().BeTrue();
+
+        var result = await Create(f, PageReview(f));
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_PanelTask_InsideAssignedPage_IsConflict_ButOtherPageIsAllowed()
+    {
+        var f = new Fixture();
+        var inside = f.AddPanel(f.Page, 1);
+        var otherPage = f.AddPage(2);
+        var outside = f.AddPanel(otherPage, 1);
+        (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
+
+        var blocked = await Create(f, f.CreateCmd(type: WorkflowEntityType.Panel, target: inside.Id));
+        var allowed = await Create(f, f.CreateCmd(type: WorkflowEntityType.Panel, target: outside.Id));
+
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        allowed.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Create_PageTask_WhenOneOfItsPanelsIsAssigned_IsConflict()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        (await Create(f, f.CreateCmd(type: WorkflowEntityType.Panel, target: panel.Id))).IsSuccess.Should().BeTrue();
+
+        var result = await Create(f, f.CreateCmd());
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Create_SameScope_AtDifferentStage_IsAllowed()
+    {
+        var f = new Fixture();
+        (await Create(f, ChapterReview(f))).IsSuccess.Should().BeTrue();
+
+        var result = await Create(f, f.CreateCmd(stageId: f.InkStage.Id));
+
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
@@ -481,6 +670,22 @@ public partial class AssignmentTests
     }
 
     [Fact]
+    public async Task Submit_ArtistPageWithInvalidReadingOrder_IsConflict()
+    {
+        var f = new Fixture();
+        var a = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        var p = f.AddPanel(f.Page, 1);
+        typeof(Panel).GetProperty(nameof(Panel.ReadingOrder))!.SetValue(p, 0);
+        await Start(f, a, f.ArtistId);
+
+        var result = await Submit(f, a);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("thứ tự đọc");
+        a.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
     public async Task Submit_WriterChapterNeedsScriptLines()
     {
         var f = new Fixture();
@@ -555,6 +760,58 @@ public partial class AssignmentTests
         var result = await Start(f, ink, f.ArtistId);
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    /// <summary>Truyện trắng đen: Producer tắt Color thì Letter chỉ chờ stage đang bật ngay trước (Pencil ở fixture này).</summary>
+    private static (PipelineStage Color, PipelineStage Letter) WithDisabledColorBeforeLetter(Fixture f)
+    {
+        var color = PipelineStage.Create(f.InkStage.PipelineDefinitionId, "Color", "color", 2, allowedRole: WorkspaceRole.Artist);
+        color.SetEnabled(false);
+        var letter = PipelineStage.Create(f.InkStage.PipelineDefinitionId, "Letter", "letter", 3, allowedRole: WorkspaceRole.Artist);
+        f.Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { f.ArtistStage, color, letter }));
+        return (color, letter);
+    }
+
+    [Fact]
+    public async Task Start_AfterDisabledStage_WaitsOnlyForNearestEnabledPriorStage()
+    {
+        var f = new Fixture();
+        var panel = f.AddPanel(f.Page, 1);
+        var (_, letterStage) = WithDisabledColorBeforeLetter(f);
+        var pencil = f.SeedFor(WorkflowEntityType.Page, f.Page.Id);
+        await Start(f, pencil, f.ArtistId);
+        await Submit(f, pencil);
+        var letter = f.SeedFor(WorkflowEntityType.Page, f.Page.Id, letterStage);
+
+        var blocked = await Start(f, letter, f.ArtistId);
+        blocked.ErrorMessage.Should().Contain("Pencil"); // không phải "Color"
+
+        Fixture.Approve(f.Progress.Single(r => r.PanelId == panel.Id));
+        (await Start(f, letter, f.ArtistId)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Start_OnDisabledStage_IsConflict()
+    {
+        var f = new Fixture();
+        f.AddPanel(f.Page, 1);
+        var (colorStage, _) = WithDisabledColorBeforeLetter(f);
+        var color = f.SeedFor(WorkflowEntityType.Page, f.Page.Id, colorStage);
+
+        var result = await Start(f, color, f.ArtistId);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        color.Status.Should().Be(AssignmentStatus.Assigned);
+    }
+
+    [Fact]
+    public void SetEnabled_InitialStage_CannotBeDisabled()
+    {
+        var f = new Fixture();
+
+        var act = () => f.ArtistStage.SetEnabled(false);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     // ── Thông báo (BR-14, UC-14) ──
@@ -846,7 +1103,7 @@ public partial class AssignmentTests
     {
         var f = new Fixture();
         f.AddPanel(f.Page, 1);
-        var script = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id); // stage Pencil đóng vai stage cấp Chapter
+        var script = f.SeedFor(WorkflowEntityType.Chapter, f.Chapter.Id, role: WorkspaceRole.Editor); // việc cả chương không theo Panel (vd Review)
         await Start(f, script, f.ArtistId);
         await Submit(f, script);
         await OpenReview(f, script, f.EditorId);
@@ -884,5 +1141,182 @@ public partial class AssignmentTests
 
         row.Invoking(r => r.Submit(Guid.NewGuid())).Should().Throw<InvalidOperationException>();
         row.Invoking(r => r.Resume()).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_WithNoSubmissionOrDependents_Deletes_AndNotifies()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        f.Assignments.Should().NotContain(a);
+        f.Notifications.Should().Contain(n => n.Type == NotificationType.AssignmentUnassigned && n.UserId == a.AssigneeUserId);
+        f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfNotFound()
+    {
+        var f = new Fixture();
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, Guid.NewGuid(), f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfChapterLocked()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        f.LockChapter();
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_FailsIfApproved()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        a.MarkApproved();
+
+        var handler = new DeleteAssignmentCommandHandler(f.Db.Object);
+        var result = await handler.Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("Approved");
+    }
+
+    [Fact]
+    public async Task Update_MultipleDependencies_DAGCycle_IsRejected()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+
+        // c phụ thuộc đồng thời vào a và b
+        var updateCHandler = new UpdateAssignmentCommandHandler(f.Db.Object);
+        var resC = await updateCHandler.Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, c.Id, f.ProducerId, c.Brief, null, null, c.Priority, c.AssigneeUserId, null, [a.Id, b.Id]), CancellationToken.None);
+        resC.IsSuccess.Should().BeTrue();
+        c.GetDependsOnAssignmentIds().Should().Contain([a.Id, b.Id]);
+
+        // Thử tạo chu trình: cho a phụ thuộc vào c (a -> c -> [a, b])
+        var updateAHandler = new UpdateAssignmentCommandHandler(f.Db.Object);
+        var resA = await updateAHandler.Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, a.Id, f.ProducerId, a.Brief, null, null, a.Priority, a.AssigneeUserId, null, [c.Id]), CancellationToken.None);
+
+        resA.IsSuccess.Should().BeFalse();
+        resA.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        resA.ErrorMessage.Should().Contain("chu trình");
+    }
+
+    [Fact]
+    public async Task Start_MultipleDependencies_RequiresAllToBeApproved()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+        c.SetDependencies([a.Id, b.Id]);
+
+        // Thử start c khi cả a và b chưa Approved
+        var startHandler = new StartAssignmentCommandHandler(f.Db.Object);
+        var res1 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res1.IsSuccess.Should().BeFalse();
+        res1.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        res1.ErrorMessage.Should().Contain("chưa được duyệt");
+
+        // Duyệt a, nhưng b vẫn chưa duyệt -> vẫn bị chặn
+        a.MarkApproved();
+        var res2 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res2.IsSuccess.Should().BeFalse();
+        res2.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        // Duyệt nốt b -> giờ c bắt đầu thành công
+        b.MarkApproved();
+        var res3 = await startHandler.Handle(new StartAssignmentCommand(f.Chapter.Id, c.Id, c.AssigneeUserId), CancellationToken.None);
+        res3.IsSuccess.Should().BeTrue();
+        c.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_WhenOthersDependOnIt_IsConflict_AndKeepsDependencies()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        var b = f.Seed();
+        var c = f.Seed();
+        c.SetDependencies([a.Id, b.Id]);
+
+        var delRes = await new DeleteAssignmentCommandHandler(f.Db.Object)
+            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        delRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        delRes.ErrorMessage.Should().Contain("1 việc phụ thuộc");
+        f.Assignments.Should().Contain(a);
+        c.GetDependsOnAssignmentIds().Should().Equal([a.Id, b.Id]);
+    }
+
+    [Fact]
+    public async Task Delete_Assignment_WithSubmission_IsConflict()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        f.Submissions.Add(Submission.Create(a.Id, f.Chapter.Id, a.AssigneeUserId, 1));
+
+        var result = await new DeleteAssignmentCommandHandler(f.Db.Object)
+            .Handle(new DeleteAssignmentCommand(f.Chapter.Id, a.Id, f.ProducerId, "Đổi kế hoạch"), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        result.ErrorMessage.Should().Contain("bài nộp");
+        f.Assignments.Should().Contain(a);
+        f.Db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_ReassignWhileInProgress_GoesBackToAssigned_AndNewAssigneeCanStart()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        (await new StartAssignmentCommandHandler(f.Db.Object)
+            .Handle(new StartAssignmentCommand(f.Chapter.Id, a.Id, f.ArtistId), CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var result = await new UpdateAssignmentCommandHandler(f.Db.Object).Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, a.Id, f.ProducerId, a.Brief, null, null, a.Priority, f.Artist2Id, null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        a.Status.Should().Be(AssignmentStatus.Assigned);
+        a.AssigneeUserId.Should().Be(f.Artist2Id);
+        var restart = await new StartAssignmentCommandHandler(f.Db.Object)
+            .Handle(new StartAssignmentCommand(f.Chapter.Id, a.Id, f.Artist2Id), CancellationToken.None);
+        restart.IsSuccess.Should().BeTrue();
+        a.Status.Should().Be(AssignmentStatus.InProgress);
+    }
+
+    [Fact]
+    public async Task Update_WhileInProgress_WithoutChangingAssignee_StaysInProgress()
+    {
+        var f = new Fixture();
+        var a = f.Seed();
+        await new StartAssignmentCommandHandler(f.Db.Object)
+            .Handle(new StartAssignmentCommand(f.Chapter.Id, a.Id, f.ArtistId), CancellationToken.None);
+
+        await new UpdateAssignmentCommandHandler(f.Db.Object).Handle(new UpdateAssignmentCommand(
+            f.Chapter.Id, a.Id, f.ProducerId, "brief mới", null, null, a.Priority, f.ArtistId, null), CancellationToken.None);
+
+        a.Status.Should().Be(AssignmentStatus.InProgress);
     }
 }

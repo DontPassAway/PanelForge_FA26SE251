@@ -13,14 +13,43 @@ namespace PanelForge.Application.Features.Assignments.Common;
 /// </summary>
 internal static class StageProgressRules
 {
-    /// <summary>Các Panel mà Assignment bao phủ. Assignment cấp Chapter (vd stage Script) không có Panel.</summary>
-    public static async Task<List<Panel>> ResolvePanelsAsync(IPanelForgeDbContext db, Assignment a, CancellationToken ct) =>
-        a.EntityType switch
+    /// <summary>Vai trò sản xuất hình (Artist, Letterer): việc cả chương của họ làm theo từng Panel và tách trang được.</summary>
+    public static bool IsProductionRole(WorkspaceRole role) => role is WorkspaceRole.Artist or WorkspaceRole.Letterer;
+
+    /// <summary>
+    /// Phạm vi thực tế: các Panel mà Assignment đang chịu trách nhiệm. Việc cả chương của Artist/Letterer = mọi Panel của chương
+    /// TRỪ phần đã tách sang việc cấp Page/Panel cùng stage. Việc cả chương của vai trò khác (Script, Review) không có Panel.
+    /// </summary>
+    public static async Task<List<Panel>> ResolvePanelsAsync(IPanelForgeDbContext db, Assignment a, CancellationToken ct)
+    {
+        switch (a.EntityType)
         {
-            WorkflowEntityType.Panel => await db.Panels.Where(p => p.Id == a.TargetEntityId).ToListAsync(ct),
-            WorkflowEntityType.Page => await db.Panels.Where(p => p.PageId == a.TargetEntityId).ToListAsync(ct),
-            _ => []
-        };
+            case WorkflowEntityType.Panel:
+                return await db.Panels.Where(p => p.Id == a.TargetEntityId).ToListAsync(ct);
+            case WorkflowEntityType.Page:
+                return await db.Panels.Where(p => p.PageId == a.TargetEntityId).ToListAsync(ct);
+            default:
+                if (!IsProductionRole(a.AssignedRole)) return [];
+                var carved = await CarvedOutAsync(db, a.ChapterId, a.PipelineStageId, ct);
+                var pageIds = await db.Pages.AsNoTracking().Where(pg => pg.ChapterId == a.ChapterId).Select(pg => pg.Id).ToListAsync(ct);
+                return (await db.Panels.Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct))
+                    .Where(p => !carved.Panels.Contains(p.Id)).ToList();
+        }
+    }
+
+    /// <summary>Page/Panel đã tách khỏi việc cả chương: có việc cấp Page hoặc Panel riêng ở cùng stage.</summary>
+    public static async Task<(HashSet<Guid> Pages, HashSet<Guid> Panels)> CarvedOutAsync(
+        IPanelForgeDbContext db, Guid chapterId, Guid stageId, CancellationToken ct)
+    {
+        var subs = await db.Assignments.AsNoTracking()
+            .Where(x => x.ChapterId == chapterId && x.PipelineStageId == stageId && x.EntityType != WorkflowEntityType.Chapter)
+            .Select(x => new { x.EntityType, x.TargetEntityId }).ToListAsync(ct);
+        var pages = subs.Where(x => x.EntityType == WorkflowEntityType.Page).Select(x => x.TargetEntityId).ToHashSet();
+        var panels = subs.Where(x => x.EntityType == WorkflowEntityType.Panel).Select(x => x.TargetEntityId).ToHashSet();
+        if (pages.Count > 0)
+            panels.UnionWith(await db.Panels.AsNoTracking().Where(p => pages.Contains(p.PageId)).Select(p => p.Id).ToListAsync(ct));
+        return (pages, panels);
+    }
 
     /// <summary>
     /// BR-19: mỗi Panel chỉ bắt đầu khi stage trước của chính nó đã Approved (hoặc việc cấp Chapter ở stage trước đã Approved,
@@ -29,26 +58,91 @@ internal static class StageProgressRules
     public static async Task<string?> PriorStageBlockReasonAsync(
         IPanelForgeDbContext db, Assignment a, PipelineStage stage, IReadOnlyList<Panel> panels, CancellationToken ct)
     {
+        if (!stage.IsEnabled) return $"Stage '{stage.Name}' đã được Producer tắt cho Series này.";
         if (stage.IsInitial || panels.Count == 0) return null;
 
-        var prior = await db.PipelineStages.AsNoTracking().FirstOrDefaultAsync(
-            s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder == stage.StageOrder - 1, ct);
+        // Stage trước = stage ĐANG BẬT gần nhất phía trước (vd. truyện trắng đen tắt Color: Letter chờ Ink)
+        var prior = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
+            .OrderByDescending(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
         if (prior is null) return null;
+
+        var panelIds = panels.Select(p => p.Id).ToList();
+
+        // Kết quả stage trước đang chờ kiểm tra ảnh hưởng thì chưa được dùng làm đầu vào
+        var flagged = await db.Assignments.Where(x =>
+            x.ChapterId == a.ChapterId && x.PipelineStageId == prior.Id && x.ImpactReviewReason != null).ToListAsync(ct);
+        foreach (var f in flagged)
+        {
+            var fPanels = await ResolvePanelsAsync(db, f, ct);
+            if (fPanels.Count == 0 || fPanels.Any(p => panelIds.Contains(p.Id)))
+                return $"Kết quả stage trước ('{prior.Name}') đang chờ kiểm tra ảnh hưởng, chưa thể dùng làm đầu vào.";
+        }
 
         var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
             x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
             x.PipelineStageId == prior.Id && x.Status == AssignmentStatus.Approved, ct);
         if (chapterLevelApproved) return null;
 
-        var panelIds = panels.Select(p => p.Id).ToList();
         var approved = await db.StageProgresses.AsNoTracking()
-            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && panelIds.Contains(s.PanelId))
-            .Select(s => s.PanelId).ToListAsync(ct);
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value))
+            .Select(s => s.PanelId!.Value).ToListAsync(ct);
 
         var missing = panelIds.Except(approved).Count();
         return missing == 0
             ? null
             : $"Stage trước ('{prior.Name}') chưa được duyệt cho {missing} panel, chưa thể bắt đầu stage '{stage.Name}'.";
+    }
+
+    /// <summary>
+    /// Việc cấp Chapter ở stage sau (vd 7. Review) bao phủ cả chương: chỉ bắt đầu / nộp / duyệt được khi MỌI Panel của chương
+    /// đã Approved ở stage đang bật ngay trước (vd Letter), hoặc stage trước là việc cấp Chapter đã Approved (vd Script).
+    /// Chặn duyệt một chương còn trang dở (BR-19 mở rộng cho việc cấp Chapter). Trả lỗi kèm số trang còn thiếu, null nếu đạt.
+    /// </summary>
+    public static async Task<string?> ChapterWorkBlockReasonAsync(
+        IPanelForgeDbContext db, Assignment a, PipelineStage stage, CancellationToken ct)
+    {
+        // Việc cả chương của Artist/Letterer đi theo phạm vi thực tế từng Panel (PriorStageBlockReasonAsync), không chờ cả chương
+        if (a.EntityType != WorkflowEntityType.Chapter || IsProductionRole(a.AssignedRole) || stage.IsInitial) return null;
+
+        var prior = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder && s.IsEnabled)
+            .OrderByDescending(s => s.StageOrder)
+            .FirstOrDefaultAsync(ct);
+        if (prior is null) return null;
+
+        if (await db.Assignments.AnyAsync(x =>
+                x.ChapterId == a.ChapterId && x.PipelineStageId == prior.Id && x.ImpactReviewReason != null, ct))
+            return $"Có việc ở stage '{prior.Name}' đang chờ kiểm tra ảnh hưởng, chưa thể làm '{stage.Name}' cho cả chương.";
+
+        var chapterLevelApproved = await db.Assignments.AnyAsync(x =>
+            x.ChapterId == a.ChapterId && x.EntityType == WorkflowEntityType.Chapter &&
+            x.PipelineStageId == prior.Id && x.Status == AssignmentStatus.Approved, ct);
+        if (chapterLevelApproved) return null;
+
+        var pageIds = await db.Pages.AsNoTracking()
+            .Where(pg => pg.ChapterId == a.ChapterId).Select(pg => pg.Id).ToListAsync(ct);
+        var panels = await db.Panels.AsNoTracking()
+            .Where(p => pageIds.Contains(p.PageId))
+            .Select(p => new { p.Id, p.PageId })
+            .ToListAsync(ct);
+        if (panels.Count == 0)
+            return $"Chương chưa có trang nào hoàn tất stage '{prior.Name}', chưa thể làm '{stage.Name}'.";
+
+        var panelIds = panels.Select(p => p.Id).ToList();
+        var approved = (await db.StageProgresses.AsNoTracking()
+            .Where(s => s.PipelineStageId == prior.Id && s.Status == StageProgressStatus.Approved && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value))
+            .Select(s => s.PanelId!.Value).ToListAsync(ct)).ToHashSet();
+
+        var unfinishedPageIds = panels.Where(p => !approved.Contains(p.Id)).Select(p => p.PageId).Distinct().ToList();
+        if (unfinishedPageIds.Count == 0) return null;
+
+        var pageNumbers = await db.Pages.AsNoTracking()
+            .Where(pg => unfinishedPageIds.Contains(pg.Id))
+            .OrderBy(pg => pg.PageNumber)
+            .Select(pg => pg.PageNumber).ToListAsync(ct);
+        return $"Trang {string.Join(", ", pageNumbers)} chưa được duyệt ở stage '{prior.Name}', chưa thể làm '{stage.Name}' cho cả chương.";
     }
 
     /// <summary>
@@ -64,31 +158,44 @@ internal static class StageProgressRules
             var hasLines = await db.ScriptLines.AsNoTracking().AnyAsync(l => sceneIds.Contains(l.SceneId), ct);
             if (!hasLines) return "Chapter chưa có dòng script nào để nộp.";
         }
-        else if (a.AssignedRole == WorkspaceRole.Artist && a.EntityType != WorkflowEntityType.Chapter)
+        else if (a.AssignedRole == WorkspaceRole.Artist)
         {
-            if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
-
-            // CF2 mục "Điều kiện nộp": artwork đã tải lên. Sau khi bị trả về, phải có bản MỚI hơn lần từ chối (BR-01).
-            var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
             var rejectedAt = await db.Submissions.AsNoTracking()
                 .Where(s => s.AssignmentId == a.Id && s.Status == SubmissionStatus.Rejected)
                 .OrderByDescending(s => s.AttemptNumber)
                 .Select(s => s.DecidedAt).FirstOrDefaultAsync(ct);
-
-            var uploads = await db.AssetReferences.AsNoTracking()
-                .Where(r => r.PipelineStageId == a.PipelineStageId && pageIds.Contains(r.PageId) &&
-                            (rejectedAt == null || r.CreatedAt >= rejectedAt))
-                .Select(r => new { r.PageId, r.PanelId }).Distinct().ToListAsync(ct);
-
-            // Trang đủ artwork khi có ảnh cả trang, hoặc mọi Panel (việc bao phủ) của trang đều có ảnh riêng
-            var missing = pageIds.Count(pageId =>
-                !uploads.Any(u => u.PageId == pageId && u.PanelId == null) &&
-                panels.Where(p => p.PageId == pageId).Any(p => !uploads.Any(u => u.PanelId == p.Id)));
-            if (missing > 0)
-                return $"{missing} trang chưa có artwork ở stage này: cần ảnh cả trang hoặc ảnh cho mọi Panel (sau lần bị trả về cần bản tải lên mới).";
+            return await ArtworkBlockReasonAsync(db, a.PipelineStageId, panels, rejectedAt, ct);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Điều kiện nộp của Artist (CF2): có Panel, thứ tự đọc hợp lệ, và mỗi trang có ảnh cả trang hoặc ảnh cho mọi Panel ở
+    /// <paramref name="stageId"/>. Sau lần bị trả về (<paramref name="rejectedAt"/>) phải có bản tải lên MỚI hơn (BR-01).
+    /// Dùng chung cho Assignment V2 và ô Lưới V3.
+    /// </summary>
+    public static async Task<string?> ArtworkBlockReasonAsync(
+        IPanelForgeDbContext db, Guid stageId, IReadOnlyList<Panel> panels, DateTime? rejectedAt, CancellationToken ct)
+    {
+        if (panels.Count == 0) return "Chưa có Panel (layout) nào để nộp.";
+
+        if (panels.Any(p => p.ReadingOrder <= 0))
+            return "Các panel cần có thứ tự đọc (reading order) hợp lệ trước khi nộp.";
+
+        var pageIds = panels.Select(p => p.PageId).Distinct().ToList();
+        var uploads = await db.AssetReferences.AsNoTracking()
+            .Where(r => r.PipelineStageId == stageId && pageIds.Contains(r.PageId) &&
+                        (rejectedAt == null || r.CreatedAt >= rejectedAt))
+            .Select(r => new { r.PageId, r.PanelId }).Distinct().ToListAsync(ct);
+
+        // Trang đủ artwork khi có ảnh cả trang, hoặc mọi Panel (việc bao phủ) của trang đều có ảnh riêng
+        var missing = pageIds.Count(pageId =>
+            !uploads.Any(u => u.PageId == pageId && u.PanelId == null) &&
+            panels.Where(p => p.PageId == pageId).Any(p => !uploads.Any(u => u.PanelId == p.Id)));
+        return missing > 0
+            ? $"{missing} trang chưa có artwork ở stage này: cần ảnh cả trang hoặc ảnh cho mọi Panel (sau lần bị trả về cần bản tải lên mới)."
+            : null;
     }
 
     /// <summary>
@@ -103,10 +210,16 @@ internal static class StageProgressRules
         var pageIds = a.EntityType switch
         {
             WorkflowEntityType.Page => new List<Guid> { a.TargetEntityId },
-            WorkflowEntityType.Panel => panels.Select(p => p.PageId).Distinct().ToList(),
-            _ => await db.Pages.AsNoTracking().Where(p => p.ChapterId == a.ChapterId).Select(p => p.Id).ToListAsync(ct)
+            // Panel, hoặc cả chương: chỉ các trang còn trong phạm vi thực tế
+            _ => panels.Select(p => p.PageId).Distinct().ToList()
         };
+        return await LetteringPagesBlockReasonAsync(db, pages, pageIds, ct);
+    }
 
+    /// <summary>Cổng nộp Lettering theo danh sách trang (dùng chung V2 và ô Lưới V3 cấp Trang).</summary>
+    public static async Task<string?> LetteringPagesBlockReasonAsync(
+        IPanelForgeDbContext db, IPageRepository pages, IReadOnlyList<Guid> pageIds, CancellationToken ct)
+    {
         foreach (var pageId in pageIds)
         {
             var page = await pages.GetAsync(pageId, ct);
@@ -142,7 +255,7 @@ internal static class StageProgressRules
 
         var panelIds = panels.Select(p => p.Id).ToList();
         var rows = await db.StageProgresses
-            .Where(s => s.PipelineStageId == a.PipelineStageId && panelIds.Contains(s.PanelId)).ToListAsync(ct);
+            .Where(s => s.PipelineStageId == a.PipelineStageId && s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
 
         try
         {
@@ -157,19 +270,143 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// CF4 4.7 (lan truyền thay đổi, BR-06): việc <paramref name="reopened"/> đã duyệt bị mở lại thì những việc đã dựa vào nó có thể
+    /// không còn hợp lệ — nhưng KHÔNG mặc định phải làm lại (vd sửa thoại không ảnh hưởng Color). Mọi việc bị ảnh hưởng được đánh
+    /// dấu "Cần kiểm tra ảnh hưởng": giữ nguyên trạng thái, kết quả và quyết định duyệt cũ; bị chặn nộp/duyệt (và stage sau không
+    /// bắt đầu dựa trên nó) tới khi người duyệt quyết giữ hay làm lại (ResolveImpactReview). Bị ảnh hưởng = phụ thuộc trực tiếp
+    /// (DAG), hoặc ở stage sau và chung Panel; việc tổng hợp cấp Chapter (không có Panel) ở stage sau luôn bị ảnh hưởng.
+    /// Việc chưa bắt đầu chưa dựa vào gì nên bỏ qua (BR-19 vẫn chặn nó bắt đầu). Gọi cùng lần Save với việc mở lại (BR-18).
+    /// Trả số việc được đánh dấu.
+    /// </summary>
+    public static async Task<int> FlagImpactedWorkAsync(
+        IPanelForgeDbContext db, Assignment reopened, string reason, CancellationToken ct)
+    {
+        var stage = await db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == reopened.PipelineStageId, ct);
+        var laterStages = await db.PipelineStages.AsNoTracking()
+            .Where(s => s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder > stage.StageOrder)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        var panelIds = (await ResolvePanelsAsync(db, reopened, ct)).Select(p => p.Id).ToHashSet();
+
+        var candidates = await db.Assignments.Where(a =>
+            a.ChapterId == reopened.ChapterId && a.Id != reopened.Id &&
+            (a.Status == AssignmentStatus.Approved || a.Status == AssignmentStatus.InProgress ||
+             a.Status == AssignmentStatus.Submitted || a.Status == AssignmentStatus.UnderReview)).ToListAsync(ct);
+
+        var count = 0;
+        foreach (var later in candidates)
+        {
+            if (!later.GetDependsOnAssignmentIds().Contains(reopened.Id))
+            {
+                if (!laterStages.ContainsKey(later.PipelineStageId)) continue;
+                var laterPanels = await ResolvePanelsAsync(db, later, ct);
+                var affected = panelIds.Count == 0 || laterPanels.Count == 0 || laterPanels.Any(p => panelIds.Contains(p.Id));
+                if (!affected) continue;
+            }
+
+            var message = $"Đầu vào '{stage.Name}' của việc này bị mở lại: {reason}";
+            later.FlagImpactReview(message);
+            count++;
+            db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                "Việc cần kiểm tra ảnh hưởng", message, later.Id, later.ChapterId));
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// CF4 (bảng lan truyền, BR-06): nguồn của việc đã duyệt đổi sau khi duyệt — Writer sửa/xoá thoại đã đặt bóng, hoặc đổi khung
+    /// Panel đã có artwork duyệt — thì việc Approved của <paramref name="roles"/> bao phủ <paramref name="panelIds"/> →
+    /// ReworkRequired (dòng tiến độ Approved → ChangesRequested) và người làm được báo. Việc chưa duyệt không đổi (chữ lỗi thời đã
+    /// chặn nộp, BR-05). Chỉ đúng các Panel liên quan; gọi trước SaveChanges của thao tác gốc (BR-18, audit theo SaveChanges).
+    /// </summary>
+    public static async Task<(int Reworked, string? Error)> ReworkForSourceChangeAsync(
+        IPanelForgeDbContext db, Guid chapterId, IReadOnlySet<Guid> panelIds, WorkspaceRole[] roles, string reason,
+        CancellationToken ct)
+    {
+        if (panelIds.Count == 0) return (0, null);
+        var candidates = await db.Assignments.Where(a => a.ChapterId == chapterId &&
+            a.Status == AssignmentStatus.Approved && roles.Contains(a.AssignedRole)).ToListAsync(ct);
+        if (candidates.Count == 0) return (0, null);
+
+        var stageIds = candidates.Select(a => a.PipelineStageId).Distinct().ToList();
+        var stageNames = await db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        return await ReworkCoveringAsync(db, candidates, panelIds, reason,
+            a => $"Việc '{stageNames.GetValueOrDefault(a.PipelineStageId)}' cần làm lại", noticeTitle: null, ct);
+    }
+
+    /// <summary>
+    /// Lõi chung của 4.7 và <see cref="ReworkForSourceChangeAsync"/>: việc trong <paramref name="candidates"/> bao phủ ít nhất một
+    /// Panel của <paramref name="panelIds"/>: Approved → ReworkRequired + báo; việc khác chỉ được báo khi có <paramref name="noticeTitle"/>.
+    /// </summary>
+    private static async Task<(int Reworked, string? Error)> ReworkCoveringAsync(
+        IPanelForgeDbContext db, IEnumerable<Assignment> candidates, IReadOnlySet<Guid> panelIds, string message,
+        Func<Assignment, string> reworkTitle, Func<Assignment, string>? noticeTitle, CancellationToken ct)
+    {
+        var count = 0;
+        foreach (var later in candidates)
+        {
+            if (!(await ResolvePanelsAsync(db, later, ct)).Any(p => panelIds.Contains(p.Id))) continue;
+
+            if (later.Status == AssignmentStatus.Approved)
+            {
+                // Mở lại mọi dòng Approved của việc (cả Panel không bị ảnh hưởng) để người làm Start lại được cả việc
+                if (await TransitionAsync(db, later, r =>
+                    {
+                        if (r.Status == StageProgressStatus.Approved) r.ReopenForRework();
+                    }, ct) is { } error)
+                    return (count, error);
+                later.RequestRework(message);
+                count++;
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    reworkTitle(later), message, later.Id, later.ChapterId));
+            }
+            else if (noticeTitle is not null)
+            {
+                db.Notifications.Add(Notification.Create(later.AssigneeUserId, NotificationType.AssignmentChangesRequested,
+                    noticeTitle(later), message, later.Id, later.ChapterId));
+            }
+        }
+
+        return (count, null);
+    }
+
+    /// <summary>
+    /// Đầu vào phải còn hợp lệ ở lúc nộp và duyệt, không chỉ lúc bắt đầu: việc không chờ kiểm tra ảnh hưởng, mọi việc tiền đề (DAG)
+    /// đã Approved và không chờ kiểm tra, stage trước của các Panel đã duyệt (BR-19). Trả lý do chặn hoặc null.
+    /// </summary>
+    public static async Task<string?> InputBlockReasonAsync(
+        IPanelForgeDbContext db, Assignment a, PipelineStage stage, IReadOnlyList<Panel> panels, CancellationToken ct)
+    {
+        if (a.ImpactReviewReason is not null)
+            return $"Việc đang chờ kiểm tra ảnh hưởng ({a.ImpactReviewReason}). Người duyệt cần quyết giữ kết quả hay làm lại trước.";
+
+        var depIds = a.GetDependsOnAssignmentIds();
+        if (depIds.Count > 0)
+        {
+            var invalid = await db.Assignments.AsNoTracking().CountAsync(x =>
+                depIds.Contains(x.Id) && (x.Status != AssignmentStatus.Approved || x.ImpactReviewReason != null), ct);
+            if (invalid > 0)
+                return $"Có {invalid} việc tiền đề không còn ở trạng thái đã duyệt hợp lệ; đầu vào đã thay đổi.";
+        }
+
+        return await PriorStageBlockReasonAsync(db, a, stage, panels, ct);
+    }
+
+    /// <summary>
     /// Upsert StageProgress của các Panel được giao (start = InProgress, submit = Submitted) rồi suy ra lại
     /// CurrentStageId: Panel = stage cao nhất đã chạm tới; Page = stage thấp nhất trong các Panel của nó.
     /// Trả thông báo lỗi nếu có Panel không ở trạng thái cho phép (chưa Save), null nếu ổn.
     /// </summary>
     public static async Task<string?> ApplyAsync(
-        IPanelForgeDbContext db, PipelineStage stage, IReadOnlyList<Panel> targetPanels, Guid userId, bool submit, CancellationToken ct)
+        IPanelForgeDbContext db, PipelineStage stage, IReadOnlyList<Panel> targetPanels, Guid userId, bool submit, CancellationToken ct, bool autoApprove = false)
     {
         if (targetPanels.Count == 0) return null;
 
         var pageIds = targetPanels.Select(p => p.PageId).Distinct().ToList();
         var pagePanels = await db.Panels.Where(p => pageIds.Contains(p.PageId)).ToListAsync(ct);
         var pagePanelIds = pagePanels.Select(p => p.Id).ToList();
-        var rows = await db.StageProgresses.Where(s => pagePanelIds.Contains(s.PanelId)).ToListAsync(ct);
+        var rows = await db.StageProgresses.Where(s => s.PanelId.HasValue && pagePanelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
 
         try
         {
@@ -182,12 +419,13 @@ internal static class StageProgressRules
                     db.StageProgresses.Add(row);
                     rows.Add(row);
                 }
-                else if (!submit)
+                else if (!submit && !autoApprove)
                 {
                     row.Resume();
                 }
 
-                if (submit) row.Submit(userId);
+                if (autoApprove) row.AutoApprove(userId);
+                else if (submit) row.Submit(userId);
             }
         }
         catch (InvalidOperationException ex)

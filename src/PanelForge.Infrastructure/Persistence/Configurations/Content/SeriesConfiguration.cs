@@ -35,6 +35,39 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
                .HasColumnName("synopsis")
                .HasColumnType("text");
 
+        builder.Property(s => s.Logline).HasColumnName("logline").HasColumnType("varchar(200)");
+        builder.Property(s => s.Teaser).HasColumnName("teaser").HasColumnType("varchar(300)");
+        builder.Property(s => s.AgeRating).HasColumnName("age_rating").HasColumnType("varchar(10)");
+
+        builder.Property(s => s.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)");
+
+        builder.Property(s => s.AvatarImageSha256)
+               .HasColumnName("avatar_image_sha256")
+               .HasColumnType("varchar(64)");
+
+        builder.Property(s => s.IsCompleted).HasColumnName("is_completed").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
+
+        builder.Property(s => s.OriginalLanguage)
+               .HasColumnName("original_language")
+               .HasColumnType("varchar(10)")
+               .HasDefaultValue(ContentLanguages.Original)
+               .IsRequired();
+
+        builder.Property(s => s.ReleaseLanguages)
+               .HasColumnName("release_languages")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[\"vi\",\"en\"]'::jsonb")
+               .HasConversion(
+                   v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                   v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<string>())
+               .IsRequired();
+
+        builder.Property(s => s.BannerImageSha256)
+               .HasColumnName("banner_image_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(s => s.StoryArc)
                .HasColumnName("story_arc")
                .HasColumnType("text");
@@ -61,7 +94,7 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
 
         builder.Property(s => s.ReleaseScheduleJson)
                .HasColumnName("release_schedule_json")
-               .HasColumnType("text");
+               .HasColumnType("jsonb");
 
         builder.Property(s => s.CreatedAt)
                .HasColumnName("created_at")

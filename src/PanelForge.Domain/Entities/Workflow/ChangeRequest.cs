@@ -23,6 +23,19 @@ public class ChangeRequest : BaseEntity
     public Guid? AssetReferenceId { get; private set; }
     /// <summary>Panel mà vùng khoanh thuộc về (FE suy từ vùng giao lớn nhất); null = không xác định.</summary>
     public Guid? PanelId { get; private set; }
+    public Guid? GroupId { get; private set; }
+    public ChangeRequestLayer Layer { get; private set; }
+    /// <summary>Phân cảnh kịch bản bị nhận xét (cổng Script); null với yêu cầu sửa trên tranh.</summary>
+    public Guid? SceneId { get; private set; }
+    /// <summary>Dòng kịch bản bị nhận xét; null = nhận xét cả phân cảnh hoặc cả bài nộp.</summary>
+    public Guid? ScriptLineId { get; private set; }
+    /// <summary>
+    /// Nguyên văn đoạn kịch bản tại lần nộp bị nhận xét. Dòng có thể bị Writer sửa sau đó; trích dẫn giữ yêu cầu sửa
+    /// gắn đúng phiên bản Editor đã đọc (CF3 bước 3).
+    /// </summary>
+    public string? QuotedText { get; private set; }
+    /// <summary>BR-34: Ngôn ngữ nhận xét cho công đoạn Lettering (null = ngôn ngữ gốc/artwork).</summary>
+    public string? LanguageCode { get; private set; }
     public DateTime? DueDate { get; private set; }
     public ChangeRequestStatus Status { get; private set; }
 
@@ -37,8 +50,13 @@ public class ChangeRequest : BaseEntity
 
     public static ChangeRequest Create(
         Guid assignmentId, Guid chapterId, Guid? submissionId, Guid responsibleUserId, Guid createdByUserId,
-        string description, string? regionJson = null, DateTime? dueDate = null, Guid? assetReferenceId = null, Guid? panelId = null)
+        string description, string? regionJson = null, DateTime? dueDate = null, Guid? assetReferenceId = null, Guid? panelId = null,
+        Guid? sceneId = null, Guid? scriptLineId = null, string? quotedText = null,
+        Guid? groupId = null, ChangeRequestLayer layer = ChangeRequestLayer.Artwork, string? languageCode = null)
     {
+        if (scriptLineId is not null && sceneId is null)
+            throw new ArgumentException("Nhận xét dòng kịch bản phải kèm phân cảnh chứa dòng đó.", nameof(sceneId));
+
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
         if (ValidateRegion(regionJson) is { } regionError) throw new ArgumentException(regionError, nameof(regionJson));
 
@@ -53,11 +71,19 @@ public class ChangeRequest : BaseEntity
             RegionJson = string.IsNullOrWhiteSpace(regionJson) ? null : regionJson.Trim(),
             AssetReferenceId = assetReferenceId,
             PanelId = panelId,
+            GroupId = groupId,
+            Layer = layer,
+            SceneId = sceneId,
+            ScriptLineId = scriptLineId,
+            QuotedText = string.IsNullOrWhiteSpace(quotedText) ? null : quotedText.Trim(),
+            LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? null : languageCode.Trim(),
             DueDate = dueDate,
             Status = ChangeRequestStatus.Open,
             CreatedAt = DateTime.UtcNow
         };
     }
+
+    public void SetLanguageCode(string? languageCode) => LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? null : languageCode.Trim();
 
     /// <summary>Open → Resolved (người chịu trách nhiệm báo đã sửa).</summary>
     public void Resolve(string? note)
@@ -94,6 +120,20 @@ public class ChangeRequest : BaseEntity
         Require(ChangeRequestStatus.Open, ChangeRequestStatus.Rejected);
         Close(ChangeRequestStatus.Rejected, byUserId, reason.Trim());
     }
+
+    /// <summary>
+    /// Chuyển giao: yêu cầu còn mở đi theo phần việc sang việc/người mới. Lịch sử (người tạo, lần nộp gốc, mô tả) giữ nguyên;
+    /// yêu cầu đã đóng ở lại với việc cũ.
+    /// </summary>
+    public void TransferTo(Guid assignmentId, Guid responsibleUserId)
+    {
+        if (IsClosed) throw new InvalidOperationException("Yêu cầu sửa đã đóng, không chuyển giao.");
+        AssignmentId = assignmentId;
+        ResponsibleUserId = responsibleUserId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 
     /// <summary>Còn mở thì chặn nộp lại / duyệt: Open và Resolved (chưa xác minh) đều chưa đóng.</summary>
     public bool IsClosed => Status is ChangeRequestStatus.Verified or ChangeRequestStatus.Rejected;

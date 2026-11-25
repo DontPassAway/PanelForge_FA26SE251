@@ -9,6 +9,8 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<BibleEntryRevision> builder)
     {
         builder.ToTable("bible_entry_revisions");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id)
@@ -27,8 +29,11 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("version_number")
                .HasColumnType("integer")
                .IsRequired();
+        // Chỉ duy nhất trong các bản còn sống: xoá mềm bản cuối rồi thêm bản mới (Max(VersionNumber)+1 không thấy dòng đã xoá)
+        // không còn đụng số version của dòng đã xoá (BR-01, BR-15)
         builder.HasIndex(r => new { r.BibleEntryId, r.VersionNumber })
                .IsUnique()
+               .HasFilter("is_deleted = false")
                .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version");
 
         builder.Property(r => r.Summary)
@@ -56,19 +61,43 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("associated_chapter_id")
                .HasColumnType("uuid");
 
-        builder.Property(r => r.EffectiveFromChapterNumber)
-               .HasColumnName("effective_from_chapter_number")
-               .HasColumnType("integer")
-               .HasDefaultValue(1)
-               .IsRequired();
-        builder.HasIndex(r => r.EffectiveFromChapterNumber)
-               .HasDatabaseName("ix_bible_entry_revisions_effective_from_chapter");
+        builder.Property(r => r.StageName)
+               .HasColumnName("stage_name")
+               .HasColumnType("varchar(100)");
 
         builder.Property(r => r.IsInitialVersion)
                .HasColumnName("is_initial_version")
                .HasColumnType("boolean")
                .HasDefaultValue(false)
                .IsRequired();
+
+        builder.Property(r => r.ArtistUserId)
+               .HasColumnName("artist_user_id")
+               .HasColumnType("uuid");
+
+        builder.Property(r => r.ReviewStatus)
+               .HasColumnName("review_status")
+               .HasColumnType("varchar(30)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<PanelForge.Domain.Enums.BibleRevisionStatus>(v))
+               .HasDefaultValue(PanelForge.Domain.Enums.BibleRevisionStatus.Draft)
+               .IsRequired();
+
+        builder.Property(r => r.ConceptImageUrl)
+               .HasColumnName("concept_image_url")
+               .HasColumnType("text");
+
+        builder.Property(r => r.CurrentConceptEventId)
+               .HasColumnName("current_concept_event_id")
+               .HasColumnType("uuid");
+
+        builder.HasOne(r => r.CurrentConceptEvent)
+               .WithMany()
+               .HasForeignKey(r => r.CurrentConceptEventId)
+               .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Property(r => r.ReworkFeedback)
+               .HasColumnName("rework_feedback")
+               .HasColumnType("varchar(1000)");
 
         builder.Property(r => r.LockedAt)
                .HasColumnName("locked_at")
@@ -78,9 +107,20 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("locked_by_id")
                .HasColumnType("uuid");
 
+        builder.Property(r => r.SupersedesRevisionId)
+               .HasColumnName("supersedes_revision_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(r => r.SupersedesRevisionId)
+               .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
+
         builder.Property(r => r.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
                .IsRequired();
+
+        builder.HasOne(r => r.SupersedesRevision)
+               .WithMany()
+               .HasForeignKey(r => r.SupersedesRevisionId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }

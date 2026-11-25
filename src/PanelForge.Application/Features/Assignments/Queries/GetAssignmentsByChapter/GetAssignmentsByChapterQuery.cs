@@ -34,6 +34,18 @@ public sealed class GetAssignmentsByChapterQueryHandler
             .OrderBy(a => a.DueDate == null).ThenBy(a => a.DueDate).ThenBy(a => a.CreatedAt)
             .ToListAsync(ct);
 
-        return Result<IReadOnlyList<AssignmentDto>>.Success(items.Select(AssignmentDto.From).ToList());
+        var panelIds = items.Where(a => a.EntityType == WorkflowEntityType.Panel).Select(a => a.TargetEntityId).Distinct().ToList();
+        var panelPage = await _db.Panels.AsNoTracking().Where(p => panelIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PageId, ct);
+
+        return Result<IReadOnlyList<AssignmentDto>>.Success(items.Select(a => AssignmentDto.From(a) with
+        {
+            PageId = a.EntityType switch
+            {
+                WorkflowEntityType.Page => a.TargetEntityId,
+                WorkflowEntityType.Panel => panelPage.TryGetValue(a.TargetEntityId, out var pid) ? pid : null,
+                _ => null
+            }
+        }).ToList());
     }
 }

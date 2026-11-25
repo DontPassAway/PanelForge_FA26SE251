@@ -84,6 +84,21 @@ public sealed class PreviewLinksController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/preview-feedback/{feedbackId}/change-request — phản hồi NeedsChange thành ChangeRequest
+    /// của một việc (chương phải đã mở lại). Việc đã duyệt bị trả về làm lại.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/preview-feedback/{feedbackId:guid}/change-request")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(PreviewFeedbackDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateChangeRequest(
+        Guid chapterId, Guid feedbackId, [FromBody] CreateChangeRequestFromFeedbackRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateChangeRequestFromFeedbackCommand(
+            chapterId, feedbackId, GetCurrentUserId(), body.AssignmentId, body.Description, body.DueDate), ct);
+        return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
+    }
+
     // ── Phía người nhận (không tài khoản) ──
 
     /// <summary>POST /api/preview/open — body { token }. 403 nếu token sai / hết hạn / bị thu hồi (đều ghi log).</summary>
@@ -100,7 +115,7 @@ public sealed class PreviewLinksController : ControllerBase
     /// <summary>GET /api/preview/images?token= — ảnh trang (token ảnh ngắn hạn lấy từ ImageUrl của /open).</summary>
     [HttpGet("api/preview/images")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> Image([FromQuery] string? token, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetPreviewImageQuery(token, Ip), ct);
@@ -117,7 +132,7 @@ public sealed class PreviewLinksController : ControllerBase
     public async Task<IActionResult> SubmitFeedback([FromBody] SubmitPreviewFeedbackRequest body, CancellationToken ct)
     {
         var result = await _mediator.Send(
-            new SubmitPreviewFeedbackCommand(body.Token, body.Message, body.PageId, body.PanelId, Ip), ct);
+            new SubmitPreviewFeedbackCommand(body.Token, body.Message, body.PageId, body.PanelId, Ip, body.ReviewerName), ct);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Error(result);
     }
 

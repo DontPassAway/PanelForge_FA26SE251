@@ -1,3 +1,5 @@
+using PanelForge.Application.Common.Interfaces.Services;
+using Moq;
 using FluentAssertions;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Catalog;
@@ -43,7 +45,7 @@ public class PublicCatalogQueryTests
     // Luồng Approve → Lock → Publish thuộc CF5; test đặt trạng thái trực tiếp
     private static void SetPublished(Chapter chapter, DateTime publishedAt)
     {
-        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.Published);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.HandedOffAndPublished);
         typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(chapter, publishedAt);
     }
 
@@ -73,7 +75,7 @@ public class PublicCatalogQueryTests
     [Fact]
     public async Task Detail_ShouldListOnlyPublishedChapters()
     {
-        var result = await new GetPublicSeriesDetailQueryHandler(_db).Handle(new GetPublicSeriesDetailQuery(_published.Id), default);
+        var result = await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(_published.Id), default);
 
         result.Value!.Chapters.Should().ContainSingle().Which.Id.Should().Be(_publishedChapter.Id);
     }
@@ -81,7 +83,7 @@ public class PublicCatalogQueryTests
     [Fact]
     public async Task Detail_OfSeriesWithoutPublishedChapters_ShouldBeNotFound()
     {
-        var result = await new GetPublicSeriesDetailQueryHandler(_db).Handle(new GetPublicSeriesDetailQuery(_inProduction.Id), default);
+        var result = await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>()).Handle(new GetPublicSeriesDetailQuery(_inProduction.Id), default);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
@@ -101,5 +103,37 @@ public class PublicCatalogQueryTests
         (await handler.Handle(new GetPipelineTemplatesQuery(ActiveOnly: true), default)).Value!
             .Select(t => t.Code).Should().Equal("MANGA");
         (await handler.Handle(new GetPipelineTemplatesQuery(), default)).Value!.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ListAndDetail_ExposeCoverStatusAndCreatedAt()
+    {
+        var sha = new string('a', 64);
+        _published.SetCover(sha);
+        _published.SetCompleted(true);
+        await _db.SaveChangesAsync();
+
+        var item = (await new GetPublicCatalogQueryHandler(_db).Handle(new GetPublicCatalogQuery(), default)).Value!.Items.Single();
+        item.CoverUrl.Should().Be($"/api/catalog/series/{_published.Id}/cover?v=aaaaaaaaaaaa");
+        item.IsCompleted.Should().BeTrue();
+        item.CreatedAt.Should().Be(_published.CreatedAt);
+
+        var detail = (await new GetPublicSeriesDetailQueryHandler(_db, Mock.Of<ICurrentUserService>())
+            .Handle(new GetPublicSeriesDetailQuery(_published.Id), default)).Value!;
+        detail.CoverUrl.Should().Be(item.CoverUrl);
+        detail.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SeriesCover_IsNotServedForSeriesWithoutPublishedChapter()
+    {
+        _inProduction.SetCover(new string('b', 64));
+        await _db.SaveChangesAsync();
+        var storage = new Mock<IAssetStorage>(MockBehavior.Strict);
+
+        var result = await new GetPublicSeriesCoverQueryHandler(_db, storage.Object)
+            .Handle(new GetPublicSeriesCoverQuery(_inProduction.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 }

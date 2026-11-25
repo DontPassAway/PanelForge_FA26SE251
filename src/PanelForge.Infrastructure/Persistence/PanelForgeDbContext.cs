@@ -15,6 +15,7 @@ using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Entities.Payments;
 
 namespace PanelForge.Infrastructure.Persistence;
 
@@ -32,10 +33,10 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<StudioWorkspace> StudioWorkspaces => Set<StudioWorkspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
-    public DbSet<ExternalPreviewLink> ExternalPreviewLinks => Set<ExternalPreviewLink>();
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
+    public DbSet<AiProviderCredential> AiProviderCredentials => Set<AiProviderCredential>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
     public DbSet<AiWorkflowRun> AiWorkflowRuns => Set<AiWorkflowRun>();
@@ -43,6 +44,8 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<AiSuggestion> AiSuggestions => Set<AiSuggestion>();
     public DbSet<AiSuggestionDecision> AiSuggestionDecisions => Set<AiSuggestionDecision>();
     public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
+    public DbSet<ChapterSnapshot> ChapterSnapshots => Set<ChapterSnapshot>();
+    public DbSet<ChapterEdition> ChapterEditions => Set<ChapterEdition>();
 
     // Master Data
     public DbSet<ElementTypeMasterData> ElementTypes => Set<ElementTypeMasterData>();
@@ -51,34 +54,61 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PipelineTemplateStage> PipelineTemplateStages => Set<PipelineTemplateStage>();
 
     public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesMember> SeriesMembers => Set<SeriesMember>();
     public DbSet<TypographyPreset> TypographyPresets => Set<TypographyPreset>();
     public DbSet<ConsistencyRule> ConsistencyRules => Set<ConsistencyRule>();
     public DbSet<SeriesBible> SeriesBibles => Set<SeriesBible>();
     public DbSet<BibleEntry> BibleEntries => Set<BibleEntry>();
     public DbSet<BibleEntryRevision> BibleEntryRevisions => Set<BibleEntryRevision>();
+    public DbSet<BibleRevisionEvent> BibleRevisionEvents => Set<BibleRevisionEvent>();
+    public DbSet<ChapterBibleBinding> ChapterBibleBindings => Set<ChapterBibleBinding>();
+    public DbSet<PanelBibleVariant> PanelBibleVariants => Set<PanelBibleVariant>();
+    public DbSet<BibleConceptComment> BibleConceptComments => Set<BibleConceptComment>();
     public DbSet<PipelineDefinition> PipelineDefinitions => Set<PipelineDefinition>();
     public DbSet<PipelineStage> PipelineStages => Set<PipelineStage>();
     public DbSet<StageTransition> StageTransitions => Set<StageTransition>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<StageProgress> StageProgresses => Set<StageProgress>();
+    public DbSet<StageTask> StageTasks => Set<StageTask>();
+    public DbSet<StageTaskLot> StageTaskLots => Set<StageTaskLot>();
+    public DbSet<StageTaskSubmission> StageTaskSubmissions => Set<StageTaskSubmission>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Submission> Submissions => Set<Submission>();
     public DbSet<ChangeRequest> ChangeRequests => Set<ChangeRequest>();
     public DbSet<ConsistencyFinding> ConsistencyFindings => Set<ConsistencyFinding>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewLink> PreviewLinks => Set<PanelForge.Domain.Entities.Preview.PreviewLink>();
+    public DbSet<ExportJob> ExportJobs => Set<ExportJob>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs => Set<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback => Set<PanelForge.Domain.Entities.Preview.PreviewFeedback>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetReference> AssetReferences => Set<AssetReference>();
     public DbSet<AssetAccessLog> AssetAccessLogs => Set<AssetAccessLog>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
+    public DbSet<ChapterScript> ChapterScripts => Set<ChapterScript>();
     public DbSet<ChapterReview> ChapterReviews => Set<ChapterReview>();
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
+    public DbSet<ScriptComment> ScriptComments => Set<ScriptComment>();
+    public DbSet<ScriptVersion> ScriptVersions => Set<ScriptVersion>();
     public DbSet<Page> Pages => Set<Page>();
     public DbSet<Panel> Panels => Set<Panel>();
     public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();
     public DbSet<ScriptLineBibleLink> ScriptLineBibleLinks => Set<ScriptLineBibleLink>();
+
+    // Payments & Monetization
+    public DbSet<ReaderWallet> ReaderWallets => Set<ReaderWallet>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
+    public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();
+    public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
+    public DbSet<PanelForge.Domain.Entities.Content.ReaderLibraryItem> ReaderLibraryItems => Set<PanelForge.Domain.Entities.Content.ReaderLibraryItem>();
+    public DbSet<PanelForge.Domain.Entities.Content.PageKeepOutZones> PageKeepOutZones => Set<PanelForge.Domain.Entities.Content.PageKeepOutZones>();
+    public DbSet<PanelForge.Domain.Entities.Content.ReaderReadingProgress> ReaderReadingProgress => Set<PanelForge.Domain.Entities.Content.ReaderReadingProgress>();
+
+    public Task LockChapterAsync(Guid chapterId, CancellationToken cancellationToken = default) =>
+        Database.IsRelational()
+            ? Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM chapters WHERE id = {chapterId} FOR UPDATE", cancellationToken)
+            : Task.CompletedTask;
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -93,7 +123,11 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
             if (entry.State is EntityState.Detached or EntityState.Unchanged)
                 continue;
 
-            if (entry.Entity is not (AuditLog or AiUsageRecord))
+            // RefreshToken: đăng nhập / đăng xuất / thu hồi phiên được ghi bằng sự kiện LOGIN, LOGOUT, SESSIONS_REVOKED
+            // ở tầng Application; không audit từng lần xoay vòng token.
+            if (entry.Entity is not (AuditLog or AiUsageRecord or AssetAccessLog or Domain.Entities.Preview.PreviewLinkAccessLog
+                    or Notification or RefreshToken)
+                && !IsTechnicalOnlyUpdate(entry) && !IsAiUsageCounter(entry))
             {
                 var action = entry.State switch
                 {
@@ -166,6 +200,20 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
 
         return await base.SaveChangesAsync(cancellationToken);
     }
+
+    // Cột kỹ thuật: đổi riêng chúng (chạm UpdatedAt, tăng Version concurrency) không phải thao tác nghiệp vụ.
+    private static readonly HashSet<string> TechnicalColumns = ["UpdatedAt", "UpdatedBy", "Version"];
+
+    private static bool OnlyModified(EntityEntry entry, Func<string, bool> allowed)
+        => entry.State == EntityState.Modified
+           && entry.Properties.Where(p => p.IsModified).All(p => allowed(p.Metadata.Name));
+
+    private static bool IsTechnicalOnlyUpdate(EntityEntry entry) => OnlyModified(entry, TechnicalColumns.Contains);
+
+    // Bộ đếm token AI tăng sau mỗi lần gọi (đã có AiUsageRecord); đổi cấu hình AI thật vẫn được audit.
+    private static bool IsAiUsageCounter(EntityEntry entry)
+        => entry.Entity is WorkspaceAiConfig
+           && OnlyModified(entry, n => n == nameof(WorkspaceAiConfig.UsedTokensCurrentMonth) || TechnicalColumns.Contains(n));
 
     /// <summary>WorkspaceId của bản ghi audit: cột WorkspaceId, chính Workspace, hoặc suy ra qua SeriesId.</summary>
     private static Guid? ResolveWorkspaceId(EntityEntry entry, IReadOnlyDictionary<Guid, Guid> workspaceBySeries)

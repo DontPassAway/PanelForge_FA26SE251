@@ -14,6 +14,7 @@ internal sealed class ContentRevisionConfiguration : IEntityTypeConfiguration<Co
         builder.Property(r => r.Id).HasColumnName("id").HasColumnType("uuid").ValueGeneratedNever();
 
         builder.Property(r => r.ChapterId).HasColumnName("chapter_id").HasColumnType("uuid").IsRequired();
+        builder.HasIndex(r => r.ChapterId).HasDatabaseName("ix_content_revisions_chapter_id");
         builder.Property(r => r.SceneId).HasColumnName("scene_id").HasColumnType("uuid").IsRequired();
         builder.Property(r => r.Kind).HasColumnName("kind").HasColumnType("varchar(20)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<ContentRevisionKind>(v)).IsRequired();

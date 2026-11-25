@@ -6,8 +6,10 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using PanelForge.API.Authentication;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Auth.Common;
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
+using PanelForge.Application.Features.Auth.Commands.DisableTwoFactor;
 using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
 using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
 using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
@@ -18,10 +20,14 @@ using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.Register;
 using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
 using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.RevokeSession;
 using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Features.Auth.Queries.CheckEmail;
+using PanelForge.Application.Features.Auth.Queries.GetActiveSessions;
 using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -41,6 +47,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -49,21 +56,38 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    /// <summary>Luồng Email-First (Mobile): email đã có tài khoản chưa → { exists }. Giới hạn tần suất như các endpoint auth.</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("check-email")]
+    [ProducesResponseType(typeof(CheckEmailResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckEmail([FromBody] CheckEmailRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CheckEmailQuery(request.Email), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
             ?? Request.Headers[RememberDeviceHeader].FirstOrDefault()
             ?? request.RememberDeviceToken;
 
+        var userAgent = Request.Headers.UserAgent.ToString();
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var deviceName = DeviceDetector.DetectDevice(userAgent);
+
         var result = await _mediator.Send(
-            new LoginCommand(request.Email, request.Password, rememberDeviceToken), cancellationToken);
+            new LoginCommand(request.Email, request.Password, rememberDeviceToken, deviceName, ipAddress, userAgent), cancellationToken);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [Authorize]
     [HttpPost("logout")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request, CancellationToken cancellationToken)
     {
@@ -76,6 +100,7 @@ public class AuthController : ControllerBase
     /// <summary>Đổi refresh token (body, hoặc cookie HttpOnly pf_refresh) lấy access JWT mới (xoay vòng refresh token).</summary>
     [EnableRateLimiting("auth")]
     [HttpPost("refresh")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Refresh(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
@@ -88,7 +113,10 @@ public class AuthController : ControllerBase
             refreshToken = Request.Cookies[AuthCookies.Refresh];
         }
 
-        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken ?? string.Empty), cancellationToken);
+        var userAgent = Request.Headers.UserAgent.ToString();
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken ?? string.Empty, ipAddress, userAgent), cancellationToken);
         if (!result.IsSuccess)
             AuthCookies.Clear(Response);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
@@ -110,10 +138,21 @@ public class AuthController : ControllerBase
 
         // BR-22: CanCreateStudio đọc từ DB (có thể đã được Admin cấp/thu hồi sau khi token phát hành)
         var canCreateStudio = false;
+        string? avatarUrl = null;
         if (Guid.TryParse(userId, out var parsedUserId))
         {
             var context = await _mediator.Send(new GetLandingContextQuery(parsedUserId), cancellationToken);
             canCreateStudio = context.IsSuccess && context.Value!.CanCreateStudio;
+
+            var profile = await _mediator.Send(new PanelForge.Application.Features.Users.Queries.GetUserProfile.GetUserProfileQuery(parsedUserId, null), cancellationToken);
+            if (profile is not null)
+            {
+                avatarUrl = profile.Avatar;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = profile.Username;
+                }
+            }
         }
 
         return Ok(new
@@ -122,12 +161,15 @@ public class AuthController : ControllerBase
             Email = email,
             FullName = name,
             Role = role,
-            CanCreateStudio = canCreateStudio
+            CanCreateStudio = canCreateStudio,
+            Avatar = avatarUrl,
+            AvatarUrl = avatarUrl
         });
     }
 
     [Authorize]
     [HttpPost("send-change-password-otp")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SendChangePasswordOtp(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -142,6 +184,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [EnableRateLimiting("auth")]
     [HttpPost("change-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -158,6 +201,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         await _mediator.Send(new ForgotPasswordCommand(request.Email), cancellationToken);
@@ -166,6 +210,7 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -177,14 +222,18 @@ public class AuthController : ControllerBase
 
     [EnableRateLimiting("auth")]
     [HttpPost("verify-email")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new VerifyEmailCommand(request.Email, request.Token), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+        var result = await _mediator.Send(
+            new VerifyEmailCommand(request.Email, request.Token, ClientIp(), ClientUserAgent()), cancellationToken);
+        // Xác thực email thành công = đăng nhập luôn: token đi qua cookie như /login, không nằm trong body.
+        return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [EnableRateLimiting("auth")]
     [HttpPost("resend-verification")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ResendVerificationEmailCommand(request.Email), cancellationToken);
@@ -194,14 +243,17 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("external-login")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExternalLogin([FromBody] ExternalLoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ExternalLoginCommand(request.IdToken), cancellationToken);
+        var result = await _mediator.Send(
+            new ExternalLoginCommand(request.IdToken, ClientIp(), ClientUserAgent()), cancellationToken);
         return result.IsSuccess ? AuthOk(result.Value!) : ToError(result);
     }
 
     [Authorize]
     [HttpPost("enable-2fa")]
+    [ProducesResponseType(typeof(EnableTwoFactorResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> EnableTwoFactor(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -211,15 +263,40 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("disable-2fa")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DisableTwoFactor([FromBody] DisableTwoFactorRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new DisableTwoFactorCommand(userId, request.Code, request.CurrentPassword), cancellationToken);
+        if (!result.IsSuccess)
+            return ToError(result);
+
+        Response.Cookies.Delete(RememberDeviceCookie);
+        return Ok(new { message = "Đã tắt bảo mật 2FA cho tài khoản của bạn." });
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("verify-2fa")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyTwoFactor([FromBody] VerifyTwoFactorRequest request, CancellationToken cancellationToken)
     {
+        // Có cookie thử thách (đã qua bước mật khẩu) → hoàn tất đăng nhập; không có → chỉ xác nhận bật 2FA cho user đang đăng nhập.
+        var challengeEmail = TwoFactorChallengeCookie.Read(HttpContext);
         var result = await _mediator.Send(new VerifyTwoFactorCommand(
-            GetCurrentUserId(), request.Code, request.Email, request.RememberDevice, request.DeviceName),
+            GetCurrentUserId(), request.Code, request.Email, request.RememberDevice, request.DeviceName,
+            ClientIp(), ClientUserAgent(), challengeEmail),
             cancellationToken);
         if (!result.IsSuccess)
             return ToError(result);
+
+        if (challengeEmail is not null)
+            TwoFactorChallengeCookie.Clear(HttpContext);
 
         var response = result.Value!;
         if (!string.IsNullOrEmpty(response.RememberDeviceToken))
@@ -237,6 +314,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forget-device")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgetDevice(CancellationToken cancellationToken)
     {
         var rememberDeviceToken = Request.Cookies[RememberDeviceCookie]
@@ -257,6 +335,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [Authorize]
     [HttpGet("me/landing-context")]
+    [ProducesResponseType(typeof(LandingContextDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLandingContext(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -269,18 +348,68 @@ public class AuthController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// GET /api/auth/sessions
+    /// Danh sách thiết bị đang đăng nhập của tài khoản hiện tại cùng giới hạn thiết bị tối đa.
+    /// </summary>
+    [Authorize]
+    [HttpGet("sessions")]
+    [ProducesResponseType(typeof(ActiveSessionsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActiveSessions(CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetActiveSessionsQuery(userId, GetCurrentSessionId()), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// DELETE /api/auth/sessions/{sessionId}
+    /// Đăng xuất từ xa một thiết bị cụ thể của tài khoản hiện tại.
+    /// </summary>
+    [Authorize]
+    [HttpDelete("sessions/{sessionId:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeSession([FromRoute] Guid sessionId, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new RevokeSessionCommand(userId, sessionId, ClientIp()), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.ErrorMessage });
+
+        return Ok(new { message = result.Value });
+    }
+
     private Guid? GetCurrentUserId()
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
     }
 
+    private Guid? GetCurrentSessionId()
+    {
+        // JwtTokenGenerator ghi mã phiên vào claim "session_id" ("sid" giữ lại cho token cũ).
+        var sid = User.FindFirstValue("session_id") ?? User.FindFirstValue("sid");
+        return Guid.TryParse(sid, out var sessionId) ? sessionId : null;
+    }
+
     // Token chỉ nằm trong cookie HttpOnly; body không trả token/refreshToken (JS không đọc được → XSS không lấy được).
     private IActionResult AuthOk(AuthResponse response)
     {
+        if (response.RequiresTwoFactor && !string.IsNullOrEmpty(response.TwoFactorEmail))
+            TwoFactorChallengeCookie.Set(HttpContext, response.TwoFactorEmail);
+
         AuthCookies.Set(Request, Response, response);
         return Ok(response with { Token = null, RefreshToken = null });
     }
+
+    private string? ClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    private string ClientUserAgent() => Request.Headers.UserAgent.ToString();
 
     private IActionResult UnknownUser()
         => Unauthorized(new { message = "Không xác định được danh tính người dùng." });
@@ -291,3 +420,4 @@ public class AuthController : ControllerBase
             ? Unauthorized(new { message = result.ErrorMessage })
             : BadRequest(new { message = result.ErrorMessage });
 }
+

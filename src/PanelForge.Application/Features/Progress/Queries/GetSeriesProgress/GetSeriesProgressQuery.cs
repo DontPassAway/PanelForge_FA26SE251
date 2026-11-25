@@ -15,7 +15,8 @@ public sealed record StageBreakdownDto(
 public sealed record ChapterProgressDto(
     Guid ChapterId, decimal ChapterNumber, string? Title, ChapterStatus Status, DateOnly? TargetReleaseDate,
     int PageCount, int PanelCount, double PercentComplete, IReadOnlyList<StageBreakdownDto> Stages,
-    IReadOnlyDictionary<string, int> AssignmentsByStatus, int OverdueAssignments);
+    IReadOnlyDictionary<string, int> AssignmentsByStatus, int OverdueAssignments,
+    int OverdueChangeRequests = 0);
 
 public sealed record WorkloadDto(
     Guid UserId, string FullName, WorkspaceRole Role, int Open, int Overdue, int WaitingReview, int Done);
@@ -23,12 +24,19 @@ public sealed record WorkloadDto(
 public sealed record OverdueAssignmentDto(
     Guid AssignmentId, Guid ChapterId, Guid AssigneeUserId, string AssigneeName, AssignmentStatus Status, DateTime DueDate, string Brief);
 
+public sealed record OverdueChangeRequestDto(
+    Guid ChangeRequestId, Guid AssignmentId, Guid ChapterId, Guid ResponsibleUserId, string ResponsibleUserName,
+    ChangeRequestStatus Status, DateTime DueDate, string Description);
+
 /// <param name="Remaining">Số việc chưa Approved vào cuối ngày <paramref name="Date"/> (UTC).</param>
-public sealed record BurndownPointDto(DateOnly Date, int Remaining);
+/// <param name="CreatedToday">Số việc tạo trong ngày (UTC).</param>
+/// <param name="ApprovedToday">Số việc Approved trong ngày (UTC).</param>
+public sealed record BurndownPointDto(DateOnly Date, int Remaining, int? CreatedToday = null, int? ApprovedToday = null);
 
 public sealed record SeriesProgressDto(
     Guid SeriesId, DateTime GeneratedAt, IReadOnlyList<ChapterProgressDto> Chapters, IReadOnlyList<WorkloadDto> Workload,
-    IReadOnlyList<OverdueAssignmentDto> Overdue, IReadOnlyList<BurndownPointDto> Burndown);
+    IReadOnlyList<OverdueAssignmentDto> Overdue, IReadOnlyList<BurndownPointDto> Burndown,
+    IReadOnlyList<OverdueChangeRequestDto>? OverdueChangeRequests = null);
 
 /// <summary>
 /// UC-16: tổng hợp tiến độ của Series cho Producer: theo stage và Panel, khối lượng việc từng người, việc quá hạn, burndown.
@@ -68,18 +76,36 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
         var panels = await _db.Panels.AsNoTracking().Where(p => pageIds.Contains(p.PageId))
             .Select(p => new { p.Id, p.PageId }).ToListAsync(ct);
         var panelIds = panels.Select(p => p.Id).ToList();
-        var progress = await _db.StageProgresses.AsNoTracking().Where(s => panelIds.Contains(s.PanelId)).ToListAsync(ct);
-        var assignments = await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct);
+        var progress = await _db.StageProgresses.AsNoTracking().Where(s => s.PanelId.HasValue && panelIds.Contains(s.PanelId.Value)).ToListAsync(ct);
+        // Việc = Assignment cũ + ô lưới V3 đã giao (theo lô). Trạng thái ô cùng tên với AssignmentStatus.
+        var gridRows = await (from t in _db.StageTasks.AsNoTracking()
+                              join l in _db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                              where t.SeriesId == q.SeriesId && t.Status != StageTaskStatus.Unassigned && t.Status != StageTaskStatus.Cancelled
+                              select new { t.Id, t.ChapterId, t.Status, t.CreatedAt, t.UpdatedAt, l.AssigneeUserId, l.AssignedRole, l.DueDate, l.Brief })
+                             .ToListAsync(ct);
+        var assignments = (await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId).ToListAsync(ct))
+            .Select(a => new WorkItem(a.Id, a.ChapterId, a.AssigneeUserId, a.AssignedRole, a.Status, a.DueDate, a.Brief, a.CreatedAt, a.CompletedAt))
+            .Concat(gridRows.Select(t =>
+            {
+                var status = Enum.Parse<AssignmentStatus>(t.Status.ToString());
+                return new WorkItem(t.Id, t.ChapterId, t.AssigneeUserId, t.AssignedRole, status, t.DueDate, t.Brief ?? "",
+                    t.CreatedAt, status == AssignmentStatus.Approved ? t.UpdatedAt ?? t.CreatedAt : null);
+            }))
+            .ToList();
+        var changeRequests = await _db.ChangeRequests.AsNoTracking()
+            .Where(cr => chapterIds.Contains(cr.ChapterId))
+            .ToListAsync(ct);
 
         var pageChapter = pages.ToDictionary(p => p.Id, p => p.ChapterId);
         var panelChapter = panels.ToDictionary(p => p.Id, p => pageChapter[p.PageId]);
 
-        bool IsOverdue(Assignment a) => a.DueDate is { } due && due < now && a.Status != AssignmentStatus.Approved;
+        bool IsOverdue(WorkItem a) => a.DueDate is { } due && due < now && a.Status != AssignmentStatus.Approved;
+        bool IsCrOverdue(ChangeRequest cr) => cr.DueDate is { } due && due < now && cr.Status == ChangeRequestStatus.Open;
 
         var chapterDtos = chapters.Select(c =>
         {
             var chapterPanels = panels.Where(p => panelChapter[p.Id] == c.Id).Select(p => p.Id).ToHashSet();
-            var rows = progress.Where(r => chapterPanels.Contains(r.PanelId)).ToList();
+            var rows = progress.Where(r => r.PanelId.HasValue && chapterPanels.Contains(r.PanelId.Value)).ToList();
             var breakdown = stages.Select(s =>
             {
                 int Count(StageProgressStatus st) => rows.Count(r => r.PipelineStageId == s.Id && r.Status == st);
@@ -93,15 +119,19 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
                 : rows.Count(r => r.PipelineStageId == finalStageId && r.Status == StageProgressStatus.Approved);
             var percent = chapterPanels.Count == 0 ? 0 : Math.Round(100.0 * finalApproved / chapterPanels.Count, 1);
             var mine = assignments.Where(a => a.ChapterId == c.Id).ToList();
+            var chapterCrs = changeRequests.Where(cr => cr.ChapterId == c.Id).ToList();
 
             return new ChapterProgressDto(
                 c.Id, c.ChapterNumber, c.Title, c.Status, c.TargetReleaseDate,
                 pages.Count(p => p.ChapterId == c.Id), chapterPanels.Count, percent, breakdown,
                 mine.GroupBy(a => a.Status.ToString()).ToDictionary(g => g.Key, g => g.Count()),
-                mine.Count(IsOverdue));
+                mine.Count(IsOverdue),
+                chapterCrs.Count(IsCrOverdue));
         }).ToList();
 
-        var assigneeIds = assignments.Select(a => a.AssigneeUserId).Distinct().ToList();
+        var assigneeIds = assignments.Select(a => a.AssigneeUserId)
+            .Concat(changeRequests.Select(cr => cr.ResponsibleUserId))
+            .Distinct().ToList();
         var names = await _db.Users.AsNoTracking().Where(u => assigneeIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
@@ -117,6 +147,11 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
             .Select(a => new OverdueAssignmentDto(a.Id, a.ChapterId, a.AssigneeUserId,
                 names.GetValueOrDefault(a.AssigneeUserId, "?"), a.Status, a.DueDate!.Value, a.Brief)).ToList();
 
+        var overdueCrs = changeRequests.Where(IsCrOverdue).OrderBy(cr => cr.DueDate)
+            .Select(cr => new OverdueChangeRequestDto(
+                cr.Id, cr.AssignmentId, cr.ChapterId, cr.ResponsibleUserId,
+                names.GetValueOrDefault(cr.ResponsibleUserId, "?"), cr.Status, cr.DueDate!.Value, cr.Description)).ToList();
+
         // Burndown theo số việc: còn lại(ngày) = đã tạo đến ngày đó - đã Approved đến ngày đó (ngày UTC, tối đa 90 ngày gần nhất)
         var burndown = new List<BurndownPointDto>();
         if (assignments.Count > 0)
@@ -126,12 +161,20 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
             var from = first < today.AddDays(-(MaxBurndownDays - 1)) ? today.AddDays(-(MaxBurndownDays - 1)) : first;
             for (var d = from; d <= today; d = d.AddDays(1))
             {
+                var startOfDay = d.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
                 var endOfDay = d.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
                 burndown.Add(new BurndownPointDto(d,
-                    assignments.Count(a => a.CreatedAt < endOfDay) - assignments.Count(a => a.CompletedAt != null && a.CompletedAt < endOfDay)));
+                    assignments.Count(a => a.CreatedAt < endOfDay) - assignments.Count(a => a.CompletedAt != null && a.CompletedAt < endOfDay),
+                    assignments.Count(a => a.CreatedAt >= startOfDay && a.CreatedAt < endOfDay),
+                    assignments.Count(a => a.CompletedAt >= startOfDay && a.CompletedAt < endOfDay)));
             }
         }
 
-        return Result<SeriesProgressDto>.Success(new SeriesProgressDto(q.SeriesId, now, chapterDtos, workload, overdue, burndown));
+        return Result<SeriesProgressDto>.Success(new SeriesProgressDto(q.SeriesId, now, chapterDtos, workload, overdue, burndown, overdueCrs));
     }
 }
+
+/// <summary>Một việc trên dashboard: Assignment cũ hoặc ô lưới V3 đã giao.</summary>
+internal sealed record WorkItem(
+    Guid Id, Guid ChapterId, Guid AssigneeUserId, WorkspaceRole AssignedRole, AssignmentStatus Status,
+    DateTime? DueDate, string Brief, DateTime CreatedAt, DateTime? CompletedAt);

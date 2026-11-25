@@ -1,4 +1,5 @@
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Domain.Entities.Content;
 
@@ -8,6 +9,12 @@ public class Scene : BaseEntity
     public int SceneNumber { get; private set; }
     public string? Heading { get; private set; }
     public string? Summary { get; private set; }
+    public NarrationMode DefaultNarrationMode { get; private set; } = NarrationMode.Present;
+    /// <summary>
+    /// BR-11 / CF4 4.2: tăng mỗi lần đổi nội dung (heading, tóm tắt, narration); là concurrency token. Đổi số thứ tự cảnh
+    /// không tăng để sắp xếp lại không làm hỏng lần sửa nội dung đang dở của người khác.
+    /// </summary>
+    public int Version { get; private set; }
 
     public Chapter Chapter { get; private set; } = default!;
     public ICollection<ScriptLine> ScriptLines { get; private set; } = [];
@@ -16,7 +23,23 @@ public class Scene : BaseEntity
 
     private Scene() { }
 
-    public static Scene Create(Guid chapterId, int sceneNumber, string? heading = null, string? summary = null)
+    public const string DefaultSceneHeading = "Default Scene";
+
+    public static Scene CreateDefault(Guid chapterId)
+    {
+        return new Scene
+        {
+            ChapterId = chapterId,
+            SceneNumber = 1,
+            Heading = DefaultSceneHeading,
+            Summary = "Default chapter scene",
+            DefaultNarrationMode = NarrationMode.Present
+        };
+    }
+
+    public static Scene Create(
+        Guid chapterId, int sceneNumber, string? heading = null, string? summary = null,
+        NarrationMode defaultNarrationMode = NarrationMode.Present)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sceneNumber);
 
@@ -25,14 +48,21 @@ public class Scene : BaseEntity
             ChapterId = chapterId,
             SceneNumber = sceneNumber,
             Heading = heading?.Trim(),
-            Summary = summary?.Trim()
+            Summary = summary?.Trim(),
+            DefaultNarrationMode = defaultNarrationMode
         };
     }
 
-    public void UpdateContent(string? heading, string? summary)
+    public void UpdateContent(string? heading, string? summary, NarrationMode? defaultNarrationMode = null)
     {
+        var mode = defaultNarrationMode ?? DefaultNarrationMode;
+        // Lưu lại y nguyên không tăng version (không làm lần sửa của người khác thành xung đột)
+        if (Heading == heading?.Trim() && Summary == summary?.Trim() && DefaultNarrationMode == mode) return;
+
         Heading = heading?.Trim();
         Summary = summary?.Trim();
+        DefaultNarrationMode = mode;
+        Version++;
     }
 
     public void Reorder(int newSceneNumber)

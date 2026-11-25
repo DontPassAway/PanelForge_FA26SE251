@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Domain.Enums;
 using PanelForge.Application.Features.Scenes.Commands.CreateScene;
@@ -50,7 +51,8 @@ public sealed class ScenesController : ControllerBase
             UserId: GetCurrentUserId(),
             SceneNumber: body.SceneNumber,
             Heading: body.Heading,
-            Summary: body.Summary
+            Summary: body.Summary,
+            DefaultNarrationMode: body.DefaultNarrationMode
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -59,7 +61,7 @@ public sealed class ScenesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return CreatedAtAction(nameof(GetSceneById), new { sceneId = result.Value!.Id }, result.Value);
@@ -111,6 +113,7 @@ public sealed class ScenesController : ControllerBase
     [ProducesResponseType(typeof(SceneDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateScene(
         [FromRoute] Guid sceneId,
         [FromBody] UpdateSceneRequest body,
@@ -120,7 +123,9 @@ public sealed class ScenesController : ControllerBase
             SceneId: sceneId,
             UserId: GetCurrentUserId(),
             Heading: body.Heading,
-            Summary: body.Summary
+            Summary: body.Summary,
+            DefaultNarrationMode: body.DefaultNarrationMode,
+            ExpectedVersion: body.ExpectedVersion
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -129,7 +134,7 @@ public sealed class ScenesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
         }
 
         return Ok(result.Value);
@@ -141,7 +146,7 @@ public sealed class ScenesController : ControllerBase
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}/scenes/reorder")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ReorderScenes(
         [FromRoute] Guid chapterId,
@@ -152,7 +157,7 @@ public sealed class ScenesController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
-            return BadRequest(new { error = result.ErrorMessage });
+            return this.ConflictOrNull(result) ?? BadRequest(new { error = result.ErrorMessage });
 
         return Ok(new { message = "Cập nhật thứ tự phân cảnh thành công." });
     }
@@ -163,18 +168,12 @@ public sealed class ScenesController : ControllerBase
     /// </summary>
     [HttpDelete("api/scenes/{sceneId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Writer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteScene(
+    public IActionResult DeleteScene(
         [FromRoute] Guid sceneId,
         CancellationToken cancellationToken)
     {
-        var command = new DeleteSceneCommand(sceneId, GetCurrentUserId());
-        var result = await _mediator.Send(command, cancellationToken);
-
-        if (!result.IsSuccess)
-            return NotFound(new { error = result.ErrorMessage });
-
-        return Ok(new { message = $"Phân cảnh {sceneId} đã được xóa thành công." });
+        return BadRequest(new { error = "Không cho phép xóa phân cảnh. Bạn chỉ có thể chỉnh sửa tiêu đề phân cảnh." });
     }
 }

@@ -1,6 +1,7 @@
 using PanelForge.Application.Features.Auth.Models;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Identity;
 
 namespace PanelForge.Application.Features.Auth.Common;
@@ -27,24 +28,42 @@ internal static class AuthResponseFactory
         User user,
         IJwtTokenGenerator jwtTokenGenerator,
         string message,
-        string? rememberDeviceToken = null)
+        string? rememberDeviceToken = null,
+        string? deviceName = null,
+        string? ipAddress = null,
+        string? userAgent = null)
     {
         var refreshToken = AuthSecrets.NewRefreshToken();
         var now = DateTime.UtcNow;
         var policy = await SessionPolicy.ForUserAsync(dbContext, user.Id, cancellationToken);
-        var session = RefreshToken.Create(user.Id, AuthSecrets.HashToken(refreshToken), policy.ExpiryFor(now, now));
+        var session = RefreshToken.Create(
+            user.Id,
+            AuthSecrets.HashToken(refreshToken),
+            policy.ExpiryFor(now, now),
+            deviceName: deviceName,
+            ipAddress: ipAddress,
+            userAgent: userAgent,
+            lastActiveAt: now);
         await policy.EnforceMaxSessionsAsync(dbContext, user.Id, session.SessionId, now, cancellationToken);
         dbContext.RefreshTokens.Add(session);
+        dbContext.AuditLogs.Add(AuditLog.Create(
+            action: "LOGIN",
+            entityName: "Session",
+            entityId: session.SessionId.ToString(),
+            userId: user.Id,
+            userEmail: user.Email,
+            ipAddress: ipAddress,
+            details: $"Đăng nhập ({deviceName ?? "Thiết bị không xác định"})."));
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken);
+        return Build(user, jwtTokenGenerator, message, rememberDeviceToken, refreshToken, session.SessionId);
     }
 
     /// <summary>Dựng AuthResponse từ refresh token đã được lưu sẵn (dùng khi xoay vòng token).</summary>
     public static AuthResponse Build(
-        User user, IJwtTokenGenerator jwtTokenGenerator, string message, string? rememberDeviceToken, string refreshToken)
+        User user, IJwtTokenGenerator jwtTokenGenerator, string message, string? rememberDeviceToken, string refreshToken, Guid sessionId)
     {
-        var (token, expiresAt) = jwtTokenGenerator.GenerateToken(user);
+        var (token, expiresAt) = jwtTokenGenerator.GenerateToken(user, sessionId);
         return new AuthResponse(
             Token: token,
             ExpiresAt: expiresAt,

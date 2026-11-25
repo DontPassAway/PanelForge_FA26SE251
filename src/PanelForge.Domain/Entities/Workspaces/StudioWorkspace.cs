@@ -6,6 +6,9 @@ namespace PanelForge.Domain.Entities.Workspaces;
 
 public class StudioWorkspace : BaseEntity
 {
+    /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL (BR-11): hai lần ghi chồng nhau → 409.</summary>
+    public uint RowVersion { get; private set; }
+
     public string Name { get; private set; } = default!;
     public Guid OwnerId { get; private set; }
     public long StorageQuotaBytes { get; private set; }
@@ -18,11 +21,34 @@ public class StudioWorkspace : BaseEntity
 
     public const int MaxSessionLifetimeMinutes = 30 * 24 * 60;
 
+    /// <summary>SHA-256 của ảnh bìa Studio lưu trong IAssetStorage (R2); null nếu dùng bìa mặc định.</summary>
+    public string? CoverImageSha256 { get; private set; }
+
+    /// <summary>Mã BIN ngân hàng nhận tiền thanh toán VietQR của Studio (vd: 970422 - MB Bank).</summary>
+    public string? BankBin { get; private set; }
+    /// <summary>Tên ngân hàng nhận thanh toán (vd: MB Bank).</summary>
+    public string? BankName { get; private set; }
+    /// <summary>Số tài khoản ngân hàng nhận tiền VietQR.</summary>
+    public string? BankAccountNo { get; private set; }
+    /// <summary>Tên chủ tài khoản nhận tiền VietQR.</summary>
+    public string? BankAccountName { get; private set; }
+
     public User Owner { get; private set; } = default!;
     public ICollection<WorkspaceMember> Members { get; private set; } = [];
     public ICollection<Series> Series { get; private set; } = [];
 
     private StudioWorkspace() { }
+
+    public void SetCover(string? sha256) => CoverImageSha256 = sha256;
+
+    /// <summary>Cập nhật thông tin tài khoản ngân hàng thụ hưởng VietQR cho Studio.</summary>
+    public void UpdateBankInfo(string? bankBin, string? bankName, string? bankAccountNo, string? bankAccountName)
+    {
+        BankBin = string.IsNullOrWhiteSpace(bankBin) ? null : bankBin.Trim();
+        BankName = string.IsNullOrWhiteSpace(bankName) ? null : bankName.Trim();
+        BankAccountNo = string.IsNullOrWhiteSpace(bankAccountNo) ? null : bankAccountNo.Trim();
+        BankAccountName = string.IsNullOrWhiteSpace(bankAccountName) ? null : bankAccountName.Trim();
+    }
 
     public static StudioWorkspace Create(string name, Guid ownerId, long storageQuotaBytes = 0)
     {
@@ -42,6 +68,12 @@ public class StudioWorkspace : BaseEntity
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newName);
         Name = newName.Trim();
+    }
+
+    public void SetStorageQuota(long quotaBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(quotaBytes);
+        StorageQuotaBytes = quotaBytes;
     }
 
     /// <summary>Thay toàn bộ session policy (null = bỏ giới hạn đó). Lifetime tối đa 30 ngày (bằng hạn refresh token).</summary>

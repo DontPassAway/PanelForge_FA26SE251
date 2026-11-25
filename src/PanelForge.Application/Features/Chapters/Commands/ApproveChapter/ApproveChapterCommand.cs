@@ -10,7 +10,8 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 
 /// <summary>
-/// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → Approved, chuyển cho Publisher.
+/// Họp tuần 5 / CF5 bước 1–2 (UC-20, BR-12): Producer duyệt bản hoàn chỉnh. Chapter InProduction → ChapterApproved, sẵn sàng bàn giao cho Publisher.
+/// Kèm theo: tạo ChapterSnapshot (CF4 / 4.1).
 /// Điều kiện: có ít nhất một Page, mọi việc giao đã Approved, không còn yêu cầu sửa Open/Resolved, không còn lỗi nhất quán Blocking đang mở. Từ đây việc/tiến độ bị khoá (BR-12).
 /// </summary>
 public sealed record ApproveChapterCommand(Guid ChapterId, Guid UserId) : IRequest<Result<ChapterReviewDto>>;
@@ -19,7 +20,13 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 {
     private readonly IPanelForgeDbContext _db;
 
-    public ApproveChapterCommandHandler(IPanelForgeDbContext db) => _db = db;
+    private readonly IPageRepository _pages;
+
+    public ApproveChapterCommandHandler(IPanelForgeDbContext db, IPageRepository pages)
+    {
+        _db = db;
+        _pages = pages;
+    }
 
     public async Task<Result<ChapterReviewDto>> Handle(ApproveChapterCommand cmd, CancellationToken ct)
     {
@@ -29,34 +36,45 @@ public sealed class ApproveChapterCommandHandler : IRequestHandler<ApproveChapte
 
         var (chapter, workspaceId) = loaded.Value;
 
-        if (!await _db.Pages.AnyAsync(p => p.ChapterId == chapter.Id, ct))
-            return Result<ChapterReviewDto>.Failure("Chapter chưa có Page nào, chưa thể duyệt.", ResultErrorCodes.Conflict);
-
-        var unfinished = await _db.Assignments.CountAsync(a => a.ChapterId == chapter.Id && a.Status != AssignmentStatus.Approved, ct);
-        if (unfinished > 0)
-            return Result<ChapterReviewDto>.Failure($"Còn {unfinished} việc chưa được duyệt, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
-
-        var openRequests = await _db.ChangeRequests.CountAsync(c => c.ChapterId == chapter.Id &&
-            (c.Status == ChangeRequestStatus.Open || c.Status == ChangeRequestStatus.Resolved), ct);
-        if (openRequests > 0)
-            return Result<ChapterReviewDto>.Failure($"Còn {openRequests} yêu cầu sửa chưa đóng, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
-
-        // CF3 "Cổng Consistency trước khi khóa chương": lỗi nhất quán mức Blocking còn mở (chưa Rejected/Ignored/Resolved) thì chặn
-        var blockingFindings = await _db.ConsistencyFindings.CountAsync(f => f.ChapterId == chapter.Id &&
-            f.Severity == ConsistencyFindingSeverity.Blocking &&
-            (f.Status == ConsistencyFindingStatus.Open || f.Status == ConsistencyFindingStatus.Confirmed ||
-             f.Status == ConsistencyFindingStatus.NeedsClarification), ct);
-        if (blockingFindings > 0)
-            return Result<ChapterReviewDto>.Failure(
-                $"Còn {blockingFindings} lỗi nhất quán mức Blocking chưa xử lý, chưa thể duyệt Chapter.", ResultErrorCodes.Conflict);
+        // Cùng bộ luật với GET /api/chapters/{id}/lock-gate (ChapterLockGate): chặn ở điều kiện Blocking đầu tiên
+        var blocker = (await ChapterLockGate.EvaluateAsync(_db, chapter, ct)).FirstOrDefault(i => i.Blocking);
+        if (blocker is not null)
+            return Result<ChapterReviewDto>.Failure(blocker.Message, ResultErrorCodes.Conflict);
 
         chapter.Approve();
         chapter.UpdatedBy = cmd.UserId.ToString();
 
+        // CF4 / 4.1: manifest bất biến của bản vừa duyệt, lưu cùng SaveChanges với Approve (BR-18);
+        // duyệt lại sau khi mở lại tạo snapshot mới, bản cũ giữ nguyên (BR-01)
+        var snapshot = await ChapterSnapshotBuilder.CreateAsync(_db, _pages, chapter, cmd.UserId, ct);
+        _db.ChapterSnapshots.Add(snapshot);
+
+        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Approved (tham chiếu snapshot cấp Chương)
+        var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+        var origLang = series?.OriginalLanguage ?? ContentLanguages.Original;
+        var origEdition = await _db.ChapterEditions.FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == origLang, ct);
+        if (origEdition is null)
+        {
+            origEdition = ChapterEdition.Create(chapter.Id, origLang, EditionStatus.Approved);
+            origEdition.Approve(snapshot.Id, cmd.UserId);
+            _db.ChapterEditions.Add(origEdition);
+        }
+        else
+        {
+            origEdition.Approve(snapshot.Id, cmd.UserId);
+        }
+
         var review = ChapterReview.Create(chapter.Id, ChapterReviewAction.ProducerApproved, cmd.UserId, chapter.VersionVector);
         _db.ChapterReviews.Add(review);
 
-        foreach (var publisherId in await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.UserId, ct))
+        var systemPublisherIds = await _db.Users.AsNoTracking()
+            .Where(u => u.Role == SystemRole.Publisher && u.IsActive && u.Id != cmd.UserId) // User không lưu IsDeleted (Ignore trong UserConfiguration)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+        var workspacePublisherIds = await ChapterReviewRules.MemberIdsAsync(_db, workspaceId, WorkspaceRole.Publisher, cmd.UserId, ct);
+        var allPublishers = systemPublisherIds.Union(workspacePublisherIds).Distinct();
+
+        foreach (var publisherId in allPublishers)
             _db.Notifications.Add(ChapterReviewRules.Notify(
                 publisherId, NotificationType.ChapterReadyForPublication, "Có chương chờ duyệt xuất bản", chapter));
 

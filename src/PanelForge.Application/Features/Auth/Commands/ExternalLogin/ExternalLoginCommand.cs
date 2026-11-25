@@ -13,7 +13,8 @@ namespace PanelForge.Application.Features.Auth.Commands.ExternalLogin;
 /// POST /api/auth/external-login — đăng nhập bằng ID token của nhà cung cấp ngoài (Firebase).
 /// Chưa có tài khoản → tạo mới; đã có theo email → liên kết.
 /// </summary>
-public sealed record ExternalLoginCommand(string IdToken) : IRequest<Result<AuthResponse>>;
+public sealed record ExternalLoginCommand(string IdToken, string? IpAddress = null, string? UserAgent = null)
+    : IRequest<Result<AuthResponse>>;
 
 public sealed class ExternalLoginCommandHandler : IRequestHandler<ExternalLoginCommand, Result<AuthResponse>>
 {
@@ -80,6 +81,7 @@ public sealed class ExternalLoginCommandHandler : IRequestHandler<ExternalLoginC
             return Result<AuthResponse>.Success(AuthResponseFactory.TwoFactorChallenge(user));
 
         return Result<AuthResponse>.Success(await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, 
-            user, _jwtTokenGenerator, "Đăng nhập mạng xã hội thành công."));
+            user, _jwtTokenGenerator, "Đăng nhập mạng xã hội thành công.",
+            deviceName: DeviceDetector.DetectDevice(command.UserAgent), ipAddress: command.IpAddress, userAgent: command.UserAgent));
     }
 }

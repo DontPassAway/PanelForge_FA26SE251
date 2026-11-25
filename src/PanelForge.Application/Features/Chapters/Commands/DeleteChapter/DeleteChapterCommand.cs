@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
 
 namespace PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
 
@@ -23,6 +24,8 @@ public sealed class DeleteChapterCommandHandler : IRequestHandler<DeleteChapterC
 
         if (chapter == null)
             return Result<bool>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
 
         chapter.DeletedBy = command.UserId.ToString();
 

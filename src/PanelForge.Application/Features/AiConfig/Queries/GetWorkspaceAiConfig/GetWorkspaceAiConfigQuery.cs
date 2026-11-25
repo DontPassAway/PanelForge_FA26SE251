@@ -1,3 +1,4 @@
+using PanelForge.Application.Common.Interfaces.Services;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,12 @@ public sealed record GetWorkspaceAiConfigQuery(Guid WorkspaceId) : IRequest<Resu
 public sealed class GetWorkspaceAiConfigQueryHandler : IRequestHandler<GetWorkspaceAiConfigQuery, Result<WorkspaceAiConfigDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IAiKeyProtector _keyProtector;
 
-    public GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext dbContext)
+    public GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext dbContext, IAiKeyProtector keyProtector)
     {
         _dbContext = dbContext;
+        _keyProtector = keyProtector;
     }
 
     public async Task<Result<WorkspaceAiConfigDto>> Handle(GetWorkspaceAiConfigQuery request, CancellationToken cancellationToken)
@@ -39,7 +42,7 @@ public sealed class GetWorkspaceAiConfigQueryHandler : IRequestHandler<GetWorksp
         }
         catch
         {
-            models = ["gemini-1.5-flash", "gemini-1.5-pro"];
+            models = [.. WorkspaceAiConfig.DefaultAllowedModels];
         }
 
         return Result<WorkspaceAiConfigDto>.Success(new WorkspaceAiConfigDto(
@@ -55,7 +58,10 @@ public sealed class GetWorkspaceAiConfigQueryHandler : IRequestHandler<GetWorksp
             CreatedAt: config.CreatedAt,
             UpdatedAt: config.UpdatedAt,
             MonthlyImageQuota: config.MonthlyImageQuota,
-            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth
+            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
+            ApiKeyUsable: !string.IsNullOrEmpty(_keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty)),
+            ProviderCredentialId: config.ProviderCredentialId,
+            ImageProviderCredentialId: config.ImageProviderCredentialId
         ));
     }
 }

@@ -12,12 +12,26 @@ public sealed record FrameTemplateDto(
     int PanelCount,
     IReadOnlyList<FrameSlot> Slots,
     DateTime CreatedAt,
-    string? CreatedBy)
+    string? CreatedBy,
+    string Category = "narrative",
+    string? Code = null,
+    string? Description = null)
 {
     public static FrameTemplateDto From(FrameTemplate t)
     {
         var slots = t.Slots;
-        return new FrameTemplateDto(t.Id, t.WorkspaceId, t.Name, t.LayoutFormat.ToString(), t.WorkspaceId is null,
-            slots.Count, slots, t.CreatedAt, t.CreatedBy);
+        return new FrameTemplateDto(
+            t.Id,
+            t.WorkspaceId,
+            t.Name,
+            t.LayoutFormat.ToString(),
+            t.WorkspaceId is null,
+            slots.Count,
+            slots,
+            t.CreatedAt,
+            t.CreatedBy,
+            t.Category,
+            t.Code,
+            t.Description);
     }
 }

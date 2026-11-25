@@ -12,7 +12,8 @@ namespace PanelForge.Application.Features.PreviewLinks.Commands;
 /// UC-21: người nhận gửi phản hồi cấp chương / trang / panel, gắn đúng phiên bản đang xem (artwork trang trong snapshot).
 /// Không có quyền sản xuất nào (BR-07).
 /// </summary>
-public sealed record SubmitPreviewFeedbackCommand(string? Token, string? Message, Guid? PageId, Guid? PanelId, string? IpAddress)
+public sealed record SubmitPreviewFeedbackCommand(string? Token, string? Message, Guid? PageId, Guid? PanelId, string? IpAddress,
+    string? ReviewerName = null)
     : IRequest<Result<PreviewFeedbackDto>>;
 
 public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<SubmitPreviewFeedbackCommand, Result<PreviewFeedbackDto>>
@@ -39,8 +40,10 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
         if (cmd.PageId is { } pageId)
         {
             var snapshotIds = link.SnapshotArtworkIds;
+            // Trang ghép: phản hồi cấp panel gắn đúng ảnh của Panel đó; còn lại lấy artwork bất kỳ của trang
             assetReferenceId = await _db.AssetReferences.AsNoTracking()
                 .Where(r => snapshotIds.Contains(r.Id) && r.PageId == pageId)
+                .OrderByDescending(r => cmd.PanelId != null && r.PanelId == cmd.PanelId).ThenBy(r => r.Id) // cùng ảnh đại diện với OpenPreview
                 .Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
             if (assetReferenceId is null) return Fail("Trang không thuộc bản xem thử này.", ResultErrorCodes.Validation);
 
@@ -50,12 +53,12 @@ public sealed class SubmitPreviewFeedbackCommandHandler : IRequestHandler<Submit
         }
 
         PreviewFeedback feedback;
-        try { feedback = PreviewFeedback.Create(link, cmd.PageId, cmd.PanelId, assetReferenceId, cmd.Message); }
+        try { feedback = PreviewFeedback.Create(link, cmd.PageId, cmd.PanelId, assetReferenceId, cmd.Message, cmd.ReviewerName); }
         catch (ArgumentException ex) { return Fail(ex.Message, ResultErrorCodes.Validation); }
 
         feedback.CreatedBy = link.RecipientEmail;
         _db.PreviewFeedback.Add(feedback);
         await _db.SaveChangesAsync(ct);
-        return Result<PreviewFeedbackDto>.Success(PreviewFeedbackDto.From(feedback));
+        return Result<PreviewFeedbackDto>.Success(await PreviewLinkRules.FeedbackDtoAsync(_db, feedback, ct));
     }
 }

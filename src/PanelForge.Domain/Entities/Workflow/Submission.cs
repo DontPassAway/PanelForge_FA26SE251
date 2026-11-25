@@ -21,6 +21,22 @@ public class Submission : BaseEntity
     public List<Guid> ArtworkReferenceIds { get; private set; } = [];
     /// <summary>Chapter.VersionVector lúc nộp (revision của script).</summary>
     public long ChapterVersion { get; private set; }
+    /// <summary>
+    /// Bố cục Panel của các trang việc bao phủ tại lúc nộp (mảng JSON: id, pageId, panelNumber, readingOrder, boundingBox).
+    /// Lịch sử lần nộp phải dựng lại được dù sau đó Panel bị xoá hay đổi toạ độ (BR-01). "[]" với việc không có Panel
+    /// và với các lần nộp có trước khi thêm cột này.
+    /// </summary>
+    public string PanelLayoutJson { get; private set; } = "[]";
+    /// <summary>
+    /// Version event stream (Marten) của từng trang việc bao phủ lúc nộp, dạng JSON <c>{"pageId": version}</c>.
+    /// Việc Letter không có artwork: lớp chữ được dựng lại đúng tại version này để duyệt (BR-01). "{}" với lần nộp cũ.
+    /// </summary>
+    public string CanvasVersionsJson { get; private set; } = "{}";
+    /// <summary>
+    /// ContentRevision (Script, append-only) mới nhất của từng Scene trong chương lúc nộp: bản script mà kết quả này viết ra
+    /// (Writer) hoặc dựa vào (Artist, Letterer). Không đổi theo script "latest" về sau. Rỗng với lần nộp cũ.
+    /// </summary>
+    public List<Guid> ScriptRevisionIds { get; private set; } = [];
 
     public Guid? DecidedByUserId { get; private set; }
     public DateTime? DecidedAt { get; private set; }
@@ -30,7 +46,8 @@ public class Submission : BaseEntity
 
     public static Submission Create(
         Guid assignmentId, Guid chapterId, Guid submittedByUserId, int attemptNumber,
-        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0)
+        IEnumerable<Guid>? artworkReferenceIds = null, long chapterVersion = 0, string? panelLayoutJson = null,
+        string? canvasVersionsJson = null, IEnumerable<Guid>? scriptRevisionIds = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptNumber);
 
@@ -42,6 +59,9 @@ public class Submission : BaseEntity
             AttemptNumber = attemptNumber,
             ArtworkReferenceIds = artworkReferenceIds?.Distinct().ToList() ?? [],
             ChapterVersion = chapterVersion,
+            PanelLayoutJson = string.IsNullOrWhiteSpace(panelLayoutJson) ? "[]" : panelLayoutJson,
+            CanvasVersionsJson = string.IsNullOrWhiteSpace(canvasVersionsJson) ? "{}" : canvasVersionsJson,
+            ScriptRevisionIds = scriptRevisionIds?.Distinct().ToList() ?? [],
             Status = SubmissionStatus.Pending,
             SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow

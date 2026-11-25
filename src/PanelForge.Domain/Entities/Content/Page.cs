@@ -40,12 +40,32 @@ public sealed class Page : AggregateRoot
     public int Dpi { get; private set; }
     public Guid? CurrentStageId { get; private set; }
 
+    /// <summary>V2.5: Đánh dấu kịch bản phân trang đã sẵn sàng cho Artist tiến hành vẽ Layout/Thumbnail song song.</summary>
+    public bool IsContentReady { get; private set; } = false;
+    public DateTime? ContentReadyAt { get; private set; }
+    public Guid? ContentReadyById { get; private set; }
+
+
     // ── EF Core Navigation Properties (cho relational queries) ───────────────
     public Chapter Chapter { get; private set; } = default!;
     public PipelineStage? CurrentStage { get; private set; }
     public ICollection<Panel> Panels { get; private set; } = [];
 
     public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
+
+    public void MarkContentReady(Guid userId)
+    {
+        IsContentReady = true;
+        ContentReadyAt = DateTime.UtcNow;
+        ContentReadyById = userId;
+    }
+
+    public void UnmarkContentReady()
+    {
+        IsContentReady = false;
+        ContentReadyAt = null;
+        ContentReadyById = null;
+    }
 
     // Constructor rỗng bắt buộc để Marten instantiate khi replay stream
     internal Page() { }
@@ -200,6 +220,15 @@ public sealed class Page : AggregateRoot
         ));
     }
 
+    public void ReassignElementPanel(Guid elementId, Guid? panelId, Guid reassignedByUserId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (element.PanelId == panelId) return;
+
+        RaiseEvent(new ElementPanelReassignedEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, panelId, element.PanelId, reassignedByUserId));
+    }
+
     /// <summary>
     /// Sửa chữ / làm mới sau khi Writer sửa thoại / gắn lại sang ScriptLine khác (BR-05).
     /// scriptLineId = null nghĩa là element không gắn dòng nào. Giữ unique: một dòng chỉ gắn một element đang hoạt động.
@@ -234,6 +263,33 @@ public sealed class Page : AggregateRoot
             UpdatedByUserId:      updatedByUserId));
     }
 
+    /// <summary>
+    /// BR-34: Cập nhật bản dịch của bóng thoại cho một ngôn ngữ phát hành.
+    /// → Raises: ElementTranslationUpdatedEvent
+    /// </summary>
+    public void UpdateElementTranslation(
+        Guid elementId, string languageCode, string? text, Guid updatedByUserId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không thể chứa bản dịch.");
+
+        var lang = Enums.ContentLanguages.Normalize(languageCode)
+            ?? throw new ArgumentException($"Mã ngôn ngữ '{languageCode}' không hợp lệ.", nameof(languageCode));
+
+        element.Texts.TryGetValue(lang, out var prevText);
+
+        RaiseEvent(new ElementTranslationUpdatedEvent(
+            EventId:         Guid.NewGuid(),
+            OccurredAt:      DateTimeOffset.UtcNow,
+            PageId:          Id,
+            ElementId:       elementId,
+            LanguageCode:    lang,
+            Text:            text?.Trim(),
+            PreviousText:    prevText,
+            UpdatedByUserId: updatedByUserId));
+    }
+
     /// <summary>BR-20: xác nhận cảnh báo tràn chữ kèm lý do (bắt buộc). → Raises: ElementOverflowAcknowledgedEvent</summary>
     public void AcknowledgeOverflow(Guid elementId, string reason, Guid userId)
     {
@@ -263,6 +319,77 @@ public sealed class Page : AggregateRoot
             Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, readingOrder, element.ReadingOrder, userId));
     }
 
+    /// <summary>Đổi kiểu chữ (null = về mặc định). → Raises: ElementStyleUpdatedEvent</summary>
+    public void UpdateElementStyle(Guid elementId, TextStyle? style, Guid userId)
+    {
+        var element = GetActiveElementOrThrow(elementId);
+        if (!TextElementTypes.Contains(element.ElementType))
+            throw new InvalidOperationException($"Element loại {element.ElementType} không phải element chữ.");
+        var validated = style?.Validated();
+        if (element.Style == validated) return;
+
+        RaiseEvent(new ElementStyleUpdatedEvent(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, elementId, validated, element.Style, userId));
+    }
+
+    /// <summary>
+    /// CF4 4.3 / US-12 (BR-01, BR-08): đưa canvas về trạng thái của <paramref name="target"/> (Page dựng lại tới version cũ)
+    /// bằng event mới; không xoá event nào. Element đang có mà bản cũ không có → xoá mềm; element khác bản cũ → ElementRestoredEvent.
+    /// Xoá trước rồi mới dựng lại nên ràng buộc một ScriptLine – một element (BR-05) giữ như ở bản cũ. Trả số thay đổi.
+    /// </summary>
+    public int RestoreTo(Page target, Guid restoredByUserId)
+    {
+        if (target.Id != Id)
+            throw new InvalidOperationException("Bản cần khôi phục không thuộc Page này.");
+        if (target.Version < 1 || target.Version >= Version)
+            throw new InvalidOperationException($"Chỉ khôi phục được về version cũ hơn version hiện tại ({Version}).");
+        if (target.IsDeleted)
+            throw new InvalidOperationException($"Page đã bị xoá ở version {target.Version}, không khôi phục về bản đó được.");
+
+        var before = UncommittedEvents.Count;
+        UpdateCanvasSettings(target.WidthPx, target.HeightPx, target.Dpi, target.LayoutFormat);
+
+        var keep = target.Elements.Values.Where(e => !e.IsRemoved).ToDictionary(e => e.ElementId);
+        foreach (var current in _elements.Values.Where(e => !e.IsRemoved && !keep.ContainsKey(e.ElementId)).ToList())
+            RemoveElement(current.ElementId, $"RESTORE_TO_VERSION_{target.Version}", restoredByUserId);
+
+        foreach (var old in keep.Values)
+        {
+            if (_elements.TryGetValue(old.ElementId, out var current) && !current.IsRemoved && SameState(current, old))
+                continue;
+            RaiseEvent(new ElementRestoredEvent(
+                Guid.NewGuid(), DateTimeOffset.UtcNow, Id, old.ElementId, target.Version,
+                old.ElementType, old.ZIndex, old.X, old.Y, old.Width, old.Height, old.Rotation,
+                old.Content, old.AssetId, old.PanelId, old.BibleEntryId,
+                old.ScriptLineId, old.SpeakerId, old.RenderedText, old.SourceLineText,
+                old.OverflowAckReason, old.ReadingOrder, old.Style, restoredByUserId));
+        }
+
+        return UncommittedEvents.Count - before;
+    }
+
+    /// <summary>Hai trạng thái element giống nhau (bỏ qua version và cờ xoá).</summary>
+    public static bool SameState(ElementState a, ElementState b) =>
+        a.ElementType == b.ElementType && a.ZIndex == b.ZIndex
+        && a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.Rotation == b.Rotation
+        && a.Content == b.Content && a.AssetId == b.AssetId && a.PanelId == b.PanelId && a.BibleEntryId == b.BibleEntryId
+        && a.ScriptLineId == b.ScriptLineId && a.SpeakerId == b.SpeakerId
+        && a.RenderedText == b.RenderedText && a.SourceLineText == b.SourceLineText
+        && a.OverflowAckReason == b.OverflowAckReason && a.ReadingOrder == b.ReadingOrder && a.Style == b.Style
+        && DictionariesEqual(a.Texts, b.Texts);
+
+    private static bool DictionariesEqual(Dictionary<string, string>? a, Dictionary<string, string>? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null) return (a?.Count ?? 0) == 0 && (b?.Count ?? 0) == 0;
+        if (a.Count != b.Count) return false;
+        foreach (var (k, v) in a)
+        {
+            if (!b.TryGetValue(k, out var bv) || bv != v) return false;
+        }
+        return true;
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // APPLY — Rebuild state từ events (pure, không có side effects)
     // ══════════════════════════════════════════════════════════════════════════
@@ -281,8 +408,12 @@ public sealed class Page : AggregateRoot
             case ElementMovedEvent e:      Apply(e); break;
             case ElementRemovedEvent e:    Apply(e); break;
             case ElementTextUpdatedEvent e:           Apply(e); break;
+            case ElementTranslationUpdatedEvent e:    Apply(e); break;
             case ElementOverflowAcknowledgedEvent e:  Apply(e); break;
             case ElementReadingOrderSetEvent e:       Apply(e); break;
+            case ElementStyleUpdatedEvent e:          Apply(e); break;
+            case ElementRestoredEvent e:              Apply(e); break;
+            case ElementPanelReassignedEvent e:       Apply(e); break;
             case PageDeletedEvent e:       Apply(e); break;
             // Ignore events không nhận ra (schema evolution / forward compatibility)
         }
@@ -351,6 +482,13 @@ public sealed class Page : AggregateRoot
         element.Version++;
     }
 
+    internal void Apply(ElementPanelReassignedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.PanelId = e.PanelId;
+        element.Version++;
+    }
+
     internal void Apply(ElementRemovedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
@@ -370,6 +508,20 @@ public sealed class Page : AggregateRoot
         element.Version++;
     }
 
+    internal void Apply(ElementTranslationUpdatedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        if (string.IsNullOrWhiteSpace(e.Text))
+        {
+            element.Texts.Remove(e.LanguageCode);
+        }
+        else
+        {
+            element.Texts[e.LanguageCode] = e.Text.Trim();
+        }
+        element.Version++;
+    }
+
     internal void Apply(ElementOverflowAcknowledgedEvent e)
     {
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
@@ -382,6 +534,44 @@ public sealed class Page : AggregateRoot
         if (!_elements.TryGetValue(e.ElementId, out var element)) return;
         element.ReadingOrder = e.ReadingOrder;
         element.Version++;
+    }
+
+    internal void Apply(ElementStyleUpdatedEvent e)
+    {
+        if (!_elements.TryGetValue(e.ElementId, out var element)) return;
+        element.Style = e.Style;
+        element.OverflowAckReason = null; // đổi cỡ/font làm chữ vừa hộp khác đi
+        element.Version++;
+    }
+
+    internal void Apply(ElementRestoredEvent e)
+    {
+        var version = _elements.TryGetValue(e.ElementId, out var existing) ? existing.Version : 0;
+        _elements[e.ElementId] = new ElementState
+        {
+            ElementId         = e.ElementId,
+            ElementType       = e.ElementType,
+            ZIndex            = e.ZIndex,
+            X                 = e.X,
+            Y                 = e.Y,
+            Width             = e.Width,
+            Height            = e.Height,
+            Rotation          = e.Rotation,
+            Content           = e.Content,
+            AssetId           = e.AssetId,
+            PanelId           = e.PanelId,
+            BibleEntryId      = e.BibleEntryId,
+            ScriptLineId      = e.ScriptLineId,
+            SpeakerId         = e.SpeakerId,
+            RenderedText      = e.RenderedText,
+            SourceLineText    = e.SourceLineText,
+            OverflowAckReason = e.OverflowAckReason,
+            ReadingOrder      = e.ReadingOrder,
+            Style             = e.Style,
+            Texts             = existing?.Texts != null ? new Dictionary<string, string>(existing.Texts, StringComparer.OrdinalIgnoreCase) : new(StringComparer.OrdinalIgnoreCase),
+            IsRemoved         = false,
+            Version           = version + 1
+        };
     }
 
     internal void Apply(PageDeletedEvent e)

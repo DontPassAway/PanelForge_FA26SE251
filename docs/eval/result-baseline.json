@@ -1,0 +1,64 @@
+{
+  "ranAt": "2026-10-31T04:11:23.8190504Z",
+  "model": "gemini-flash-latest",
+  "promptRef": "Prompts/continuity.md@v1#sha256:a1f40621b49c",
+  "dataset": "evaluation_dataset_80_patched.json",
+  "bibleEntries": 38,
+  "samples": 80,
+  "notRun": 79,
+  "rule": "predicted error = >=1 finding Blocking/Warning",
+  "overall": {
+    "tp": 0,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0,
+    "failed": 1,
+    "accuracy": 0,
+    "precision": 0,
+    "recall": 0,
+    "f1": 0,
+    "falsePositiveRate": 0
+  },
+  "byCategory": {
+    "Character Text": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failed": 1,
+      "accuracy": 0,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "falsePositiveRate": 0
+    }
+  },
+  "byErrorType": {
+    "Character Text - Wrong Character Name": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failed": 1,
+      "accuracy": 0,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
+      "falsePositiveRate": 0
+    }
+  },
+  "totalTokens": 0,
+  "results": [
+    {
+      "id": "SMP-002",
+      "category": "Character Text",
+      "seededErrorType": "Character Text - Wrong Character Name",
+      "expected": true,
+      "predicted": null,
+      "errorCode": "PROVIDER_ERROR",
+      "findings": [],
+      "tokens": 0,
+      "seconds": 142.4777843
+    }
+  ]
+}

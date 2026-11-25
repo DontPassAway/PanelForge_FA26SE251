@@ -56,14 +56,24 @@ public sealed record PreviewFeedbackDto(
     string? TriageNote,
     Guid? TriagedByUserId,
     DateTime? TriagedAt,
-    DateTime CreatedAt)
+    DateTime CreatedAt,
+    Guid? ChangeRequestId,
+    string? ReviewerName = null,
+    Guid? StageTaskId = null,
+    int? PageNumber = null,
+    int? PanelNumber = null,
+    // AssetReference.VersionNumber (1-based) của artwork gắn phản hồi; khác ChapterVersion (VersionVector, 0-based)
+    int? ArtworkVersionNumber = null)
 {
     public static PreviewFeedbackDto From(PreviewFeedback f) => new(
         f.Id, f.PreviewLinkId, f.ChapterId, f.PageId, f.PanelId, f.AssetReferenceId, f.ChapterVersion, f.RecipientEmail,
-        f.Message, f.Status, f.TriageNote, f.TriagedByUserId, f.TriagedAt, f.CreatedAt);
+        f.Message, f.Status, f.TriageNote, f.TriagedByUserId, f.TriagedAt, f.CreatedAt, f.ChangeRequestId, f.ReviewerName, f.StageTaskId);
 }
 
 public sealed record CreatePreviewLinkRequest(string RecipientEmail, int? ExpiresInHours = null);
 public sealed record PreviewTokenRequest(string Token);
-public sealed record SubmitPreviewFeedbackRequest(string Token, string Message, Guid? PageId = null, Guid? PanelId = null);
+public sealed record SubmitPreviewFeedbackRequest(
+    string Token, string Message, Guid? PageId = null, Guid? PanelId = null, string? ReviewerName = null);
 public sealed record TriagePreviewFeedbackRequest(PreviewFeedbackStatus Decision, string? Note);
+/// <summary>Description bỏ trống = lấy từ nội dung phản hồi và ghi chú triage.</summary>
+public sealed record CreateChangeRequestFromFeedbackRequest(Guid AssignmentId, string? Description = null, DateTime? DueDate = null);

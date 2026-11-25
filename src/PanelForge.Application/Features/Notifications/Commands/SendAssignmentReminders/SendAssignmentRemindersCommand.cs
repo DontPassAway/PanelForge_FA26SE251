@@ -11,8 +11,9 @@ namespace PanelForge.Application.Features.Notifications.Commands.SendAssignmentR
 /// InProduction có hạn trong <paramref name="Lead"/> tới thì nhận "sắp đến hạn"; đã quá hạn (trong 7 ngày gần nhất) thì nhận
 /// "đã quá hạn" một lần. Việc đã nộp chờ duyệt, đã duyệt, hay Chapter đã khoá thì không nhắc. Trả về số thông báo mới.
 /// Chống gửi trùng bằng cách đối chiếu thông báo cùng việc, loại, người nhận và nội dung (nội dung chứa hạn nên đổi hạn thì nhắc lại).
+/// <paramref name="ProducerUserId"/> có giá trị (gọi tay từ API) thì chỉ quét các Workspace người đó làm Producer; null (job nền) quét tất cả.
 /// </summary>
-public sealed record SendAssignmentRemindersCommand(TimeSpan Lead, DateTime? NowUtc = null) : IRequest<int>;
+public sealed record SendAssignmentRemindersCommand(TimeSpan Lead, DateTime? NowUtc = null, Guid? ProducerUserId = null) : IRequest<int>;
 
 public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<SendAssignmentRemindersCommand, int>
 {
@@ -30,9 +31,16 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
         var upper = now + cmd.Lead;
         var lower = now - OverdueWindow;
 
+        var pid = cmd.ProducerUserId;
+        var chapterIds = _db.Chapters
+            .Where(c => c.Status == ChapterStatus.InProduction &&
+                        (pid == null || _db.Series.Any(s => s.Id == c.SeriesId && _db.WorkspaceMembers.Any(m =>
+                            m.WorkspaceId == s.WorkspaceId && m.UserId == pid && m.Role == WorkspaceRole.Producer))))
+            .Select(c => c.Id);
+
         var candidates = await _db.Assignments.AsNoTracking()
             .Where(a => a.DueDate != null && a.DueDate <= upper && a.DueDate >= lower && OpenStatuses.Contains(a.Status) &&
-                        _db.Chapters.Any(c => c.Id == a.ChapterId && c.Status == ChapterStatus.InProduction))
+                        chapterIds.Contains(a.ChapterId))
             .ToListAsync(ct);
 
         var created = 0;
@@ -46,6 +54,47 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
 
             _db.Notifications.Add(note);
             created++;
+        }
+
+        // ChangeRequest: nhắc người chịu trách nhiệm khi yêu cầu sửa sắp đến hạn hoặc đã quá hạn (UC-14, CF3)
+        var crCandidates = await _db.ChangeRequests.AsNoTracking()
+            .Where(cr => cr.DueDate != null && cr.DueDate <= upper && cr.DueDate >= lower && cr.Status == ChangeRequestStatus.Open &&
+                         chapterIds.Contains(cr.ChapterId))
+            .ToListAsync(ct);
+
+        foreach (var cr in crCandidates)
+        {
+            var note = cr.DueDate < now ? AssignmentNotifications.ChangeRequestOverdue(cr) : AssignmentNotifications.ChangeRequestDueSoon(cr);
+
+            var alreadySent = await _db.Notifications.AnyAsync(n =>
+                n.AssignmentId == cr.AssignmentId && n.UserId == cr.ResponsibleUserId && n.Type == note.Type && n.Message == note.Message, ct);
+            if (alreadySent) continue;
+
+            _db.Notifications.Add(note);
+            created++;
+        }
+
+        // Lưới V3: lô còn ô chưa xong (chưa nộp) sắp/đã quá hạn. Quá hạn thì báo cả Producer đã giao để gia hạn hoặc chia lại.
+        var lots = await _db.StageTaskLots.AsNoTracking()
+            .Where(l => l.Status == StageTaskLotStatus.Active && l.DueDate != null && l.DueDate <= upper && l.DueDate >= lower &&
+                        chapterIds.Contains(l.ChapterId))
+            .ToListAsync(ct);
+        foreach (var lot in lots)
+        {
+            var open = await _db.StageTasks.CountAsync(t => t.LotId == lot.Id && (t.Status == StageTaskStatus.Assigned ||
+                t.Status == StageTaskStatus.InProgress || t.Status == StageTaskStatus.ReworkRequired), ct);
+            if (open == 0) continue;
+            var overdue = lot.DueDate < now;
+            Guid[] recipients = overdue ? [.. new[] { lot.AssigneeUserId, lot.AssignedByUserId }.Distinct()] : [lot.AssigneeUserId];
+            foreach (var userId in recipients)
+            {
+                var note = TaskGrid.Common.TaskGridNotifications.LotDue(userId, lot, open, overdue);
+                if (await _db.Notifications.AnyAsync(n => n.UserId == userId && n.Type == note.Type && n.ChapterId == lot.ChapterId
+                                                          && n.Message == note.Message, ct))
+                    continue;
+                _db.Notifications.Add(note);
+                created++;
+            }
         }
 
         // ponytail: hai instance Backend chạy cùng lúc có thể gửi trùng một lần ở cùng chu kỳ; chấp nhận được, cần thì thêm cột reminded_at + unique index

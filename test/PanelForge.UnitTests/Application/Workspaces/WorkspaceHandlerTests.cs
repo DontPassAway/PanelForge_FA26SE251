@@ -67,6 +67,8 @@ public class WorkspaceHandlerTests
 
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment> { pending, approved, deleted }));
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
 
         var result = await new GetMyWorkspacesQueryHandler(_dbContextMock.Object)
             .Handle(new GetMyWorkspacesQuery(userId), CancellationToken.None);
@@ -76,6 +78,49 @@ public class WorkspaceHandlerTests
         dto.MemberCount.Should().Be(1);    // bỏ member đã xóa
         dto.IsOwner.Should().BeTrue();
         dto.CurrentUserRole.Should().Be(WorkspaceRole.Producer);
+        dto.SeriesCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetMyWorkspaces_ShouldSummariseSeriesAndLatestActivity()
+    {
+        var userId = Guid.NewGuid();
+        var owner = User.Create("owner2@test.com", "Owner");
+        owner.GetType().GetProperty("Id")?.SetValue(owner, userId);
+        var workspace = StudioWorkspace.Create("Moonlight", owner.Id);
+        workspace.GetType().GetProperty("Owner")?.SetValue(workspace, owner);
+        typeof(StudioWorkspace).GetProperty("Members")?.SetValue(workspace, new List<WorkspaceMember>());
+
+        Series MakeSeries(string title, DateTime at, bool deleted = false)
+        {
+            var s = Series.Create(workspace.Id, title, ReadingDirection.RightToLeft);
+            s.CreatedAt = at;
+            s.IsDeleted = deleted;
+            return s;
+        }
+        var oldest = MakeSeries("A", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var middle = MakeSeries("B", new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newer = MakeSeries("C", new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newest = MakeSeries("D", new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc));
+        var removed = MakeSeries("X", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc), deleted: true);
+
+        var chapter = Chapter.Create(oldest.Id, 1, "Ch1");
+        chapter.GetType().GetProperty("Series")?.SetValue(chapter, oldest);
+        var chapterEdited = new DateTime(2026, 5, 10, 0, 0, 0, DateTimeKind.Utc);
+        chapter.UpdatedAt = chapterEdited;
+
+        _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
+        _dbContextMock.Setup(db => db.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment>()));
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { oldest, middle, newer, newest, removed }));
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { chapter }));
+
+        var result = await new GetMyWorkspacesQueryHandler(_dbContextMock.Object)
+            .Handle(new GetMyWorkspacesQuery(userId), CancellationToken.None);
+
+        var dto = result.Value.Should().ContainSingle().Subject;
+        dto.SeriesCount.Should().Be(4); // series đã xoá không tính
+        dto.SeriesPreviews!.Select(p => p.Title).Should().Equal("D", "C", "B"); // 3 series mới nhất
+        dto.LastActivityAt.Should().Be(chapterEdited); // sửa chương mới hơn mọi series
     }
 
     [Fact]
@@ -205,5 +250,42 @@ public class WorkspaceHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain("Chủ sở hữu");
+    }
+
+    /// <summary>G06: rời Studio thì ô đang làm về Unassigned (Producer giao lại), ô đã nộp giữ nguyên để Editor chấm.</summary>
+    [Fact]
+    public async Task RemoveMember_ReleasesUnsubmittedGridCells_KeepsSubmittedOnes()
+    {
+        await using var db = InMemoryDb.Create();
+        var ownerId = Guid.NewGuid();
+        var artistId = Guid.NewGuid();
+        var workspace = StudioWorkspace.Create("Studio", ownerId);
+        var series = Series.Create(workspace.Id, "S", ReadingDirection.RightToLeft);
+        var chapterId = Guid.NewGuid();
+        var stageId = Guid.NewGuid();
+        var lot = StageTaskLot.Create(series.Id, chapterId, stageId, artistId, WorkspaceRole.Artist, ownerId, null, null);
+        var working = StageTask.Create(series.Id, chapterId, stageId, Guid.NewGuid());
+        working.AssignTo(lot.Id);
+        working.Start(prerequisitesApproved: true);
+        var submitted = StageTask.Create(series.Id, chapterId, stageId, Guid.NewGuid());
+        submitted.AssignTo(lot.Id);
+        submitted.Start(prerequisitesApproved: true);
+        submitted.Submit(null, isApprovalGate: true);
+        db.StudioWorkspaces.Add(workspace);
+        db.WorkspaceMembers.Add(WorkspaceMember.Create(workspace.Id, artistId, WorkspaceRole.Artist));
+        db.Series.Add(series);
+        db.StageTaskLots.Add(lot);
+        db.StageTasks.AddRange(working, submitted);
+        await db.SaveChangesAsync();
+        _authorizationServiceMock.Setup(a => a.IsOwnerOrProducerAsync(ownerId, workspace.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await new RemoveWorkspaceMemberCommandHandler(db, _authorizationServiceMock.Object)
+            .Handle(new RemoveWorkspaceMemberCommand(ownerId, workspace.Id, artistId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        working.Status.Should().Be(StageTaskStatus.Unassigned);
+        working.LotId.Should().BeNull();
+        submitted.Status.Should().Be(StageTaskStatus.Submitted);
     }
 }

@@ -16,7 +16,13 @@ public sealed record SeriesDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     int ChaptersCount,
-    string? StoryArc = null
+    string? StoryArc = null,
+    string? CoverUrl = null,
+    string? AvatarUrl = null,
+    string? BannerUrl = null,
+    bool IsCompleted = false,
+    string OriginalLanguage = ContentLanguages.Original,
+    IReadOnlyList<string>? ReleaseLanguages = null
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -43,12 +49,30 @@ public sealed record SeriesDetailDto(
     DateTime? UpdatedAt,
     string? CreatedBy,
     IReadOnlyList<SeriesChapterSummaryDto> Chapters,
-    string? StoryArc = null
+    string? StoryArc = null,
+    string? CoverUrl = null,
+    string? AvatarUrl = null,
+    string? BannerUrl = null,
+    string OriginalLanguage = ContentLanguages.Original,
+    IReadOnlyList<string>? ReleaseLanguages = null,
+    string? Logline = null,
+    string? Teaser = null,
+    string? AgeRating = null
+);
+
+public sealed record UpdateSeriesLanguagesRequest(
+    string OriginalLanguage,
+    IReadOnlyList<string> ReleaseLanguages
 );
 
 public sealed record CreateSeriesRequest(
     string Title,
-    string? Format = "WEBTOON"
+    string? Format = "MANGA",
+    ReadingDirection? ReadingDirection = null,
+    string? Synopsis = null,
+    string? Genre = null,
+    string? StoryArc = null,
+    Guid? PipelineTemplateId = null
 );
 
 public sealed record UpdateSeriesRequest(
@@ -59,5 +83,6 @@ public sealed record UpdateSeriesRequest(
     string? Genre = null,
     string? Format = null,
     string? ReleaseScheduleJson = null,
-    string? StoryArc = null
+    string? StoryArc = null,
+    bool? IsCompleted = null
 );

@@ -1,0 +1,492 @@
+@startuml PanelForge_UML2_Physical_Model
+!theme plain
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 5
+skinparam classFontSize 11
+skinparam classFontName "Consolas"
+skinparam defaultFontName "Segoe UI"
+skinparam arrowThickness 1.5
+
+title PanelForge Manga Production Platform - Physical Data Model (UML 2.0 Profile for PostgreSQL 16)
+
+class "users" as users <<table>> {
+    + id : uuid <<PK>>
+    --
+    + email : varchar(320) <<UQ>>
+    + firebase_uid : varchar(128) <<UQ>>
+    + password_hash : varchar(255)
+    + full_name : varchar(255)
+    + phone_number : varchar(20)
+    + avatar_url : varchar(2048)
+    + profile_cover_preset_id : varchar(64)
+    + role : varchar(30)
+    + is_active : boolean
+    + is_email_confirmed : boolean
+    + email_verification_token : varchar(255) <<IX>>
+    + email_verification_token_expires_at : timestamptz
+    + password_reset_token : varchar(255) <<IX>>
+    + password_reset_token_expires_at : timestamptz
+    + otp_failed_attempts : integer
+    + two_factor_enabled : boolean
+    + two_factor_secret : varchar(255)
+    + can_create_studio : boolean
+    + created_at : timestamptz
+}
+
+class "refresh_tokens" as refresh_tokens <<table>> {
+    + id : uuid <<PK>>
+    --
+    + user_id : uuid <<FK, IX>>
+    + token_hash : varchar(64) <<UQ>>
+    + expires_at : timestamptz
+    + revoked_at : timestamptz
+    + session_id : uuid
+    + session_started_at : timestamptz
+    + device_name : varchar(150)
+    + ip_address : varchar(64)
+    + user_agent : varchar(512)
+    + last_active_at : timestamptz
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+}
+
+class "studio_workspaces" as studio_workspaces <<table>> {
+    + id : uuid <<PK>>
+    --
+    + owner_id : uuid <<FK>>
+    + name : varchar(255)
+    + slug : varchar(255) <<UQ>>
+    + description : text
+    + logo_url : varchar(2048)
+    + cover_image_url : varchar(2048)
+    + status : varchar(30)
+    + plan_tier : varchar(30)
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "workspace_members" as workspace_members <<table>> {
+    + id : uuid <<PK>>
+    --
+    + workspace_id : uuid <<FK>>
+    + user_id : uuid <<FK>>
+    + role : varchar(30)
+    + status : varchar(30)
+    + joined_at : timestamptz
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "series" as series <<table>> {
+    + id : uuid <<PK>>
+    --
+    + workspace_id : uuid <<FK, IX>>
+    + title : varchar(500)
+    + slug : varchar(500) <<UQ>>
+    + synopsis : text
+    + cover_image_url : varchar(2048)
+    + avatar_url : varchar(2048)
+    + banner_url : varchar(2048)
+    + status : varchar(30)
+    + target_demographic : varchar(50)
+    + release_schedule_json : jsonb
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "series_members" as series_members <<table>> {
+    + id : uuid <<PK>>
+    --
+    + series_id : uuid <<FK>>
+    + user_id : uuid <<FK>>
+    + role : varchar(30)
+    + assigned_at : timestamptz
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "chapters" as chapters <<table>> {
+    + id : uuid <<PK>>
+    --
+    + series_id : uuid <<FK, IX>>
+    + chapter_number : numeric(8,2)
+    + title : varchar(500)
+    + outline : text
+    + cover_image_sha256 : varchar(64)
+    + status : varchar(20) <<IX>>
+    + published_at : timestamptz
+    + target_release_date : date
+    + is_script_frozen : boolean
+    + script_frozen_at : timestamptz
+    + script_frozen_by_id : uuid
+    + script_content_hash : varchar(64)
+    + script_reopen_status : varchar(20)
+    + script_reopen_reason : text
+    + script_reopen_requested_by_id : uuid
+    + script_reopen_requested_at : timestamptz
+    + version_vector : bigint
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "chapter_scripts" as chapter_scripts <<table>> {
+    + id : uuid <<PK>>
+    --
+    + chapter_id : uuid <<FK, UQ>>
+    + version : integer
+    + raw_text : text
+    + is_locked : boolean
+    + locked_at : timestamptz
+    + locked_by_id : uuid
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "scenes" as scenes <<table>> {
+    + id : uuid <<PK>>
+    --
+    + chapter_id : uuid <<FK, IX>>
+    + scene_number : integer
+    + heading : varchar(500)
+    + summary : text
+    + default_narration_mode : varchar(30)
+    + version : integer
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "script_lines" as script_lines <<table>> {
+    + id : uuid <<PK>>
+    --
+    + scene_id : uuid <<FK, IX>>
+    + panel_id : uuid <<FK, IX>>
+    + speaker_character_id : uuid <<FK, IX>>
+    + line_order : integer
+    + dialogue_text : text
+    + stage_direction : text
+    + narration_mode : varchar(30)
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "pages" as pages <<table>> {
+    + id : uuid <<PK>>
+    --
+    + chapter_id : uuid <<FK, IX>>
+    + page_number : integer
+    + layout_format : varchar(30)
+    + width_px : integer
+    + height_px : integer
+    + dpi : integer
+    + is_content_ready : boolean
+    + content_ready_at : timestamptz
+    + content_ready_by_id : uuid
+    + current_stage_id : uuid <<FK>>
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "panels" as panels <<table>> {
+    + id : uuid <<PK>>
+    --
+    + page_id : uuid <<FK, IX>>
+    + scene_id : uuid <<FK, IX>>
+    + panel_number : integer
+    + reading_order : integer
+    + bounding_box : jsonb
+    + current_stage_id : uuid <<FK>>
+    + version : integer
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "pipeline_definitions" as pipeline_definitions <<table>> {
+    + id : uuid <<PK>>
+    --
+    + workspace_id : uuid <<FK, IX>>
+    + series_id : uuid <<FK, IX>>
+    + name : varchar(255)
+    + description : text
+    + is_default : boolean
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "pipeline_stages" as pipeline_stages <<table>> {
+    + id : uuid <<PK>>
+    --
+    + pipeline_definition_id : uuid <<FK, IX>>
+    + name : varchar(100)
+    + stage_order : integer
+    + required_role : varchar(30)
+    + is_enabled : boolean
+    + configuration_json : jsonb
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "assignments" as assignments <<table>> {
+    + id : uuid <<PK>>
+    --
+    + series_id : uuid <<FK, IX>>
+    + chapter_id : uuid <<FK, IX>>
+    + pipeline_stage_id : uuid <<FK, IX>>
+    + assignee_user_id : uuid <<FK, IX>>
+    + assigned_role : varchar(30)
+    + entity_type : varchar(20)
+    + target_entity_id : uuid <<IX>>
+    + brief : text
+    + reference_notes : text
+    + reference_asset_urls_json : jsonb
+    + due_date : timestamptz <<IX>>
+    + priority : varchar(20)
+    + status : varchar(30) <<IX>>
+    + depends_on_assignment_id : uuid <<FK, IX>>
+    + depends_on_assignment_ids_json : jsonb
+    + batch_id : uuid <<IX>>
+    + started_at : timestamptz
+    + completed_at : timestamptz
+    + last_feedback_comment : text
+    + impact_review_reason : text
+    + has_script_impact : boolean
+    + cancel_reason : text
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "submissions" as submissions <<table>> {
+    + id : uuid <<PK>>
+    --
+    + assignment_id : uuid <<FK, IX>>
+    + chapter_id : uuid <<FK, IX>>
+    + submitted_by_user_id : uuid <<FK>>
+    + attempt_number : integer
+    + status : varchar(30)
+    + submitted_at : timestamptz
+    + decided_by_user_id : uuid <<FK>>
+    + decided_at : timestamptz
+    + decision_reason : text
+    + panel_layout_json : jsonb
+    + canvas_versions_json : jsonb
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "change_requests" as change_requests <<table>> {
+    + id : uuid <<PK>>
+    --
+    + assignment_id : uuid <<FK, IX>>
+    + chapter_id : uuid <<FK, IX>>
+    + submission_id : uuid <<FK, IX>>
+    + asset_reference_id : uuid <<FK, IX>>
+    + panel_id : uuid <<FK>>
+    + responsible_user_id : uuid <<FK>>
+    + requested_by_user_id : uuid <<FK>>
+    + status : varchar(30)
+    + severity : varchar(20)
+    + comment : text
+    + resolved_comment : text
+    + region_json : jsonb
+    + artwork_version : integer
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "series_bibles" as series_bibles <<table>> {
+    + id : uuid <<PK>>
+    --
+    + series_id : uuid <<FK, UQ>>
+    + workspace_id : uuid <<FK, IX>>
+    + name : varchar(255)
+    + description : text
+    + version : integer
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "bible_entries" as bible_entries <<table>> {
+    + id : uuid <<PK>>
+    --
+    + series_bible_id : uuid <<FK, IX>>
+    + category : varchar(30) <<IX>>
+    + code : varchar(50)
+    + name : varchar(255)
+    + subtitle : varchar(255)
+    + description : text
+    + details_json : jsonb
+    + reference_image_url : text
+    + priority : varchar(20)
+    + strict_check : boolean
+    + is_active : boolean
+    + is_stub : boolean
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "assets" as assets <<table>> {
+    + id : uuid <<PK>>
+    --
+    + workspace_id : uuid <<FK>>
+    + sha256 : varchar(64)
+    + size_bytes : bigint
+    + content_type : varchar(100)
+    + storage_key : varchar(200)
+    + created_at : timestamptz
+    + updated_at : timestamptz
+}
+
+class "asset_references" as asset_references <<table>> {
+    + id : uuid <<PK>>
+    --
+    + asset_id : uuid <<FK, IX>>
+    + workspace_id : uuid <<FK>>
+    + chapter_id : uuid <<FK, IX>>
+    + page_id : uuid <<FK>>
+    + panel_id : uuid <<FK>>
+    + pipeline_stage_id : uuid <<FK>>
+    + version_number : integer
+    + layer_type : varchar(40)
+    + file_name : varchar(255)
+    + uploaded_by_user_id : uuid <<FK>>
+    + created_at : timestamptz
+    + updated_at : timestamptz
+}
+
+class "preview_links" as preview_links <<table>> {
+    + id : uuid <<PK>>
+    --
+    + chapter_id : uuid <<FK, IX>>
+    + workspace_id : uuid <<FK, IX>>
+    + recipient_email : varchar(320)
+    + token_hash : varchar(64) <<UQ>>
+    + expires_at : timestamptz
+    + revoked_at : timestamptz
+    + revoked_by_user_id : uuid <<FK>>
+    + revoke_reason : varchar(500)
+    + created_by_user_id : uuid <<FK>>
+    + snapshot_artwork_ids : text
+    + chapter_version : bigint
+    + created_at : timestamptz
+    + updated_at : timestamptz
+    + is_deleted : boolean
+    + deleted_at : timestamptz
+    + deleted_by : text
+}
+
+class "audit_logs" as audit_logs <<table>> {
+    + id : uuid <<PK>>
+    --
+    + workspace_id : uuid <<FK, IX>>
+    + user_id : uuid <<FK, IX>>
+    + user_email : varchar(255)
+    + action : varchar(100) <<IX>>
+    + entity_name : varchar(100)
+    + entity_id : varchar(100)
+    + changes_json : text
+    + timestamp_utc : timestamptz <<IX>>
+    + ip_address : varchar(45)
+    + details : text
+    + created_at : timestamptz
+    + updated_at : timestamptz
+}
+
+' Foreign Key Constraint Relationships
+users "1" <-- "0..*" studio_workspaces : "<<FK>> owner_id"
+users "1" <-- "0..*" workspace_members : "<<FK>> user_id"
+studio_workspaces "1" <-- "1..*" workspace_members : "<<FK>> workspace_id"
+users "1" <-- "0..*" refresh_tokens : "<<FK>> user_id"
+
+studio_workspaces "1" <-- "0..*" series : "<<FK>> workspace_id"
+series "1" <-- "0..*" series_members : "<<FK>> series_id"
+users "1" <-- "0..*" series_members : "<<FK>> user_id"
+series "1" <-- "1..*" chapters : "<<FK>> series_id"
+chapters "1" <-- "1" chapter_scripts : "<<FK, UQ>> chapter_id"
+
+chapters "1" <-- "1..*" scenes : "<<FK>> chapter_id"
+scenes "1" <-- "1..*" script_lines : "<<FK>> scene_id"
+panels "0..1" <-- "0..*" script_lines : "<<FK>> panel_id"
+
+chapters "1" <-- "1..*" pages : "<<FK>> chapter_id"
+pages "1" <-- "1..*" panels : "<<FK>> page_id"
+scenes "0..1" <-- "0..*" panels : "<<FK>> scene_id"
+
+studio_workspaces "1" <-- "1..*" pipeline_definitions : "<<FK>> workspace_id"
+pipeline_definitions "1" <-- "1..*" pipeline_stages : "<<FK>> pipeline_definition_id"
+
+chapters "1" <-- "0..*" assignments : "<<FK>> chapter_id"
+pipeline_stages "1" <-- "0..*" assignments : "<<FK>> pipeline_stage_id"
+users "1" <-- "0..*" assignments : "<<FK>> assignee_user_id"
+assignments "0..1" <-- "0..*" assignments : "<<FK>> depends_on_assignment_id"
+
+assignments "1" <-- "0..*" submissions : "<<FK>> assignment_id"
+assignments "1" <-- "0..*" change_requests : "<<FK>> assignment_id"
+submissions "0..1" <-- "0..*" change_requests : "<<FK>> submission_id"
+
+series "1" <-- "1" series_bibles : "<<FK, UQ>> series_id"
+series_bibles "1" <-- "1..*" bible_entries : "<<FK>> series_bible_id"
+
+studio_workspaces "1" <-- "0..*" assets : "<<FK>> workspace_id"
+assets "1" <-- "1..*" asset_references : "<<FK>> asset_id"
+chapters "1" <-- "0..*" asset_references : "<<FK>> chapter_id"
+pages "1" <-- "0..*" asset_references : "<<FK>> page_id"
+panels "0..1" <-- "0..*" asset_references : "<<FK>> panel_id"
+
+chapters "1" <-- "0..*" preview_links : "<<FK>> chapter_id"
+studio_workspaces "1" <-- "0..*" audit_logs : "<<FK>> workspace_id"
+
+@enduml
+

@@ -10,6 +10,8 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
     public void Configure(EntityTypeBuilder<BibleEntry> builder)
     {
         builder.ToTable("bible_entries");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id)
@@ -47,6 +49,14 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasColumnType("varchar(255)")
                .IsRequired();
 
+        builder.Property(e => e.NormalizedName)
+               .HasColumnName("normalized_name")
+               .HasColumnType("varchar(200)")
+               .IsRequired();
+        builder.HasIndex(e => new { e.SeriesBibleId, e.NormalizedName })
+               .IsUnique()
+               .HasDatabaseName("ix_bible_entries_series_bible_id_normalized_name");
+
         builder.Property(e => e.Subtitle)
                .HasColumnName("subtitle")
                .HasColumnType("varchar(255)");
@@ -58,7 +68,8 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
 
         builder.Property(e => e.DetailsJson)
                .HasColumnName("details_json")
-               .HasColumnType("text")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'{}'::jsonb")
                .IsRequired();
 
         builder.Property(e => e.ReferenceImageUrl)
@@ -83,6 +94,18 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasColumnName("is_active")
                .HasColumnType("boolean")
                .HasDefaultValue(true)
+               .IsRequired();
+
+        builder.Property(e => e.IsStub)
+               .HasColumnName("is_stub")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(e => e.IsCrowd)
+               .HasColumnName("is_crowd")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
                .IsRequired();
 
         builder.Property(e => e.CreatedAt)

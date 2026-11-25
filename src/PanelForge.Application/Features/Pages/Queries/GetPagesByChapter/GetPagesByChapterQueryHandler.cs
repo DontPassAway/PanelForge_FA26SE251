@@ -37,7 +37,10 @@ public sealed class GetPagesByChapterQueryHandler
                 p.WidthPx,
                 p.HeightPx,
                 p.Dpi,
-                p.Panels.Count
+                p.Panels.Count,
+                p.IsContentReady,
+                p.ContentReadyAt,
+                p.ContentReadyById
             ))
             .ToListAsync(cancellationToken);
 

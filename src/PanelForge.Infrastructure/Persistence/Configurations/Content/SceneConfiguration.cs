@@ -26,6 +26,14 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
                .HasColumnType("int")
                .IsRequired();
 
+        // BR-11: chống ghi đè khi hai người sửa cùng scene
+        builder.Property(s => s.Version)
+               .HasColumnName("version")
+               .HasColumnType("int")
+               .HasDefaultValue(0)
+               .IsConcurrencyToken()
+               .IsRequired();
+
         builder.HasIndex(s => new { s.ChapterId, s.SceneNumber })
                .IsUnique()
                .HasFilter("is_deleted = false") // trang/khung/cảnh đã xoá mềm không giữ chỗ số thứ tự
@@ -38,6 +46,14 @@ internal sealed class SceneConfiguration : IEntityTypeConfiguration<Scene>
         builder.Property(s => s.Summary)
                .HasColumnName("summary")
                .HasColumnType("text");
+
+        builder.Property(s => s.DefaultNarrationMode)
+               .HasColumnName("default_narration_mode")
+               .HasColumnType("varchar(30)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<PanelForge.Domain.Enums.NarrationMode>(v))
+               .HasDefaultValue(PanelForge.Domain.Enums.NarrationMode.Present);
 
         builder.HasMany(s => s.ScriptLines)
                .WithOne(l => l.Scene)

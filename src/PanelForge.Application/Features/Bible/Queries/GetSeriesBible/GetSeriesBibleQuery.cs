@@ -22,60 +22,23 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
         var bible = await _dbContext.SeriesBibles
             .Include(b => b.Entries)
                 .ThenInclude(e => e.Revisions)
+                    .ThenInclude(r => r.Events)
             .FirstOrDefaultAsync(b => b.SeriesId == request.SeriesId, cancellationToken);
 
         if (bible == null)
         {
-            return Result<SeriesBibleDto>.Failure($"SeriesBible cho Series {request.SeriesId} không tồn tại.");
+            // Series tạo trước khi có Bible (dữ liệu cũ/seed): coi là Bible rỗng; mục đầu tiên sẽ tạo Bible (CreateBibleEntry).
+            var workspaceId = await _dbContext.Series.AsNoTracking()
+                .Where(s => s.Id == request.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(cancellationToken);
+            return workspaceId == null
+                ? Result<SeriesBibleDto>.Failure($"Series {request.SeriesId} không tồn tại.", ResultErrorCodes.NotFound)
+                : Result<SeriesBibleDto>.Success(new SeriesBibleDto(Guid.Empty, request.SeriesId, workspaceId.Value, "Series Bible", null, 0, []));
         }
 
         var entryDtos = bible.Entries
             .OrderBy(e => e.Category)
             .ThenBy(e => e.Name)
-            .Select(e =>
-            {
-                // Revision có hiệu lực ở chương mới nhất (BR-15), khớp với current state của entry
-                var latestRev = e.GetCurrentRevision();
-
-                BibleEntryRevisionDto? revDto = null;
-                if (latestRev != null)
-                {
-                    revDto = new BibleEntryRevisionDto(
-                        Id: latestRev.Id,
-                        BibleEntryId: latestRev.BibleEntryId,
-                        VersionNumber: latestRev.VersionNumber,
-                        Summary: latestRev.Summary,
-                        SnapshotJson: latestRev.SnapshotJson,
-                        ContentHash: latestRev.ContentHash,
-                        AuthorId: latestRev.AuthorId,
-                        AssociatedChapterId: latestRev.AssociatedChapterId,
-                        EffectiveFromChapterNumber: latestRev.EffectiveFromChapterNumber,
-                        IsInitialVersion: latestRev.IsInitialVersion,
-                        CreatedAt: latestRev.CreatedAt,
-                        IsLocked: latestRev.IsLocked,
-                        LockedAt: latestRev.LockedAt,
-                        LockedById: latestRev.LockedById
-                    );
-                }
-
-                return new BibleEntryDto(
-                    Id: e.Id,
-                    SeriesBibleId: e.SeriesBibleId,
-                    Category: e.Category,
-                    Code: e.Code,
-                    Name: e.Name,
-                    Subtitle: e.Subtitle,
-                    Description: e.Description,
-                    DetailsJson: e.DetailsJson,
-                    ReferenceImageUrl: e.ReferenceImageUrl,
-                    Priority: e.Priority,
-                    StrictCheck: e.StrictCheck,
-                    IsActive: e.IsActive,
-                    EffectiveRevision: revDto,
-                    CreatedAt: e.CreatedAt,
-                    UpdatedAt: e.UpdatedAt
-                );
-            })
+            .Select(e => BibleEntryDto.From(e) with { IsCrowd = false })
             .ToList();
 
         return Result<SeriesBibleDto>.Success(new SeriesBibleDto(

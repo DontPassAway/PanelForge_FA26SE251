@@ -67,12 +67,15 @@ internal sealed class PreviewFeedbackConfiguration : IEntityTypeConfiguration<Pr
         builder.Property(f => f.AssetReferenceId).HasColumnName("asset_reference_id").HasColumnType("uuid");
         builder.Property(f => f.ChapterVersion).HasColumnName("chapter_version").HasColumnType("bigint").IsRequired();
         builder.Property(f => f.RecipientEmail).HasColumnName("recipient_email").HasColumnType("varchar(320)").IsRequired();
+        builder.Property(f => f.ReviewerName).HasColumnName("reviewer_name").HasColumnType("varchar(80)");
         builder.Property(f => f.Message).HasColumnName("message").HasColumnType("text").IsRequired();
         builder.Property(f => f.Status).HasColumnName("status").HasColumnType("varchar(20)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<PreviewFeedbackStatus>(v)).IsRequired();
         builder.Property(f => f.TriageNote).HasColumnName("triage_note").HasColumnType("text");
         builder.Property(f => f.TriagedByUserId).HasColumnName("triaged_by_user_id").HasColumnType("uuid");
         builder.Property(f => f.TriagedAt).HasColumnName("triaged_at").HasColumnType("timestamptz");
+        builder.Property(f => f.ChangeRequestId).HasColumnName("change_request_id").HasColumnType("uuid");
+        builder.Property(f => f.StageTaskId).HasColumnName("stage_task_id").HasColumnType("uuid");
         builder.Property(f => f.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(f => f.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
         builder.HasOne<PreviewLink>().WithMany().HasForeignKey(f => f.PreviewLinkId).OnDelete(DeleteBehavior.Cascade);

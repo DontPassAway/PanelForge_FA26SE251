@@ -11,13 +11,46 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PanelForge.Application;
 using PanelForge.Infrastructure;
+using PanelForge.API.Hubs;
+using PanelForge.API.Services;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Infrastructure.Persistence.Seeders;
 using PanelForge.API.Common;
+using PanelForge.Application.Common.Models;
+using PanelForge.Application.Features.Payments.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ── Công cụ: chép ảnh từ đĩa lên R2 rồi thoát (không khởi động web, không chạm DB) ──
+//   dotnet run -- migrate-assets-to-r2 [--dry-run] [--source <thư mục>]
+if (args.Length > 0 && args[0] == "migrate-assets-to-r2")
+{
+    var sourceIndex = Array.IndexOf(args, "--source");
+    var source = sourceIndex >= 0 && sourceIndex + 1 < args.Length
+        ? args[sourceIndex + 1]
+        : builder.Configuration["AssetStorage:RootPath"] is { Length: > 0 } configured
+            ? configured
+            : Path.Combine(AppContext.BaseDirectory, "App_Data", "assets");
+    var dryRun = args.Contains("--dry-run");
+
+    if (!Directory.Exists(source))
+    {
+        Console.Error.WriteLine($"Không thấy thư mục ảnh: {source}");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    Console.WriteLine($"Nguồn: {Path.GetFullPath(source)}{(dryRun ? "  (chạy thử, không chép)" : "")}");
+    var summary = await PanelForge.Infrastructure.Services.AssetStorageMigrator.RunAsync(
+        source, dryRun ? null : PanelForge.Infrastructure.Services.R2AssetStorage.FromConfiguration(builder.Configuration),
+        Console.Out);
+    Console.WriteLine($"Xong: {summary.Copied} {(dryRun ? "sẽ chép" : "đã chép")}, {summary.Invalid} sai hash, {summary.Failed} lỗi.");
+    Environment.ExitCode = summary.Invalid + summary.Failed == 0 ? 0 : 1;
+    return;
+}
 
 // ── Application layer (MediatR + Command/Query handlers) ─────────────────────
 builder.Services.AddApplication();
@@ -66,6 +99,14 @@ builder.Services.AddAuthentication(options =>
         OnMessageReceived = context =>
         {
             var request = context.HttpContext.Request;
+            var accessToken = request.Query["access_token"];
+            var path = request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+                return Task.CompletedTask;
+            }
+
             if (string.IsNullOrEmpty(context.Token)
                 && !request.Headers.ContainsKey("Authorization")
                 && request.Cookies.TryGetValue(AuthCookies.Access, out var cookieToken)
@@ -81,9 +122,10 @@ builder.Services.AddAuthentication(options =>
             var sub = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
                       ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var db = context.HttpContext.RequestServices.GetRequiredService<IPanelForgeDbContext>();
+            Guid? sessionId = Guid.TryParse(context.Principal?.FindFirst("session_id")?.Value, out var sid) ? sid : null;
             if (!Guid.TryParse(sub, out var userId)
-                || !await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, context.HttpContext.RequestAborted))
-                context.Fail("Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.");
+                || !await AccessTokenGuard.IsValidAsync(db, userId, sessionId, DateTime.UtcNow, context.HttpContext.RequestAborted))
+                context.Fail("Tài khoản không tồn tại, đã bị vô hiệu hóa hoặc phiên đăng nhập đã kết thúc.");
         }
     };
 });
@@ -95,6 +137,9 @@ builder.Services.AddHostedService<AiRunSweeper>();
 
 // ── UC-14: nhắc người nhận việc sắp đến hạn / quá hạn ─────────────────────────────────
 builder.Services.AddHostedService<AssignmentReminderWorker>();
+
+// ── UC-12 / UC-14: chạy bản xuất chương (CBZ, PDF, ảnh trang, webtoon) ────────────────
+builder.Services.AddHostedService<ExportWorker>();
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -134,22 +179,34 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => options.Filters.Add<PanelForge.API.Common.ConcurrencyConflictFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend
+// [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend (hỗ trợ cả config động qua appsettings/env)
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Cho phép cả React và Vite
+        policy.WithOrigins(configuredOrigins)
               .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
               .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
               .AllowCredentials();                  // Cần thiết nếu dùng Cookie hoặc xác thực đặc thù
     });
+});
+
+// Hỗ trợ reverse proxy headers (X-Forwarded-For, X-Forwarded-Proto) khi deploy sau Nginx/Cloudflare/ALB
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                             | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // Chống dò mật khẩu / OTP: tối đa 10 request/phút/IP cho các endpoint auth ([EnableRateLimiting("auth")]).
@@ -167,6 +224,9 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IAiStreamPublisher, AiStreamPublisher>();
+
 var app = builder.Build();
 
 // ── Migrate & Seed master data on startup ─────────────────────────────────────
@@ -176,15 +236,21 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await MasterDataSeeder.SeedAsync(db);
 
-    if (app.Environment.IsDevelopment())
-        await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
+    // QR của Studio chưa khai ngân hàng sẽ trỏ tới tài khoản này: tài khoản giả ở môi trường thật = độc giả chuyển nhầm tiền.
+    if (!app.Environment.IsDevelopment() && app.Services.GetRequiredService<DefaultBankSettings>().IsPlaceholder)
+        app.Logger.LogWarning("SePay:DefaultBank vẫn là tài khoản giả {AccountNo}. Cấu hình SePay__DefaultBank__* bằng tài khoản thật đã liên kết SePay.",
+            DefaultBankSettings.PlaceholderAccountNo);
 
-    // Dữ liệu mẫu demo AI: opt-in (AiService:SeedDemoData=true), chạy lặp không tạo trùng, không sửa dữ liệu có sẵn
-    if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("AiService:SeedDemoData"))
+    if (app.Environment.IsDevelopment())
     {
-        var seeded = await AiDemoSeeder.SeedAsync(db);
-        app.Logger.LogInformation("AiDemoSeeder: {Result}", seeded ? "đã seed Studio Moonlight" : "bỏ qua (đã có hoặc thiếu tài khoản dev)");
+        await DevUserSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher>());
+        var paymentSeeded = await PaymentDemoSeeder.SeedAsync(db);
+        if (paymentSeeded)
+            app.Logger.LogInformation("PaymentDemoSeeder: đã seed KomaForge Studio và giao dịch VietQR mẫu.");
     }
+
+    if (app.Environment.IsDevelopment())
+        await DemoPipelineSeeder.EnsureAsync(db);
 }
 
 app.UseSwagger();
@@ -196,6 +262,9 @@ app.UseSwaggerUI(options =>
 
 //app.UseHttpsRedirection();
 
+// Nhận diện HTTPS/IP thực từ reverse proxy (Nginx, Traefik, Cloudflare, ALB)
+app.UseForwardedHeaders();
+
 // [THÊM MỚI] 2. Kích hoạt middleware CORS (Phải đặt TRƯỚC UseAuthentication)
 app.UseCors("AllowFrontend");
 
@@ -205,5 +274,6 @@ app.UseAuthorization();
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
+app.MapHub<AiStreamHub>("/hubs/ai-stream");
 
 app.Run();

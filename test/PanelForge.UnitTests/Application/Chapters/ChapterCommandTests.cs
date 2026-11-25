@@ -18,6 +18,10 @@ public class ChapterCommandTests
     public ChapterCommandTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        // SCR-05: tạo chương kèm Scene mặc định ẩn
+        _dbContextMock.Setup(db => db.Scenes).Returns(DbSetMockHelper.CreateDbSetMock(new List<Scene>()));
+        // BR-34: ChapterEditions
+        _dbContextMock.Setup(db => db.ChapterEditions).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChapterEdition>()));
     }
 
     [Fact]
@@ -51,6 +55,26 @@ public class ChapterCommandTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.ChapterNumber.Should().Be(1);
         result.Value.Title.Should().Be("Chapter 1: The Beginning");
+    }
+
+    [Theory]
+    [InlineData("  An tìm thấy chìa khoá bạc.  ", "An tìm thấy chìa khoá bạc.")]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public async Task CreateChapter_WithOutline_SavesItTrimmed_BlankMeansNone(string? outline, string? expected)
+    {
+        var seriesId = Guid.NewGuid();
+        var series = Series.Create(Guid.NewGuid(), "Manga", ReadingDirection.RightToLeft);
+        typeof(Series).GetProperty("Id")!.SetValue(series, seriesId);
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
+        _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var result = await new CreateChapterCommandHandler(_dbContextMock.Object).Handle(
+            new CreateChapterCommand(seriesId, Guid.NewGuid(), 1, Outline: outline), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.Value!.Outline.Should().Be(expected);
     }
 
     [Fact]

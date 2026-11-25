@@ -1,6 +1,9 @@
+using PanelForge.Application.Features.Scenes.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -10,16 +13,21 @@ public sealed record UpdateSceneCommand(
     Guid SceneId,
     Guid UserId,
     string? Heading,
-    string? Summary
+    string? Summary,
+    PanelForge.Domain.Enums.NarrationMode? DefaultNarrationMode = null,
+    int? ExpectedVersion = null   // BR-11: version client đã thấy; null = không kiểm
 ) : IRequest<Result<SceneDto>>;
 
 public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneCommand, Result<SceneDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
 
-    public UpdateSceneCommandHandler(IPanelForgeDbContext dbContext)
+    private readonly IWorkspaceAuthorizationService _auth;
+
+    public UpdateSceneCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<SceneDto>> Handle(UpdateSceneCommand command, CancellationToken cancellationToken)
@@ -31,11 +39,27 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
 
         if (scene == null)
             return Result<SceneDto>.Failure($"Scene {command.SceneId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, scene.ChapterId, cancellationToken) is { } readOnly)
+            return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, scene.ChapterId, cancellationToken) is { } notAssigned)
+            return Result<SceneDto>.Failure(notAssigned, ResultErrorCodes.Forbidden);
+        if (command.ExpectedVersion is { } expected && expected != scene.Version)
+            return Result<SceneDto>.Failure(
+                $"Scene đã được người khác sửa (version hiện tại {scene.Version}, bạn đang sửa bản {expected}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
-        scene.UpdateContent(command.Heading, command.Summary);
+        scene.UpdateContent(command.Heading, command.Summary, command.DefaultNarrationMode);
         scene.UpdatedBy = command.UserId.ToString();
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Hai người lưu gần như cùng lúc: Version là concurrency token nên bản lưu sau bị từ chối (BR-11)
+            return Result<SceneDto>.Failure("Scene vừa được người khác sửa. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
+        }
 
         return Result<SceneDto>.Success(new SceneDto(
             Id: scene.Id,
@@ -47,7 +71,9 @@ public sealed class UpdateSceneCommandHandler : IRequestHandler<UpdateSceneComma
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: scene.ScriptLines.Count,
-            PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count()
+            PagesCount: scene.Panels.Select(p => p.PageId).Distinct().Count(),
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         ));
     }
 }

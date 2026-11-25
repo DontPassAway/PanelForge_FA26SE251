@@ -58,6 +58,10 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
                .IsRequired();
         builder.HasIndex(a => a.TimestampUtc)
                .HasDatabaseName("ix_audit_logs_timestamp_utc");
+        // Màn nhật ký theo workspace: lọc workspace + sắp mới nhất trước trong một lần quét index
+        builder.HasIndex(a => new { a.WorkspaceId, a.TimestampUtc })
+               .IsDescending(false, true)
+               .HasDatabaseName("ix_audit_logs_workspace_id_timestamp_utc");
 
         builder.Property(a => a.IpAddress)
                .HasColumnName("ip_address")

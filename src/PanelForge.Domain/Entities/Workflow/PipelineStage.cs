@@ -17,7 +17,18 @@ public class PipelineStage : BaseEntity
     public bool IsApprovalGate { get; private set; }
     public bool IsInitial { get; private set; }
     public bool IsTerminal { get; private set; }
+    public bool IsEnabled { get; private set; } = true;
     public int? EstimatedDurationDays { get; private set; }
+
+    /// <summary>
+    /// Nhánh chạy song song (BR-19), vd "A" = Ink → Color, "B" = Lettering. null = bước chung, chờ mọi nhánh trước nó.
+    /// Xem <see cref="StageDependencies"/>.
+    /// </summary>
+    public string? Track { get; private set; }
+    public const int MaxTrackLength = 20;
+
+    /// <summary>Giao việc hàng loạt: Chapter = 1 việc cả chương (Script/Review), Page = mỗi trang 1 việc (Pencil/Ink/Color/Letter).</summary>
+    public WorkflowEntityType AssignmentGranularity { get; private set; } = WorkflowEntityType.Chapter;
 
     public PipelineDefinition PipelineDefinition { get; private set; } = default!;
     public ICollection<StageTransition> OutgoingTransitions { get; private set; } = [];
@@ -54,7 +65,9 @@ public class PipelineStage : BaseEntity
             IsApprovalGate = isApprovalGate,
             IsInitial = isInitial,
             IsTerminal = isTerminal,
-            EstimatedDurationDays = estimatedDurationDays
+            EstimatedDurationDays = estimatedDurationDays,
+            AssignmentGranularity = allowedRole is WorkspaceRole.Artist or WorkspaceRole.Letterer
+                ? WorkflowEntityType.Page : WorkflowEntityType.Chapter
         };
     }
 
@@ -72,6 +85,29 @@ public class PipelineStage : BaseEntity
         AllowedRole = allowedRole;
         IsApprovalGate = isApprovalGate;
         EstimatedDurationDays = estimatedDurationDays;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Producer tắt stage không dùng cho Series (vd. Color với truyện trắng đen, phiếu V1.2: Color là phạm vi mở rộng)
+    /// thay vì xoá, vì stage đã có dữ liệu thì không xoá được. BR-19 bỏ qua stage tắt khi tìm stage trước.
+    /// </summary>
+    public void SetEnabled(bool isEnabled)
+    {
+        if (IsEnabled == isEnabled) return;
+        if (!isEnabled && (IsInitial || IsTerminal))
+            throw new InvalidOperationException("Không thể tắt stage đầu hoặc stage cuối của pipeline.");
+        IsEnabled = isEnabled;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetTrack(string? track)
+    {
+        var normalized = string.IsNullOrWhiteSpace(track) ? null : track.Trim().ToUpperInvariant();
+        if (normalized?.Length > MaxTrackLength)
+            throw new ArgumentException($"Tên nhánh tối đa {MaxTrackLength} ký tự.");
+        if (Track == normalized) return;
+        Track = normalized;
         UpdatedAt = DateTime.UtcNow;
     }
 

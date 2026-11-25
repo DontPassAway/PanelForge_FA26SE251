@@ -27,7 +27,8 @@ public sealed record PageLetteringAnalysis(
 
 public static class LetteringPageAnalysis
 {
-    public static async Task<PageLetteringAnalysis> AnalyzeAsync(IPanelForgeDbContext db, Page page, CancellationToken ct)
+    public static async Task<PageLetteringAnalysis> AnalyzeAsync(
+        IPanelForgeDbContext db, Page page, CancellationToken ct, string? lang = null)
     {
         var active = page.Elements.Values.Where(e => !e.IsRemoved).ToList();
         var lineIds = active.Where(e => e.ScriptLineId.HasValue).Select(e => e.ScriptLineId!.Value).Distinct().ToList();
@@ -36,9 +37,9 @@ public static class LetteringPageAnalysis
             ? new Dictionary<Guid, LineFacts>()
             : (await db.ScriptLines.AsNoTracking()
                 .Where(l => lineIds.Contains(l.Id))
-                .Select(l => new { l.Id, l.DialogueText, l.StageDirection, l.SpeakerCharacterId, l.LineOrder, l.Scene.SceneNumber, l.Scene.ChapterId })
+                .Select(l => new { l.Id, l.DialogueText, l.StageDirection, l.LineOrder, l.Scene.SceneNumber, l.Scene.ChapterId })
                 .ToListAsync(ct))
-              .ToDictionary(l => l.Id, l => new LineFacts(l.DialogueText ?? l.StageDirection, l.SpeakerCharacterId, l.SceneNumber, l.LineOrder, l.ChapterId));
+              .ToDictionary(l => l.Id, l => new LineFacts(l.DialogueText ?? l.StageDirection, null, l.SceneNumber, l.LineOrder, l.ChapterId));
 
         // Lỗi thời: Writer đã sửa thoại/speaker, hoặc xóa dòng sau lúc gắn
         var stale = active
@@ -53,7 +54,7 @@ public static class LetteringPageAnalysis
             .FirstOrDefaultAsync(ct) ?? ReadingDirection.LeftToRight;
 
         var warnings = LetteringWarningRules.Evaluate(
-            active, direction, lines.ToDictionary(kv => kv.Key, kv => (kv.Value.SceneNumber, kv.Value.LineOrder)));
+            active, direction, lines.ToDictionary(kv => kv.Key, kv => (kv.Value.SceneNumber, kv.Value.LineOrder)), lang);
 
         return new PageLetteringAnalysis(lines, warnings, stale);
     }
@@ -67,7 +68,7 @@ public static class LetteringPageAnalysis
 
         var line = await db.ScriptLines.AsNoTracking()
             .Where(l => l.Id == lineId)
-            .Select(l => new LineFacts(l.DialogueText ?? l.StageDirection, l.SpeakerCharacterId, l.Scene.SceneNumber, l.LineOrder, l.Scene.ChapterId))
+            .Select(l => new LineFacts(l.DialogueText ?? l.StageDirection, null, l.Scene.SceneNumber, l.LineOrder, l.Scene.ChapterId))
             .FirstOrDefaultAsync(ct);
 
         if (line is null) return (null, $"ScriptLine {lineId} không tồn tại.");

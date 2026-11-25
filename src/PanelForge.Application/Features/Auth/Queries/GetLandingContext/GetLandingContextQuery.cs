@@ -61,6 +61,9 @@ public sealed class GetLandingContextQueryHandler
         if (role == SystemRole.Admin)
             return "AdminDashboard";
 
+        if (role == SystemRole.Publisher)
+            return "PublisherPortal";
+
         if (workspaceCount > 0)
             return "YourWorkspaces";
 

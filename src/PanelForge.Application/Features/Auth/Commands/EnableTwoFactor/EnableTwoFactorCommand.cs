@@ -32,6 +32,10 @@ public sealed class EnableTwoFactorCommandHandler : IRequestHandler<EnableTwoFac
             return Result<EnableTwoFactorResponse>.Failure(
                 "Người dùng không tồn tại hoặc đã bị vô hiệu hóa.", ResultErrorCodes.Unauthorized);
 
+        // Không ghi đè khoá đang dùng: nếu bỏ dở thiết lập, Authenticator cũ sẽ không còn khớp và người dùng bị khoá ngoài.
+        if (user.TwoFactorEnabled)
+            return Result<EnableTwoFactorResponse>.Failure("2FA đang bật. Hãy tắt 2FA trước khi thiết lập lại.");
+
         var secret = _totpService.GenerateSecret();
         user.SetTwoFactorSecret(secret);
         await _dbContext.SaveChangesAsync(cancellationToken);

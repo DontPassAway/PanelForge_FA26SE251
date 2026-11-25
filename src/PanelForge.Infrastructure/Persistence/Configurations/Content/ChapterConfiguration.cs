@@ -37,15 +37,30 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
 
         builder.Property(c => c.Status)
                .HasColumnName("status")
-               .HasColumnType("varchar(20)")
+               .HasColumnType("varchar(30)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<ChapterStatus>(v))
-               .HasDefaultValue(ChapterStatus.InProduction)
-               .HasSentinel(ChapterStatus.InProduction)
+               .HasDefaultValue(ChapterStatus.PreProduction)
+               .HasSentinel(ChapterStatus.PreProduction)
                .IsRequired();
 
         builder.Property(c => c.PublishedAt)
                .HasColumnName("published_at")
                .HasColumnType("timestamptz");
+
+        builder.Property(c => c.IsHandedOff)
+               .HasColumnName("is_handed_off")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(c => c.HandedOffAt)
+               .HasColumnName("handed_off_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.HandedOffById)
+               .HasColumnName("handed_off_by_id")
+               .HasColumnType("uuid");
+
 
         // Public catalog (BR-23/24) lọc theo trạng thái Published
         builder.HasIndex(c => new { c.Status, c.SeriesId })
@@ -55,9 +70,79 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("title")
                .HasColumnType("varchar(500)");
 
+        builder.Property(c => c.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)");
+
         builder.Property(c => c.Outline)
                .HasColumnName("outline")
                .HasColumnType("text");
+
+        builder.Property(c => c.ScriptStatus)
+               .HasColumnName("script_status")
+               .HasColumnType("varchar(20)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<ScriptStatus>(v))
+               .HasDefaultValue(ScriptStatus.Draft)
+               .HasSentinel(ScriptStatus.Draft)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptSubmittedAt)
+               .HasColumnName("script_submitted_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.ScriptSubmittedById)
+               .HasColumnName("script_submitted_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.LastSubmittedVersionId)
+               .HasColumnName("last_submitted_version_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.PreviousSubmittedVersionId)
+               .HasColumnName("previous_submitted_version_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.IsScriptFrozen)
+               .HasColumnName("is_script_frozen")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptFrozenAt)
+               .HasColumnName("script_frozen_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.ScriptFrozenById)
+               .HasColumnName("script_frozen_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.FrozenScriptVersionId)
+               .HasColumnName("frozen_script_version_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptContentHash)
+               .HasColumnName("script_content_hash")
+               .HasColumnType("varchar(64)");
+
+        builder.Property(c => c.ScriptReopenStatus)
+               .HasColumnName("script_reopen_status")
+               .HasColumnType("varchar(20)")
+               .HasConversion(v => v.ToString(), v => Enum.Parse<ScriptReopenStatus>(v))
+               .HasDefaultValue(ScriptReopenStatus.None)
+               .HasSentinel(ScriptReopenStatus.None)
+               .IsRequired();
+
+        builder.Property(c => c.ScriptReopenReason)
+               .HasColumnName("script_reopen_reason")
+               .HasColumnType("text");
+
+        builder.Property(c => c.ScriptReopenRequestedById)
+               .HasColumnName("script_reopen_requested_by_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptReopenRequestedAt)
+               .HasColumnName("script_reopen_requested_at")
+               .HasColumnType("timestamptz");
 
         builder.Property(c => c.TargetReleaseDate)
                .HasColumnName("target_release_date")
@@ -75,6 +160,11 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        builder.HasOne(c => c.Script)
+               .WithOne(s => s.Chapter)
+               .HasForeignKey<ChapterScript>(s => s.ChapterId)
+               .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(c => c.Scenes)
                .WithOne(s => s.Chapter)
                .HasForeignKey(s => s.ChapterId)
@@ -83,11 +173,6 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
         builder.HasMany(c => c.Pages)
                .WithOne(p => p.Chapter)
                .HasForeignKey(p => p.ChapterId)
-               .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasMany(c => c.ExternalPreviewLinks)
-               .WithOne()
-               .HasForeignKey(l => l.ChapterId)
                .OnDelete(DeleteBehavior.Cascade);
     }
 }

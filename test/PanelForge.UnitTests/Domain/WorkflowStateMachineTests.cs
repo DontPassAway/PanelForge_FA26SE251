@@ -11,7 +11,7 @@ namespace PanelForge.UnitTests.Domain;
 public class WorkflowStateMachineTests
 {
     [Fact]
-    public void CreateDefaultMangaPipeline_ShouldInitialize8CanonicalStages()
+    public void CreateDefaultMangaPipeline_ShouldInitialize7CanonicalStages()
     {
         // Arrange
         var workspaceId = Guid.NewGuid();
@@ -22,23 +22,22 @@ public class WorkflowStateMachineTests
         // Assert
         pipeline.Should().NotBeNull();
         pipeline.WorkspaceId.Should().Be(workspaceId);
-        pipeline.Stages.Should().HaveCount(8);
+        pipeline.Stages.Should().HaveCount(7);
 
         var stages = pipeline.Stages.OrderBy(s => s.StageOrder).ToList();
         stages[0].Slug.Should().Be("script");
         stages[0].IsInitial.Should().BeTrue();
 
-        stages[1].Slug.Should().Be("thumbnail");
-        stages[2].Slug.Should().Be("pencil");
-        stages[3].Slug.Should().Be("ink");
-        stages[4].Slug.Should().Be("color");
-        stages[5].Slug.Should().Be("letter");
+        stages[1].Slug.Should().Be("pencil");
+        stages[2].Slug.Should().Be("ink");
+        stages[3].Slug.Should().Be("color");
+        stages[4].Slug.Should().Be("letter");
 
-        stages[6].Slug.Should().Be("review");
-        stages[6].IsApprovalGate.Should().BeTrue();
+        stages[5].Slug.Should().Be("review");
+        stages[5].IsApprovalGate.Should().BeTrue();
 
-        stages[7].Slug.Should().Be("approved");
-        stages[7].IsTerminal.Should().BeTrue();
+        stages[6].Slug.Should().Be("approved");
+        stages[6].IsTerminal.Should().BeTrue();
     }
 
     [Fact]
@@ -49,14 +48,14 @@ public class WorkflowStateMachineTests
         var pipeline = PipelineDefinition.CreateDefaultMangaPipeline(workspaceId);
 
         var sScript = pipeline.Stages.First(s => s.Slug == "script");
-        var sThumbnail = pipeline.Stages.First(s => s.Slug == "thumbnail");
+        var sPencil = pipeline.Stages.First(s => s.Slug == "pencil");
         var sLetter = pipeline.Stages.First(s => s.Slug == "letter");
         var sReview = pipeline.Stages.First(s => s.Slug == "review");
         var sApproved = pipeline.Stages.First(s => s.Slug == "approved");
 
         // Act & Assert
         // Writer can submit script
-        pipeline.CanTransition(sScript.Id, sThumbnail.Id, WorkspaceRole.Writer).Should().BeTrue();
+        pipeline.CanTransition(sScript.Id, sPencil.Id, WorkspaceRole.Writer).Should().BeTrue();
 
         // Letterer can submit to review
         pipeline.CanTransition(sLetter.Id, sReview.Id, WorkspaceRole.Letterer).Should().BeTrue();

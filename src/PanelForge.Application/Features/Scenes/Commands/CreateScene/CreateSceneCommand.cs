@@ -1,8 +1,12 @@
+using PanelForge.Application.Features.Scenes.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Enums;
 using DomainScene = PanelForge.Domain.Entities.Content.Scene;
 
 namespace PanelForge.Application.Features.Scenes.Commands.CreateScene;
@@ -12,16 +16,20 @@ public sealed record CreateSceneCommand(
     Guid UserId,
     int? SceneNumber = null,
     string? Heading = null,
-    string? Summary = null
+    string? Summary = null,
+    NarrationMode? DefaultNarrationMode = null
 ) : IRequest<Result<SceneDto>>;
 
 public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneCommand, Result<SceneDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
 
-    public CreateSceneCommandHandler(IPanelForgeDbContext dbContext)
+    private readonly IWorkspaceAuthorizationService _auth;
+
+    public CreateSceneCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<SceneDto>> Handle(CreateSceneCommand command, CancellationToken cancellationToken)
@@ -32,6 +40,10 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
 
         if (!chapterExists)
             return Result<SceneDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<SceneDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, command.ChapterId, cancellationToken) is { } notAssigned)
+            return Result<SceneDto>.Failure(notAssigned, ResultErrorCodes.Forbidden);
 
         // 2. Tính số scene tự động nếu không truyền vào
         int sceneNumber;
@@ -61,7 +73,8 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
                 chapterId: command.ChapterId,
                 sceneNumber: sceneNumber,
                 heading: command.Heading,
-                summary: command.Summary
+                summary: command.Summary,
+                defaultNarrationMode: command.DefaultNarrationMode ?? NarrationMode.Present
             );
             scene.CreatedBy = command.UserId.ToString();
         }
@@ -83,7 +96,9 @@ public sealed class CreateSceneCommandHandler : IRequestHandler<CreateSceneComma
             UpdatedAt: scene.UpdatedAt,
             CreatedBy: scene.CreatedBy,
             ScriptLinesCount: 0,
-            PagesCount: 0
+            PagesCount: 0,
+            DefaultNarrationMode: scene.DefaultNarrationMode,
+            Version: scene.Version
         ));
     }
 }

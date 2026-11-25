@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Infrastructure.ExternalServices;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -17,6 +18,7 @@ using PanelForge.Infrastructure.Persistence;
 using PanelForge.Infrastructure.Persistence.EventStore.Projections;
 using PanelForge.Infrastructure.Persistence.EventStore;
 using PanelForge.Infrastructure.Services;
+using PanelForge.Infrastructure.ExternalServices.GooglePlay;
 using Weasel.Core;
 
 namespace PanelForge.Infrastructure;
@@ -38,6 +40,7 @@ public static class DependencyInjection
                 npgsql.MigrationsAssembly(typeof(PanelForgeDbContext).Assembly.FullName);
             });
 
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 #if DEBUG
             options.EnableSensitiveDataLogging()
                    .EnableDetailedErrors();
@@ -62,8 +65,11 @@ public static class DependencyInjection
                 typeof(ElementMovedEvent),
                 typeof(ElementRemovedEvent),
                 typeof(ElementTextUpdatedEvent),
+                typeof(ElementTranslationUpdatedEvent),
                 typeof(ElementOverflowAcknowledgedEvent),
                 typeof(ElementReadingOrderSetEvent),
+                typeof(ElementStyleUpdatedEvent),
+                typeof(ElementRestoredEvent),
                 typeof(PageDeletedEvent)
             });
 
@@ -86,18 +92,42 @@ public static class DependencyInjection
         services.AddSingleton<ITotpService, OtpNetTotpService>();
         services.AddSingleton<IExternalIdentityVerifier, FirebaseIdentityVerifier>();
 
+        // Google Play Billing: xác thực purchaseToken với Google Play Developer API trước khi cộng Ví.
+        services.AddHttpClient(GooglePlayPurchaseVerifier.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IGooglePlayPurchaseVerifier, GooglePlayPurchaseVerifier>();
+
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
+        services.AddScoped<IChapterCastInheritanceResolver, ChapterCastInheritanceResolver>();
 
         // ── Artwork assets: lưu file cục bộ + link tải ngắn hạn ký bằng Data Protection (BR-04, BR-13, BR-16) ──
-        services.AddSingleton<IAssetStorage, LocalAssetStorage>();
+        // AssetStorage:Provider = "Local" (mặc định, đĩa cục bộ) | "R2" (Cloudflare R2)
+        if (string.Equals(configuration["AssetStorage:Provider"], "R2", StringComparison.OrdinalIgnoreCase))
+            services.AddSingleton<IAssetStorage>(_ => R2AssetStorage.FromConfiguration(configuration));
+        else
+            services.AddSingleton<IAssetStorage, LocalAssetStorage>();
         services.AddSingleton<IAssetLinkSigner, DataProtectionAssetLinkSigner>();
+
+        // ── UC-12: dựng file xuất chương (SkiaSharp) ──
+        services.AddSingleton<IChapterExportRenderer, PanelForge.Infrastructure.Exports.SkiaChapterExportRenderer>();
+        services.AddSingleton<IImageThumbnailer, PanelForge.Infrastructure.Exports.SkiaImageThumbnailer>();
+        services.AddSingleton<IPageLetteringCompositor, PanelForge.Infrastructure.Exports.SkiaPageLetteringCompositor>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
         services.AddDataProtection();
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
+        services.AddHttpClient(AiProviderValidator.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IAiUsageService, AiUsageService>();
+        services.AddScoped<IImageConsistencyService, ImageConsistencyService>();
+
+        // ── Tách panel/bong bóng từ ảnh cả trang: OpenCV chạy trong tiến trình (thay service Python 5066) ──
+        services.AddSingleton<IPanelSplitter, OpenCvPanelSplitter>();
+
+        // ── Thanh toán VietQR: tài khoản nhận tiền mặc định khi Studio chưa khai ngân hàng ──
+        var defaultBank = new DefaultBankSettings();
+        configuration.GetSection(DefaultBankSettings.SectionName).Bind(defaultBank);
+        services.AddSingleton(defaultBank);
 
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();
@@ -118,6 +148,27 @@ public static class DependencyInjection
                 o.CircuitBreaker.FailureRatio = 0.5;
                 o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(20);
             });
+
+        // Copilot (sync): KHÔNG retry (mỗi lần gọi tốn token, không idempotent), timeout cứng theo CopilotTimeoutSeconds
+        services.AddHttpClient(AiClient.CopilotHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.CopilotTimeoutSeconds, 2, 60));
+        });
+        // Sinh ảnh (sync): KHÔNG retry (mỗi ảnh tốn quota), timeout dài hơn timeout phía AI service
+        services.AddHttpClient(AiClient.ImageHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.ImageTimeoutSeconds, 15, 200));
+        });
+
+        // ── Dịch kịch bản / thoại (LibreTranslate tự lưu trữ) ──
+        var translationBaseUrl = configuration["TranslationService:BaseUrl"] ?? "http://localhost:5000";
+        services.AddHttpClient<ITranslationService, LibreTranslateService>(client =>
+        {
+            client.BaseAddress = new Uri(translationBaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
 
         // ── Audit trail: danh tính người gọi request (BR-18, UC-15) ─────────────
         services.AddHttpContextAccessor();

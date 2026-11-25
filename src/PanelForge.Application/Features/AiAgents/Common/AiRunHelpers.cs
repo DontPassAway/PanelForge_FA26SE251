@@ -44,7 +44,30 @@ internal static class AiRunHelpers
             s.Id, s.RunId, s.StepId, s.SceneId, s.Kind, s.Status, s.Summary, ToElement(s.PayloadJson), s.PayloadHash,
             s.BaseChapterVersion, s.BaseScriptRevisionId, ReadGuidList(s.BibleRevisionIdsJson), s.ParentSuggestionId,
             s.HasBlockingFindings, s.CreatedAt, decisions.OrderBy(d => d.DecidedAtUtc).Select(ToDto).ToList(),
-            roles, s.Status == AiSuggestionStatus.Pending && viewerRole is { } r && roles.Contains(r));
+            roles, s.Status == AiSuggestionStatus.Pending && viewerRole is { } r && roles.Contains(r),
+            s.Status == AiSuggestionStatus.Pending && viewerRole is { } a && AiWorkflowPolicy.AcceptRoles(s.Kind).Contains(a));
+    }
+
+    /// <summary>Lý do "Yêu cầu sửa" của đề xuất cùng Series và Scene; null nếu đề xuất không ở trạng thái đó.</summary>
+    public static async Task<string?> RevisionFeedbackAsync(IPanelForgeDbContext db, Guid seriesId, Guid suggestionId, Guid sceneId, CancellationToken ct)
+    {
+        var valid = await db.AiSuggestions.AsNoTracking().AnyAsync(s => s.Id == suggestionId && s.SeriesId == seriesId
+            && s.SceneId == sceneId && s.Status == AiSuggestionStatus.ChangesRequested, ct);
+        if (!valid) return null;
+        return await db.AiSuggestionDecisions.AsNoTracking()
+            .Where(d => d.SuggestionId == suggestionId && d.Decision == AiSuggestionStatus.ChangesRequested)
+            .OrderByDescending(d => d.DecidedAtUtc).Select(d => d.Reason).FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>Ghép lý do của người duyệt vào đầu vào, ưu tiên giữ lý do khi vượt giới hạn.</summary>
+    public static string AppendFeedback(string? input, string feedback, int maxLength)
+    {
+        var note = $"Yêu cầu sửa từ người duyệt: {feedback.Trim()}";
+        if (note.Length >= maxLength) return note[..maxLength];
+        if (string.IsNullOrWhiteSpace(input)) return note;
+        var room = maxLength - note.Length - 2;
+        var kept = input.Trim();
+        return (kept.Length > room ? kept[..room] : kept) + "\n\n" + note;
     }
 
     /// <summary>Quyền đọc: thành viên Workspace chứa Series (BR-07, BR-23). Run/suggestion phải thuộc đúng Series trên route.</summary>

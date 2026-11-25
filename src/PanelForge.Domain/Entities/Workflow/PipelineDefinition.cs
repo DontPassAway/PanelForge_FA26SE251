@@ -242,27 +242,25 @@ public class PipelineDefinition : BaseEntity
     }
 
     /// <summary>
-    /// Factory method khởi tạo cấu hình quy trình Manga chuẩn 8 công đoạn theo đặc tả Capstone.
-    /// Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved
+    /// Factory method khởi tạo cấu hình quy trình Manga chuẩn 7 công đoạn (loại bỏ Thumbnail riêng, chia thumbnail trực tiếp bên Artist Desk).
+    /// Script → Pencil → Ink → Color → Letter → Review → Approved
     /// </summary>
     [Obsolete("Replaced by MasterData PipelineTemplate cloning in CreateSeriesCommand (NFR-08).")]
     public static PipelineDefinition CreateDefaultMangaPipeline(Guid workspaceId, Guid? seriesId = null)
     {
-        var pipeline = Create(workspaceId, "Standard Manga Pipeline", "Canonical 8-stage manga production pipeline with guarded review gates", seriesId, true);
+        var pipeline = Create(workspaceId, "Standard Manga Pipeline", "Canonical 7-stage manga production pipeline with guarded review gates", seriesId, true);
 
-        // 1. Khởi tạo 8 Stages
+        // 1. Khởi tạo 7 Stages
         var sScript = pipeline.AddStage("Script", "script", 1, "#6B7280", WorkspaceRole.Writer, isApprovalGate: false, isInitial: true);
-        var sThumbnail = pipeline.AddStage("Thumbnail", "thumbnail", 2, "#8B5CF6", WorkspaceRole.Artist);
-        var sPencil = pipeline.AddStage("Pencil", "pencil", 3, "#3B82F6", WorkspaceRole.Artist);
-        var sInk = pipeline.AddStage("Ink", "ink", 4, "#10B981", WorkspaceRole.Artist);
+        var sPencil = pipeline.AddStage("Pencil", "pencil", 2, "#3B82F6", WorkspaceRole.Artist);
+        var sInk = pipeline.AddStage("Ink", "ink", 3, "#10B981", WorkspaceRole.Artist);
         var sColor = pipeline.AddStage("Color", "color", 5, "#F59E0B", WorkspaceRole.Artist);
-        var sLetter = pipeline.AddStage("Letter", "letter", 6, "#EC4899", WorkspaceRole.Letterer);
-        var sReview = pipeline.AddStage("Review", "review", 7, "#EF4444", WorkspaceRole.Editor, isApprovalGate: true);
-        var sApproved = pipeline.AddStage("Approved", "approved", 8, "#059669", WorkspaceRole.Editor, isApprovalGate: false, isInitial: false, isTerminal: true);
+        var sLetter = pipeline.AddStage("Letter", "letter", 5, "#EC4899", WorkspaceRole.Letterer);
+        var sReview = pipeline.AddStage("Review", "review", 6, "#EF4444", WorkspaceRole.Editor, isApprovalGate: true);
+        var sApproved = pipeline.AddStage("Approved", "approved", 7, "#059669", WorkspaceRole.Editor, isApprovalGate: false, isInitial: false, isTerminal: true);
 
         // 2. Thiết lập các bước chuyển tiếp hợp lệ (Forward Transitions)
-        pipeline.AddTransition(sScript.Id, sThumbnail.Id, "Script Completed", WorkspaceRole.Writer);
-        pipeline.AddTransition(sThumbnail.Id, sPencil.Id, "Layout Confirmed", WorkspaceRole.Artist);
+        pipeline.AddTransition(sScript.Id, sPencil.Id, "Script Completed", WorkspaceRole.Writer);
         pipeline.AddTransition(sPencil.Id, sInk.Id, "Pencils Finished", WorkspaceRole.Artist);
         pipeline.AddTransition(sInk.Id, sColor.Id, "Inks Finished", WorkspaceRole.Artist);
         pipeline.AddTransition(sColor.Id, sLetter.Id, "Flats & Colors Finished", WorkspaceRole.Artist);

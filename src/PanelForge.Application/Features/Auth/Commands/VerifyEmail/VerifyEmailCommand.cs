@@ -9,7 +9,8 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 namespace PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 
 /// <summary>POST /api/auth/verify-email — xác thực email bằng OTP, thành công thì đăng nhập luôn.</summary>
-public sealed record VerifyEmailCommand(string Email, string Token) : IRequest<Result<AuthResponse>>;
+public sealed record VerifyEmailCommand(string Email, string Token, string? IpAddress = null, string? UserAgent = null)
+    : IRequest<Result<AuthResponse>>;
 
 public sealed class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailCommand, Result<AuthResponse>>
 {
@@ -47,6 +48,7 @@ public sealed class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailComma
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, 
-            user, _jwtTokenGenerator, "Xác thực tài khoản thành công!"));
+            user, _jwtTokenGenerator, "Xác thực tài khoản thành công!",
+            deviceName: DeviceDetector.DetectDevice(command.UserAgent), ipAddress: command.IpAddress, userAgent: command.UserAgent));
     }
 }

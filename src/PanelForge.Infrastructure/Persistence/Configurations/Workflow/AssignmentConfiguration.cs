@@ -79,8 +79,8 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
 
         builder.Property(a => a.ReferenceAssetUrlsJson)
                .HasColumnName("reference_asset_urls_json")
-               .HasColumnType("text")
-               .HasDefaultValue("[]")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
                .IsRequired();
 
         builder.Property(a => a.DueDate)
@@ -117,6 +117,24 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasForeignKey(a => a.DependsOnAssignmentId)
                .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Property(a => a.BatchId)
+               .HasColumnName("batch_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(a => a.BatchId)
+               .HasDatabaseName("ix_assignments_batch_id");
+
+        // Lớp chặn cuối ở DB: một đối tượng chỉ có một việc đang hiệu lực mỗi stage (việc huỷ = xoá mềm, không tính)
+        builder.HasIndex(a => new { a.PipelineStageId, a.TargetEntityId, a.EntityType })
+               .IsUnique()
+               .HasFilter("is_deleted = false")
+               .HasDatabaseName("uq_active_assignment");
+
+        builder.Property(a => a.DependsOnAssignmentIdsJson)
+               .HasColumnName("depends_on_assignment_ids_json")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
+               .IsRequired();
+
         builder.Property(a => a.StartedAt)
                .HasColumnName("started_at")
                .HasColumnType("timestamptz");
@@ -129,15 +147,39 @@ internal sealed class AssignmentConfiguration : IEntityTypeConfiguration<Assignm
                .HasColumnName("last_feedback_comment")
                .HasColumnType("text");
 
+        builder.Property(a => a.ImpactReviewReason)
+               .HasColumnName("impact_review_reason")
+               .HasColumnType("text");
+
+        builder.Property(a => a.ImpactReviewRequestedAt)
+               .HasColumnName("impact_review_requested_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(a => a.HasScriptImpact)
+               .HasColumnName("has_script_impact")
+               .HasColumnType("boolean")
+               .HasDefaultValue(false)
+               .IsRequired();
+
+        builder.Property(a => a.ImpactedScriptLineId)
+               .HasColumnName("impacted_script_line_id")
+               .HasColumnType("uuid");
+
+        builder.Property(a => a.CancelReason)
+               .HasColumnName("cancel_reason")
+               .HasColumnType("text");
+
         builder.Property(a => a.CreatedAt)
                .HasColumnName("created_at")
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        // Chuyển giao / nộp / duyệt cùng lúc trên một việc: lần lưu sau thấy updated_at đã đổi → 409, không ghi đè quyền/phiên bản
         builder.Property(a => a.UpdatedAt)
                .HasColumnName("updated_at")
                .HasColumnType("timestamptz")
-               .IsRequired();
+               .IsRequired()
+               .IsConcurrencyToken();
 
         builder.HasOne(a => a.Series)
                .WithMany()

@@ -72,13 +72,26 @@ public static class MasterDataSeeder
 
     private static async Task SeedDefaultPipelineTemplateAsync(PanelForgeDbContext dbContext, CancellationToken ct)
     {
-        if (await dbContext.PipelineTemplates.AnyAsync(t => t.Code == "STANDARD_MANGA", ct)) return;
+        if (await dbContext.PipelineTemplates.FirstOrDefaultAsync(t => t.Code == "STANDARD_MANGA", ct) is { } existing)
+        {
+            // DB seed trước khi bỏ Script (D1) và Thumbnail: dọn để series mới clone template không mang lại hai công đoạn này
+            var stale = await dbContext.PipelineTemplateStages
+                .Where(s => s.PipelineTemplateId == existing.Id && (s.Code == "THUMBNAIL" || s.Code == "SCRIPT"))
+                .ToListAsync(ct);
+            dbContext.PipelineTemplateStages.RemoveRange(stale);
+            // Gate 2 theo trang: DB seed trước 16/11 chưa bật cổng cho Color/Letter (chỉ ảnh hưởng series tạo mới)
+            foreach (var s in await dbContext.PipelineTemplateStages
+                         .Where(s => s.PipelineTemplateId == existing.Id && (s.Code == "COLOR" || s.Code == "LETTER") && s.GateType == null)
+                         .ToListAsync(ct))
+                s.Update(s.Name, s.Order, s.RequiredRole, "Approval", s.IsRequired, null);
+            return;
+        }
 
         var template = PipelineTemplate.Create(
             code: "STANDARD_MANGA",
             name: "Standard Manga Pipeline",
-            description: "Canonical 8-stage manga production pipeline with guarded review gates. " +
-                         "Script → Thumbnail → Pencil → Ink → Color → Letter → Review → Approved",
+            description: "Canonical 7-stage manga production pipeline with guarded review gates. " +
+                         "Pencil → Ink → Color → Letter → Review → Approved",
             isDefault: true
         );
 
@@ -89,14 +102,13 @@ public static class MasterDataSeeder
 
         var stages = new[]
         {
-            ("SCRIPT",    "Script",    1, WorkspaceRole.Writer,   (string?)null,       true,  """{"colorCode":"#6B7280","estimatedDays":3}"""),
-            ("THUMBNAIL", "Thumbnail", 2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#8B5CF6","estimatedDays":2}"""),
-            ("PENCIL",    "Pencil",    3, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
-            ("INK",       "Ink",       4, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
-            ("COLOR",     "Color",     5, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
-            ("LETTER",    "Letter",    6, WorkspaceRole.Letterer, null,                true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
-            ("REVIEW",    "Review",    7, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
-            ("APPROVED",  "Approved",  8, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
+            // D1 / SCR-12: kịch bản không phải stage pipeline (vòng đời riêng ScriptStatus, D12)
+            ("PENCIL",    "Pencil",    1, WorkspaceRole.Artist,   (string?)null,       true,  """{"colorCode":"#3B82F6","estimatedDays":4}"""),
+            ("INK",       "Ink",       2, WorkspaceRole.Artist,   null,                true,  """{"colorCode":"#10B981","estimatedDays":3}"""),
+            ("COLOR",     "Color",     3, WorkspaceRole.Artist,   "Approval",               true,  """{"colorCode":"#F59E0B","estimatedDays":3}"""),
+            ("LETTER",    "Letter",    4, WorkspaceRole.Letterer, "Approval",               true,  """{"colorCode":"#EC4899","estimatedDays":2}"""),
+            ("REVIEW",    "Review",    5, WorkspaceRole.Editor,   "Approval",          true,  """{"colorCode":"#EF4444","estimatedDays":1}"""),
+            ("APPROVED",  "Approved",  6, WorkspaceRole.Editor,   null,                false, """{"colorCode":"#059669","estimatedDays":0}"""),
         };
 
         foreach (var (code, name, order, role, gate, isRequired, cfg) in stages)

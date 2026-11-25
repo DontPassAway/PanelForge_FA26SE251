@@ -1,4 +1,5 @@
 using System.Text;
+using PanelForge.AI.Caching;
 using PanelForge.AI.Contracts;
 using PanelForge.AI.Validators;
 
@@ -10,15 +11,24 @@ public sealed class ContinuityAgent
     public static readonly PromptInfo Prompt = PromptLibrary.Load("continuity");
 
     private readonly AgentRunner _runner;
+    private readonly IContextMemoryCache? _cache;
 
-    public ContinuityAgent(AgentRunner runner) => _runner = runner;
+    public ContinuityAgent(AgentRunner runner, IContextMemoryCache? cache = null)
+    {
+        _runner = runner;
+        _cache = cache;
+    }
 
     public async Task<(AgentCall<ContinuityReport> Call, string InputJson)> RunAsync(
         AgentContext ctx, KeyMaps keys, ScriptDraft draft, CancellationToken ct)
     {
+        var bibleContent = _cache is not null
+            ? _cache.GetOrBuildBibleSummary(ctx, keys).FormattedBibleBlock
+            : PromptText.BibleBlock(ctx, keys);
+
         var sb = new StringBuilder();
         sb.AppendLine($"[[agent:continuity]] [[round:{draft.Round}]]");
-        sb.AppendLine($"## Bible hiệu lực tại chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(PromptText.BibleBlock(ctx, keys)).AppendLine();
+        sb.AppendLine($"## Bible hiệu lực tại chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(bibleContent).AppendLine();
         sb.AppendLine("## Script cần kiểm tra (dữ liệu)").AppendLine(PromptText.ScriptBlock(draft, keys)).AppendLine();
         sb.AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
 
@@ -30,10 +40,10 @@ public sealed class ContinuityAgent
             scriptLineIds = draft.Lines.Select(l => new { key = $"L{l.Order}", lineId = l.LineId })
         });
 
-        var bibleByRevision = ctx.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, $"{b.Name}\n{b.Description}"));
+        var bibleByRevision = ctx.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, b.EvidenceText));
         var lineKeys = KeyMaps.LineKeys(draft);
         var call = await _runner.RunAsync<ContinuityReport>(Prompt, sb.ToString(),
-            text => Parse(text, ctx, keys, draft, lineKeys, bibleByRevision), ct);
+            text => Parse(text, ctx, keys, draft, lineKeys, bibleByRevision), ct, lowReasoning: true);
         return (call, inputJson);
     }
 

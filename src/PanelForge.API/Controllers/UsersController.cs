@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Features.Users.Models;
 using PanelForge.Application.Features.Users.Commands.SoftDeleteUser;
 using PanelForge.Application.Features.Users.Commands.UpdateUserProfile;
+using PanelForge.Application.Features.Users.Commands.SetMyProfileCover;
 using PanelForge.Application.Features.Users.Queries.GetUserProfile;
+using PanelForge.API.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -44,6 +46,7 @@ public class UsersController : ControllerBase
     /// Lấy thông tin hồ sơ của chính người dùng đang đăng nhập
     /// </summary>
     [HttpGet("me")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyProfile(CancellationToken cancellationToken)
     {
         var userIdStr = GetCallerUserIdStr();
@@ -62,9 +65,35 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Đặt bìa hồ sơ của chính mình từ bộ mẫu hệ thống. Body: { "presetId": "profile-cover-manga-studio" | null }.
+    /// null = bìa mặc định. ID không hợp lệ → 400.
+    /// </summary>
+    [HttpPut("me/profile-cover")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetMyProfileCover([FromBody] SetProfileCoverRequest request, CancellationToken cancellationToken)
+    {
+        Guid? guid = Guid.TryParse(GetCallerUserIdStr(), out var parsedGuid) ? parsedGuid : null;
+        try
+        {
+            var result = await _sender.Send(
+                new SetMyProfileCoverCommand(guid, GetCallerFirebaseUid(), request.PresetId), cancellationToken);
+            return result is null
+                ? NotFound(new { message = "Không tìm thấy thông tin hồ sơ của bạn." })
+                : Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message, code = "INVALID_PROFILE_COVER_PRESET" });
+        }
+    }
+
+    /// <summary>
     /// Lấy chi tiết người dùng theo PostgreSQL Id
     /// </summary>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileQuery(Id: id);
@@ -82,6 +111,7 @@ public class UsersController : ControllerBase
     /// Lấy chi tiết người dùng theo Firebase Uid
     /// </summary>
     [HttpGet("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetByFirebaseUid(string firebaseUid, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileQuery(FirebaseUid: firebaseUid);
@@ -99,6 +129,7 @@ public class UsersController : ControllerBase
     /// Cập nhật Username và Avatar theo PostgreSQL Id (xác thực quyền sở hữu qua token)
     /// </summary>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProfile(Guid id, [FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         try
@@ -136,6 +167,7 @@ public class UsersController : ControllerBase
     /// Cập nhật Username và Avatar theo Firebase Uid (xác thực quyền sở hữu qua token)
     /// </summary>
     [HttpPut("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProfileByFirebaseUid(string firebaseUid, [FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
         try
@@ -173,6 +205,7 @@ public class UsersController : ControllerBase
     /// Vô hiệu hóa (Soft Delete) người dùng theo PostgreSQL Id
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SoftDelete(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -207,6 +240,7 @@ public class UsersController : ControllerBase
     /// Vô hiệu hóa (Soft Delete) người dùng theo Firebase Uid
     /// </summary>
     [HttpDelete("firebase/{firebaseUid}")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SoftDeleteByFirebaseUid(string firebaseUid, CancellationToken cancellationToken)
     {
         try
@@ -236,4 +270,26 @@ public class UsersController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+    /// <summary>
+    /// Cập nhật ngôn ngữ đọc ưa thích của người dùng đang đăng nhập (BR-34).
+    /// </summary>
+    [HttpPut("me/reading-language")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateMyReadingLanguage(
+        [FromBody] UpdateReadingLanguageRequest request, CancellationToken ct)
+    {
+        var userIdStr = GetCallerUserIdStr();
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new PanelForge.Application.Features.Users.Commands.UpdateReadingLanguage.UpdateReadingLanguageCommand(userId, request.LanguageCode), ct);
+        return result.IsSuccess
+            ? Ok(new { preferredReadingLanguage = result.Value })
+            : BadRequest(new { error = result.ErrorMessage });
+    }
 }
+
+public record SetProfileCoverRequest(string? PresetId);
+public record UpdateReadingLanguageRequest(string? LanguageCode);

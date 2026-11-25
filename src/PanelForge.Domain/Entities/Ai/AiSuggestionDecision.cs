@@ -22,10 +22,11 @@ public class AiSuggestionDecision : BaseEntity
 
     public static AiSuggestionDecision Create(
         Guid suggestionId, Guid decidedByUserId, AiSuggestionStatus decision, string? reason,
-        long chapterVersionAtDecision, Guid? resultRevisionId)
+        long chapterVersionAtDecision, Guid? resultRevisionId, bool appliesOutsideContent = false)
     {
         if (decision is AiSuggestionStatus.Pending) throw new ArgumentException("Quyết định không hợp lệ.", nameof(decision));
-        if (decision == AiSuggestionStatus.Accepted && resultRevisionId is null)
+        // Đề xuất cấp Series (metadata phát hành) không có content revision của Scene; provenance = payload (giá trị cũ + mới) + audit log Series
+        if (decision == AiSuggestionStatus.Accepted && resultRevisionId is null && !appliesOutsideContent)
             throw new ArgumentException("Accept phải kèm content revision (BR-10).", nameof(resultRevisionId));
 
         return new AiSuggestionDecision

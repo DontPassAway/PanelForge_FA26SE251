@@ -1,7 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -9,8 +11,8 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 
 /// <summary>
-/// Họp tuần 5: Publisher kiểm tra và duyệt xuất bản chương đã được Producer duyệt, rồi lên lịch. Chapter Approved → Published;
-/// <c>PublishedAt</c> = giờ lên lịch (bỏ trống = ngay), Reader chỉ thấy từ lúc đó. Published là bản cuối (BR-24).
+/// Họp tuần 5 / V2.6: Publisher kiểm tra và phát hành chương đã được Producer bàn giao (ChapterApproved + IsHandedOff → HandedOffAndPublished);
+/// <c>PublishedAt</c> = giờ lên lịch (bỏ trống = ngay), Reader chỉ thấy từ lúc đó. HandedOffAndPublished là bản cuối (BR-24).
 /// </summary>
 public sealed record PublishChapterCommand(Guid ChapterId, Guid UserId, DateTime? PublishAt) : IRequest<Result<ChapterReviewDto>>;
 
@@ -29,14 +31,29 @@ public sealed class PublishChapterCommandHandler : IRequestHandler<PublishChapte
         if (publishAt < now - ClockSkew)
             return Result<ChapterReviewDto>.Failure("Thời điểm phát hành không được ở quá khứ.", ResultErrorCodes.Validation);
 
-        var loaded = await ChapterReviewRules.LoadAsync(_db, cmd.ChapterId, ChapterStatus.Approved, ct);
+        var loaded = await ChapterReviewRules.LoadAsync(_db, cmd.ChapterId, ChapterStatus.ChapterApproved, ct);
         if (!loaded.IsSuccess)
             return Result<ChapterReviewDto>.Failure(loaded.ErrorMessage!, loaded.ErrorCode);
 
         var (chapter, workspaceId) = loaded.Value;
 
+        if (!chapter.IsHandedOff)
+            return Result<ChapterReviewDto>.Failure("Chương chưa được Producer bàn giao cho Publisher.", ResultErrorCodes.Conflict);
+
+        // BR-34: Ấn bản ngôn ngữ gốc chuyển sang Published — D4: phải đã cấu hình Free/Trả phí hợp lệ.
+        var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chapter.SeriesId, ct);
+        var origLang = series?.OriginalLanguage ?? ContentLanguages.Original;
+        var origEdition = await _db.ChapterEditions.FirstOrDefaultAsync(e => e.ChapterId == chapter.Id && e.LanguageCode == origLang, ct);
+        if (origEdition is null)
+            return Result<ChapterReviewDto>.Failure(
+                $"Chương chưa có ấn bản ngôn ngữ gốc '{origLang}' để phát hành.", ResultErrorCodes.Conflict);
+        var pageCount = await _db.Pages.CountAsync(p => p.ChapterId == chapter.Id, ct);
+        if (EditionMonetizationGate.PublishBlocker(origEdition, pageCount) is { } blocker)
+            return Result<ChapterReviewDto>.Failure(blocker, ResultErrorCodes.Conflict);
+
         chapter.Publish(publishAt);
         chapter.UpdatedBy = cmd.UserId.ToString();
+        origEdition.Publish();
 
         var review = ChapterReview.Create(
             chapter.Id, ChapterReviewAction.PublisherPublished, cmd.UserId, chapter.VersionVector, scheduledAt: publishAt);

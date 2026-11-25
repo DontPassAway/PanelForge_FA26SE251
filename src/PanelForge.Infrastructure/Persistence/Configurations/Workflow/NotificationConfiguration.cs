@@ -24,6 +24,9 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
                .IsRequired();
         builder.HasIndex(n => new { n.UserId, n.ReadAt })
                .HasDatabaseName("ix_notifications_user_read");
+        builder.HasIndex(n => new { n.UserId, n.CreatedAt })
+               .IsDescending(false, true)
+               .HasDatabaseName("ix_notifications_user_created");
 
         builder.Property(n => n.Type)
                .HasColumnName("type")

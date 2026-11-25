@@ -1,6 +1,8 @@
 using MediatR;
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -12,7 +14,8 @@ public sealed record UpdateChapterCommand(
     string? Title,
     DateOnly? TargetReleaseDate,
     bool IncrementVersion,
-    string? Outline = null
+    string? Outline = null,
+    long? ExpectedChapterVersion = null
 ) : IRequest<Result<ChapterDto>>;
 
 public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterCommand, Result<ChapterDto>>
@@ -33,6 +36,15 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
 
         if (chapter == null)
             return Result<ChapterDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+
+        if (ChapterEditGuard.ReadOnlyReason(chapter) is { } readOnly)
+            return Result<ChapterDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+
+        // BR-11: client gửi version đã đọc thì phải khớp, không thì người khác vừa sửa → 409 thay vì đè
+        if (command.ExpectedChapterVersion is { } expected && expected != chapter.VersionVector)
+            return Result<ChapterDto>.Failure(
+                $"Chương vừa được người khác cập nhật (expected={expected}, actual={chapter.VersionVector}). Tải lại rồi thử lại.",
+                ResultErrorCodes.Conflict);
 
         chapter.UpdateDetails(command.Title, command.TargetReleaseDate, command.Outline);
         chapter.UpdatedBy = command.UserId.ToString();
@@ -58,7 +70,16 @@ public sealed class UpdateChapterCommandHandler : IRequestHandler<UpdateChapterC
             PagesCount: chapter.Pages.Count,
             Status: chapter.Status,
             PublishedAt: chapter.PublishedAt,
-            Outline: chapter.Outline
+            Outline: chapter.Outline,
+            IsScriptFrozen: chapter.IsScriptFrozen,
+            ScriptFrozenAt: chapter.ScriptFrozenAt,
+            ScriptFrozenById: chapter.ScriptFrozenById,
+            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
+            ScriptContentHash: chapter.ScriptContentHash,
+            ScriptStatus: chapter.ScriptStatus,
+            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
+            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
+            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
         ));
     }
 }

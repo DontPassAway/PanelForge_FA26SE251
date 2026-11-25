@@ -35,7 +35,7 @@ public sealed record AgentCall<T>(
 
 /// <summary>
 /// Chạy một agent: ChatClientAgent (Microsoft Agent Framework) trên IChatClient → parse JSON → validate bằng code →
-/// nếu sai cho phép đúng MỘT lần sửa output; sau đó ghi lỗi rõ ràng. Không có tool-call tự do: dữ liệu vào là context đã chụp.
+/// nếu sai cho phép sửa output (mặc định MỘT lần); sau đó ghi lỗi rõ ràng. Không có tool-call tự do: dữ liệu vào là context đã chụp.
 /// </summary>
 public sealed class AgentRunner
 {
@@ -44,25 +44,46 @@ public sealed class AgentRunner
     /// <summary>Chỉ đạo của Supervisor cho lần chạy agent kế tiếp (workflow gán trước mỗi bước, tuần tự nên không đua).</summary>
     public string? Instruction { get; set; }
 
+    /// <summary>Trần token đầu ra cho bước nhẹ (Supervisor, Copilot): output là một JSON nhỏ.</summary>
+    public const int LightMaxOutputTokens = 2048;
+
     private readonly IChatClient _chat;
     private readonly ProviderOptions _options;
+    private readonly string? _model;
 
-    public AgentRunner(IChatClient chat, IOptions<ProviderOptions> options)
+    public AgentRunner(IChatClient chat, IOptions<ProviderOptions> options, string? model = null)
     {
         _chat = chat;
         _options = options.Value;
+        _model = model;
     }
 
+    /// <summary>
+    /// Mức "thinking" cho bước nhẹ. Token thinking của Gemini 2.5 bị tính phí và trừ vào MaxOutputTokens;
+    /// bước chỉ chọn hành động/viết lại một dòng không cần. 2.5 Pro không tắt hẳn được → "low".
+    /// </summary>
+    internal static bool IsCloudflareModel(string? model) => model?.StartsWith("@cf/", StringComparison.Ordinal) == true;
+
+    internal static string LightReasoningEffort(string? model) =>
+        model?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true ? "low" : "none";
+
+    /// <param name="light">Bước nhẹ: tắt/giảm thinking và hạ trần token đầu ra.</param>
+    /// <param name="lowReasoning">
+    /// Bước nặng có output dài (Writer): thinking "low" để token thinking không ăn hết MaxOutputTokens và cắt cụt JSON.
+    /// </param>
     public async Task<AgentCall<T>> RunAsync<T>(
         PromptInfo prompt, string userMessage,
-        Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct)
+        Func<string, (T? Payload, IReadOnlyList<string> Errors)> parse, CancellationToken ct,
+        int maxRepairAttempts = MaxRepairAttempts, bool light = false, bool lowReasoning = false)
     {
         var started = DateTime.UtcNow;
         long? inTokens = null, outTokens = null;
+        var maxOutputTokens = light ? Math.Min(LightMaxOutputTokens, _options.MaxOutputTokens) : _options.MaxOutputTokens;
+        var effort = light ? LightReasoningEffort(_model) : lowReasoning ? "low" : null;
         var parameters = AiJson.Serialize(new
         {
-            temperature = _options.Temperature, maxOutputTokens = _options.MaxOutputTokens,
-            responseFormat = "json", maxRepairAttempts = MaxRepairAttempts
+            temperature = _options.Temperature, maxOutputTokens,
+            responseFormat = "json", maxRepairAttempts, reasoningEffort = effort
         });
         // Chỉ đạo của Supervisor cho agent này (nếu có): đưa vào cuối tin nhắn, đánh dấu rõ là dữ liệu điều phối
         if (!string.IsNullOrWhiteSpace(Instruction))
@@ -70,7 +91,7 @@ public sealed class AgentRunner
         var message = userMessage;
         IReadOnlyList<string> errors = [];
 
-        for (var attempt = 0; attempt <= MaxRepairAttempts; attempt++)
+        for (var attempt = 0; attempt <= maxRepairAttempts; attempt++)
         {
             try
             {
@@ -79,8 +100,15 @@ public sealed class AgentRunner
                     options: new ChatClientAgentRunOptions(new ChatOptions
                     {
                         Temperature = _options.Temperature,
-                        MaxOutputTokens = _options.MaxOutputTokens,
-                        ResponseFormat = ChatResponseFormat.Json
+                        MaxOutputTokens = maxOutputTokens,
+                        // JSON mode của Workers AI làm Llama sinh JSON hỏng cú pháp (vd. {"panels':[{": ...}); với model @cf/
+                        // để model trả văn bản và OutputParser tự tách đối tượng JSON
+                        ResponseFormat = IsCloudflareModel(_model) ? null : ChatResponseFormat.Json,
+                        // Gemini OpenAI-compat nhận reasoning_effort "none"/"low"
+                        Reasoning = effort is null ? null : new ReasoningOptions
+                        {
+                            Effort = effort == "none" ? ReasoningEffort.None : ReasoningEffort.Low
+                        }
                     }), cancellationToken: ct);
 
                 if (response.Usage is { } usage)
@@ -91,8 +119,7 @@ public sealed class AgentRunner
 
                 string? json;
                 T? payload;
-                (payload, errors) = parse(response.Text);
-                if (errors.Count == 0 && payload is not null)
+                (payload, errors) = parse(response.Text);                if (errors.Count == 0 && payload is not null)
                 {
                     json = AiJson.Serialize(payload);
                     return new AgentCall<T>(true, payload, json, null, null, inTokens, outTokens, attempt,
@@ -115,8 +142,8 @@ public sealed class AgentRunner
         }
 
         return Failure<T>("INVALID_OUTPUT",
-            "Output không hợp lệ sau khi đã sửa " + MaxRepairAttempts + " lần: " + string.Join(" | ", errors.Take(6)),
-            inTokens, outTokens, MaxRepairAttempts, started, parameters);
+            "AI trả kết quả không hợp lệ (đã thử sửa " + maxRepairAttempts + " lần):\n• " + string.Join("\n• ", errors.Take(6)),
+            inTokens, outTokens, maxRepairAttempts, started, parameters);
     }
 
     private static AgentCall<T> Failure<T>(

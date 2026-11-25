@@ -118,7 +118,7 @@ public class NewWorkflowsEndToEndTests
     {
         var h = await AiHarness.CreateAsync();
         var an = (await h.Db.BibleEntries.SingleAsync(e => e.Code == "AN")).Id;
-        h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, an));
+        h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, speakerLabel: "An"));
         await h.Db.SaveChangesAsync();
 
         var runId = await h.RunMockAsync(AiWorkflowType.Storyboard, AiHarness.Writer);
@@ -131,6 +131,13 @@ public class NewWorkflowsEndToEndTests
         last.Reason.Should().Contain("không có Writer");
         (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.WaitingForHuman);
         h.Db.AiSuggestions.Count(s => s.RunId == runId).Should().Be(0);
+
+        // Continuity trên script có sẵn đồng bộ finding vào ConsistencyFindings để Editor triage (BR-21)
+        var finding = await h.Db.ConsistencyFindings.SingleAsync(f => f.ChapterId == AiDemoSeeder.ChapterId);
+        finding.RuleCode.Should().Be("AI_CONTINUITY_ITEMTIMELINE");
+        finding.Severity.Should().Be(ConsistencyFindingSeverity.Blocking);
+        finding.Status.Should().Be(ConsistencyFindingStatus.Open);
+        finding.Evidence.Should().Contain("Chương 5");
     }
 
     [Fact]
@@ -206,8 +213,8 @@ public class NewWorkflowsEndToEndTests
         steps.Select(s => s.Agent).Should().NotContain([AiAgentType.Writer, AiAgentType.Continuity, AiAgentType.Storyboard, AiAgentType.Editor],
             "không ép cả 7 agent chạy trong mọi run");
         var artistStep = steps[1];
-        artistStep.PromptVersion.Should().Be("artist@1");
-        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v1#sha256:");
+        artistStep.PromptVersion.Should().Be("artist@2");
+        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v2#sha256:");
         artistStep.ParametersJson.Should().Contain("temperature");
         artistStep.PromptTokens.Should().BeNull("Mock không khai token");
 
@@ -228,130 +235,6 @@ public class NewWorkflowsEndToEndTests
         h.Db.BibleEntryRevisions.Count().Should().Be(bibleRevisionsBefore, "Artist không tự sửa Bible");
     }
 
-    // ── Letterer ─────────────────────────────────────────────────────────────
-    [Fact]
-    public async Task Letterer_ShortensLongLines_LinkedToLinesAndPanels_WithCodeComputedEstimates()
-    {
-        var h = await AiHarness.CreateAsync();
-        await h.AcceptScriptAndLayoutAsync();
-
-        var runId = await h.RunMockAsync(AiWorkflowType.Letterer);
-
-        var steps = await h.StepsAsync(runId);
-        Agents(steps).Should().Equal(AiAgentType.Supervisor, AiAgentType.Letterer, AiAgentType.Supervisor);
-        steps[1].PromptRef.Should().StartWith("Prompts/letterer.md@v1#sha256:");
-        var set = AiJson.Deserialize<LetteringSuggestionSet>(steps[1].OutputJson!)!;
-        set.Suggestions.Should().NotBeEmpty();
-
-        var lines = await h.Db.ScriptLines.ToListAsync();
-        foreach (var s in set.Suggestions)
-        {
-            var line = lines.Single(l => l.Id == s.SourceScriptLineId);
-            s.OriginalText.Should().Be(line.DialogueText);
-            s.SuggestedText.Length.Should().BeLessThan(s.OriginalText.Length);
-            s.SuggestedText.Length.Should().BeLessThanOrEqualTo(s.MaxChars);
-            s.WithinEstimatedLimit.Should().BeTrue();
-            s.LimitSource.Should().Be(LetteringLimits.SourcePanel, "chưa có bubble trên canvas: giới hạn theo diện tích panel (ước lượng)");
-            s.TargetElementId.Should().BeNull();
-            h.Db.Panels.Any(p => p.Id == s.PanelId).Should().BeTrue();
-        }
-        set.Suggestions.Select(s => s.SourceScriptLineId).Should().OnlyHaveUniqueItems("single-binding: mỗi dòng một đề xuất");
-
-        var suggestion = await h.Db.AiSuggestions.SingleAsync(s => s.RunId == runId);
-        suggestion.Kind.Should().Be(AiSuggestionKind.Lettering);
-        suggestion.Status.Should().Be(AiSuggestionStatus.Pending);
-        // Chưa áp dụng gì: script gốc vẫn nguyên
-        (await h.Db.ScriptLines.ToListAsync()).Select(l => l.DialogueText).Should().Equal(lines.Select(l => l.DialogueText));
-    }
-
-    [Fact]
-    public async Task Letterer_BindsToExistingBubble_ByContent_OneElementPerLine_AndUsesItsSizeForTheLimit()
-    {
-        var h = await AiHarness.CreateAsync();
-        await h.AcceptScriptAndLayoutAsync();
-        var line = (await h.Db.ScriptLines.OrderBy(l => l.LineOrder).ToListAsync()).First(l => l.DialogueText is { Length: >= 40 });
-        var page = h.SavedPages.Values.Single();
-        // Hai bubble cùng nội dung với dòng thoại: chỉ một được ghép (single-binding), bubble nhỏ → giới hạn ước lượng nhỏ
-        page.AddElement("SPEECH_BALLOON", 10, 10, 200, 60, 1, AiHarness.Letterer, line.DialogueText);
-        page.AddElement("SPEECH_BALLOON", 300, 10, 200, 60, 2, AiHarness.Letterer, line.DialogueText);
-        page.AddElement("SOUND_EFFECT", 400, 400, 200, 60, 3, AiHarness.Letterer, line.DialogueText);
-
-        var runId = await h.RunMockAsync(AiWorkflowType.Letterer);
-
-        var run = await h.RunAsync(runId);
-        run.Status.Should().Be(AiRunStatus.Completed);
-        var set = AiJson.Deserialize<LetteringSuggestionSet>(Workers(await h.StepsAsync(runId)).Single().OutputJson!)!;
-        var bound = set.Suggestions.Single(s => s.SourceScriptLineId == line.Id);
-        var firstBubble = page.Elements.Values.OrderBy(e => e.ZIndex).First(e => e.ElementType == "SPEECH_BALLOON");
-        bound.TargetElementId.Should().Be(firstBubble.ElementId);
-        bound.LimitSource.Should().Be(LetteringLimits.SourceElement);
-        bound.MaxChars.Should().Be(LetteringLimits.ForElement(200, 60));
-        bound.SuggestedText.Length.Should().BeLessThanOrEqualTo(bound.MaxChars);
-        set.Suggestions.Where(s => s.TargetElementId != null).Select(s => s.TargetElementId).Should().OnlyHaveUniqueItems();
-    }
-
-    // ── Producer (báo cáo tham khảo) ─────────────────────────────────────────
-    private static async Task AddAssignmentsAsync(AiHarness h)
-    {
-        Assignment A(Guid user, WorkspaceRole role, DateTime? due) => Assignment.Create(
-            AiDemoSeeder.SeriesId, AiDemoSeeder.ChapterId, WorkflowEntityType.Page, Guid.NewGuid(), Guid.NewGuid(), user, role, "Việc", dueDate: due);
-        var overdue = A(AiHarness.Writer, WorkspaceRole.Writer, DateTime.UtcNow.AddDays(-3));
-        overdue.StartWork();
-        var approved = A(AiHarness.Artist, WorkspaceRole.Artist, DateTime.UtcNow.AddDays(-5));
-        approved.MarkApproved();
-        var soon = A(AiHarness.Letterer, WorkspaceRole.Letterer, DateTime.UtcNow.AddDays(2));
-        var blocked = A(AiHarness.Editor, WorkspaceRole.Editor, null);
-        typeof(Assignment).GetProperty(nameof(Assignment.Status))!.SetValue(blocked, AssignmentStatus.Blocked);
-        h.Db.Assignments.AddRange(overdue, approved, soon, blocked);
-        await h.Db.SaveChangesAsync();
-    }
-
-    [Fact]
-    public async Task Producer_ReportsFromBackendComputedFacts_CitesSources_NoSuggestion_NoSideEffects()
-    {
-        var h = await AiHarness.CreateAsync();
-        await AddAssignmentsAsync(h);
-        var chapterBefore = (await h.Db.Chapters.SingleAsync()).VersionVector;
-
-        var runId = await h.RunMockAsync(AiWorkflowType.Producer);
-
-        var steps = await h.StepsAsync(runId);
-        Agents(steps).Should().Equal(AiAgentType.Supervisor, AiAgentType.Producer, AiAgentType.Supervisor);
-        steps[1].PromptVersion.Should().Be("producer@1");
-        steps[1].PromptRef.Should().StartWith("Prompts/producer.md@v1#sha256:");
-        var report = AiJson.Deserialize<ProductionReport>(steps[1].OutputJson!)!;
-
-        // Con số do Backend tính, không do LLM: 1/4 Approved = 25%
-        report.Facts.Should().Contain(f => f.Text.Contains("1/4 = 25%"));
-        report.Facts.Should().Contain(f => f.Text.Contains("đã quá 3 ngày"));
-        report.Risks.Should().NotBeEmpty();
-        var keys = report.Facts.Select(f => f.Key).ToHashSet();
-        report.Risks.Should().OnlyContain(r => r.SourceFactKeys.Count > 0 && r.SourceFactKeys.All(keys.Contains));
-        report.Recommendations.Should().OnlyContain(r => r.SourceFactKeys.Count > 0 && r.SourceFactKeys.All(keys.Contains));
-        report.DataGaps.Should().Contain(g => g.Contains("ngày phát hành"), "thiếu dữ liệu phải được nói rõ");
-        report.Summary.Should().Contain("thiếu dữ liệu");
-
-        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Completed);
-        h.Db.AiSuggestions.Count(s => s.RunId == runId).Should().Be(0, "báo cáo tiến độ không bị ép thành content revision");
-        h.Db.ContentRevisions.Count().Should().Be(0);
-        (await h.Db.Chapters.SingleAsync()).VersionVector.Should().Be(chapterBefore);
-        h.Db.Assignments.Count(a => a.Status == AssignmentStatus.Assigned).Should().Be(1, "Producer agent không tự giao việc/đổi trạng thái");
-    }
-
-    [Fact]
-    public async Task Producer_WithNoAssignments_StatesMissingData_InsteadOfInventingProgress()
-    {
-        var h = await AiHarness.CreateAsync();
-
-        var runId = await h.RunMockAsync(AiWorkflowType.Producer);
-
-        var report = AiJson.Deserialize<ProductionReport>(Workers(await h.StepsAsync(runId)).Single().OutputJson!)!;
-        report.DataGaps.Should().Contain(g => g.Contains("assignment"));
-        report.Risks.Should().BeEmpty();
-        report.Summary.Should().Contain("thiếu dữ liệu");
-        report.Facts.Should().NotContain(f => f.Text.Contains("%"), "không có assignment thì không có phần trăm hoàn thành nào");
-    }
-
     // ── Output bịa / sai bị code chặn (sau đúng một lần sửa) ──────────────────
     private static async Task<(AiHarness H, Guid RunId)> RunTamperedAsync(
         AiWorkflowType type, string agentMarker, Func<string, string> tamper, bool prepareLayout = true)
@@ -363,32 +246,6 @@ public class NewWorkflowsEndToEndTests
         var chat = new ScriptedChatClient((_, msg) => msg.Contains(agentMarker) ? tamper(Ask(mock, msg)) : Ask(mock, msg));
         await h.ExecuteWorkflowAsync(runId, chat);
         return (h, runId);
-    }
-
-    [Fact]
-    public async Task Producer_InventedPercentage_IsRejected_AfterOneRepair()
-    {
-        var (h, runId) = await RunTamperedAsync(AiWorkflowType.Producer, "[[agent:producer]]",
-            json => json.Replace("\"summary\":\"", "\"summary\":\"Chương đã xong 85% rồi. "), prepareLayout: false);
-
-        var failed = (await h.StepsAsync(runId)).Last();
-        failed.Agent.Should().Be(AiAgentType.Producer);
-        failed.Status.Should().Be(AiStepStatus.Failed);
-        failed.ErrorCode.Should().Be("INVALID_OUTPUT");
-        failed.ErrorMessage.Should().Contain("85%");
-        failed.RepairAttempts.Should().Be(1);
-        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Failed);
-    }
-
-    [Fact]
-    public async Task Producer_UnknownSourceKey_IsRejected()
-    {
-        var (h, runId) = await RunTamperedAsync(AiWorkflowType.Producer, "[[agent:producer]]",
-            json => json.Replace("\"sourceFactKeys\":[\"F1\"]", "\"sourceFactKeys\":[\"F99\"]"), prepareLayout: false);
-
-        var failed = (await h.StepsAsync(runId)).Last();
-        failed.Status.Should().Be(AiStepStatus.Failed);
-        failed.ErrorMessage.Should().Contain("F99");
     }
 
     [Fact]
@@ -415,71 +272,48 @@ public class NewWorkflowsEndToEndTests
         failed.ErrorMessage.Should().Contain("thiếu tham chiếu nhân vật");
     }
 
-    [Fact]
-    public async Task Letterer_SuggestionLongerThanOriginal_IsRejectedByCode()
-    {
-        var (h, runId) = await RunTamperedAsync(AiWorkflowType.Letterer, "[[agent:letterer]]",
-            json => json.Replace("\"suggestedText\":\"", "\"suggestedText\":\"Lời thoại mới dài dài dài hơn bản gốc rất nhiều lần để thử chặn, "));
-
-        var failed = (await h.StepsAsync(runId)).Last();
-        failed.Agent.Should().Be(AiAgentType.Letterer);
-        failed.Status.Should().Be(AiStepStatus.Failed);
-        failed.ErrorMessage.Should().Contain("ngắn hơn");
-    }
-
-    [Fact]
-    public async Task Letterer_UnknownLineKey_IsRejected()
-    {
-        var (h, runId) = await RunTamperedAsync(AiWorkflowType.Letterer, "[[agent:letterer]]",
-            json => System.Text.RegularExpressions.Regex.Replace(json, "\"lineKey\":\"L\\d+\"", "\"lineKey\":\"L77\""));
-
-        (await h.StepsAsync(runId)).Last().ErrorMessage.Should().Contain("L77");
-    }
-
     // ── Supervisor chọn agent không được phép ────────────────────────────────
     [Theory]
     [InlineData(AiWorkflowType.Artist, "Artist")]
-    [InlineData(AiWorkflowType.Letterer, "Letterer")]
-    [InlineData(AiWorkflowType.Producer, "Producer")]
-    public async Task Supervisor_ChoosingAnAgentOutsideTheWorkflow_IsOverriddenByGuardrail_AndRecorded(AiWorkflowType type, string expectedAgent)
+    public async Task SingleAgentWorkflow_NeverAsksTheSupervisorModel_SoItCannotBeSteeredOutsideTheWorkflow(AiWorkflowType type, string expectedAgent)
     {
         var h = await AiHarness.CreateAsync();
-        if (type != AiWorkflowType.Producer) await h.AcceptScriptAndLayoutAsync();
+        await h.AcceptScriptAndLayoutAsync();
         var runId = await h.StartAsync(type);
         var mock = new MockChatClient();
-        // Supervisor luôn đòi chạy Writer (không thuộc workflow) rồi Finish ngay
+        // Nếu được hỏi, Supervisor sẽ đòi chạy Writer (không thuộc workflow); mọi bước chỉ có một lựa chọn nên code quyết định, model không được hỏi
         var chat = new ScriptedChatClient((_, msg) => msg.Contains("[[agent:supervisor]]")
             ? "{\"action\":\"Writer\",\"reason\":\"viết lại script\",\"instruction\":null}"
             : Ask(mock, msg));
 
         await h.ExecuteWorkflowAsync(runId, chat);
 
+        chat.UserMessages.Should().NotContain(m => m.Contains("[[agent:supervisor]]"));
         var all = await h.StepsAsync(runId);
         var first = AiJson.Deserialize<SupervisorDecision>(all[0].OutputJson!)!;
-        first.GuardrailOverridden.Should().BeTrue();
+        first.GuardrailOverridden.Should().BeFalse();
         first.Action.Should().Be(expectedAgent);
         first.AllowedActions.Should().Equal(expectedAgent);
-        all[0].RepairAttempts.Should().Be(1);
+        all[0].ParametersJson.Should().Contain("single-allowed-action");
         all.Should().NotContain(s => s.Agent == AiAgentType.Writer);
-        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Completed, "workflow vẫn chạy đúng chuỗi của nó sau khi code ghi đè");
+        (await h.RunAsync(runId)).Status.Should().Be(AiRunStatus.Completed);
     }
 
     private static AgentStepReport SupervisorStep(Guid runId, int index, string action, IReadOnlyList<string> allowed, int? parent = null)
     {
         var decision = new SupervisorDecision(AiProtocol.SchemaVersion, runId, 0, action, "Lý do", null, allowed, false);
         var now = DateTime.UtcNow;
-        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Mock", "mock-fixture-v1", "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
+        return new AgentStepReport(index, "Supervisor", 0, parent, true, "Gemini", AiHarness.Model, "supervisor@2", "Prompts/supervisor.md@v2#sha256:x",
             "{}", "{}", AiJson.Serialize(decision), now, now, null, null, 0, null, null);
     }
 
     [Theory]
     [InlineData(AiWorkflowType.Artist, "Finish")]        // chưa có Artist đã chạy mà Finish
-    [InlineData(AiWorkflowType.Producer, "Writer")]      // agent ngoài workflow
-    [InlineData(AiWorkflowType.Letterer, "Storyboard")]
+    [InlineData(AiWorkflowType.Artist, "Writer")]        // agent ngoài workflow
     public async Task Backend_RejectsSupervisorDecisionsOutsideTheAllowedSet_ForTheRunsWorkflow(AiWorkflowType type, string action)
     {
         var h = await AiHarness.CreateAsync();
-        if (type != AiWorkflowType.Producer) await h.AcceptScriptAndLayoutAsync();
+        await h.AcceptScriptAndLayoutAsync();
         var runId = await h.StartAsync(type);
 
         var result = await h.RecordHandler().Handle(new RecordAgentStepCommand(runId, SupervisorStep(runId, 1, action, [action])), default);
@@ -499,7 +333,7 @@ public class NewWorkflowsEndToEndTests
             .IsSuccess.Should().BeTrue();
 
         var now = DateTime.UtcNow;
-        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Mock", "mock-fixture-v1", "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
+        var writer = new AgentStepReport(2, "Writer", 0, null, true, "Gemini", AiHarness.Model, "writer@1", "ref", "{}", "{}", "{}", now, now, null, null, 0, null, null);
         var result = await h.RecordHandler().Handle(new RecordAgentStepCommand(runId, writer), default);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
@@ -522,7 +356,7 @@ public class NewWorkflowsEndToEndTests
 
         var ctx = (await new GetAgentContextQueryHandler(h.Db).Handle(new GetAgentContextQuery(runId), default)).Value!;
         ctx.WorkflowType.Should().Be("FullScene");
-        (ctx.ExistingLayout, ctx.Artist, ctx.Lettering, ctx.Progress).Should().Be((null, null, null, null));
+        (ctx.ExistingLayout, ctx.Artist).Should().Be((null, null));
 
         await h.ExecuteWorkflowAsync(runId);
 
@@ -540,13 +374,13 @@ public class NewWorkflowsEndToEndTests
         var json = """
         {"runId":"a1000000-0000-0000-0000-0000000000a1","seriesId":"a1000000-0000-0000-0000-000000000002","chapterId":"a1000000-0000-0000-0000-000000000003",
          "chapterNumber":3,"sceneId":"a1000000-0000-0000-0000-000000000004","sceneHeading":"H","sceneSummary":null,"brief":"b","readingDirection":"RightToLeft",
-         "chapterVersion":0,"provider":"Mock","model":"mock-fixture-v1","maxRevisionRounds":2,"bible":[],"bibleRevisionIds":[],"baselineScript":[]}
+         "chapterVersion":0,"provider":"Gemini","model":"gemini-2.5-flash","maxRevisionRounds":2,"bible":[],"bibleRevisionIds":[],"baselineScript":[]}
         """;
 
         var ctx = AiJson.Deserialize<AgentContext>(json)!;
 
         ctx.WorkflowType.Should().Be("FullScene");
-        ctx.Inputs.Should().Be(new WorkflowInputs(false, false, false, false, false));
+        ctx.Inputs.Should().Be(new WorkflowInputs(false, false, false));
         WorkflowRules.AllowedActions(ctx.WorkflowType, ctx.Inputs, [], 2).Should().Equal("Writer");
     }
 

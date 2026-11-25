@@ -58,6 +58,46 @@ public sealed class MartenPageRepository : IPageRepository
         return page;
     }
 
+    public async Task<Page?> GetAtVersionAsync(Guid pageId, long version, CancellationToken ct = default)
+    {
+        var page = await _session.Events.AggregateStreamAsync<Page>(pageId, version: version, token: ct);
+        if (page is null) return null;
+        page.SetVersion(version);
+        return page;
+    }
+
+    public async Task<IReadOnlyList<PanelForge.Domain.Common.IDomainEvent>> GetEventsAsync(
+        Guid pageId, CancellationToken ct = default)
+    {
+        var events = await _session.Events.FetchStreamAsync(pageId, token: ct);
+        return events.Select(e => e.Data).OfType<PanelForge.Domain.Common.IDomainEvent>().ToList();
+    }
+
+    public async Task<long> GetStreamVersionAsync(Guid pageId, CancellationToken ct = default)
+    {
+        var state = await _session.Events.FetchStreamStateAsync(pageId, ct);
+        return state?.Version ?? -1;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, long>> GetStreamVersionsAsync(
+        IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default)
+    {
+        if (pageIds.Count == 0) return new Dictionary<Guid, long>();
+
+        var result = pageIds.ToDictionary(id => id, _ => -1L);
+        var tasks = pageIds.Select(async id =>
+        {
+            var state = await _session.Events.FetchStreamStateAsync(id, ct);
+            return (id, version: state?.Version ?? -1L);
+        });
+        var states = await Task.WhenAll(tasks);
+        foreach (var s in states)
+        {
+            result[s.id] = s.version;
+        }
+        return result;
+    }
+
     /// <summary>
     /// Append uncommitted events của Page vào Marten stream. KHÔNG update row nào.
     ///   - Version == -1 (chưa từng persist) → StartStream

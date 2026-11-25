@@ -1,3 +1,4 @@
+using PanelForge.UnitTests.Common;
 using FluentAssertions;
 using Moq;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -42,12 +43,31 @@ public class ElementVersionConflictTests
     }
 
     [Fact]
+    public async Task Move_ReturnsRealVersion_NoOpKeepsVersion_SoNextCommandWithThatVersionSucceeds()
+    {
+        // Lỗi cũ: thả bóng đúng chỗ cũ → server không raise event (version giữ nguyên) nhưng client tự +1 → lệnh sau 409
+        var (page, a, _) = PageWithTwoElements();
+        var handler = new MoveElementCommandHandler(_repo.Object, InMemoryDb.Create());
+
+        var moved = await handler.Handle(Move(page, a, 99, expected: 1), default);
+        moved.Value.Should().Be(2);
+
+        var noOp = await handler.Handle(Move(page, a, 99, expected: 2), default);
+        noOp.IsSuccess.Should().BeTrue();
+        noOp.Value.Should().Be(2); // không đổi gì → không tăng
+
+        var next = await handler.Handle(Move(page, a, 150, expected: noOp.Value), default);
+        next.IsSuccess.Should().BeTrue();
+        next.Value.Should().Be(3);
+    }
+
+    [Fact]
     public async Task Move_WhenOtherElementOnSamePageChanged_ShouldSucceed()
     {
         var (page, a, b) = PageWithTwoElements();
         page.MoveElement(b, 300, 300, 50, 50, _user); // người khác sửa element B (page version tăng)
 
-        var result = await new MoveElementCommandHandler(_repo.Object).Handle(Move(page, a, 99, expected: 1), default);
+        var result = await new MoveElementCommandHandler(_repo.Object, InMemoryDb.Create()).Handle(Move(page, a, 99, expected: 1), default);
 
         result.IsSuccess.Should().BeTrue();
         page.Elements[a].X.Should().Be(99);
@@ -59,7 +79,7 @@ public class ElementVersionConflictTests
         var (page, a, _) = PageWithTwoElements();
         page.MoveElement(a, 30, 10, 50, 50, _user); // người khác đã kéo A → version 2
 
-        var result = await new MoveElementCommandHandler(_repo.Object).Handle(Move(page, a, 99, expected: 1), default);
+        var result = await new MoveElementCommandHandler(_repo.Object, InMemoryDb.Create()).Handle(Move(page, a, 99, expected: 1), default);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain(Page.ElementVersionConflictCode);
@@ -72,7 +92,7 @@ public class ElementVersionConflictTests
     {
         var (page, a, _) = PageWithTwoElements();
 
-        var result = await new MoveElementCommandHandler(_repo.Object).Handle(Move(page, a, 99, expected: null), default);
+        var result = await new MoveElementCommandHandler(_repo.Object, InMemoryDb.Create()).Handle(Move(page, a, 99, expected: null), default);
 
         result.IsSuccess.Should().BeFalse();
         _repo.Verify(r => r.SaveAsync(It.IsAny<Page>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -85,7 +105,7 @@ public class ElementVersionConflictTests
         _repo.Setup(r => r.SaveAsync(page, It.IsAny<CancellationToken>()))
              .ThrowsAsync(new ConcurrentPageUpdateException(page.Id));
 
-        var result = await new MoveElementCommandHandler(_repo.Object).Handle(Move(page, a, 99, expected: 1), default);
+        var result = await new MoveElementCommandHandler(_repo.Object, InMemoryDb.Create()).Handle(Move(page, a, 99, expected: 1), default);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain("Xung đột");
@@ -118,7 +138,7 @@ public class ElementVersionConflictTests
         var (page, a, _) = PageWithTwoElements();
         page.MoveElement(a, 30, 10, 50, 50, _user);
 
-        var result = await new RemoveElementCommandHandler(_repo.Object)
+        var result = await new RemoveElementCommandHandler(_repo.Object, InMemoryDb.Create())
             .Handle(new RemoveElementCommand(page.Id, a, "USER_DELETE", _user, ExpectedElementVersion: 1), default);
 
         result.IsSuccess.Should().BeFalse();

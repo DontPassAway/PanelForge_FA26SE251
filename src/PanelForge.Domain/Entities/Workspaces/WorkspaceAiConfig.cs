@@ -10,6 +10,10 @@ public class WorkspaceAiConfig : BaseEntity
     public Guid WorkspaceId { get; private set; }
     public string Provider { get; private set; } = "Google Gemini";
     public string? ApiKeyEncrypted { get; private set; }
+    /// <summary>API do Admin khai báo trong bảng ai_provider_credentials. Có giá trị thì thay cho Provider/ApiKeyEncrypted ở trên.</summary>
+    public Guid? ProviderCredentialId { get; private set; }
+    /// <summary>API riêng cho sinh ảnh (dùng ImageModel của credential đó). null = sinh ảnh theo API chữ/cấu hình hệ thống như trước.</summary>
+    public Guid? ImageProviderCredentialId { get; private set; }
     public bool IsEnabled { get; private set; } = true;
     public long MonthlyTokenQuota { get; private set; } = 1_000_000;
     public long UsedTokensCurrentMonth { get; private set; } = 0;
@@ -17,7 +21,17 @@ public class WorkspaceAiConfig : BaseEntity
     /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
     public long MonthlyImageQuota { get; private set; } = 0;
     public long UsedImagesCurrentMonth { get; private set; } = 0;
-    public string AllowedModelsJson { get; private set; } = "[\"gemini-1.5-flash\",\"gemini-1.5-pro\"]";
+    /// <summary>
+    /// Model mặc định phải gồm model văn bản và ảnh mà AI service đang chạy, nếu không mọi lượt chạy bị chặn.
+    /// Dòng 3.x đứng đầu: key của project Google mới bị từ chối dòng 2.5 ("no longer available to new users");
+    /// giữ 2.5 cho key cũ vẫn còn quyền dùng.
+    /// </summary>
+    public static readonly IReadOnlyList<string> DefaultAllowedModels =
+        ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-image"];
+    public const string DefaultAllowedModelsJson =
+        "[\"gemini-3.8-flash\",\"gemini-3.1-pro-preview\",\"gemini-2.5-flash\",\"gemini-2.5-pro\",\"gemini-2.5-flash-image\"]";
+
+    public string AllowedModelsJson { get; private set; } = DefaultAllowedModelsJson;
     public DateTime? LastResetAt { get; private set; }
 
     public StudioWorkspace Workspace { get; private set; } = default!;
@@ -40,7 +54,7 @@ public class WorkspaceAiConfig : BaseEntity
             MonthlyTokenQuota = Math.Max(0, monthlyTokenQuota),
             UsedTokensCurrentMonth = 0,
             AllowedModelsJson = string.IsNullOrWhiteSpace(allowedModelsJson)
-                ? "[\"gemini-1.5-flash\",\"gemini-1.5-pro\"]"
+                ? DefaultAllowedModelsJson
                 : allowedModelsJson.Trim(),
             LastResetAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
@@ -66,6 +80,19 @@ public class WorkspaceAiConfig : BaseEntity
         {
             AllowedModelsJson = allowedModelsJson.Trim();
         }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>null = quay về key Gemini riêng của Workspace.</summary>
+    public void UseProviderCredential(Guid? credentialId)
+    {
+        ProviderCredentialId = credentialId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UseImageProviderCredential(Guid? credentialId)
+    {
+        ImageProviderCredentialId = credentialId;
         UpdatedAt = DateTime.UtcNow;
     }
 

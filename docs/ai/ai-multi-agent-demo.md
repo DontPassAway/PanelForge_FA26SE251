@@ -1,6 +1,6 @@
 # AI Multi-Agent: 7 agent chuyên môn + Gemini Supervisor
 
-Nguồn thiết kế: `HuongDan/AI_Research/AI_MultiAgent_TongHop.md`. Tài liệu này mô tả **phần đã triển khai thật** trong Backend + Frontend, cách chạy và những chỗ khác với tài liệu thiết kế. Hướng B (Gemini làm Supervisor) vẫn là nền; bản này mở rộng từ một workflow demo (Writer → Continuity → Storyboard → Editor) sang **7 agent** và **7 loại nhiệm vụ**.
+Nguồn thiết kế: `docs/guides/AI_Research/AI_MultiAgent_TongHop.md`. Tài liệu này mô tả **phần đã triển khai thật** trong Backend + Frontend, cách chạy và những chỗ khác với tài liệu thiết kế. Hướng B (Gemini làm Supervisor) vẫn là nền; bản này mở rộng từ một workflow demo (Writer → Continuity → Storyboard → Editor) sang **7 agent** và **7 loại nhiệm vụ**.
 
 > **Đối chiếu phiếu V1.2 (06/10/2026):** Artist Agent hiện chỉ soạn prompt ảnh, chưa sinh ảnh; pipeline ảnh nhân vật (character sheet khoá, sinh ảnh từ sketch, tách nền, so tương đồng) là lõi nhưng chưa triển khai. Letterer Agent rút gọn thoại là lõi; dịch thoại và Producer Agent là mở rộng. Layout hiện áp dụng vào Scene chưa có Page (mô hình cũ `Page.SceneId`); phiếu V1.2 đổi sang Panel tham chiếu Scene.
 
@@ -111,7 +111,7 @@ Mỗi agent có: prompt `.md` nhúng vào assembly kèm `<!-- version: N -->` + 
 
 DB: Backend tự `Migrate` khi khởi động. Cổng: Backend `5044`, AI `5055` (`Kestrel:Endpoints:Http:Url = http://127.0.0.1:5055`).
 
-Cấu hình Backend (section `AiService`, xem `appsettings.Example.json`): `Provider` (`Mock` mặc định | `Gemini`), `GeminiModel` (`gemini-2.5-flash`), `ServiceUrl`, `ServiceKey` (**user-secrets**, cùng giá trị cho cả hai project), `MaxRevisionRounds` (2), `RunStaleAfterSeconds` (300), `SeedDemoData` (false, opt-in, chỉ Development).
+Cấu hình Backend (section `AiService`, xem `appsettings.Example.json`): `Provider` (`Mock` mặc định | `Gemini`), `GeminiModel` (`gemini-3.8-flash`; key của project Google mới không gọi được dòng 2.5), `ServiceUrl`, `ServiceKey` (**user-secrets**, cùng giá trị cho cả hai project), `MaxRevisionRounds` (2), `RunStaleAfterSeconds` (300), `SeedDemoData` (false, opt-in, chỉ Development).
 
 ```powershell
 cd "D:\Program Files\Downloads\Project SEP490\Backend\PanelForge_FA26SE251"
@@ -144,7 +144,7 @@ Thứ tự demo (mỗi bước đăng nhập đúng tài khoản):
 
 **Mock (mặc định)**: không cần API key, không gọi mạng; fixture xác định cho cả 7 agent + Supervisor (`Demo/Fixtures/MockFixtures.cs`). `provider = "Mock"`, `model = "mock-fixture-v1"`; không giả lập token (`promptTokens/completionTokens = null`, không ghi `AiUsageRecord`). Mock vẫn bắt buộc: thành viên đúng role, `WorkspaceAiConfig` tồn tại và `IsEnabled = true`.
 
-**Gemini**: Admin cấu hình key + model được phép (`PUT /api/Admin/workspaces/{id}/ai-config`, key lưu mã hoá, không log); Backend: `$env:AiService__Provider = "Gemini"` (+ `AiService__GeminiModel`). Mỗi run kiểm `IAiUsageService`; mỗi step ghi `AiUsageRecord` đúng một lần (`feature = AiAgents.<Agent>`). Hạn mức free tier (đã gặp thật): `gemini-2.5-flash` **20 request/ngày/model**; AI service giãn cách 6,5 giây giữa hai lần gọi và retry 3 lần với backoff; lỗi 429 còn lại thành step lỗi `PROVIDER_UNAVAILABLE` (run `Failed`), **không** tự rơi về Mock, không retry liên tục. Số lần gọi model mỗi run: 2 × số agent + vòng sửa (Artist/Letterer/Producer: 2 lần/run).
+**Gemini**: Admin cấu hình key + model được phép (`PUT /api/Admin/workspaces/{id}/ai-config`, key lưu mã hoá, không log); Backend: `$env:AiService__Provider = "Gemini"` (+ `AiService__GeminiModel`). Mỗi run kiểm `IAiUsageService`; mỗi step ghi `AiUsageRecord` đúng một lần (`feature = AiAgents.<Agent>`). Hạn mức free tier (đã gặp thật): `gemini-2.5-flash` **20 request/ngày/model**; AI service giãn cách 6,5 giây giữa hai lần gọi và retry 3 lần với backoff; lỗi 429 còn lại thành step lỗi `PROVIDER_UNAVAILABLE` (run `Failed`), **không** tự rơi về Mock, không retry liên tục. Số lần gọi model mỗi run (từ 12/10/2026): Supervisor chỉ gọi model khi có 2 lựa chọn (sau finding chặn: Writer | StopForHuman); bước chỉ có một hành động hợp lệ do code quyết định (`SupervisorAgent.SingleChoice`, vẫn lưu step Supervisor với `source = "code"`). `Script`: 2 lần (không sửa), 5 lần (một lượt sửa); `FullScene` một lượt sửa: 7 lần; Artist/Letterer/Producer: 1 lần/run. Trước đó là 2 × số agent + vòng sửa.
 
 ## 8. Chịu lỗi, an toàn, provenance
 

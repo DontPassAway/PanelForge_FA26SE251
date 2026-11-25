@@ -51,9 +51,12 @@ public sealed class WriterAgent
             blockingFindings = findingsInput
         });
 
-        var call = await _runner.RunAsync<ScriptDraft>(Prompt, sb.ToString(), text => Parse(text, ctx, keys, round), ct);
+        var call = await _runner.RunAsync<ScriptDraft>(Prompt, sb.ToString(), text => Parse(text, ctx, keys, round), ct, lowReasoning: true);
         return (call, inputJson);
     }
+
+    private static string? Clean(string? s) =>
+        string.IsNullOrWhiteSpace(s) || s.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ? null : s.Trim();
 
     private static (ScriptDraft?, IReadOnlyList<string>) Parse(string text, AgentContext ctx, KeyMaps keys, int round)
     {
@@ -61,23 +64,57 @@ public sealed class WriterAgent
         if (model is null) return (null, [error!]);
         if (model.Lines is null or { Count: 0 }) return (null, ["Thiếu mảng lines."]);
 
-        var errors = new List<string>();
+        var unknownSpeakers = new Dictionary<string, List<int>>();
         var lines = new List<ScriptDraftLine>();
+        var badRefs = new List<string>();
         for (var i = 0; i < model.Lines.Count; i++)
         {
             var l = model.Lines[i];
             Guid? speaker = null;
             if (!string.IsNullOrWhiteSpace(l.Speaker) && !l.Speaker.Equals("null", StringComparison.OrdinalIgnoreCase))
             {
-                if (keys.CharactersByCode.TryGetValue(l.Speaker.Trim().ToUpperInvariant(), out var c)) speaker = c.EntryId;
-                else errors.Add($"Dòng {i + 1}: speaker '{l.Speaker}' không phải code nhân vật trong Bible.");
+                var code = l.Speaker.Trim().ToUpperInvariant();
+                if (keys.CharactersByCode.TryGetValue(code, out var c)) speaker = c.EntryId;
+                else if (unknownSpeakers.TryGetValue(code, out var at)) at.Add(i + 1);
+                else unknownSpeakers[code] = [i + 1];
+            }
+            var kind = Clean(l.Kind);
+            var lineText = Clean(l.Text);
+            var spoken = kind is "Dialogue" or "Thought";
+            var dialogue = kind is null ? Clean(l.Dialogue) : spoken ? lineText : null;
+            var stage = kind is null ? Clean(l.StageDirection) : spoken ? null : lineText;
+            var effectiveKind = kind ?? (dialogue is null ? "Action" : "Dialogue");
+            var name = speaker is null ? Clean(l.NewSpeaker) : keys.CharactersByCode.Values.First(c => c.EntryId == speaker).Name;
+            var label = effectiveKind == "Action" || name is null ? null
+                : Clean(l.Parenthetical) is { } tone ? $"{name} ({tone})" : name;
+            var refs = new List<ScriptDraftRef>();
+            var refText = stage ?? dialogue ?? "";
+            foreach (var r in l.Refs ?? [])
+            {
+                // Như Backend (ScriptBibleRefs): thẻ có cụm chữ không nằm trong dòng (vd model gắn tên cho đại từ "cậu")
+                // thì bỏ thẻ, không làm hỏng cả bản nháp; thẻ chỉ để tô sáng, không phải nội dung script.
+                var surface = r.Text?.Trim();
+                if (string.IsNullOrEmpty(surface) || !refText.Contains(surface, StringComparison.OrdinalIgnoreCase)) continue;
+                var code = Clean(r.Code);
+                var entry = code is null ? null : ctx.Bible.FirstOrDefault(b => b.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
+                if (code is not null && entry is null) badRefs.Add($"Tham chiếu code '{code}' ở dòng {i + 1} không có trong Bible.");
+                else refs.Add(new ScriptDraftRef(surface, entry?.EntryId, entry is null ? Clean(r.NewName) : null, entry is null ? Clean(r.Category) : null));
             }
             // LineId do ứng dụng cấp, không phải model
-            lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker,
-                string.IsNullOrWhiteSpace(l.Dialogue) ? null : l.Dialogue.Trim(),
-                string.IsNullOrWhiteSpace(l.StageDirection) ? null : l.StageDirection.Trim()));
+            lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker, dialogue, stage, kind, label, refs.Count > 0 ? refs : null));
         }
-        if (errors.Count > 0) return (null, errors);
+        if (unknownSpeakers.Count > 0)
+        {
+            // Lỗi này cũng được gửi lại cho model ở lượt sửa, nên kèm danh sách code hợp lệ.
+            var allowed = keys.CharactersByCode.Count == 0
+                ? "chưa có nhân vật nào được khoá hồ sơ"
+                : "chỉ được dùng " + string.Join(", ", keys.CharactersByCode.Values.Select(c => c.Code));
+            return (null, unknownSpeakers.Select(kv =>
+                $"Speaker '{kv.Key}' (dòng {string.Join(", ", kv.Value)}) không nằm trong danh sách nhân vật AI được dùng ({allowed}). " +
+                "Nhân vật phải có hồ sơ đã được Producer khoá thì AI mới dùng được.").ToList());
+        }
+
+        if (badRefs.Count > 0) return (null, badRefs);
 
         var draft = new ScriptDraft(AiProtocol.SchemaVersion, ctx.RunId, ctx.SceneId, round, lines,
             ctx.BibleRevisionIds, model.RevisionNotes);

@@ -54,6 +54,21 @@ public class GetPageSnapshotQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithAtVersion_ReplaysStreamToThatVersion()
+    {
+        var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1000, 1500, 300);
+        page.AddElement("DialogueBalloon", 10, 10, 100, 50, 1, Guid.NewGuid(), "Bản đã nộp");
+        _pageRepositoryMock.Setup(r => r.GetAtVersionAsync(page.Id, 7, It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(page);
+
+        var result = await _handler.Handle(new GetPageSnapshotQuery(page.Id, AtVersion: 7), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Elements.Should().ContainSingle(e => e.Content == "Bản đã nộp");
+        _pageRepositoryMock.Verify(r => r.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Handle_WhenIncludeRemovedIsTrue_ShouldReturnAllElements()
     {
         // Arrange

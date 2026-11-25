@@ -1,3 +1,4 @@
+using PanelForge.Application.Common.Interfaces.Services;
 using FluentAssertions;
 using Moq;
 using PanelForge.Application.Features.Scenes.Commands.CreateScene;
@@ -19,6 +20,7 @@ public class SceneCommandTests
     public SceneCommandTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        _dbContextMock.Setup(db => db.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter>()));
     }
 
     [Fact]
@@ -35,9 +37,10 @@ public class SceneCommandTests
 
         _dbContextMock.Setup(db => db.Chapters).Returns(chaptersDbSet);
         _dbContextMock.Setup(db => db.Scenes).Returns(scenesDbSet);
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series>()));
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        var handler = new CreateSceneCommandHandler(_dbContextMock.Object);
+        var handler = new CreateSceneCommandHandler(_dbContextMock.Object, Mock.Of<IWorkspaceAuthorizationService>());
         var command = new CreateSceneCommand(
             ChapterId: chapterId,
             UserId: Guid.NewGuid(),
@@ -69,9 +72,10 @@ public class SceneCommandTests
 
         var scenesDbSet = DbSetMockHelper.CreateDbSetMock(new List<Scene> { scene1, scene2 });
         _dbContextMock.Setup(db => db.Scenes).Returns(scenesDbSet);
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series>()));
         _dbContextMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        var handler = new ReorderScenesCommandHandler(_dbContextMock.Object);
+        var handler = new ReorderScenesCommandHandler(_dbContextMock.Object, Mock.Of<IWorkspaceAuthorizationService>());
         var command = new ReorderScenesCommand(
             ChapterId: chapterId,
             UserId: Guid.NewGuid(),

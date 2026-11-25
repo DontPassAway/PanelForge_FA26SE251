@@ -12,12 +12,32 @@ public class Series : BaseEntity
     public Guid? PipelineDefinitionId { get; private set; }
     public string Title { get; private set; } = default!;
     public string? Synopsis { get; private set; }
+    /// <summary>Metadata phát hành: giới thiệu một câu; null = chưa có.</summary>
+    public string? Logline { get; private set; }
+    /// <summary>Metadata phát hành: câu quảng bá; null = chưa có.</summary>
+    public string? Teaser { get; private set; }
+    /// <summary>Metadata phát hành: độ tuổi (All, 13+, 16+, 18+); null = chưa có.</summary>
+    public string? AgeRating { get; private set; }
     /// <summary>V1.2: story arc của Series (Producer/Writer ghi), đưa vào input Writer Agent.</summary>
     public string? StoryArc { get; private set; }
     public ReadingDirection ReadingDirection { get; private set; }
     public string Genre { get; private set; } = "Action";
     public string Format { get; private set; } = "Manga";
     public string? ReleaseScheduleJson { get; private set; }
+    /// <summary>SHA-256 ảnh bìa hiện tại (file trên kho asset theo hash); null = chưa có bìa.</summary>
+    public string? CoverImageSha256 { get; private set; }
+    /// <summary>SHA-256 avatar vuông của Series (nhận diện trong danh sách/breadcrumb); độc lập với bìa dọc.</summary>
+    public string? AvatarImageSha256 { get; private set; }
+    /// <summary>SHA-256 banner ngang (~3:1) đầu Series Dashboard; độc lập với bìa dọc và avatar.</summary>
+    public string? BannerImageSha256 { get; private set; }
+    /// <summary>Producer đánh dấu bộ truyện đã hoàn thành (Reader thấy "Hoàn thành" thay vì "Đang ra").</summary>
+    public bool IsCompleted { get; private set; }
+
+    /// <summary>Ngôn ngữ kịch bản gốc (BR-34, mặc định 'vi').</summary>
+    public string OriginalLanguage { get; private set; } = ContentLanguages.Original;
+
+    /// <summary>Các ngôn ngữ phát hành (BR-34, luôn chứa OriginalLanguage, mặc định ['vi', 'en']).</summary>
+    public List<string> ReleaseLanguages { get; private set; } = [ContentLanguages.Vietnamese, ContentLanguages.English];
 
     public StudioWorkspace Workspace { get; private set; } = default!;
     public SeriesBible? Bible { get; private set; }
@@ -30,6 +50,7 @@ public class Series : BaseEntity
     public ICollection<ConsistencyRule> ConsistencyRules { get; private set; } = [];
 
     public ICollection<Chapter> Chapters { get; private set; } = [];
+    public ICollection<SeriesMember> Members { get; private set; } = [];
 
     private Series() { }
 
@@ -56,6 +77,36 @@ public class Series : BaseEntity
         };
     }
 
+    public void SetCompleted(bool isCompleted)
+    {
+        if (IsCompleted == isCompleted) return;
+        IsCompleted = isCompleted;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Producer thiết lập ngôn ngữ gốc và danh sách ngôn ngữ phát hành (BR-34).</summary>
+    public void SetLanguages(string originalLanguage, IEnumerable<string> releaseLanguages)
+    {
+        var original = ContentLanguages.Normalize(originalLanguage)
+            ?? throw new ArgumentException($"Ngôn ngữ gốc '{originalLanguage}' không thuộc ContentLanguages.", nameof(originalLanguage));
+
+        var releases = new List<string>();
+        foreach (var l in releaseLanguages)
+        {
+            var code = ContentLanguages.Normalize(l)
+                ?? throw new ArgumentException($"Ngôn ngữ phát hành '{l}' không thuộc ContentLanguages.", nameof(releaseLanguages));
+            if (!releases.Contains(code))
+                releases.Add(code);
+        }
+
+        if (!releases.Contains(original))
+            releases.Insert(0, original);
+
+        OriginalLanguage = original;
+        ReleaseLanguages = releases;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void UpdateDetails(
         string title,
         string? synopsis,
@@ -75,8 +126,26 @@ public class Series : BaseEntity
         if (releaseScheduleJson != null) ReleaseScheduleJson = releaseScheduleJson.Trim();
     }
 
+    /// <summary>Ghi metadata phát hành sau khi người có quyền chấp nhận đề xuất.</summary>
+    public void SetReleaseMetadata(string logline, string teaser, string ageRating)
+    {
+        Logline = logline.Trim();
+        Teaser = teaser.Trim();
+        AgeRating = ageRating.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>Producer/Writer ghi story arc của Series; chuỗi rỗng = xoá.</summary>
     public void SetStoryArc(string? storyArc) => StoryArc = string.IsNullOrWhiteSpace(storyArc) ? null : storyArc.Trim();
+
+    /// <summary>Producer đặt / xoá ảnh bìa (null = xoá).</summary>
+    public void SetCover(string? sha256) => CoverImageSha256 = sha256;
+
+    /// <summary>Producer đặt / xoá avatar Series (null = xoá).</summary>
+    public void SetAvatar(string? sha256) => AvatarImageSha256 = sha256;
+
+    /// <summary>Producer đặt / xoá banner Series (null = xoá).</summary>
+    public void SetBanner(string? sha256) => BannerImageSha256 = sha256;
 
     public void AttachBible(SeriesBible bible)
     {

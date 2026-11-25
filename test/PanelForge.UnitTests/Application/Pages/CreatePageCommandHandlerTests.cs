@@ -18,8 +18,10 @@ public class CreatePageCommandHandlerTests
     public CreatePageCommandHandlerTests()
     {
         _dbContextMock = new Mock<IPanelForgeDbContext>();
+        // Chương chưa dùng lưới: không sinh ô cho trang mới
+        _dbContextMock.Setup(db => db.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workflow.StageTask>()));
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork());
+        _handler = new CreatePageCommandHandler(_dbContextMock.Object, _pageRepositoryMock.Object, new PassThroughUnitOfWork(), Mock.Of<IWorkspaceAuthorizationService>());
     }
 
     [Fact]
@@ -87,7 +89,7 @@ public class CreatePageCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPageNumberDuplicate_ShouldReturnFailure()
+    public async Task Handle_WhenPageNumberTaken_InsertsAndShiftsLaterPages()
     {
         // Arrange
         var chapterId = Guid.NewGuid();
@@ -95,24 +97,29 @@ public class CreatePageCommandHandlerTests
         typeof(Chapter).GetProperty("Id")!.SetValue(chapter, chapterId);
 
         var existingPage = Page.CreateNew(chapterId, 1, PanelForge.Domain.Enums.LayoutFormat.StandardPage, 1200, 1800, 300);
+        var aggregate = Page.CreateNew(chapterId, 1, PanelForge.Domain.Enums.LayoutFormat.StandardPage, 1200, 1800, 300);
 
         var chaptersDbSet = DbSetMockHelper.CreateDbSetMock(new List<Chapter> { chapter });
-        var pagesDbSet = DbSetMockHelper.CreateDbSetMock(new List<Page> { existingPage });
+        var pagesList = new List<Page> { existingPage };
+        var pagesDbSet = DbSetMockHelper.CreateDbSetMock(pagesList);
 
         _dbContextMock.Setup(db => db.Chapters).Returns(chaptersDbSet);
         _dbContextMock.Setup(db => db.Pages).Returns(pagesDbSet);
+        _pageRepositoryMock.Setup(r => r.GetAsync(existingPage.Id, It.IsAny<CancellationToken>())).ReturnsAsync(aggregate);
 
         var command = new CreatePageCommand(
             ChapterId:  chapterId,
-            PageNumber: 1 // Trùng số trang 1
+            PageNumber: 1 // Chèn vào trước trang 1 đang có
         );
 
         // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("đã tồn tại");
-        _pageRepositoryMock.Verify(r => r.SaveAsync(It.IsAny<Page>(), It.IsAny<CancellationToken>()), Times.Never);
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.PageNumber.Should().Be(1);
+        existingPage.PageNumber.Should().Be(2);
+        aggregate.PageNumber.Should().Be(2);
+        _pageRepositoryMock.Verify(r => r.SaveAsync(aggregate, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

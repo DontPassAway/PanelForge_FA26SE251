@@ -10,8 +10,14 @@ using PanelForge.Application.Features.ConsistencyRules.Commands.DeleteConsistenc
 using PanelForge.Application.Features.ConsistencyRules.Queries.GetConsistencyRules;
 using PanelForge.Application.Features.Series.Commands.CreateSeries;
 using PanelForge.Application.Features.Series.Commands.DeleteSeries;
+using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 using PanelForge.Application.Features.Series.Commands.SetSeriesStoryArc;
+using PanelForge.Application.Features.Series.Queries.GetSeriesCover;
+using PanelForge.Application.Features.Series.Commands.SetSeriesImage;
+using PanelForge.Application.Features.Series.Queries.GetSeriesImage;
+using PanelForge.Domain.Entities.Content;
 using PanelForge.Application.Features.Series.Commands.UpdateSeries;
+using PanelForge.Application.Features.Series.Commands.UpdateSeriesLanguages;
 using PanelForge.Application.Features.Series.Models;
 using PanelForge.Application.Features.Series.Queries.GetSeriesById;
 using PanelForge.Application.Features.Series.Queries.GetSeriesList;
@@ -21,6 +27,8 @@ using PanelForge.Application.Features.TypographyPresets.Commands.DeleteTypograph
 using PanelForge.Application.Features.TypographyPresets.Models;
 using PanelForge.Application.Features.TypographyPresets.Queries.GetTypographyPresets;
 using PanelForge.Domain.Enums;
+using PanelForge.API.Common;
+using PanelForge.Application.Common;
 
 namespace PanelForge.API.Controllers;
 
@@ -60,7 +68,12 @@ public sealed class SeriesController : ControllerBase
             WorkspaceId: workspaceId,
             UserId: GetCurrentUserId(),
             Title: body.Title,
-            Format: body.Format ?? "WEBTOON"
+            Format: body.Format ?? "MANGA",
+            ReadingDirection: body.ReadingDirection,
+            Synopsis: body.Synopsis,
+            Genre: body.Genre,
+            StoryArc: body.StoryArc,
+            PipelineTemplateId: body.PipelineTemplateId
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -102,11 +115,16 @@ public sealed class SeriesController : ControllerBase
         [FromRoute] Guid seriesId,
         CancellationToken cancellationToken)
     {
-        var query = new GetSeriesByIdQuery(seriesId);
+        var query = new GetSeriesByIdQuery(seriesId, GetCurrentUserId());
         var result = await _mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.Forbidden)
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage });
+
             return NotFound(new { error = result.ErrorMessage });
+        }
 
         return Ok(result.Value);
     }
@@ -134,7 +152,8 @@ public sealed class SeriesController : ControllerBase
             Genre: body.Genre,
             Format: body.Format,
             ReleaseScheduleJson: body.ReleaseScheduleJson,
-            StoryArc: body.StoryArc
+            StoryArc: body.StoryArc,
+            IsCompleted: body.IsCompleted
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -143,6 +162,41 @@ public sealed class SeriesController : ControllerBase
             if (result.ErrorMessage?.Contains("không tồn tại") == true)
                 return NotFound(new { error = result.ErrorMessage });
 
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/languages
+    /// Cập nhật ngôn ngữ gốc và danh sách ngôn ngữ phát hành của Series (BR-34). Chỉ Producer sửa.
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/languages")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(SeriesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateSeriesLanguages(
+        [FromRoute] Guid seriesId,
+        [FromBody] UpdateSeriesLanguagesRequest body,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateSeriesLanguagesCommand(
+            SeriesId: seriesId,
+            UserId: GetCurrentUserId(),
+            OriginalLanguage: body.OriginalLanguage,
+            ReleaseLanguages: body.ReleaseLanguages
+        );
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == ResultErrorCodes.Forbidden)
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage });
+            if (result.ErrorMessage?.Contains("không tồn tại") == true)
+                return NotFound(new { error = result.ErrorMessage });
             return BadRequest(new { error = result.ErrorMessage });
         }
 
@@ -162,11 +216,145 @@ public sealed class SeriesController : ControllerBase
     }
 
     /// <summary>
+    /// PUT /api/series/{seriesId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa (PNG/JPEG/WebP, ≤ 5 MB).
+    /// Trả <c>value</c> = coverUrl mới (cũng có trong SeriesDto.coverUrl).
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetCover([FromRoute] Guid seriesId, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh bìa." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return CoverResult(await _mediator.Send(new SetSeriesCoverCommand(seriesId, GetCurrentUserId(), buffer.ToArray()), cancellationToken));
+    }
+
+    /// <summary>DELETE /api/series/{seriesId}/cover — Producer xoá ảnh bìa (FE quay về bìa chữ cái).</summary>
+    [HttpDelete("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearCover([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+        => CoverResult(await _mediator.Send(new SetSeriesCoverCommand(seriesId, GetCurrentUserId(), null), cancellationToken));
+
+    /// <summary>
+    /// GET /api/series/{seriesId}/cover — ảnh bìa hiện tại, mọi thành viên Workspace. Cần Bearer: FE tải bằng fetch rồi
+    /// hiển thị qua blob URL. Dùng đúng <c>coverUrl</c> trong DTO (có <c>?v=</c> theo nội dung) để không dính cache bìa cũ.
+    /// </summary>
+    [HttpGet("api/series/{seriesId:guid}/cover")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCover([FromRoute] Guid seriesId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSeriesCoverQuery(seriesId), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    private IActionResult CoverResult(PanelForge.Application.Common.Result<string?> result)
+        => result.IsSuccess
+            ? Ok(new TextValueResponse(result.Value))
+            : result.ErrorCode == PanelForge.Application.Common.ResultErrorCodes.NotFound
+                ? NotFound(new { error = result.ErrorMessage })
+                : BadRequest(new { error = result.ErrorMessage });
+
+    // ---- Avatar (vuông) & banner (ngang ~3:1) của Series: độc lập với bìa dọc; lưu qua IAssetStorage (R2) như bìa ----
+
+    /// <summary>PUT /api/series/{seriesId}/{avatar|banner} (multipart: file) — Producer tải ảnh riêng (PNG/JPEG/WebP, ≤ 5 MB).</summary>
+    [HttpPut("api/series/{seriesId:guid}/{kind:regex(^(avatar|banner)$)}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SetSeriesImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SetSeriesImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetImage([FromRoute] Guid seriesId, [FromRoute] string kind, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Thiếu file ảnh." });
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        return CoverResult(await _mediator.Send(
+            new SetSeriesImageCommand(seriesId, GetCurrentUserId(), ParseKind(kind), buffer.ToArray()), cancellationToken));
+    }
+
+    /// <summary>
+    /// PUT /api/series/{seriesId}/{avatar|banner}/preset — body { presetId }. Backend đọc file mẫu từ danh mục có kiểm soát
+    /// (Presets/series) rồi lưu lên kho asset (R2) theo đúng luồng tải ảnh; không nhận URL hay đường dẫn từ client.
+    /// </summary>
+    [HttpPut("api/series/{seriesId:guid}/{kind:regex(^(avatar|banner)$)}/preset")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetImagePreset([FromRoute] Guid seriesId, [FromRoute] string kind,
+        [FromBody] SeriesImagePresetRequest request, [FromServices] IWebHostEnvironment env, CancellationToken cancellationToken)
+    {
+        var imageKind = ParseKind(kind);
+        var ids = imageKind == SeriesImageKind.Avatar ? SeriesImagePresets.AvatarIds : SeriesImagePresets.BannerIds;
+        if (string.IsNullOrWhiteSpace(request?.PresetId) || !ids.Contains(request.PresetId))
+            return BadRequest(new { error = "Mẫu ảnh không tồn tại.", code = "INVALID_SERIES_IMAGE_PRESET" });
+
+        // ID đã nằm trong danh mục cố định nên đường dẫn không thể bị điều khiển từ client
+        var path = Path.Combine(env.ContentRootPath, "Presets", "series",
+            imageKind == SeriesImageKind.Avatar ? "avatars" : "banners", request.PresetId + ".webp");
+        if (!System.IO.File.Exists(path))
+            return NotFound(new { error = "Không tìm thấy file ảnh mẫu trên máy chủ." });
+
+        var bytes = await System.IO.File.ReadAllBytesAsync(path, cancellationToken);
+        return CoverResult(await _mediator.Send(
+            new SetSeriesImageCommand(seriesId, GetCurrentUserId(), imageKind, bytes), cancellationToken));
+    }
+
+    /// <summary>DELETE /api/series/{seriesId}/{avatar|banner} — Producer xoá (FE về fallback). File cũ giữ nguyên trên kho.</summary>
+    [HttpDelete("api/series/{seriesId:guid}/{kind:regex(^(avatar|banner)$)}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearImage([FromRoute] Guid seriesId, [FromRoute] string kind, CancellationToken cancellationToken)
+        => CoverResult(await _mediator.Send(
+            new SetSeriesImageCommand(seriesId, GetCurrentUserId(), ParseKind(kind), null), cancellationToken));
+
+    /// <summary>GET /api/series/{seriesId}/{avatar|banner} — mọi thành viên Workspace; dùng URL trong DTO (có ?v= theo nội dung).</summary>
+    [HttpGet("api/series/{seriesId:guid}/{kind:regex(^(avatar|banner)$)}")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImage([FromRoute] Guid seriesId, [FromRoute] string kind, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSeriesImageQuery(seriesId, ParseKind(kind)), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.ErrorMessage });
+
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    private static SeriesImageKind ParseKind(string kind)
+        => kind == "avatar" ? SeriesImageKind.Avatar : SeriesImageKind.Banner;
+
+    /// <summary>
     /// DELETE /api/series/{seriesId}
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSeries(
         [FromRoute] Guid seriesId,
@@ -265,6 +453,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/presets/{presetId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteTypographyPreset(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid presetId,
@@ -353,6 +542,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpDelete("api/series/{seriesId:guid}/consistency-rules/{ruleId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteConsistencyRule(
         [FromRoute] Guid seriesId,
         [FromRoute] Guid ruleId,
@@ -366,3 +556,5 @@ public sealed class SeriesController : ControllerBase
 }
 
 public sealed record SetSeriesStoryArcRequest(string? StoryArc);
+
+public sealed record SeriesImagePresetRequest(string? PresetId);

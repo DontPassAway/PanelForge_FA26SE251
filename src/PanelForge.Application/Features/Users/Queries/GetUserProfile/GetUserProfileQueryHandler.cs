@@ -49,7 +49,9 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, U
             PhoneNumber: user.PhoneNumber,
             IsActive: user.IsActive,
             Role: user.Role.ToString(),
-            CreatedAt: user.CreatedAt
+            CreatedAt: user.CreatedAt,
+            ProfileCoverPresetId: user.ProfileCoverPresetId,
+            PreferredReadingLanguage: user.PreferredReadingLanguage
         );
     }
 }

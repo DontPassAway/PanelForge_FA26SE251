@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
 
 namespace PanelForge.Application.Features.Panels.Commands.DeletePanel;
 
@@ -23,6 +25,15 @@ public sealed class DeletePanelCommandHandler : IRequestHandler<DeletePanelComma
 
         if (panel == null)
             return Result<bool>.Failure($"Panel {command.PanelId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, panel.PageId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
+        if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, panel.PageId, panel.Id, cancellationToken, layout: true) is { } outOfScope)
+            return Result<bool>.Failure(outOfScope, ResultErrorCodes.Forbidden);
+
+        // Còn việc đang giao cho Panel thì không xoá: tránh Assignment mồ côi
+        if (await AssignmentRules.DeleteBlockedReasonAsync(_dbContext, "panel", [command.PanelId], cancellationToken) is { } blocked)
+            return Result<bool>.Failure(blocked, ResultErrorCodes.Conflict);
 
         panel.DeletedBy = command.UserId.ToString();
 

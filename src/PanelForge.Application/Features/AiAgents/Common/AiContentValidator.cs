@@ -49,20 +49,10 @@ public static class AiContentValidator
             ? ["Run không có context Artist (layout/panel)."]
             : ContentRules.ValidateArtist(set, run.Id, run.SceneId ?? Guid.Empty, snap.Artist, snap.Bible.Select(b => b.EntryId).ToHashSet());
 
-    public static IReadOnlyList<string> ValidateLettering(AiWorkflowRun run, RunSnapshot snap, LetteringSuggestionSet set) =>
-        snap.Lettering is null
-            ? ["Run không có context Letterer (thoại/panel/bubble)."]
-            : ContentRules.ValidateLettering(set, run.Id, run.SceneId ?? Guid.Empty, snap.Lettering);
-
-    public static IReadOnlyList<string> ValidateProduction(AiWorkflowRun run, RunSnapshot snap, ProductionReport report) =>
-        snap.Progress is null
-            ? ["Run không có snapshot tiến độ."]
-            : ContentRules.ValidateProduction(report, run.Id, snap.Progress);
-
     public static IReadOnlyList<string> ValidateContinuity(
         AiWorkflowRun run, RunSnapshot snap, ContinuityReport report, ScriptDraft script) =>
         ContentRules.ValidateContinuity(report, run.Id, script,
-            snap.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, $"{b.Name}\n{b.Description}")));
+            snap.Bible.ToDictionary(b => b.RevisionId, b => (b.EntryId, b.EvidenceText)));
 
     public static IReadOnlyList<string> ValidateLayout(
         AiWorkflowRun run, RunSnapshot snap, StoryboardLayout layout, ScriptDraft script) =>

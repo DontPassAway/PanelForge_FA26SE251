@@ -9,5 +9,7 @@ public record UserProfileDto(
     string? PhoneNumber,
     bool IsActive,
     string Role,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? ProfileCoverPresetId = null,
+    string? PreferredReadingLanguage = null
 );

@@ -33,4 +33,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Ảnh mẫu + kết quả chuẩn của app.py cho test parity của OpenCvPanelSplitter -->
+    <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

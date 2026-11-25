@@ -23,11 +23,13 @@ public sealed class GetWorkflowAvailabilityQueryHandler
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IWorkspaceAuthorizationService _auth;
+    private readonly AiAgentSettings _settings;
 
-    public GetWorkflowAvailabilityQueryHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth)
+    public GetWorkflowAvailabilityQueryHandler(IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, AiAgentSettings settings)
     {
         _db = db;
         _auth = auth;
+        _settings = settings;
     }
 
     public async Task<Result<AiWorkflowAvailabilityResponse>> Handle(GetWorkflowAvailabilityQuery q, CancellationToken ct)
@@ -53,6 +55,7 @@ public sealed class GetWorkflowAvailabilityQueryHandler
         var workflows = new List<AiWorkflowAvailabilityDto>();
         foreach (var type in Enum.GetValues<AiWorkflowType>())
         {
+            if (!AiWorkflowPolicy.IsListed(type, _settings.ShowFullSceneWorkflow)) continue;
             var missing = facts.Evaluate(type).ToList();
             if (AiWorkflowPolicy.NeedsScene(type) && scene is null)
                 missing.Add(new AiMissingConditionDto("SCENE_REQUIRED", "Context", "Chọn một Scene để chạy nhiệm vụ này."));

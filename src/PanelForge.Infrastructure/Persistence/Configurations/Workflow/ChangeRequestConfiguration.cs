@@ -34,14 +34,52 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
         builder.Property(c => c.AssetReferenceId)
                .HasColumnName("asset_reference_id")
                .HasColumnType("uuid");
+        builder.HasIndex(c => c.AssetReferenceId)
+               .HasDatabaseName("ix_change_requests_asset_reference_id");
 
         builder.Property(c => c.PanelId)
                .HasColumnName("panel_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.GroupId)
+               .HasColumnName("group_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(c => c.GroupId)
+               .HasDatabaseName("ix_change_requests_group_id");
+
+        builder.Property(c => c.Layer)
+               .HasColumnName("layer")
+               .HasColumnType("varchar(20)")
+               .HasConversion(
+                   v => v.ToString(),
+                   v => Enum.Parse<ChangeRequestLayer>(v))
+               .IsRequired();
+
+        // Không khóa ngoại tới scene/script_line: Writer có thể xoá dòng khi sửa, yêu cầu sửa vẫn phải giữ làm lịch sử
+        // (BR-01); quoted_text lưu nguyên văn tại lần nộp.
+        builder.Property(c => c.SceneId)
+               .HasColumnName("scene_id")
+               .HasColumnType("uuid");
+
+        builder.Property(c => c.ScriptLineId)
+               .HasColumnName("script_line_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(c => c.ScriptLineId)
+               .HasDatabaseName("ix_change_requests_script_line_id");
+
+        builder.Property(c => c.QuotedText)
+               .HasColumnName("quoted_text")
+               .HasColumnType("text");
+
+        builder.Property(c => c.LanguageCode)
+               .HasColumnName("language_code")
+               .HasColumnType("varchar(10)");
+
         builder.Property(c => c.SubmissionId)
                .HasColumnName("submission_id")
                .HasColumnType("uuid");
+        builder.HasIndex(c => c.SubmissionId)
+               .HasDatabaseName("ix_change_requests_submission_id");
 
         builder.Property(c => c.ResponsibleUserId)
                .HasColumnName("responsible_user_id")
@@ -60,7 +98,7 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
 
         builder.Property(c => c.RegionJson)
                .HasColumnName("region_json")
-               .HasColumnType("text");
+               .HasColumnType("jsonb");
 
         builder.Property(c => c.DueDate)
                .HasColumnName("due_date")

@@ -1,0 +1,215 @@
+classDiagram
+    title PanelForge Manga Production Platform - Logical Domain Model (UML 2.0)
+
+    class User {
+        +Guid id
+        +String email
+        +String fullName
+        +SystemRole role
+        +Boolean isActive
+        +Boolean canCreateStudio
+    }
+
+    class StudioWorkspace {
+        +Guid id
+        +Guid ownerId
+        +String name
+        +String slug
+        +WorkspaceStatus status
+        +WorkspacePlan planTier
+    }
+
+    class Series {
+        +Guid id
+        +Guid workspaceId
+        +String title
+        +String slug
+        +SeriesStatus status
+        +JsonObject releaseSchedule
+    }
+
+    class Chapter {
+        +Guid id
+        +Guid seriesId
+        +Decimal chapterNumber
+        +String title
+        +ChapterStatus status
+        +Boolean isScriptFrozen
+        +String coverImageSha256
+        +Long versionVector
+    }
+
+    class ChapterScript {
+        +Guid id
+        +Guid chapterId
+        +Integer version
+        +String rawText
+        +Boolean isLocked
+        +DateTime lockedAt
+    }
+
+    class Scene {
+        +Guid id
+        +Guid chapterId
+        +Integer sceneNumber
+        +String heading
+        +String summary
+        +NarrationMode defaultNarrationMode
+        +Integer version
+    }
+
+    class ScriptLine {
+        +Guid id
+        +Guid sceneId
+        +Guid panelId
+        +Guid speakerCharacterId
+        +Integer lineOrder
+        +String dialogueText
+        +NarrationMode narrationMode
+    }
+
+    class Page {
+        +Guid id
+        +Guid chapterId
+        +Integer pageNumber
+        +LayoutFormat layoutFormat
+        +Integer widthPx
+        +Integer heightPx
+        +Boolean isContentReady
+    }
+
+    class Panel {
+        +Guid id
+        +Guid pageId
+        +Guid sceneId
+        +Integer panelNumber
+        +Integer readingOrder
+        +JsonObject boundingBox
+        +Integer version
+    }
+
+    class PipelineDefinition {
+        +Guid id
+        +Guid workspaceId
+        +String name
+        +Boolean isDefault
+    }
+
+    class PipelineStage {
+        +Guid id
+        +Guid pipelineDefinitionId
+        +String name
+        +Integer stageOrder
+        +WorkspaceRole requiredRole
+        +Boolean isEnabled
+    }
+
+    class Assignment {
+        +Guid id
+        +Guid seriesId
+        +Guid chapterId
+        +Guid pipelineStageId
+        +Guid assigneeUserId
+        +WorkflowEntityType entityType
+        +Guid targetEntityId
+        +AssignmentStatus status
+        +AssignmentPriority priority
+        +List~Guid~ dependsOnAssignmentIds
+    }
+
+    class Submission {
+        +Guid id
+        +Guid assignmentId
+        +Guid chapterId
+        +Integer attemptNumber
+        +SubmissionStatus status
+        +JsonObject panelLayout
+        +JsonObject canvasVersions
+    }
+
+    class ChangeRequest {
+        +Guid id
+        +Guid assignmentId
+        +Guid chapterId
+        +Guid submissionId
+        +ChangeRequestStatus status
+        +SeverityLevel severity
+        +String comment
+        +JsonObject region
+    }
+
+    class SeriesBible {
+        +Guid id
+        +Guid seriesId
+        +String name
+        +Integer version
+    }
+
+    class BibleEntry {
+        +Guid id
+        +Guid seriesBibleId
+        +BibleEntryCategory category
+        +String code
+        +String name
+        +JsonObject details
+        +Boolean strictCheck
+    }
+
+    class DigitalAsset {
+        +Guid id
+        +Guid workspaceId
+        +String sha256
+        +Long sizeBytes
+        +String storageKey
+    }
+
+    class ArtworkVersion {
+        +Guid id
+        +Guid assetId
+        +Guid chapterId
+        +Guid pageId
+        +Guid panelId
+        +Integer versionNumber
+    }
+
+    class PreviewLink {
+        +Guid id
+        +Guid chapterId
+        +Guid workspaceId
+        +String recipientEmail
+        +String tokenHash
+        +DateTime expiresAt
+    }
+
+    %% Relationships
+    User "1" --> "*" StudioWorkspace : owns
+    StudioWorkspace "1" *-- "*" Series : manages
+    Series "1" *-- "1..*" Chapter : contains
+    Chapter "1" *-- "1" ChapterScript : has baseline
+    Chapter "1" *-- "1..*" Scene : divides into
+    Scene "1" *-- "1..*" ScriptLine : contains
+
+    Chapter "1" *-- "1..*" Page : renders
+    Page "1" *-- "1..*" Panel : frames
+    Scene "1" --> "*" Panel : visualizes
+    Panel "1" o-- "*" ScriptLine : anchors
+
+    StudioWorkspace "1" *-- "1..*" PipelineDefinition : defines
+    PipelineDefinition "1" *-- "1..*" PipelineStage : sequences
+    Chapter "1" --> "*" Assignment : tracks
+    PipelineStage "1" --> "*" Assignment : regulates
+    User "1" --> "*" Assignment : assigned to
+    Assignment "1" *-- "*" Submission : delivers
+    Assignment "1" *-- "*" ChangeRequest : requests revisions
+
+    Series "1" *-- "1" SeriesBible : documented by
+    SeriesBible "1" *-- "1..*" BibleEntry : catalogs
+    ScriptLine "*" --> "*" BibleEntry : references
+
+    StudioWorkspace "1" *-- "*" DigitalAsset : stores
+    DigitalAsset "1" *-- "1..*" ArtworkVersion : addresses
+    Page "1" --> "*" ArtworkVersion : displays
+    Panel "1" --> "*" ArtworkVersion : layers
+
+    Chapter "1" *-- "*" PreviewLink : shares
+

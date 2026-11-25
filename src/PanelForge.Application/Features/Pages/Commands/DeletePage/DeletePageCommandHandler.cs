@@ -1,8 +1,11 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.Pages.Common;
 
 namespace PanelForge.Application.Features.Pages.Commands.DeletePage;
 
@@ -47,6 +50,16 @@ public sealed class DeletePageCommandHandler
 
         if (efPage is null && streamPage is null)
             return Result<bool>.Failure($"Page {command.PageId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, efPage?.ChapterId ?? streamPage!.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+
+        // Còn việc đang giao cho Page hoặc Panel của nó thì không xoá: tránh Assignment mồ côi
+        var targetIds = await _dbContext.Panels.AsNoTracking()
+            .Where(p => p.PageId == command.PageId).Select(p => p.Id).ToListAsync(cancellationToken);
+        targetIds.Add(command.PageId);
+        if (await AssignmentRules.DeleteBlockedReasonAsync(_dbContext, "trang", targetIds, cancellationToken) is { } blocked)
+            return Result<bool>.Failure(blocked, ResultErrorCodes.Conflict);
+        await AssignmentRules.CancelUnstartedPageCellsAsync(_dbContext, command.PageId, cancellationToken);
 
         // 1. Event Store: đánh dấu Page đã xóa trong stream
         if (streamPage is not null)
@@ -61,6 +74,18 @@ public sealed class DeletePageCommandHandler
             _dbContext.Pages.Remove(efPage);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        // 3. Đánh số lại các trang còn lại thành 1..N (xoá trang 1 thì trang 2, 3 thành 1, 2)
+        var chapterId = efPage?.ChapterId ?? streamPage!.ChapterId;
+        var remaining = await _dbContext.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == chapterId && p.Id != command.PageId)
+            .OrderBy(p => p.PageNumber)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        if (await PageOrdering.ApplyAsync(_dbContext, _pageRepository, chapterId,
+                remaining.Select((id, i) => (id, n: i + 1)).ToDictionary(x => x.id, x => x.n),
+                _currentUser.UserId?.ToString(), cancellationToken) is { } renumberError)
+            return Result<bool>.Failure(renumberError);
 
         return Result<bool>.Success(true);
     }

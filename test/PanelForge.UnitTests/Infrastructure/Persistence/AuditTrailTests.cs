@@ -111,6 +111,57 @@ public class AuditTrailTests
     }
 
     [Fact]
+    public async Task NoiseEntities_ShouldNotBeAudited()
+    {
+        await using var db = InMemoryDb.Create(new FakeCurrentUser(_actorId, ActorEmail));
+        db.AssetAccessLogs.Add(PanelForge.Domain.Entities.Assets.AssetAccessLog.Create(Guid.NewGuid(), _actorId, "10.0.0.5"));
+        await db.SaveChangesAsync();
+
+        db.AuditLogs.Should().BeEmpty("log truy cập ảnh đã có bảng riêng, không ghi trùng vào audit");
+    }
+
+    [Fact]
+    public async Task AiTokenCounter_ShouldNotBeAudited_ButSettingsChangeShould()
+    {
+        await using var db = InMemoryDb.Create(new FakeCurrentUser(_actorId, ActorEmail));
+        var config = WorkspaceAiConfig.Create(Guid.NewGuid());
+        db.WorkspaceAiConfigs.Add(config);
+        await db.SaveChangesAsync();
+
+        config.RecordUsage(500);
+        await db.SaveChangesAsync();
+        (await db.AuditLogs.CountAsync(a => a.Action == "UPDATE_WORKSPACEAICONFIG")).Should().Be(0);
+
+        config.UpdateSettings("Google Gemini", null, isEnabled: false, 2_000_000, "[\"gemini-1.5-flash\"]");
+        await db.SaveChangesAsync();
+        (await db.AuditLogs.CountAsync(a => a.Action == "UPDATE_WORKSPACEAICONFIG")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TechnicalOnlyUpdate_ShouldNotBeAudited()
+    {
+        await using var db = InMemoryDb.Create(new FakeCurrentUser(_actorId, ActorEmail));
+        var workspace = StudioWorkspace.Create("Studio", _actorId);
+        db.StudioWorkspaces.Add(workspace);
+        await db.SaveChangesAsync();
+
+        db.Entry(workspace).Property(nameof(StudioWorkspace.UpdatedAt)).CurrentValue = DateTime.UtcNow.AddMinutes(1);
+        await db.SaveChangesAsync();
+
+        (await db.AuditLogs.CountAsync(a => a.Action == "UPDATE_STUDIOWORKSPACE")).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RefreshToken_ShouldNotBeAuditedAutomatically()
+    {
+        await using var db = InMemoryDb.Create(new FakeCurrentUser(_actorId, ActorEmail));
+        db.RefreshTokens.Add(RefreshToken.Create(_actorId, "hash", DateTime.UtcNow.AddDays(1)));
+        await db.SaveChangesAsync();
+
+        db.AuditLogs.Should().BeEmpty("đăng nhập được ghi bằng sự kiện LOGIN, không ghi từng token");
+    }
+
+    [Fact]
     public async Task NoHttpUser_ShouldStillAudit_WithNullActor()
     {
         await using var db = InMemoryDb.Create(currentUser: null);

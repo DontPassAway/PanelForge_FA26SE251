@@ -17,7 +17,14 @@ public sealed record SupervisorDecision(
 
 // ── Writer ───────────────────────────────────────────────────────────────────
 /// <summary>LineId do ứng dụng cấp (không phải model). Khi Accept, ScriptLine được tạo với đúng Id này.</summary>
-public sealed record ScriptDraftLine(Guid LineId, int Order, Guid? SpeakerId, string? Dialogue, string? StageDirection);
+/// <summary>Tham chiếu Series Bible trên dòng: mục có sẵn (BibleEntryId) hoặc mục nháp tạo khi Accept (NewName, NewCategory).</summary>
+public sealed record ScriptDraftRef(string SurfaceText, Guid? BibleEntryId = null, string? NewName = null, string? NewCategory = null);
+
+/// <param name="Kind">Action, Dialogue, Thought, Narration hoặc Sfx; null ở bản nháp cũ.</param>
+/// <param name="SpeakerLabel">Tên người nói như trên trang script, có thể kèm sắc thái: "An (thì thầm)".</param>
+public sealed record ScriptDraftLine(
+    Guid LineId, int Order, Guid? SpeakerId, string? Dialogue, string? StageDirection,
+    string? Kind = null, string? SpeakerLabel = null, IReadOnlyList<ScriptDraftRef>? Refs = null);
 
 public sealed record ScriptDraft(
     int SchemaVersion,
@@ -107,43 +114,3 @@ public sealed record ArtistPromptSet(
     Guid LayoutRevisionId,
     IReadOnlyList<ArtistPanelPrompt> Panels,
     string? StyleSummary);
-
-// ── Letterer ─────────────────────────────────────────────────────────────────
-/// <summary>
-/// Đề xuất rút gọn một dòng thoại. SourceScriptLineId, TargetElementId, PanelId, OriginalText, MaxChars, LimitSource do CODE điền từ context;
-/// WithinEstimatedLimit là ƯỚC LƯỢNG của code (không phải kết quả render, không phải nhận định của LLM).
-/// </summary>
-public sealed record LetteringSuggestion(
-    Guid SourceScriptLineId,
-    Guid? TargetElementId,
-    Guid? PanelId,
-    string OriginalText,
-    string SuggestedText,
-    string Reason,
-    int MaxChars,
-    string LimitSource,
-    bool WithinEstimatedLimit);
-
-public sealed record LetteringSuggestionSet(
-    int SchemaVersion,
-    Guid RunId,
-    Guid SceneId,
-    IReadOnlyList<LetteringSuggestion> Suggestions,
-    string? Summary);
-
-// ── Producer ─────────────────────────────────────────────────────────────────
-public sealed record ProductionRisk(string Severity, string Description, IReadOnlyList<string> SourceFactKeys);
-
-public sealed record ProductionRecommendation(
-    string Action, string Rationale, IReadOnlyList<string> SourceFactKeys, string? SuggestedOwnerRole);
-
-/// <summary>Báo cáo tham khảo (không phải đề xuất áp dụng). Facts/DataGaps do code sao chép từ snapshot để báo cáo tự đủ nguồn.</summary>
-public sealed record ProductionReport(
-    int SchemaVersion,
-    Guid RunId,
-    string Headline,
-    string Summary,
-    IReadOnlyList<ProductionRisk> Risks,
-    IReadOnlyList<ProductionRecommendation> Recommendations,
-    IReadOnlyList<string> DataGaps,
-    IReadOnlyList<ProgressFact> Facts);

@@ -62,8 +62,6 @@ public class WorkflowTypeRulesTests
 
     [Theory]
     [InlineData("Artist")]
-    [InlineData("Letterer")]
-    [InlineData("Producer")]
     public void SingleAgentWorkflows_RunOnlyTheirOwnAgent_ThenFinish(string type)
     {
         Allowed(type).Should().Equal(type);
@@ -72,8 +70,6 @@ public class WorkflowTypeRulesTests
 
     [Theory]
     [InlineData("Artist", new[] { "Writer", "Continuity", "Storyboard", "Editor", "Letterer", "Producer" })]
-    [InlineData("Letterer", new[] { "Writer", "Continuity", "Storyboard", "Editor", "Artist", "Producer" })]
-    [InlineData("Producer", new[] { "Writer", "Continuity", "Storyboard", "Editor", "Artist", "Letterer" })]
     [InlineData("Storyboard", new[] { "Writer", "Artist", "Letterer", "Producer" })]
     [InlineData("Editor", new[] { "Writer", "Storyboard", "Artist", "Letterer", "Producer" })]
     [InlineData("Script", new[] { "Storyboard", "Editor", "Artist", "Letterer", "Producer" })]
@@ -94,23 +90,21 @@ public class WorkflowTypeRulesTests
     [InlineData("Storyboard")]
     [InlineData("Editor")]
     public void MissingScript_OnlyStopForHuman(string type) =>
-        WorkflowRules.AllowedActions(type, new WorkflowInputs(false, false, false, false, false), [], 2)
+        WorkflowRules.AllowedActions(type, new WorkflowInputs(false, false, false), [], 2)
             .Should().Equal("StopForHuman");
 
     [Fact]
     public void MissingPanels_MissingLines_MissingProgress_OnlyStopForHuman()
     {
-        var none = new WorkflowInputs(true, true, false, false, false);
+        var none = new WorkflowInputs(true, true, false);
         WorkflowRules.AllowedActions("Artist", none, [], 2).Should().Equal("StopForHuman");
-        WorkflowRules.AllowedActions("Letterer", none, [], 2).Should().Equal("StopForHuman");
-        WorkflowRules.AllowedActions("Producer", none, [], 2).Should().Equal("StopForHuman");
-        WorkflowRules.AllowedActions("Artist", new WorkflowInputs(false, false, true, false, false), [], 2).Should().Equal("Artist");
+        WorkflowRules.AllowedActions("Artist", new WorkflowInputs(false, false, true), [], 2).Should().Equal("Artist");
     }
 
     [Fact]
     public void WriterWorkflows_DoNotNeedExistingScript()
     {
-        var none = new WorkflowInputs(false, false, false, false, false);
+        var none = new WorkflowInputs(false, false, false);
         WorkflowRules.AllowedActions("Script", none, [], 2).Should().Equal("Writer");
         WorkflowRules.AllowedActions("FullScene", none, [], 2).Should().Equal("Writer");
     }

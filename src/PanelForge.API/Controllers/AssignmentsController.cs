@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Assignments.Commands.ReturnWorkFromReview;
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -6,19 +7,28 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assignments.Commands.ApproveAssignment;
 using PanelForge.Application.Features.Assignments.Commands.CreateAssignment;
+using PanelForge.Application.Features.Assignments.Commands.CreateBulkAssignment;
+using PanelForge.Application.Features.Assignments.Commands.CreateAssignmentPlan;
+using PanelForge.Application.Features.Assignments.Queries.GetAssignmentPlanTemplate;
+using PanelForge.Application.Features.Assignments.Commands.DeleteAssignment;
 using PanelForge.Application.Features.Assignments.Commands.OpenAssignmentReview;
 using PanelForge.Application.Features.Assignments.Commands.RejectChangeRequest;
 using PanelForge.Application.Features.Assignments.Commands.ReopenChangeRequest;
 using PanelForge.Application.Features.Assignments.Commands.RequestAssignmentChanges;
 using PanelForge.Application.Features.Assignments.Commands.ResolveChangeRequest;
+using PanelForge.Application.Features.Assignments.Commands.ResolveImpactReview;
 using PanelForge.Application.Features.Assignments.Commands.StartAssignment;
 using PanelForge.Application.Features.Assignments.Commands.SubmitAssignment;
+using PanelForge.Application.Features.Assignments.Commands.TransferAssignmentScope;
 using PanelForge.Application.Features.Assignments.Commands.UpdateAssignment;
 using PanelForge.Application.Features.Assignments.Commands.VerifyChangeRequest;
+using PanelForge.Application.Features.Assignments.Queries.GetAssigneeSuggestions;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentSubmissions;
 using PanelForge.Application.Features.Assignments.Queries.GetChangeRequestsByChapter;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Queries.GetAssignmentsByChapter;
+using PanelForge.Application.Features.Assignments.Queries.GetEditorReviewQueue;
+using PanelForge.Application.Features.Assignments.Queries.GetMyWorkspaceAssignments;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
 using PanelForge.Application.Features.Progress.Queries.GetStageProgressByChapter;
 using PanelForge.Domain.Enums;
@@ -46,11 +56,63 @@ public sealed class AssignmentsController : ControllerBase
         var result = await _mediator.Send(new CreateAssignmentCommand(
             chapterId, GetCurrentUserId(), body.EntityType, body.TargetEntityId, body.PipelineStageId,
             body.AssigneeUserId, body.Brief, body.ReferenceNotes, body.DueDate, body.Priority,
-            body.DependsOnAssignmentId), ct);
+            body.DependsOnAssignmentId, body.DependsOnAssignmentIds), ct);
 
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value)
             : Error(result);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/assignments/bulk — giao cả chương / dải trang theo granularity của stage; dryRun = xem trước.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/bulk")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(BulkAssignmentResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BulkAssignmentResultDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateBulk(
+        Guid chapterId, [FromBody] CreateBulkAssignmentRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateBulkAssignmentCommand(
+            chapterId, GetCurrentUserId(), body.PipelineStageId, body.AssigneeUserId, body.Brief, body.PageIds,
+            body.ReferenceNotes, body.DueDate, body.Priority, body.DryRun), ct);
+
+        if (!result.IsSuccess) return Error(result);
+        return body.DryRun
+            ? Ok(result.Value)
+            : CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value);
+    }
+
+    /// <summary>POST /api/chapters/{chapterId}/assignments/plan — giao nhiều stage một lần (all-or-nothing); dryRun = xem trước.</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/plan")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentPlanResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AssignmentPlanResultDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreatePlan(Guid chapterId, [FromBody] CreateAssignmentPlanRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateAssignmentPlanCommand(chapterId, GetCurrentUserId(), body), ct);
+        if (!result.IsSuccess) return Error(result);
+        return body.DryRun
+            ? Ok(result.Value)
+            : CreatedAtAction(nameof(GetByChapter), new { chapterId }, result.Value);
+    }
+
+    /// <summary>GET /api/chapters/{chapterId}/assignments/plan-template — đội đã giao ở chương gần nhất trước đó của Series.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/assignments/plan-template")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentPlanTemplateDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PlanTemplate(Guid chapterId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetAssignmentPlanTemplateQuery(chapterId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/chapters/{chapterId}/assignments/assignee-suggestions?pipelineStageId= — ứng viên đã xếp hạng cho stage.</summary>
+    [HttpGet("api/chapters/{chapterId:guid}/assignments/assignee-suggestions")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<AssigneeSuggestionDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AssigneeSuggestions(Guid chapterId, [FromQuery] Guid pipelineStageId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetAssigneeSuggestionsQuery(chapterId, pipelineStageId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>GET /api/chapters/{chapterId}/assignments?assigneeUserId=&amp;status= — mọi thành viên Workspace.</summary>
@@ -64,6 +126,30 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
+    /// <summary>GET /api/workspaces/{workspaceId}/my-assignments — danh sách việc cá nhân toàn bộ Studio (Cross-Chapter Worklist).</summary>
+    [HttpGet("api/workspaces/{workspaceId:guid}/my-assignments")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(IReadOnlyList<WorkspaceAssignmentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyWorkspaceAssignments(
+        Guid workspaceId, [FromQuery] AssignmentStatus? status, [FromQuery] Guid? seriesId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetMyWorkspaceAssignmentsQuery(
+            workspaceId, GetCurrentUserId(), status, seriesId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/editor/review-queue?gate=&amp;status= — Editor xem hàng đợi thẩm định toàn Series (Gate 1 &amp; Gate 2).</summary>
+    [HttpGet("api/series/{seriesId:guid}/editor/review-queue")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<EditorReviewQueueItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEditorReviewQueue(
+        Guid seriesId, [FromQuery] string? gate, [FromQuery] AssignmentStatus? status, CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new GetEditorReviewQueueQuery(seriesId, GetCurrentUserId(), gate, status), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
     /// <summary>PUT /api/chapters/{chapterId}/assignments/{assignmentId} — Producer sửa, giao lại, đổi dependency.</summary>
     [HttpPut("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
@@ -73,7 +159,45 @@ public sealed class AssignmentsController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateAssignmentCommand(
             chapterId, assignmentId, GetCurrentUserId(), body.Brief, body.ReferenceNotes, body.DueDate,
-            body.Priority, body.AssigneeUserId, body.DependsOnAssignmentId), ct);
+            body.Priority, body.AssigneeUserId, body.DependsOnAssignmentId, body.DependsOnAssignmentIds), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>DELETE /api/chapters/{chapterId}/assignments/{assignmentId}?reason= — Producer huỷ Assignment, lý do bắt buộc (UC-05).</summary>
+    [HttpDelete("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Delete(Guid chapterId, Guid assignmentId, [FromQuery] string? reason, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new DeleteAssignmentCommand(chapterId, assignmentId, GetCurrentUserId(), reason), ct);
+        return result.IsSuccess ? NoContent() : Error(result);
+    }
+
+    /// <summary>
+    /// POST .../assignments/{assignmentId}/transfer — Producer chuyển giao trang/khung của việc cả chương (Artist/Letterer) sang
+    /// người khác; trả các việc mới tạo. Lý do bắt buộc.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/transfer")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<AssignmentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Transfer(
+        Guid chapterId, Guid assignmentId, [FromBody] TransferAssignmentScopeRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new TransferAssignmentScopeCommand(
+            chapterId, assignmentId, GetCurrentUserId(), body.TargetType, body.TargetIds ?? [], body.NewAssigneeUserId,
+            body.Reason ?? "", body.Brief, body.DueDate), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>POST .../assignments/{assignmentId}/impact-review — Editor/Producer quyết giữ kết quả hay làm lại (lý do bắt buộc).</summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{assignmentId:guid}/impact-review")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AssignmentDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResolveImpactReview(
+        Guid chapterId, Guid assignmentId, [FromBody] ResolveImpactReviewRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ResolveImpactReviewCommand(
+            chapterId, assignmentId, GetCurrentUserId(), body.Decision, body.Reason ?? ""), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -129,6 +253,22 @@ public sealed class AssignmentsController : ControllerBase
         var result = await _mediator.Send(
             new RequestAssignmentChangesCommand(
                 chapterId, assignmentId, GetCurrentUserId(), body.Comment, body.Changes, body.ExpectedSubmissionId), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>
+    /// POST .../assignments/{reviewAssignmentId}/return-work — từ màn duyệt cả chương (vd 7. Review), trả việc của một trang/khung
+    /// về người làm kèm mô tả + vùng khoanh. Body: { targetAssignmentId, description, regionJson?, panelId?, assetReferenceId?, dueDate? }.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/assignments/{reviewAssignmentId:guid}/return-work")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ChangeRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReturnWorkFromReview(
+        Guid chapterId, Guid reviewAssignmentId, [FromBody] ReturnWorkFromReviewRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ReturnWorkFromReviewCommand(
+            chapterId, reviewAssignmentId, body.TargetAssignmentId, GetCurrentUserId(), body.Description ?? "",
+            body.RegionJson, body.PanelId, body.AssetReferenceId, body.DueDate, body.GroupId, body.Layer), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -230,3 +370,17 @@ public sealed class AssignmentsController : ControllerBase
         _ => BadRequest(new { error = result.ErrorMessage })
     };
 }
+
+/// <summary>Body trả việc từ màn duyệt cả chương.</summary>
+public sealed record ReturnWorkFromReviewRequest(
+    Guid TargetAssignmentId, string? Description, string? RegionJson = null, Guid? PanelId = null,
+    Guid? AssetReferenceId = null, DateTime? DueDate = null, Guid? GroupId = null,
+    ChangeRequestLayer Layer = ChangeRequestLayer.Artwork);
+
+/// <summary>Body chuyển giao trang/khung: <c>targetType</c> = Page | Panel.</summary>
+public sealed record TransferAssignmentScopeRequest(
+    WorkflowEntityType TargetType, IReadOnlyList<Guid>? TargetIds, Guid NewAssigneeUserId, string? Reason,
+    string? Brief = null, DateTime? DueDate = null);
+
+/// <summary>Body quyết định kiểm tra ảnh hưởng: <c>decision</c> = Keep | Rework.</summary>
+public sealed record ResolveImpactReviewRequest(ImpactReviewDecision Decision, string? Reason);

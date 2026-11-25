@@ -1,7 +1,12 @@
-﻿using MediatR;
+using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
+using PanelForge.Application.Features.Assignments.Common;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Pages.Common;
 using PanelForge.Application.Features.Pages.Models;
+using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
@@ -15,15 +20,18 @@ public sealed class CreatePageCommandHandler
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IPageRepository _pageRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWorkspaceAuthorizationService _auth;
 
     public CreatePageCommandHandler(
         IPanelForgeDbContext dbContext,
         IPageRepository pageRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
         _pageRepository = pageRepository;
         _unitOfWork = unitOfWork;
+        _auth = auth;
     }
 
     // Marten (event) + EF Core (read model) ghi trong cùng một transaction
@@ -42,6 +50,11 @@ public sealed class CreatePageCommandHandler
 
         if (!chapterExists)
             return Result<PageDto>.Failure($"Chapter {command.ChapterId} không tồn tại.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<PageDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (command.UserId is { } userId &&
+            await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, userId, command.ChapterId, cancellationToken) is { } writerBlock)
+            return Result<PageDto>.Failure(writerBlock.Error, writerBlock.Code);
 
         // 2. Tính số trang tự động nếu không truyền vào
         int pageNumber;
@@ -51,8 +64,16 @@ public sealed class CreatePageCommandHandler
             var isDuplicate = await _dbContext.Pages
                 .AnyAsync(p => p.ChapterId == command.ChapterId && p.PageNumber == pageNumber, cancellationToken);
 
+            // Chèn giữa: dời các trang từ vị trí này trở đi lùi một số (trang mới trống nên không đảo thứ tự Scene)
             if (isDuplicate)
-                return Result<PageDto>.Failure($"Trang số {pageNumber} đã tồn tại trong Chapter này.");
+            {
+                var shifted = await _dbContext.Pages.AsNoTracking()
+                    .Where(p => p.ChapterId == command.ChapterId && p.PageNumber >= pageNumber)
+                    .ToDictionaryAsync(p => p.Id, p => p.PageNumber + 1, cancellationToken);
+                if (await PageOrdering.ApplyAsync(_dbContext, _pageRepository, command.ChapterId, shifted,
+                        null, cancellationToken) is { } error)
+                    return Result<PageDto>.Failure(error);
+            }
         }
         else
         {
@@ -92,6 +113,11 @@ public sealed class CreatePageCommandHandler
         // 6. Read Model: Lưu vào EF Core bảng pages để phục vụ relational queries nhanh
         _dbContext.Pages.Add(page);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // BR-12: chương đã dùng lưới thì trang mới có ngay ô chưa giao, để cổng khoá chương không cho trang trắng lọt qua.
+        if (await WorkScopeGuard.UsesGridAsync(_dbContext, command.ChapterId, cancellationToken))
+            await new GenerateStageTasksCommandHandler(_dbContext).Handle(
+                new GenerateStageTasksCommand(command.ChapterId, command.UserId ?? Guid.Empty), cancellationToken);
 
         return Result<PageDto>.Success(new PageDto(
             Id:            page.Id,

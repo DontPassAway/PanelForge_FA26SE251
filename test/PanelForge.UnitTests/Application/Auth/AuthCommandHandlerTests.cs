@@ -5,7 +5,9 @@ using Moq;
 using OtpNet;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Auth.Commands.ChangePassword;
+using PanelForge.Application.Features.Auth.Commands.DisableTwoFactor;
 using PanelForge.Application.Features.Auth.Commands.EnableTwoFactor;
+using PanelForge.Application.Features.Auth.Common;
 using PanelForge.Application.Features.Auth.Commands.ExternalLogin;
 using PanelForge.Application.Features.Auth.Commands.ForgetDevice;
 using PanelForge.Application.Features.Auth.Commands.ForgotPassword;
@@ -37,11 +39,13 @@ public class AuthCommandHandlerTests
     private readonly List<UserRememberedDevice> _rememberedDevices = new();
 
     private readonly List<RefreshToken> _refreshTokens = new();
+    private readonly List<PanelForge.Domain.Entities.Audit.AuditLog> _auditLogs = new();
 
     public AuthCommandHandlerTests()
     {
         SetupRememberedDevices(_rememberedDevices);
         _dbContextMock.Setup(db => db.RefreshTokens).Returns(DbSetMockHelper.CreateDbSetMock(_refreshTokens));
+        _dbContextMock.Setup(db => db.AuditLogs).Returns(DbSetMockHelper.CreateDbSetMock(_auditLogs));
         // Session policy (V1.2): user chưa thuộc Workspace nào → không bị giới hạn thêm
         _dbContextMock.Setup(db => db.WorkspaceMembers)
             .Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workspaces.WorkspaceMember>()));
@@ -168,13 +172,14 @@ public class AuthCommandHandlerTests
         user.ConfirmEmail();
         SetupUsers(new List<User> { user });
         _passwordHasherMock.Setup(h => h.VerifyPassword("CorrectPassword", "hashed_password")).Returns(true);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("valid_jwt_token", DateTime.UtcNow.AddHours(24)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("valid_jwt_token", DateTime.UtcNow.AddHours(24)));
 
         var result = await Login().Handle(
             new LoginCommand("tam@example.com", "CorrectPassword", null), CancellationToken.None);
 
         result.Value!.Token.Should().Be("valid_jwt_token");
         result.Value.User!.Email.Should().Be("tam@example.com");
+        _auditLogs.Should().ContainSingle(a => a.Action == "LOGIN" && a.UserId == user.Id && a.UserEmail == "tam@example.com");
     }
 
     [Fact]
@@ -210,7 +215,7 @@ public class AuthCommandHandlerTests
             UserRememberedDevice.Create(user.Id, HashToken(plainToken), DateTime.UtcNow.AddDays(30), "My PC")
         });
         _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("trusted-jwt-token", DateTime.UtcNow.AddDays(7)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("trusted-jwt-token", DateTime.UtcNow.AddDays(7)));
 
         var result = await Login().Handle(
             new LoginCommand("user@example.com", "Password123!", plainToken), CancellationToken.None);
@@ -228,7 +233,7 @@ public class AuthCommandHandlerTests
     public async Task ChangePassword_WhenValid_ShouldUpdatePasswordHash()
     {
         var user = User.Create("user@example.com", "User", "old_hash");
-        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        user.SetPasswordResetToken(AuthSecrets.ChangePasswordOtp("123456"), DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
         _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
         _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
@@ -246,7 +251,7 @@ public class AuthCommandHandlerTests
     public async Task ChangePassword_ShouldRevokeOtherSessionsButKeepCurrentOne()
     {
         var user = User.Create("user@example.com", "User", "old_hash");
-        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        user.SetPasswordResetToken(AuthSecrets.ChangePasswordOtp("123456"), DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
         _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
         _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
@@ -268,7 +273,7 @@ public class AuthCommandHandlerTests
     public async Task ChangePassword_WithoutCurrentRefreshToken_ShouldRevokeAllSessions()
     {
         var user = User.Create("user@example.com", "User", "old_hash");
-        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        user.SetPasswordResetToken(AuthSecrets.ChangePasswordOtp("123456"), DateTime.UtcNow.AddMinutes(15));
         SetupUsers(new List<User> { user });
         _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
         _passwordHasherMock.Setup(h => h.VerifyPassword("NewPassword123!", "old_hash")).Returns(false);
@@ -459,7 +464,7 @@ public class AuthCommandHandlerTests
         user.ConfirmEmail();
         SetupUsers(new List<User> { user });
         _passwordHasherMock.Setup(p => p.VerifyPassword("Password123!", "hash")).Returns(true);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
 
         var result = await Login().Handle(new LoginCommand("user@example.com", "Password123!", null), CancellationToken.None);
 
@@ -474,7 +479,7 @@ public class AuthCommandHandlerTests
         SetupUsers(new List<User> { user });
         var old = RefreshToken.Create(user.Id, HashToken("old-token"), DateTime.UtcNow.AddDays(1));
         _refreshTokens.Add(old);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>(), It.IsAny<Guid>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
         SetupRefreshTokenUser(old, user);
 
         var result = await new RefreshTokenCommandHandler(_dbContextMock.Object, _jwtTokenGeneratorMock.Object)
@@ -502,6 +507,7 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
         other.IsRevoked.Should().BeTrue();
+        _auditLogs.Should().ContainSingle(a => a.Action == "SESSIONS_REVOKED" && a.UserId == user.Id);
     }
 
     [Fact]
@@ -572,10 +578,10 @@ public class AuthCommandHandlerTests
     {
         var (user, code) = CreateTwoFactorUser();
         SetupUsers(new List<User> { user });
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
 
         var result = await VerifyTwoFactor().Handle(
-            new VerifyTwoFactorCommand(null, code, user.Email, true, "Office Desktop"), CancellationToken.None);
+            new VerifyTwoFactorCommand(null, code, user.Email, true, "Office Desktop", ChallengeEmail: user.Email), CancellationToken.None);
 
         var response = result.Value!;
         response.Token.Should().Be("jwt-2fa-token");
@@ -595,10 +601,10 @@ public class AuthCommandHandlerTests
     {
         var (user, code) = CreateTwoFactorUser();
         SetupUsers(new List<User> { user });
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user)).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
 
         var result = await VerifyTwoFactor().Handle(
-            new VerifyTwoFactorCommand(null, code, user.Email, false, null), CancellationToken.None);
+            new VerifyTwoFactorCommand(null, code, user.Email, false, null, ChallengeEmail: user.Email), CancellationToken.None);
 
         result.Value!.Token.Should().Be("jwt-2fa-token");
         result.Value.RememberDeviceToken.Should().BeNull();
@@ -612,7 +618,7 @@ public class AuthCommandHandlerTests
         SetupUsers(new List<User> { user });
 
         var result = await VerifyTwoFactor().Handle(
-            new VerifyTwoFactorCommand(null, "000000", user.Email, false, null), CancellationToken.None);
+            new VerifyTwoFactorCommand(null, "000000", user.Email, false, null, ChallengeEmail: user.Email), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
     }
@@ -630,6 +636,142 @@ public class AuthCommandHandlerTests
 
         _rememberedDevices.Should().BeEmpty();
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WithoutPasswordStepChallenge_ShouldBeRejected_EvenWithCorrectCode()
+    {
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, user.Email, false, null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        _refreshTokens.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WhenBodyEmailDiffersFromChallenge_ShouldBeRejected()
+    {
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, "other@example.com", false, null, ChallengeEmail: user.Email),
+            CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        _refreshTokens.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WithChallenge_CompletesLogin_EvenWhenAnotherUserIsSignedIn()
+    {
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+
+        var result = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(Guid.NewGuid(), code, null, false, null, ChallengeEmail: user.Email),
+            CancellationToken.None);
+
+        result.Value!.Token.Should().Be("jwt-2fa-token");
+    }
+
+    [Fact]
+    public async Task EnableTwoFactor_WhenAlreadyEnabled_ShouldFail_AndKeepCurrentSecret()
+    {
+        var (user, _) = CreateTwoFactorUser();
+        var currentSecret = user.TwoFactorSecret;
+        SetupUsers(new List<User> { user });
+
+        var result = await new EnableTwoFactorCommandHandler(_dbContextMock.Object, _totpService)
+            .Handle(new EnableTwoFactorCommand(user.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        user.TwoFactorSecret.Should().Be(currentSecret);
+    }
+
+    private DisableTwoFactorCommandHandler DisableTwoFactor()
+        => new(_dbContextMock.Object, _passwordHasherMock.Object, _totpService);
+
+    [Fact]
+    public async Task DisableTwoFactor_WithPasswordAndCode_ShouldDisable_AndForgetTrustedDevices()
+    {
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+        _rememberedDevices.Add(UserRememberedDevice.Create(user.Id, "hash", DateTime.UtcNow.AddDays(30), "Laptop"));
+
+        var result = await DisableTwoFactor().Handle(
+            new DisableTwoFactorCommand(user.Id, code, "Password123!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.TwoFactorEnabled.Should().BeFalse();
+        user.TwoFactorSecret.Should().BeNull();
+        _rememberedDevices.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("WrongPassword", true)]
+    [InlineData("Password123!", false)]
+    public async Task DisableTwoFactor_WithWrongPasswordOrCode_ShouldBeUnauthorized_AndStayEnabled(string password, bool useValidCode)
+    {
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+
+        var result = await DisableTwoFactor().Handle(
+            new DisableTwoFactorCommand(user.Id, useValidCode ? code : "000000", password), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        user.TwoFactorEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldForgetTrustedDevices()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.HashPassword("NewSecret123!")).Returns("new_hashed_pwd");
+        _rememberedDevices.Add(UserRememberedDevice.Create(user.Id, "hash", DateTime.UtcNow.AddDays(30), "Laptop"));
+
+        var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
+            .Handle(new ResetPasswordCommand("user@example.com", "123456", "NewSecret123!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _rememberedDevices.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldRejectOtpIssuedForChangePassword()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken(AuthSecrets.ChangePasswordOtp("123456"), DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+
+        var result = await new ResetPasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object)
+            .Handle(new ResetPasswordCommand("user@example.com", "123456", "NewSecret123!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        user.PasswordHash.Should().Be("old_hash");
+    }
+
+    [Fact]
+    public async Task ChangePassword_ShouldRejectOtpIssuedForPasswordReset()
+    {
+        var user = User.Create("user@example.com", "User", "old_hash");
+        user.SetPasswordResetToken("123456", DateTime.UtcNow.AddMinutes(15));
+        SetupUsers(new List<User> { user });
+        _passwordHasherMock.Setup(h => h.VerifyPassword("OldPassword123!", "old_hash")).Returns(true);
+
+        var result = await new ChangePasswordCommandHandler(_dbContextMock.Object, _passwordHasherMock.Object, _totpService).Handle(
+            new ChangePasswordCommand(user.Id, "OldPassword123!", "NewPassword123!", "123456", null), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        user.PasswordHash.Should().Be("old_hash");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -671,7 +813,7 @@ public class AuthCommandHandlerTests
     {
         var users = new List<User>();
         SetupUsers(users);
-        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddDays(1)));
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(It.IsAny<User>(), It.IsAny<Guid>())).Returns(("jwt", DateTime.UtcNow.AddDays(1)));
 
         var result = await ExternalLogin(new ExternalIdentityResult(
                 ExternalIdentityStatus.Valid, Uid: "fb-uid", Email: " New@Gmail.com ", Name: null))

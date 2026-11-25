@@ -6,6 +6,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="AWSSDK.S3" Version="4.0.104.2" />
 		<PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
 		<PackageReference Include="EFCore.NamingConventions" Version="9.0.0" />
 		<PackageReference Include="FirebaseAdmin" Version="3.1.0" />
@@ -15,7 +16,12 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.8" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+		<PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+		<PackageReference Include="OpenCvSharp4.official.runtime.linux-x64.slim" Version="4.13.0.20260627" />
+		<PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
 		<PackageReference Include="Otp.NET" Version="1.4.1" />
+		<PackageReference Include="SkiaSharp" Version="4.153.1" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
 	</ItemGroup>
 
@@ -29,4 +35,8 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
+	<!-- Font cho lớp chữ bản xuất (SkiaPageLetteringCompositor): đặt file Family-Variant.ttf, vd Mali-Regular.ttf -->
+	<ItemGroup>
+		<None Include="Exports/Fonts/*.ttf" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
 </Project>

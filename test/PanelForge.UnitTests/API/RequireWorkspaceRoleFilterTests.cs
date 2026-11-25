@@ -149,4 +149,116 @@ public class RequireWorkspaceRoleFilterTests
         context.Result.Should().BeOfType<ObjectResult>();
         (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenRouteHasSeriesId_AndUserIsSeriesMember_ShouldProceed()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+
+        _authServiceMock
+            .Setup(a => a.GetWorkspaceIdOfSeriesAsync(seriesId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workspaceId);
+
+        _authServiceMock
+            .Setup(a => a.IsSeriesMemberAsync(userId, seriesId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("seriesId", seriesId.ToString());
+
+        var (context, _) = CreateContext(userId, routeData);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        var executed = false;
+        ActionExecutionDelegate next = () =>
+        {
+            executed = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+
+        // Act
+        await filter.OnActionExecutionAsync(context, next);
+
+        // Assert
+        executed.Should().BeTrue();
+        context.Result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenRouteHasSeriesId_AndUserIsNotSeriesMember_ShouldReturnForbidden()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+
+        _authServiceMock
+            .Setup(a => a.GetWorkspaceIdOfSeriesAsync(seriesId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workspaceId);
+
+        _authServiceMock
+            .Setup(a => a.IsSeriesMemberAsync(userId, seriesId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("seriesId", seriesId.ToString());
+
+        var (context, _) = CreateContext(userId, routeData);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        var executed = false;
+        ActionExecutionDelegate next = () =>
+        {
+            executed = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+
+        // Act
+        await filter.OnActionExecutionAsync(context, next);
+
+        // Assert
+        executed.Should().BeFalse();
+        context.Result.Should().BeOfType<ObjectResult>();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenRouteHasSeriesId_AndUserHasSeriesRole_ShouldProceed()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+
+        _authServiceMock
+            .Setup(a => a.GetWorkspaceIdOfSeriesAsync(seriesId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workspaceId);
+
+        _authServiceMock
+            .Setup(a => a.HasSeriesRoleAsync(userId, seriesId, It.Is<WorkspaceRole[]>(r => r.Contains(WorkspaceRole.Writer)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("seriesId", seriesId.ToString());
+
+        var (context, _) = CreateContext(userId, routeData);
+        var filter = new RequireWorkspaceRoleFilter([WorkspaceRole.Writer], _authServiceMock.Object);
+
+        var executed = false;
+        ActionExecutionDelegate next = () =>
+        {
+            executed = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+
+        // Act
+        await filter.OnActionExecutionAsync(context, next);
+
+        // Assert
+        executed.Should().BeTrue();
+        context.Result.Should().BeNull();
+    }
 }

@@ -12,17 +12,28 @@ public sealed class Result<T>
     /// <summary>Mã lỗi máy đọc được (xem <see cref="ResultErrorCodes"/>), null nếu là lỗi nghiệp vụ chung.</summary>
     public string? ErrorCode { get; }
 
+    /// <summary>Optional structured business-error payload for endpoints that need more than a message.</summary>
+    public object? ErrorDetails { get; }
+
     private Result(T value)       { IsSuccess = true;  Value = value; }
-    private Result(string error, string? errorCode)  { IsSuccess = false; ErrorMessage = error; ErrorCode = errorCode; }
+    private Result(string error, string? errorCode, object? errorDetails)
+    {
+        IsSuccess = false;
+        ErrorMessage = error;
+        ErrorCode = errorCode;
+        ErrorDetails = errorDetails;
+    }
 
     public static Result<T> Success(T value)       => new(value);
-    public static Result<T> Failure(string error, string? errorCode = null)  => new(error, errorCode);
+    public static Result<T> Failure(string error, string? errorCode = null, object? errorDetails = null)  => new(error, errorCode, errorDetails);
 }
 
 public static class ResultErrorCodes
 {
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
+    /// <summary>BR-12: chương Approved/Published, nội dung chỉ đọc → HTTP 409. Mã riêng để FE không nhầm với xung đột phiên bản.</summary>
+    public const string ChapterReadOnly = "CHAPTER_READ_ONLY";
     /// <summary>Sai thông tin đăng nhập / OTP / token → HTTP 401.</summary>
     public const string Unauthorized = "UNAUTHORIZED";
     /// <summary>Đã xác thực nhưng không đủ quyền → HTTP 403.</summary>
@@ -31,6 +42,9 @@ public static class ResultErrorCodes
     public const string Validation = "VALIDATION_FAILED";
     /// <summary>AI service tắt/không phản hồi → HTTP 503. Chức năng Backend khác vẫn chạy.</summary>
     public const string AiUnavailable = "AI_UNAVAILABLE";
+    /// <summary>Không xác thực được với cổng thanh toán (Google Play chưa cấu hình / không phản hồi) → HTTP 503, client thử lại sau.</summary>
+    public const string PaymentProviderUnavailable = "PAYMENT_PROVIDER_UNAVAILABLE";
+    public const string AiInvalidOutput = "AI_INVALID_OUTPUT";
     public const string AiDisabled = "AI_DISABLED";
     public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";
 }

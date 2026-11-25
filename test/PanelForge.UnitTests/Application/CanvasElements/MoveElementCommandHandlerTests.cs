@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+﻿using PanelForge.UnitTests.Common;
+using FluentAssertions;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using Moq;
 using PanelForge.Application.Features.CanvasElements.Commands.MoveElement;
@@ -17,7 +18,7 @@ public class MoveElementCommandHandlerTests
     public MoveElementCommandHandlerTests()
     {
         _pageRepositoryMock = new Mock<IPageRepository>();
-        _handler = new MoveElementCommandHandler(_pageRepositoryMock.Object);
+        _handler = new MoveElementCommandHandler(_pageRepositoryMock.Object, InMemoryDb.Create());
     }
 
     [Fact]
@@ -47,7 +48,7 @@ public class MoveElementCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().BeTrue();
+        result.Value.Should().BeGreaterThan(0); // phiên bản element sau khi lưu
         _pageRepositoryMock.Verify(r => r.SaveAsync(page, It.IsAny<CancellationToken>()), Times.Once);
     }
 

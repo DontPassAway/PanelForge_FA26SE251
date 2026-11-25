@@ -20,4 +20,4 @@ public sealed record MoveElementCommand(
     int? ExpectedElementVersion = null,  // BR-11: version của element đang giữ; ưu tiên hơn ExpectedPageVersion
     double? NewRotation = null,          // null = giữ nguyên góc xoay
     int? NewZIndex = null                // null = giữ nguyên thứ tự lớp
-) : IRequest<Result<bool>>;
+) : IRequest<Result<int>>;

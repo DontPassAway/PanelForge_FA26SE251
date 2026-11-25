@@ -31,6 +31,13 @@ internal static class AuthSecrets
            && !string.IsNullOrWhiteSpace(provided)
            && string.Equals(stored, provided.Trim(), StringComparison.Ordinal);
 
+    /// <summary>
+    /// OTP đổi mật khẩu dùng chung cột với OTP đặt lại mật khẩu / lời mời; gắn tiền tố khi lưu và khi so khớp để
+    /// mã xin cho luồng này không dùng được ở luồng kia.
+    /// ponytail: chung một ô lưu nên xin mã luồng này vẫn ghi đè mã đang chờ của luồng kia; tách cột riêng nếu cần cả hai cùng lúc.
+    /// </summary>
+    public static string ChangePasswordOtp(string otp) => "cp:" + otp.Trim();
+
     public static bool IsExpired(DateTime? expiresAt) => !expiresAt.HasValue || expiresAt.Value < DateTime.UtcNow;
 
     /// <summary>Chia secret thành cụm 4 ký tự để người dùng nhập tay.</summary>

@@ -73,9 +73,29 @@ internal sealed class SubmissionConfiguration : IEntityTypeConfiguration<Submiss
                .HasColumnType("uuid[]")
                .IsRequired();
 
+        builder.Property(s => s.ScriptRevisionIds)
+               .HasColumnName("script_revision_ids")
+               .HasColumnType("uuid[]")
+               .HasDefaultValueSql("'{}'::uuid[]")
+               .IsRequired();
+
         builder.Property(s => s.ChapterVersion)
                .HasColumnName("chapter_version")
                .HasColumnType("bigint")
+               .IsRequired();
+
+        // Bố cục Panel lúc nộp; lần nộp cũ (trước khi có cột) nhận "[]"
+        builder.Property(s => s.PanelLayoutJson)
+               .HasColumnName("panel_layout_json")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
+               .IsRequired();
+
+        // Version canvas từng trang lúc nộp; lần nộp cũ nhận "{}"
+        builder.Property(s => s.CanvasVersionsJson)
+               .HasColumnName("canvas_versions_json")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'{}'::jsonb")
                .IsRequired();
 
         builder.Property(s => s.CreatedAt)

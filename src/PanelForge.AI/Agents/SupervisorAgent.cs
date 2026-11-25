@@ -36,7 +36,7 @@ public sealed class SupervisorAgent
         sb.AppendLine().AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
 
         var inputJson = AiJson.Serialize(new { round, blockingFindings = blocking, allowedActions = allowed, history });
-        var call = await _runner.RunAsync<SupervisorDecision>(Prompt, sb.ToString(), text => Parse(text, ctx, allowed, round), ct);
+        var call = await _runner.RunAsync<SupervisorDecision>(Prompt, sb.ToString(), text => Parse(text, ctx, allowed, round), ct, light: true);
         return (call, inputJson);
     }
 
@@ -58,15 +58,36 @@ public sealed class SupervisorAgent
         {
             AiProtocol.WorkflowStoryboard or AiProtocol.WorkflowEditor => "Scene chưa có script để kiểm tra/chia panel/review.",
             AiProtocol.WorkflowArtist => "Chưa có layout đã duyệt với panel còn tồn tại để soạn prompt ảnh.",
-            AiProtocol.WorkflowLetterer => "Chưa có dòng thoại nào gắn với panel của layout đã duyệt.",
-            AiProtocol.WorkflowProducer => "Không có snapshot tiến độ do Backend tính.",
             _ => "Thiếu dữ liệu đầu vào cho workflow."
         };
         var decision = new SupervisorDecision(AiProtocol.SchemaVersion, ctx.RunId, 0, WorkflowRules.ActionStopForHuman,
             $"Thiếu context, dừng để con người bổ sung: {why}", null, allowed, GuardrailOverridden: false);
+        return ByCode(decision, "missing-context");
+    }
+
+    /// <summary>
+    /// Hàng rào chỉ còn đúng một hành động hợp lệ: không có gì để Supervisor lựa chọn nên code lập quyết định,
+    /// không tốn một lần gọi model. Vẫn lưu thành step Supervisor (ghi rõ nguồn là code) để truy vết.
+    /// </summary>
+    public static AgentCall<SupervisorDecision> SingleChoice(AgentContext ctx, IReadOnlyList<string> allowed, int round, int blocking) =>
+        ByCode(new SupervisorDecision(AiProtocol.SchemaVersion, ctx.RunId, round, allowed[0],
+            allowed[0] switch
+            {
+                // Không khẳng định "còn finding chặn" khi hàng rào dừng vì lý do khác (chuỗi bước không có đường tiến hợp lệ)
+                WorkflowRules.ActionStopForHuman when blocking == 0 =>
+                    "Quy tắc workflow không còn bước hợp lệ nào để chạy tiếp: dừng để con người quyết định.",
+                WorkflowRules.ActionStopForHuman =>
+                    "Còn finding chặn mà không còn bước tự sửa hợp lệ (hết lượt sửa hoặc workflow không có Writer): dừng để con người quyết định.",
+                WorkflowRules.ActionFinish => "Workflow đã chạy hết các bước: kết thúc, kết quả chờ con người xem xét.",
+                var next => $"Quy tắc workflow chỉ cho phép một bước kế tiếp: {next}."
+            },
+            null, allowed, GuardrailOverridden: false), "single-allowed-action");
+
+    private static AgentCall<SupervisorDecision> ByCode(SupervisorDecision decision, string reason)
+    {
         var now = DateTime.UtcNow;
         return new AgentCall<SupervisorDecision>(true, decision, AiJson.Serialize(decision), null, null, null, null, 0, now, now,
-            AiJson.Serialize(new { source = "code", reason = "missing-context" }));
+            AiJson.Serialize(new { source = "code", reason }));
     }
 
     private static (SupervisorDecision?, IReadOnlyList<string>) Parse(

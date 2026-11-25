@@ -24,12 +24,18 @@ public sealed class AssetsController : ControllerBase
 
     public AssetsController(IMediator mediator) => _mediator = mediator;
 
-    private Guid GetCurrentUserId() =>
-        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : Guid.Empty;
+    private Guid GetCurrentUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("id")
+            ?? User.FindFirst("nameid")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
 
     /// <summary>
-    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId, clientSha256, layerType?, panelId?.
-    /// Server tính lại SHA-256 và từ chối nếu lệch (BR-04). Chỉ người đang giữ việc InProgress ở stage đó.
+    /// POST /api/chapters/{chapterId}/pages/{pageId}/artwork (multipart/form-data): file, stageId?, clientSha256?, layerType?, panelId?.
+    /// Server tính lại SHA-256 và từ chối nếu lệch (BR-04). Hỗ trợ Artist / Producer tải artwork trực tiếp hoặc theo assignment InProgress.
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/pages/{pageId:guid}/artwork")]
     [RequireWorkspaceRole]
@@ -47,7 +53,7 @@ public sealed class AssetsController : ControllerBase
         await form.File.CopyToAsync(buffer, ct);
 
         var result = await _mediator.Send(new UploadArtworkCommand(
-            chapterId, pageId, form.StageId, GetCurrentUserId(), buffer.ToArray(),
+            chapterId, pageId, form.StageId ?? Guid.Empty, GetCurrentUserId(), buffer.ToArray(),
             form.File.FileName, form.ClientSha256, form.LayerType, form.PanelId), ct);
 
         return result.IsSuccess
@@ -77,19 +83,23 @@ public sealed class AssetsController : ControllerBase
 
     /// <summary>
     /// GET /api/assets/download?token= — tải artwork bằng link ngắn hạn. Không cần Bearer (dùng được trong thẻ img):
-    /// quyền nằm ở token đã ký, và người nhận link phải còn là thành viên Workspace.
+    /// quyền nằm ở token đã ký, và người nhận link phải còn là thành viên Workspace. <c>size=thumb</c> trả bản WebP rộng tối đa 400px.
     /// </summary>
     [HttpGet("api/assets/download")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Download([FromQuery] string? token, CancellationToken ct)
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Download([FromQuery] string? token, [FromQuery] string? size, CancellationToken ct)
     {
         var result = await _mediator.Send(
-            new DownloadAssetCommand(token ?? string.Empty, HttpContext.Connection.RemoteIpAddress?.ToString()), ct);
+            new DownloadAssetCommand(token ?? string.Empty, HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Thumbnail: string.Equals(size, "thumb", StringComparison.OrdinalIgnoreCase)), ct);
         if (!result.IsSuccess) return Error(result);
 
-        // Không để proxy/trình duyệt cache artwork chưa phát hành; không cho trình duyệt đoán lại loại file
-        Response.Headers.CacheControl = "no-store";
+        // Chỉ trình duyệt của người tải được cache, và không lâu hơn hạn của link (5 phút); proxy dùng chung không được lưu
+        Response.Headers.CacheControl = "private, max-age=300";
+        // Cùng URL được tải bằng <img> (không CORS) rồi fetch() (CORS). Không có Vary: Origin thì trình duyệt dùng lại bản
+        // cache của <img> (thiếu Access-Control-Allow-Origin) cho fetch() → "Failed to fetch" (vd. bước nhận diện panel).
+        Response.Headers.Vary = "Origin";
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(result.Value!.Content, result.Value.ContentType, result.Value.FileName);
     }
@@ -108,7 +118,7 @@ public sealed class AssetsController : ControllerBase
 public sealed class UploadArtworkForm
 {
     public IFormFile? File { get; set; }
-    public Guid StageId { get; set; }
+    public Guid? StageId { get; set; }
     public string? ClientSha256 { get; set; }
     public string? LayerType { get; set; }
     /// <summary>Tuỳ chọn: ảnh cho một Panel của Page; bỏ trống = artwork cả trang.</summary>

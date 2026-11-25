@@ -30,9 +30,29 @@ public class Assignment : BaseEntity
     /// <summary>CF2: việc phải được Approved trước khi việc này bắt đầu (cùng Chapter, tối đa một; không được tạo chu trình).</summary>
     public Guid? DependsOnAssignmentId { get; private set; }
 
+    /// <summary>Đợt giao hàng loạt tạo ra việc này (null = giao lẻ). Cùng BatchId → 1 thông báo gộp (BR-14).</summary>
+    public Guid? BatchId { get; private set; }
+
+    /// <summary>Đồ thị phụ thuộc đa nhiệm (DAG): danh sách các công việc tiền đề phải được Approved trước khi việc này bắt đầu.</summary>
+    public string DependsOnAssignmentIdsJson { get; private set; } = "[]";
+
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
     public string? LastFeedbackComment { get; private set; }
+
+    /// <summary>
+    /// "Cần kiểm tra ảnh hưởng": đầu vào (stage trước / việc phụ thuộc) bị mở lại sau khi việc này đã dựa vào nó. Khác null thì
+    /// không nộp/duyệt được, và stage sau không bắt đầu dựa trên nó, tới khi người duyệt quyết giữ kết quả hoặc làm lại.
+    /// </summary>
+    public string? ImpactReviewReason { get; private set; }
+    public DateTime? ImpactReviewRequestedAt { get; private set; }
+
+    /// <summary>V2.5 & WF04: Cờ cảnh báo tác động kịch bản (Script Impact Flag ⚑) khi câu thoại kịch bản bị sửa sau khi đã duyệt.</summary>
+    public bool HasScriptImpact { get; private set; } = false;
+    public Guid? ImpactedScriptLineId { get; private set; }
+
+    /// <summary>Lý do Producer huỷ việc (bắt buộc); việc bị huỷ được xoá mềm, giữ lịch sử, không bao giờ tính là Approved.</summary>
+    public string? CancelReason { get; private set; }
 
     public Series Series { get; private set; } = default!;
     public Chapter Chapter { get; private set; } = default!;
@@ -54,9 +74,21 @@ public class Assignment : BaseEntity
         string? referenceAssetUrlsJson = null,
         DateTime? dueDate = null,
         AssignmentPriority priority = AssignmentPriority.Medium,
-        Guid? dependsOnAssignmentId = null)
+        Guid? dependsOnAssignmentId = null,
+        IEnumerable<Guid>? dependsOnAssignmentIds = null,
+        Guid? batchId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(brief);
+
+        var depList = dependsOnAssignmentIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
+
+        if (dependsOnAssignmentId.HasValue && !depList.Contains(dependsOnAssignmentId.Value))
+        {
+            depList.Insert(0, dependsOnAssignmentId.Value);
+        }
 
         return new Assignment
         {
@@ -72,7 +104,9 @@ public class Assignment : BaseEntity
             ReferenceAssetUrlsJson = string.IsNullOrWhiteSpace(referenceAssetUrlsJson) ? "[]" : referenceAssetUrlsJson.Trim(),
             DueDate = dueDate,
             Priority = priority,
-            DependsOnAssignmentId = dependsOnAssignmentId,
+            DependsOnAssignmentId = depList.Count > 0 ? depList[0] : null,
+            DependsOnAssignmentIdsJson = depList.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(depList) : "[]",
+            BatchId = batchId,
             Status = AssignmentStatus.Assigned,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -137,23 +171,109 @@ public class Assignment : BaseEntity
     }
 
     /// <summary>
-    /// Phân công lại nhiệm vụ cho thành viên khác hoặc cập nhật vai trò.
+    /// Phân công lại nhiệm vụ cho thành viên khác hoặc cập nhật vai trò. Đang làm dở (InProgress) mà đổi sang người khác thì lùi
+    /// về Assigned: người mới phải bấm Bắt đầu để nhận bàn giao (bài đã tải lên vẫn giữ).
     /// </summary>
     public void Reassign(Guid newAssigneeUserId, WorkspaceRole newRole)
     {
+        if (newAssigneeUserId != AssigneeUserId && Status == AssignmentStatus.InProgress)
+            Status = AssignmentStatus.Assigned;
         AssigneeUserId = newAssigneeUserId;
         AssignedRole = newRole;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Đặt hoặc bỏ dependency. Việc kiểm tra chu trình do handler làm (cần dữ liệu của cả Chapter).</summary>
+    /// <summary>Đánh dấu cần kiểm tra ảnh hưởng (giữ nguyên trạng thái và kết quả cũ). Đã đánh dấu thì giữ lý do đầu tiên.</summary>
+    public void FlagImpactReview(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (ImpactReviewReason is not null) return;
+        ImpactReviewReason = reason.Trim();
+        ImpactReviewRequestedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Người duyệt đã quyết (giữ kết quả hoặc làm lại): gỡ cờ. Quyết định và lý do nằm trong audit log.</summary>
+    /// <summary>V2.5 & WF04: Đánh cờ tác động do kịch bản thay đổi và chuyển trạng thái về ReworkRequired.</summary>
+    public void FlagScriptImpact(Guid scriptLineId)
+    {
+        HasScriptImpact = true;
+        ImpactedScriptLineId = scriptLineId;
+        if (Status == AssignmentStatus.Approved || Status == AssignmentStatus.UnderReview)
+        {
+            Status = AssignmentStatus.ReworkRequired;
+            LastFeedbackComment = "Kịch bản đối thoại hoặc chỉ dẫn liên quan đã bị sửa đổi sau khi đóng băng. Vui lòng rà soát và vẽ/sắp chữ lại cho khớp.";
+        }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>V2.5 & WF04: Gỡ cờ tác động kịch bản sau khi đã xử lý xong.</summary>
+    public void ClearScriptImpact()
+    {
+        HasScriptImpact = false;
+        ImpactedScriptLineId = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ClearImpactReview()
+    {
+        ImpactReviewReason = null;
+        ImpactReviewRequestedAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Ghi lý do huỷ trước khi xoá mềm. Việc đã Approved không huỷ được.</summary>
+    public void Cancel(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Status == AssignmentStatus.Approved)
+            throw new InvalidOperationException("Không thể huỷ việc đã được duyệt (Approved).");
+        CancelReason = reason.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Lấy danh sách toàn bộ ID của các công việc tiền đề phụ thuộc (DAG).</summary>
+    public IReadOnlyList<Guid> GetDependsOnAssignmentIds()
+    {
+        var ids = new List<Guid>();
+        if (!string.IsNullOrWhiteSpace(DependsOnAssignmentIdsJson) && DependsOnAssignmentIdsJson != "[]")
+        {
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(DependsOnAssignmentIdsJson);
+                if (parsed != null) ids.AddRange(parsed.Where(i => i != Guid.Empty));
+            }
+            catch { }
+        }
+
+        if (DependsOnAssignmentId.HasValue && !ids.Contains(DependsOnAssignmentId.Value))
+        {
+            ids.Insert(0, DependsOnAssignmentId.Value);
+        }
+
+        return ids.Distinct().ToList();
+    }
+
+    /// <summary>Cập nhật đồ thị phụ thuộc đa nhiệm (DAG). Gán lại cả DependsOnAssignmentId đại diện.</summary>
+    public void SetDependencies(IEnumerable<Guid>? dependsOnAssignmentIds)
+    {
+        var list = dependsOnAssignmentIds?
+            .Where(id => id != Guid.Empty && id != Id)
+            .Distinct()
+            .ToList() ?? [];
+
+        DependsOnAssignmentIdsJson = list.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(list) : "[]";
+        DependsOnAssignmentId = list.Count > 0 ? list[0] : null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Đặt hoặc bỏ dependency đơn. Tự động đồng bộ vào danh sách đa nhiệm.</summary>
     public void SetDependency(Guid? dependsOnAssignmentId)
     {
         if (dependsOnAssignmentId == Id)
             throw new InvalidOperationException("Assignment không thể phụ thuộc vào chính nó.");
 
-        DependsOnAssignmentId = dependsOnAssignmentId;
-        UpdatedAt = DateTime.UtcNow;
+        SetDependencies(dependsOnAssignmentId.HasValue ? [dependsOnAssignmentId.Value] : null);
     }
 
     /// <summary>

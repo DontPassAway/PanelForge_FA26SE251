@@ -9,6 +9,8 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
     public void Configure(EntityTypeBuilder<StudioWorkspace> builder)
     {
         builder.ToTable("studio_workspaces");
+        builder.Property(x => x.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(w => w.Id);
         builder.Property(w => w.Id)
@@ -43,6 +45,27 @@ internal sealed class StudioWorkspaceConfiguration : IEntityTypeConfiguration<St
         builder.Property(w => w.SessionLifetimeMinutes).HasColumnName("session_lifetime_minutes").HasColumnType("integer");
         builder.Property(w => w.SessionIdleTimeoutMinutes).HasColumnName("session_idle_timeout_minutes").HasColumnType("integer");
         builder.Property(w => w.MaxConcurrentSessions).HasColumnName("max_concurrent_sessions").HasColumnType("integer");
+
+        builder.Property(w => w.CoverImageSha256)
+               .HasColumnName("cover_image_sha256")
+               .HasColumnType("varchar(64)")
+               .IsRequired(false);
+
+        builder.Property(w => w.BankBin)
+               .HasColumnName("bank_bin")
+               .HasColumnType("varchar(20)");
+
+        builder.Property(w => w.BankName)
+               .HasColumnName("bank_name")
+               .HasColumnType("varchar(100)");
+
+        builder.Property(w => w.BankAccountNo)
+               .HasColumnName("bank_account_no")
+               .HasColumnType("varchar(50)");
+
+        builder.Property(w => w.BankAccountName)
+               .HasColumnName("bank_account_name")
+               .HasColumnType("varchar(200)");
 
         builder.Property(w => w.CreatedAt)
                .HasColumnName("created_at")

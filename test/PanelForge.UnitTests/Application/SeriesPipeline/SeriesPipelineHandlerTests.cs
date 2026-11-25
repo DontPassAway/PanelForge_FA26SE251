@@ -121,6 +121,61 @@ public class SeriesPipelineHandlerTests
         outgoing.RequiredRole.Should().Be(WorkspaceRole.Producer);
     }
 
+    /// <summary>
+    /// Tắt stage: ô đã duyệt của chương cũ không chặn, và ô chưa giao bị huỷ (nếu không cổng duyệt chương kẹt vì đếm chúng).
+    /// </summary>
+    [Fact]
+    public async Task Disable_StageWithOnlyApprovedAndUnassignedCells_CancelsUnassignedCells()
+    {
+        var pencil = _stageIds[1];
+        Guid freeCellId;
+        await using (var db = NewDb())
+        {
+            var oldChapterCell = StageTask.Create(_seriesId, Guid.NewGuid(), pencil, Guid.NewGuid());
+            oldChapterCell.AssignTo(Guid.NewGuid());
+            oldChapterCell.Start(prerequisitesApproved: true);
+            oldChapterCell.Submit(null, isApprovalGate: false);   // Approved
+            var freeCell = StageTask.Create(_seriesId, Guid.NewGuid(), pencil, Guid.NewGuid());
+            freeCellId = freeCell.Id;
+            db.StageTasks.AddRange(oldChapterCell, freeCell);
+            await db.SaveChangesAsync();
+
+            var result = await new UpdatePipelineStageCommandHandler(db).Handle(new UpdatePipelineStageCommand(
+                _seriesId, pencil, "Pencil", null, WorkspaceRole.Artist, false, null, IsEnabled: false), default);
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        }
+
+        await using var verify = NewDb();
+        (await verify.StageTasks.SingleAsync(t => t.Id == freeCellId)).Status.Should().Be(StageTaskStatus.Cancelled);
+        (await verify.PipelineStages.SingleAsync(s => s.Id == pencil)).IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Update_DisableGatedLastStageOfBranch_MovesGateToPreviousStageOfSameBranch()
+    {
+        Guid ink, color;
+        await using (var db = NewDb())
+        {
+            var pipeline = await db.PipelineDefinitions.Include(p => p.Stages).SingleAsync();
+            var inkStage = pipeline.InsertStage("Ink", null, 3, null, WorkspaceRole.Artist, false, null);
+            var colorStage = pipeline.InsertStage("Color", null, 4, null, WorkspaceRole.Artist, true, null);
+            inkStage.SetTrack("A");
+            colorStage.SetTrack("A");
+            await db.SaveChangesAsync();
+            (ink, color) = (inkStage.Id, colorStage.Id);
+        }
+
+        await using (var db = NewDb())
+        {
+            var result = await new UpdatePipelineStageCommandHandler(db).Handle(new UpdatePipelineStageCommand(
+                _seriesId, color, "Color", null, WorkspaceRole.Artist, true, null, IsEnabled: false), default);
+            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        }
+
+        await using var verify = NewDb();
+        (await verify.PipelineStages.SingleAsync(s => s.Id == ink)).IsApprovalGate.Should().BeTrue("truyện trắng đen vẫn qua Editor duyệt ở Ink");
+    }
+
     [Fact]
     public async Task Update_StageOfAnotherPipeline_ShouldReturnNotFound()
     {

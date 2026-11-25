@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Workspaces;
@@ -11,10 +12,17 @@ internal static class WorkspaceMapper
     public static WorkspaceRole? RoleOf(StudioWorkspace workspace, Guid userId)
         => workspace.OwnerId == userId
             ? WorkspaceRole.Producer
-            : workspace.Members.FirstOrDefault(m => m.UserId == userId)?.Role;
+            : workspace.Members.FirstOrDefault(m => m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)?.Role;
 
     /// <summary>Yêu cầu workspace đã Include(Owner) và Include(Members).</summary>
-    public static WorkspaceDto ToDto(StudioWorkspace workspace, Guid currentUserId, int memberCount, int pendingTasks = 0)
+    public static WorkspaceDto ToDto(
+        StudioWorkspace workspace,
+        Guid currentUserId,
+        int memberCount,
+        int pendingTasks = 0,
+        IReadOnlyList<WorkspaceMemberPreviewDto>? memberPreviews = null,
+        int pendingEditorReviews = 0,
+        WorkspaceActivity? activity = null)
         => new(
             Id: workspace.Id,
             Name: workspace.Name,
@@ -27,7 +35,17 @@ internal static class WorkspaceMapper
             IsOwner: workspace.OwnerId == currentUserId,
             CurrentUserRole: RoleOf(workspace, currentUserId),
             MemberCount: memberCount,
-            PendingTasks: pendingTasks);
+            PendingTasks: pendingTasks,
+            CoverUrl: SetWorkspaceCoverCommandHandler.CoverUrl(workspace.Id, workspace.CoverImageSha256),
+            Description: null,
+            MemberPreviews: memberPreviews,
+            PendingEditorReviews: pendingEditorReviews,
+            SeriesCount: activity?.SeriesCount ?? 0,
+            SeriesPreviews: activity?.SeriesPreviews,
+            LastActivityAt: activity?.LastActivityAt);
+
+    /// <summary>Tóm tắt series và hoạt động gần nhất của một Studio cho danh sách Studio.</summary>
+    public sealed record WorkspaceActivity(int SeriesCount, IReadOnlyList<WorkspaceSeriesPreviewDto> SeriesPreviews, DateTime? LastActivityAt);
 
     public static WorkspaceMemberDto ToMemberDto(WorkspaceMember member, User user, Guid ownerId)
         => new(
@@ -39,5 +57,6 @@ internal static class WorkspaceMapper
             Role: member.Role,
             IsOwner: user.Id == ownerId,
             JoinedAt: member.JoinedAt,
-            IsEmailConfirmed: user.IsEmailConfirmed);
+            IsEmailConfirmed: user.IsEmailConfirmed,
+            Status: member.Status);
 }

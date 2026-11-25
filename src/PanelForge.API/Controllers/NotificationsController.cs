@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Notifications.Commands.MarkNotificationsRead;
+using PanelForge.Application.Features.Notifications.Commands.SendAssignmentReminders;
 using PanelForge.Application.Features.Notifications.Queries.GetMyNotifications;
 
 namespace PanelForge.API.Controllers;
@@ -49,5 +50,15 @@ public sealed class NotificationsController : ControllerBase
     {
         var result = await _mediator.Send(new MarkNotificationsReadCommand(GetCurrentUserId()), ct);
         return Ok(new { marked = result.Value });
+    }
+
+    /// <summary>POST /api/notifications/send-reminders — Producer quét và gửi nhắc hạn cho Assignment & ChangeRequest trong các Workspace mình làm Producer (UC-14). Job nền AssignmentReminderWorker quét toàn hệ thống.</summary>
+    [HttpPost("send-reminders")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SendReminders([FromQuery] int leadHours = 24, CancellationToken ct = default)
+    {
+        var lead = TimeSpan.FromHours(Math.Clamp(leadHours, 1, 24 * 14));
+        var created = await _mediator.Send(new SendAssignmentRemindersCommand(lead, ProducerUserId: GetCurrentUserId()), ct);
+        return Ok(new { created });
     }
 }

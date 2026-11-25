@@ -33,6 +33,38 @@ public sealed class GetChangeRequestsByChapterQueryHandler
         if (q.ResponsibleUserId is { } responsible) query = query.Where(c => c.ResponsibleUserId == responsible);
 
         var rows = await query.OrderBy(c => c.CreatedAt).ToListAsync(ct);
-        return Result<IReadOnlyList<ChangeRequestDto>>.Success(rows.Select(ChangeRequestDto.From).ToList());
+
+        // Trang + công đoạn để màn làm việc đưa người sửa tới đúng chỗ ("Xem vị trí").
+        // Trả việc chỉ nhận việc cấp Page / Panel (ReturnWorkFromReview), nên luôn suy ra được trang:
+        // khung được khoanh → trang của khung; nếu không thì từ đối tượng của việc bị trả về.
+        var assignmentIds = rows.Select(r => r.AssignmentId).Distinct().ToList();
+        var assignments = await _db.Assignments.AsNoTracking()
+            .Where(a => assignmentIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.EntityType, a.TargetEntityId, a.PipelineStageId })
+            .ToDictionaryAsync(a => a.Id, ct);
+        var panelIds = rows.Where(r => r.PanelId != null).Select(r => r.PanelId!.Value)
+            .Concat(assignments.Values.Where(a => a.EntityType == WorkflowEntityType.Panel).Select(a => a.TargetEntityId))
+            .Distinct().ToList();
+        var panelPage = await _db.Panels.AsNoTracking()
+            .Where(p => panelIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PageId, ct);
+
+        Guid? PageOf(Domain.Entities.Workflow.ChangeRequest c)
+        {
+            if (c.PanelId is { } pid && panelPage.TryGetValue(pid, out var fromPanel)) return fromPanel;
+            if (!assignments.TryGetValue(c.AssignmentId, out var a)) return null;
+            return a.EntityType switch
+            {
+                WorkflowEntityType.Page => a.TargetEntityId,
+                WorkflowEntityType.Panel when panelPage.TryGetValue(a.TargetEntityId, out var pg) => pg,
+                _ => null,
+            };
+        }
+
+        return Result<IReadOnlyList<ChangeRequestDto>>.Success(rows.Select(c => ChangeRequestDto.From(c) with
+        {
+            PageId = PageOf(c),
+            PipelineStageId = assignments.TryGetValue(c.AssignmentId, out var a) ? a.PipelineStageId : null,
+        }).ToList());
     }
 }

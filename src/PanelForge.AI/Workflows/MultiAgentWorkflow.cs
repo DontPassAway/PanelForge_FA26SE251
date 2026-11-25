@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using PanelForge.AI.Agents;
+using PanelForge.AI.Caching;
 using PanelForge.AI.Clients;
 using PanelForge.AI.Contracts;
 using PanelForge.AI.Gateway;
@@ -7,7 +8,7 @@ using PanelForge.AI.Gateway;
 namespace PanelForge.AI.Workflows;
 
 /// <summary>
-/// Gemini làm đầu não: <see cref="SupervisorAgent"/> điều phối 7 agent chuyên môn (Writer, Continuity, Storyboard, Artist, Letterer, Editor, Producer)
+/// Gemini làm đầu não: <see cref="SupervisorAgent"/> điều phối 5 agent chuyên môn (Writer, Continuity, Storyboard, Artist, Editor)
 /// theo LOẠI workflow của run (<see cref="AgentContext.WorkflowType"/>) — không workflow nào chạy đủ cả 7.
 /// Mỗi bước Supervisor chọn hành động kế tiếp (kèm lý do + chỉ đạo) trong danh sách do CODE tính
 /// (<see cref="WorkflowRules"/>: chuỗi hợp lệ + điều kiện Finish riêng từng workflow, tối đa MaxRevisionRounds lượt sửa Writer, script luôn qua Continuity...).
@@ -24,15 +25,18 @@ public sealed class MultiAgentWorkflow
     private readonly ChatClientFactory _factory;
     private readonly Microsoft.Extensions.Options.IOptions<ProviderOptions> _options;
     private readonly ILogger<MultiAgentWorkflow> _logger;
+    private readonly IContextMemoryCache? _cache;
 
     public MultiAgentWorkflow(
         BackendClient backend, ChatClientFactory factory,
-        Microsoft.Extensions.Options.IOptions<ProviderOptions> options, ILogger<MultiAgentWorkflow> logger)
+        Microsoft.Extensions.Options.IOptions<ProviderOptions> options, ILogger<MultiAgentWorkflow> logger,
+        IContextMemoryCache? cache = null)
     {
         _backend = backend;
         _factory = factory;
         _options = options;
         _logger = logger;
+        _cache = cache;
     }
 
     public Task RunAsync(AiRunJob job, CancellationToken ct) => RunAsync(job, _factory.Create(job), ct);
@@ -42,10 +46,10 @@ public sealed class MultiAgentWorkflow
     {
         var ctx = await _backend.GetContextAsync(job.RunId, ct);
         var keys = new KeyMaps(ctx);
-        var runner = new AgentRunner(chat, _options);
+        var runner = new AgentRunner(chat, _options, job.Model);
         var steps = new StepWriter(_backend, job, _logger);
 
-        // Gemini: kiểm tra model còn khả dụng trước khi tốn lượt gọi; lỗi → step thất bại rõ ràng, KHÔNG fallback sang Mock
+        // Gemini: kiểm tra model còn khả dụng trước khi tốn lượt gọi; lỗi → step thất bại rõ ràng
         if (job.Provider == AiProtocol.ProviderGemini)
         {
             var probe = await _factory.ProbeGeminiModelAsync(job, ct);
@@ -58,12 +62,10 @@ public sealed class MultiAgentWorkflow
 
         var supervisor = new SupervisorAgent(runner);
         var writer = new WriterAgent(runner);
-        var continuity = new ContinuityAgent(runner);
+        var continuity = new ContinuityAgent(runner, _cache);
         var storyboard = new StoryboardAgent(runner);
         var editor = new EditorAgent(runner);
         var artist = new ArtistAgent(runner);
-        var letterer = new LettererAgent(runner);
-        var producer = new ProducerAgent(runner);
 
         var inputs = ctx.Inputs;
         var facts = new List<StepFact>();
@@ -92,6 +94,12 @@ public sealed class MultiAgentWorkflow
                 // Thiếu context ngay từ đầu: code lập quyết định StopForHuman với lý do rõ ràng (không cần hỏi model)
                 dCall = SupervisorAgent.MissingContext(ctx, allowed);
                 dInput = AiJson.Serialize(new { round, allowedActions = allowed, history, missingContext = true });
+            }
+            else if (allowed.Count == 1)
+            {
+                // Chỉ một bước hợp lệ: không có gì để chọn → code quyết định, tiết kiệm một lần gọi model (quota)
+                dCall = SupervisorAgent.SingleChoice(ctx, allowed, round, blocking);
+                dInput = AiJson.Serialize(new { round, blockingFindings = blocking, allowedActions = allowed, history });
             }
             else
             {
@@ -169,24 +177,6 @@ public sealed class MultiAgentWorkflow
                     if (ack is null || !call.Succeeded) return;
                     facts.Add(new StepFact(AiProtocol.AgentArtist, 0, true, false));
                     history.Add($"#{steps.LastIndex} Artist: {call.Payload!.Panels.Count} prompt ảnh cho panel.");
-                    break;
-                }
-                case AiProtocol.AgentLetterer:
-                {
-                    var (call, input) = await letterer.RunAsync(ctx, keys, ct);
-                    var ack = await steps.ReportAsync(AiProtocol.AgentLetterer, 0, null, call, input, LettererAgent.Prompt, ct);
-                    if (ack is null || !call.Succeeded) return;
-                    facts.Add(new StepFact(AiProtocol.AgentLetterer, 0, true, false));
-                    history.Add($"#{steps.LastIndex} Letterer: {call.Payload!.Suggestions.Count} đề xuất rút gọn thoại.");
-                    break;
-                }
-                case AiProtocol.AgentProducer:
-                {
-                    var (call, input) = await producer.RunAsync(ctx, ct);
-                    var ack = await steps.ReportAsync(AiProtocol.AgentProducer, 0, null, call, input, ProducerAgent.Prompt, ct);
-                    if (ack is null || !call.Succeeded) return;
-                    facts.Add(new StepFact(AiProtocol.AgentProducer, 0, true, false));
-                    history.Add($"#{steps.LastIndex} Producer: báo cáo tiến độ ({call.Payload!.Risks.Count} rủi ro, {call.Payload.Recommendations.Count} đề xuất).");
                     break;
                 }
                 default:

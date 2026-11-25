@@ -26,8 +26,17 @@ public static class AiProtocol
     public const int SchemaVersion = 1;
 
     public const string ServiceKeyHeader = "X-Service-Key";
-    public const string ProviderMock = "Mock";
     public const string ProviderGemini = "Gemini";
+    /// <summary>Cloudflare Workers AI: văn bản qua endpoint OpenAI-compatible, cần thêm AccountId.</summary>
+    public const string ProviderCloudflare = "Cloudflare";
+
+    /// <summary>Provider văn bản/vision được hỗ trợ và đủ thông tin xác thực (Cloudflare cần cả AccountId).</summary>
+    public static bool CredentialsOk(string? provider, string? apiKey, string? accountId) => provider switch
+    {
+        ProviderGemini => !string.IsNullOrWhiteSpace(apiKey),
+        ProviderCloudflare => !string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(accountId),
+        _ => false
+    };
 
     public const string AgentSupervisor = "Supervisor";
     public const string AgentWriter = "Writer";
@@ -35,20 +44,16 @@ public static class AiProtocol
     public const string AgentStoryboard = "Storyboard";
     public const string AgentEditor = "Editor";
     public const string AgentArtist = "Artist";
-    public const string AgentLetterer = "Letterer";
-    public const string AgentProducer = "Producer";
 
     /// <summary>Loại workflow = nhiệm vụ. Run cũ (trước khi có loại) được đọc như <see cref="WorkflowFullScene"/>.</summary>
     public const string WorkflowFullScene = "FullScene";   // Writer → Continuity (vòng sửa) → Storyboard → Editor
     public const string WorkflowScript = "Script";         // Writer → Continuity (vòng sửa)
     public const string WorkflowStoryboard = "Storyboard"; // Continuity (script có sẵn) → Storyboard → Editor
     public const string WorkflowArtist = "Artist";         // Artist soạn prompt ảnh cho panel của layout đã duyệt
-    public const string WorkflowLetterer = "Letterer";     // Letterer đề xuất rút gọn thoại
     public const string WorkflowEditor = "Editor";         // Continuity (script có sẵn) → Editor
-    public const string WorkflowProducer = "Producer";     // Producer báo cáo tiến độ từ snapshot do Backend tính
 
     public static readonly string[] AllWorkflows =
-        [WorkflowFullScene, WorkflowScript, WorkflowStoryboard, WorkflowArtist, WorkflowLetterer, WorkflowEditor, WorkflowProducer];
+        [WorkflowFullScene, WorkflowScript, WorkflowStoryboard, WorkflowArtist, WorkflowEditor];
 
     public const string SeverityBlocking = "Blocking";
     public const string SeverityWarning = "Warning";

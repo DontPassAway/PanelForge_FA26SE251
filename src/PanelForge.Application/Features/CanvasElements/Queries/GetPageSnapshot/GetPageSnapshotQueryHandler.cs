@@ -21,13 +21,15 @@ public sealed class GetPageSnapshotQueryHandler
         GetPageSnapshotQuery query,
         CancellationToken cancellationToken)
     {
-        var page = await _pageRepository.GetAsync(query.PageId, cancellationToken);
+        var page = query.AtVersion is { } version
+            ? await _pageRepository.GetAtVersionAsync(query.PageId, version, cancellationToken)
+            : await _pageRepository.GetAsync(query.PageId, cancellationToken);
         if (page is null)
             return Result<PageSnapshotDto>.Failure(
                 $"Page {query.PageId} không tồn tại.");
 
         // BR-05 (chữ lỗi thời) + BR-20 (cảnh báo tràn chữ, thứ tự đọc, đè Key Artwork Region): một lượt cho cả Page
-        var analysis = await LetteringPageAnalysis.AnalyzeAsync(_db, page, cancellationToken);
+        var analysis = await LetteringPageAnalysis.AnalyzeAsync(_db, page, cancellationToken, query.Lang);
 
         var elements = page.Elements.Values
             .Where(e => query.IncludeRemoved || !e.IsRemoved)
@@ -58,7 +60,9 @@ public sealed class GetPageSnapshotQueryHandler
                     Version:         e.Version,
                     PanelId:         e.PanelId,
                     Rotation:        e.Rotation,
-                    BibleEntryId:    e.BibleEntryId
+                    BibleEntryId:    e.BibleEntryId,
+                    Style:           e.Style,
+                    Texts:           e.Texts.Count > 0 ? e.Texts : null
                 );
             })
             .ToList();

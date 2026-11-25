@@ -2,7 +2,6 @@ using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using PanelForge.Domain.Entities.Workspaces;
-using PanelForge.Domain.Entities.Publishing;
 
 namespace PanelForge.Domain.Entities.Identity;
 
@@ -14,6 +13,8 @@ public class User : BaseEntity
     public string FullName { get; private set; } = default!;
     public string? PhoneNumber { get; private set; }
     public string? AvatarUrl { get; private set; }
+    /// <summary>Bìa hồ sơ cá nhân chọn từ bộ mẫu hệ thống (null = bìa mặc định). Độc lập với avatar và bìa Series.</summary>
+    public string? ProfileCoverPresetId { get; private set; }
     public bool IsActive { get; private set; } = true;
     public SystemRole Role { get; private set; } = SystemRole.User;
 
@@ -39,9 +40,13 @@ public class User : BaseEntity
     /// </summary>
     public bool CanCreateStudio { get; private set; } = false;
 
+    /// <summary>
+    /// BR-34: Ngôn ngữ đọc ưa thích của người dùng (null = theo ngôn ngữ mặc định).
+    /// </summary>
+    public string? PreferredReadingLanguage { get; private set; }
+
     public ICollection<StudioWorkspace> OwnedWorkspaces { get; private set; } = [];
     public ICollection<WorkspaceMember> WorkspaceMemberships { get; private set; } = [];
-    public ICollection<ExternalPreviewLink> CreatedPreviewLinks { get; private set; } = [];
     public ICollection<Assignment> AssignedTasks { get; private set; } = [];
 
     private User() { }
@@ -76,6 +81,15 @@ public class User : BaseEntity
         FullName = fullName.Trim();
         PhoneNumber = phoneNumber?.Trim();
         AvatarUrl = avatarUrl?.Trim();
+    }
+
+    /// <summary>Đặt bìa hồ sơ theo ID mẫu; null/rỗng = về bìa mặc định.</summary>
+    public void SetProfileCoverPreset(string? presetId)
+    {
+        var id = string.IsNullOrWhiteSpace(presetId) ? null : presetId.Trim();
+        if (id is not null && !ProfileCoverPresets.IsValid(id))
+            throw new ArgumentException($"Mẫu ảnh bìa '{id}' không tồn tại.", nameof(presetId));
+        ProfileCoverPresetId = id;
     }
 
     public void UpdatePassword(string passwordHash)
@@ -155,6 +169,20 @@ public class User : BaseEntity
     }
 
     public void AssignSystemRole(SystemRole newRole) => Role = newRole;
+
+    /// <summary>BR-34: Đặt ngôn ngữ đọc ưa thích (null hoặc rỗng = mặc định).</summary>
+    public void SetPreferredReadingLanguage(string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+        {
+            PreferredReadingLanguage = null;
+            return;
+        }
+
+        var norm = ContentLanguages.Normalize(languageCode)
+            ?? throw new ArgumentException($"Mã ngôn ngữ '{languageCode}' không hợp lệ.", nameof(languageCode));
+        PreferredReadingLanguage = norm;
+    }
 
     public void Deactivate() => IsActive = false;
     public void Activate()   => IsActive = true;

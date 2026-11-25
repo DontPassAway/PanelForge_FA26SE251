@@ -47,7 +47,8 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
         if (_passwordHasher.VerifyPassword(command.NewPassword, user.PasswordHash))
             return Result<bool>.Failure("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
 
-        if (!AuthSecrets.OtpMatches(user.PasswordResetToken, command.EmailOtp))
+        if (!AuthSecrets.OtpMatches(user.PasswordResetToken,
+                string.IsNullOrWhiteSpace(command.EmailOtp) ? null : AuthSecrets.ChangePasswordOtp(command.EmailOtp)))
         {
             user.RegisterFailedOtp();
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -74,7 +75,7 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
         var keepHash = string.IsNullOrWhiteSpace(command.KeepRefreshToken)
             ? null
             : AuthSecrets.HashToken(command.KeepRefreshToken.Trim());
-        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken, keepHash);
+        await RefreshTokenRevocation.RevokeAllAsync(_dbContext, user.Id, cancellationToken, keepHash, "đổi mật khẩu");
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<bool>.Success(true);

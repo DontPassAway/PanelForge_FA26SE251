@@ -35,7 +35,7 @@ public class SessionPolicyTests
         _db.Users.Add(_user);
         _db.SaveChanges();
         _hasher.Setup(h => h.VerifyPassword("Password123!", "hash")).Returns(true);
-        _jwt.Setup(j => j.GenerateToken(It.IsAny<User>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
+        _jwt.Setup(j => j.GenerateToken(It.IsAny<User>(), It.IsAny<Guid>())).Returns(("jwt", DateTime.UtcNow.AddMinutes(30)));
     }
 
     private StudioWorkspace JoinWorkspace(int? lifetime = null, int? idle = null, int? maxSessions = null)
@@ -62,9 +62,11 @@ public class SessionPolicyTests
     private static string Hash(string token)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 
-    private async Task<Token> AddTokenAsync(string raw, DateTime sessionStartedAt, DateTime issuedAt)
+    /// <param name="lastActiveAt">Lần cuối phiên có request; mặc định = lúc phát token (không có request nào sau đó).</param>
+    private async Task<Token> AddTokenAsync(string raw, DateTime sessionStartedAt, DateTime issuedAt, DateTime? lastActiveAt = null)
     {
-        var token = Token.Create(_user.Id, Hash(raw), DateTime.UtcNow.AddDays(1), sessionStartedAt: sessionStartedAt);
+        var token = Token.Create(_user.Id, Hash(raw), DateTime.UtcNow.AddDays(1), sessionStartedAt: sessionStartedAt,
+            lastActiveAt: lastActiveAt ?? issuedAt);
         _db.RefreshTokens.Add(token);
         await _db.SaveChangesAsync();
         // CreatedAt bị ghi đè khi thêm mới; lùi lại sau khi lưu để giả lập lần làm mới gần nhất đã lâu.
@@ -159,6 +161,19 @@ public class SessionPolicyTests
         var next = await _db.RefreshTokens.SingleAsync(t => t.TokenHash == Hash(rotated.Value!.RefreshToken!));
         next.SessionId.Should().Be(activeToken.SessionId);
         next.SessionStartedAt.Should().Be(activeToken.SessionStartedAt);
+    }
+
+    [Fact]
+    public async Task Refresh_AfterAccessTokenExpired_ButWithRecentActivity_IsAccepted()
+    {
+        // Idle 10' < hạn JWT 30': FE chỉ refresh khi gặp 401, tức token đã phát hơn 30' trước dù user vẫn đang làm việc.
+        JoinWorkspace(idle: 10);
+        await AddTokenAsync("busy", sessionStartedAt: DateTime.UtcNow.AddHours(-1),
+            issuedAt: DateTime.UtcNow.AddMinutes(-31), lastActiveAt: DateTime.UtcNow.AddMinutes(-1));
+
+        var result = await RefreshAsync("busy");
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
     }
 
     [Fact]

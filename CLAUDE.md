@@ -9,8 +9,17 @@ dotnet build PanelForge.slnx
 dotnet test PanelForge.slnx
 ```
 
-Frontend ↔ Backend coordination happens through `../../HANDOFF.md` (see the workspace-level `CLAUDE.md`).
+Frontend ↔ Backend coordination follows `.agents/CODEBASE_MAP.md` and feature DTOs in `PanelForge.Application/Features/<Domain>/`. Expose clean Swagger schemas and maintain DTO parity with Frontend and Mobile.
 
+## Central Knowledge Base & Spec (Tất cả tài liệu đọc tại Hub)
+
+> 🚨 **QUY TẮC CỐT LÕI:** Tất cả tài liệu đặc tả, nghiệp vụ, hiểu biết hệ thống, kiến trúc và kế hoạch triển khai **ĐƯỢC ĐỌC TẬP TRUNG TẠI `../panelforge-hub/docs/`**, KHÔNG đọc tại các repo riêng lẻ.
+
+- **Master Spec V2.6:** `../panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md` (quyết định Q1–Q14, BR-xx, 5 vai trò, 5 luồng CF1–CF5). Trích dẫn mã BR-xx / Module trong commit.
+- **Kế hoạch triển khai (Plans):** `../panelforge-hub/docs/note/PANELFORGE_V2_6_IMPLEMENTATION_PLAN.md` và `../panelforge-hub/docs/note/plans/`. Không tạo hay lưu file plan trong repo này.
+- **Kiến trúc & Sơ đồ:** `../panelforge-hub/docs/architecture/` (Clean Architecture, storage, diagrams, OpenApi).
+- **Thuật ngữ & State Machines:** `../panelforge-hub/docs/standards/` (Ubiquitous Language, State Machine standards).
+- **Team Workboard:** `../panelforge-hub/docs/tracking/TEAM_WORKBOARD.md`. Khi bắt đầu task và khi merge, cập nhật trạng thái kèm thay đổi API/DB/enum cho cả nhóm.
 ## PanelForge Agent Rules
 
 1. Read existing implementation before writing code.
@@ -32,7 +41,7 @@ Frontend ↔ Backend coordination happens through `../../HANDOFF.md` (see the wo
 
 ## Precedence when instructions conflict
 
-1. PanelForge Business Rules / requirements (`panelforge-business-rules`, `docs/requirements/requirements.md`)
+1. PanelForge Business Rules / requirements (`panelforge-business-rules`, `panelforge-hub/docs/V2.6/PANELFORGE_MASTER_SPECIFICATION_V2_6.md`)
 2. Security and data integrity
 3. Existing project architecture (what the code already does)
 4. PanelForge custom skills (`.claude/skills/panelforge-*`)
@@ -89,3 +98,50 @@ Installed as a Claude Code plugin at project scope (`.claude/settings.json`, mar
 - `.claude/references/` – checklists referenced by upstream skills as `../../references/*.md`.
 - `.claude/settings.json` – shared: Ponytail plugin, `PONYTAIL_DEFAULT_MODE`, deny rules for reading secret files.
 - `.claude/settings.local.json` – personal, not committed.
+
+## Git workflow (bắt buộc cho AI Agents)
+
+- **Nhánh làm việc: `{work-branch}`** — nhánh do người code trên máy này chọn (mỗi người push nhánh riêng), lưu ở `git config --local panelforge.workBranch` (chỉ trên máy này, không commit). Đầu phiên chạy `git config --local --get panelforge.workBranch`: có giá trị → dùng, không hỏi lại; trống → hỏi người dùng tên nhánh rồi lưu bằng `powershell -File ../panelforge-hub/.agents/scripts/work_branch.ps1 -Action set -Branch <tên>`; repo đang ở nhánh khác → hỏi trước khi checkout. Không commit/push lên `main` hay nhánh của người khác; không tạo nhánh `feature/*` để làm việc thường ngày.
+- **Một agent:** làm trực tiếp trên `{work-branch}` trong repo chính (`git checkout {work-branch}`), không tạo worktree.
+- **Nhiều agent song song (multi-agent / subagent / session song song):** mỗi agent làm trong **git worktree riêng**, tách nhánh con từ `{work-branch}`:
+  - `git worktree add ../.worktrees/<repo>-<task> -b {work-branch}-<task> {work-branch}`
+  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không được sửa cùng file.
+  - Không agent nào sửa trực tiếp working tree chính khi agent khác đang chạy.
+  - Khi xong: commit trong worktree → `git checkout {work-branch} && git merge --no-ff {work-branch}-<task>` → giải quyết conflict, build → `git worktree remove <path>` và `git branch -d {work-branch}-<task>`. Không push nhánh `{work-branch}-<task>` lên remote.
+- **Lấy code mới:** khi working tree sạch, `git pull origin {work-branch}` (còn thay đổi thì commit hoặc `git stash` rồi `stash pop` sau khi pull).
+- **Push:** chỉ `git push origin {work-branch}` khi hoàn thành 1 module lớn hoặc khi user yêu cầu trực tiếp. Không push sau mỗi prompt/commit nhỏ.
+- Không force-push, không rebase lại lịch sử đã push trên `{work-branch}`.
+- **Conflict:** giữ thay đổi của cả hai bên khi không loại trừ nhau; với `*ModelSnapshot.cs` của EF, sau khi gộp phải kiểm tra bằng `dotnet ef migrations add` thử (phải ra migration rỗng). Build/test trước khi commit merge.
+- **Commit message:** theo Conventional Commits (`panelforge-hubs/web/public/docs/note/GIT_COMMIT_CONVENTION.md`): `<type>(<scope>): <mô tả>` — type ∈ feat|fix|docs|style|refactor|perf|test|chore; header ≤ 72 ký tự, động từ mệnh lệnh, viết thường, không dấu chấm cuối; body giải thích *why/how*, trích mã BR-xx nếu có. Merge commit: `chore(merge): sync origin/{work-branch} into {work-branch}`.
+- Không dùng `--no-verify`, không `push --force` lên nhánh dùng chung.
+- **Sau khi sửa code, cập nhật `panelforge-hubs` (nhánh `main`) và push:**
+  1. `git -C ../panelforge-hubs pull --ff-only origin main`.
+  2. Thêm một dòng lên đầu §3 "Đã xong" của `docs/tracking/TEAM_WORKBOARD.md` (ngày, người, repo BE/FE, việc, commit hash trên `{work-branch}`, ảnh hưởng API/DB/enum); xoá dòng của mình ở §2 nếu có.
+  3. Chạy `node scripts/sync-hub.mjs` để đồng bộ `hub-state.json`, `AUDIT_LOGS.md` và `web/public/docs`.
+## Git Branch & Multi-Agent Workflow (THBMinh)
+
+### Luồng nhánh (promotion flow)
+
+```
+THBMinh  ──merge──▶  dev  ──merge──▶  stg  ──(stg chạy OK)──merge──▶  main
+(code)              (tích hợp)        (môi trường giống production)     (production)
+```
+
+- **`THBMinh`**: nhánh code. Mọi thay đổi đều được commit ở đây (có ở cả BE `PanelForge_FA26SE251` và FE `panelforge-fe`).
+- **`dev`**: nhánh tích hợp. Khi xong việc trên `THBMinh` → merge `THBMinh` vào `dev`.
+- **`stg`**: staging, environment giống production. Chỉ nhận merge từ `dev`.
+- **`main`**: production. Chỉ nhận merge từ `stg`, và **chỉ sau khi `stg` đã được xác nhận chạy OK**.
+- Không bao giờ commit trực tiếp lên `dev`, `stg`, `main`; không merge nhảy cóc (ví dụ `THBMinh` → `main`, `dev` → `main`). Không force-push, không rebase lịch sử đã push.
+- Agent chỉ tự merge/push tới `dev`. Đẩy `dev` → `stg` và `stg` → `main` cần người dùng xác nhận rõ ràng.
+
+### Làm việc với agent
+
+- **Một agent**: làm trực tiếp trên `THBMinh` (`git checkout THBMinh`).
+- **Nhiều agent (multi-agent / subagent / session song song)**: mỗi agent làm trong **git worktree riêng**, trên nhánh con tách từ `THBMinh`:
+  - `git worktree add ../.worktrees/<repo>-<task> -b THBMinh-<task> THBMinh`
+  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không sửa cùng file; không sửa working tree chính khi agent khác đang chạy.
+- **Khi hoàn thành task**:
+  1. Commit trong worktree → `git checkout THBMinh && git merge --no-ff THBMinh-<task>`, giải quyết conflict, chạy build/test.
+  2. `git push origin THBMinh`.
+  3. Merge vào dev: `git checkout dev && git pull && git merge --no-ff THBMinh && git push origin dev`, rồi quay lại `THBMinh`.
+  4. Dọn dẹp: `git worktree remove <path>` và `git branch -d THBMinh-<task>`.

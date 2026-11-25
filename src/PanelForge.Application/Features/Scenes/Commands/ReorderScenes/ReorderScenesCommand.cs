@@ -1,6 +1,9 @@
+using PanelForge.Application.Features.Scenes.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Scenes.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -16,9 +19,12 @@ public sealed class ReorderScenesCommandHandler : IRequestHandler<ReorderScenesC
 {
     private readonly IPanelForgeDbContext _dbContext;
 
-    public ReorderScenesCommandHandler(IPanelForgeDbContext dbContext)
+    private readonly IWorkspaceAuthorizationService _auth;
+
+    public ReorderScenesCommandHandler(IPanelForgeDbContext dbContext, IWorkspaceAuthorizationService auth)
     {
         _dbContext = dbContext;
+        _auth = auth;
     }
 
     public async Task<Result<bool>> Handle(ReorderScenesCommand command, CancellationToken cancellationToken)
@@ -29,6 +35,10 @@ public sealed class ReorderScenesCommandHandler : IRequestHandler<ReorderScenesC
 
         if (scenes.Count == 0)
             return Result<bool>.Failure($"Không tìm thấy Scene nào trong Chapter {command.ChapterId}.");
+        if (await ChapterEditGuard.ReadOnlyReasonAsync(_dbContext, command.ChapterId, cancellationToken) is { } readOnly)
+            return Result<bool>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
+        if (await SceneAssignmentGate.BlockedReasonAsync(_dbContext, _auth, command.UserId, command.ChapterId, cancellationToken) is { } notAssigned)
+            return Result<bool>.Failure(notAssigned, ResultErrorCodes.Forbidden);
 
         var sceneMap = scenes.ToDictionary(s => s.Id);
         foreach (var item in command.Scenes)

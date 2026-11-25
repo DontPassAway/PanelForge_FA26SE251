@@ -4,5 +4,6 @@ namespace PanelForge.Application.Common.Interfaces.Authentication;
 
 public interface IJwtTokenGenerator
 {
-    (string Token, DateTime ExpiresAt) GenerateToken(User user);
+    /// <param name="sessionId">Phiên đăng nhập (RefreshToken.SessionId) mà access token này thuộc về, ghi vào claim <c>session_id</c>.</param>
+    (string Token, DateTime ExpiresAt) GenerateToken(User user, Guid sessionId);
 }
