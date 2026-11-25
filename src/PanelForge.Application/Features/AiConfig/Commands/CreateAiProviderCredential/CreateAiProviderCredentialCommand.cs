@@ -21,8 +21,8 @@ public sealed class CreateAiProviderCredentialCommandHandler(
         var r = command.Request;
         if (AiCredentials.Validate(r.Name, r.ProviderType, r.AccountId, r.TextModel, r.ImageModel) is { } error)
             return Result<AiProviderCredentialDto>.Failure(error, ResultErrorCodes.Validation);
-        if (string.IsNullOrWhiteSpace(r.ApiKey))
-            return Result<AiProviderCredentialDto>.Failure("API key không được để trống.", ResultErrorCodes.Validation);
+        if (AiCredentials.ValidateApiKey(r.ApiKey) is { } keyError)
+            return Result<AiProviderCredentialDto>.Failure(keyError, ResultErrorCodes.Validation);
 
         var check = await AiCredentials.CheckKeyAsync(validator, r.ProviderType, r.AccountId, r.ApiKey, ct);
         if (!check.IsSuccess)

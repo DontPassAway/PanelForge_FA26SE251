@@ -51,7 +51,7 @@ public sealed class AiUsageService : IAiUsageService
         var record = AiUsageRecord.Create(
             workspaceId: entry.WorkspaceId,
             feature: entry.Feature,
-            provider: config?.Provider ?? UnconfiguredProvider,
+            provider: !string.IsNullOrWhiteSpace(entry.Provider) ? entry.Provider.Trim() : (config?.Provider ?? UnconfiguredProvider),
             status: entry.Status,
             userId: entry.UserId ?? _currentUser.UserId,
             model: entry.Model,

@@ -137,4 +137,15 @@ public class AiUsageServiceTests
         result.Value!.TotalCount.Should().Be(1);
         result.Value.Items.Single().Feature.Should().Be("B");
     }
+
+    [Fact]
+    public async Task Record_WhenEntrySpecifiesProvider_RecordsActualProviderInsteadOfLegacyConfigDefault()
+    {
+        await AddConfigAsync(quota: 1000);
+
+        var record = await _service.RecordAsync(new AiUsageEntry(
+            _workspaceId, "AiAgents.Copilot.writer.rewrite", AiUsageStatus.Succeeded, "@cf/meta/llama", 20, 10, Provider: "Cloudflare"));
+
+        record.Provider.Should().Be("Cloudflare");
+    }
 }

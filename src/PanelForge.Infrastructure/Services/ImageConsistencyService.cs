@@ -242,7 +242,7 @@ public sealed class ImageConsistencyService : IImageConsistencyService
             response.Succeeded ? AiUsageStatus.Succeeded
                 : response.ErrorCode is "AI_UNAVAILABLE" or "PROVIDER_UNAVAILABLE" ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
             Model: model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
-            ErrorMessage: response.ErrorMessage, DurationMs: durationMs, UserId: input.UserId), cancellationToken);
+            ErrorMessage: response.ErrorMessage, DurationMs: durationMs, UserId: input.UserId, Provider: provider), cancellationToken);
 
         // Không đoán điểm khi AI lỗi / trả kết quả không đọc được: báo lỗi thay vì "đạt" giả
         if (!response.Succeeded || response.Score is not { } score)

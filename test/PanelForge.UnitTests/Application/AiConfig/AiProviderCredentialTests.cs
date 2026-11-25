@@ -242,4 +242,74 @@ public class AiProviderCredentialTests
         (await handler.Handle(new("text", null), default)).IsSuccess.Should().BeTrue();
         b.IsDefaultText.Should().BeFalse("null = bỏ API mặc định");
     }
+
+    [Fact]
+    public async Task Delete_DefaultCredential_ReturnsConflict_EvenWhenZeroWorkspacesExplicitlyAssigned()
+    {
+        var def = Gemini(); def.SetDefaultText(true);
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { def }));
+        _db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceAiConfig>()));
+
+        var result = await new DeleteAiProviderCredentialCommandHandler(_db.Object)
+            .Handle(new DeleteAiProviderCredentialCommand(def.Id), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_EmptyKeyKeepsOldKey_RejectsMaskedKey_AndBlocksDisablingOrClearingImageModelOnDefault()
+    {
+        var cred = Cloudflare();
+        cred.SetDefaultImage(true);
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { cred }));
+        _db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceAiConfig>()));
+        var handler = new PanelForge.Application.Features.AiConfig.Commands.UpdateAiProviderCredential.UpdateAiProviderCredentialCommandHandler(
+            _db.Object, _protector.Object, _validator.Object);
+
+        // 1) Để trống ApiKey → giữ nguyên key cũ, không gọi validator
+        var keep = await handler.Handle(new(cred.Id, new UpdateAiProviderCredentialRequest(
+            "CF đổi tên", "acc-1", "   ", "@cf/meta/llama-new", "@cf/flux", true)), default);
+        keep.IsSuccess.Should().BeTrue();
+        cred.ApiKeyEncrypted.Should().Be("enc:cf-token");
+        _validator.VerifyNoOtherCalls();
+
+        // 2) Dán nhầm chuỗi mask "••••" → chặn Validation
+        var masked = await handler.Handle(new(cred.Id, new UpdateAiProviderCredentialRequest(
+            "CF", "acc-1", "••••token", "@cf/meta/llama-new", "@cf/flux", true)), default);
+        masked.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+
+        // 3) Tắt API đang là mặc định → chặn Validation
+        var disableDefault = await handler.Handle(new(cred.Id, new UpdateAiProviderCredentialRequest(
+            "CF", "acc-1", null, "@cf/meta/llama-new", "@cf/flux", false)), default);
+        disableDefault.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+
+        // 4) Xoá trống ImageModel trên API đang là mặc định sinh ảnh → chặn Validation
+        var clearImage = await handler.Handle(new(cred.Id, new UpdateAiProviderCredentialRequest(
+            "CF", "acc-1", null, "@cf/meta/llama-new", null, true)), default);
+        clearImage.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    [Fact]
+    public async Task Test_UsesStrictProbe_AndReportsUndecryptableKey()
+    {
+        var ok = Gemini("enc:good");
+        var broken = Gemini("corrupted-ciphertext");
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { ok, broken }));
+        _validator.Setup(v => v.ProbeAsync("Gemini", null, "good", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Failure("API key hợp lệ nhưng đang bị giới hạn tần suất (HTTP 429)."));
+        var handler = new PanelForge.Application.Features.AiConfig.Commands.TestAiProviderCredential.TestAiProviderCredentialCommandHandler(
+            _db.Object, _protector.Object, _validator.Object);
+
+        var brokenRes = await handler.Handle(new(broken.Id), default);
+        brokenRes.IsSuccess.Should().BeFalse();
+        brokenRes.ErrorMessage.Should().Contain("không giải mã được");
+
+        var rateLimited = await handler.Handle(new(ok.Id), default);
+        rateLimited.IsSuccess.Should().BeFalse();
+        rateLimited.ErrorMessage.Should().Contain("429");
+
+        AiCredentials.ToDto(broken, _protector.Object, 0).KeyDecryptable.Should().BeFalse();
+        AiCredentials.ToDto(ok, _protector.Object, 0).KeyDecryptable.Should().BeTrue();
+    }
 }

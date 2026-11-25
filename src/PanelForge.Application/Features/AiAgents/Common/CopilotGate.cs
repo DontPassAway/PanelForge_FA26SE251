@@ -1,4 +1,5 @@
 using PanelForge.Application.Features.AiConfig.Common;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
@@ -12,7 +13,14 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Common;
 
-internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config, string? ApiKey = null, string? AccountId = null);
+internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config, string? ApiKey = null, string? AccountId = null)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append($"Provider = {Provider}, Model = {Model}, ApiKey = ***, AccountId = {AccountId}");
+        return true;
+    }
+}
 
 /// <summary>
 /// Phần dùng chung của mọi task Copilot sync: AI bật + quota Workspace + model được phép, giới hạn lượt/phút theo Series,
@@ -77,7 +85,7 @@ internal static class CopilotGate
             response.Succeeded ? AiUsageStatus.Succeeded
                 : response.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
             Model: p.Model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
-            ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId), ct);
+            ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId, Provider: p.Provider), ct);
         step.LinkUsageRecord(record.Id);
         return step;
     }

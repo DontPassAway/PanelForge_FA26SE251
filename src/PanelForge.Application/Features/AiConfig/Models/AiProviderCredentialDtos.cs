@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace PanelForge.Application.Features.AiConfig.Models;
 
 /// <summary>Không bao giờ trả key: chỉ KeyHint dạng "••••abcd".</summary>
@@ -14,15 +16,30 @@ public sealed record AiProviderCredentialDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool IsDefaultText = false,
-    bool IsDefaultImage = false);
+    bool IsDefaultImage = false,
+    bool KeyDecryptable = true);
 
 /// <summary>ProviderType: "Gemini" | "Cloudflare" (Cloudflare bắt buộc AccountId).</summary>
 public sealed record CreateAiProviderCredentialRequest(
-    string Name, string ProviderType, string? AccountId, string ApiKey, string TextModel, string? ImageModel);
+    string Name, string ProviderType, string? AccountId, string ApiKey, string TextModel, string? ImageModel)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append($"Name = {Name}, ProviderType = {ProviderType}, AccountId = {AccountId}, ApiKey = ***, TextModel = {TextModel}, ImageModel = {ImageModel}");
+        return true;
+    }
+}
 
 /// <summary>ApiKey trống = giữ key cũ. ProviderType không đổi được (tạo credential mới).</summary>
 public sealed record UpdateAiProviderCredentialRequest(
-    string Name, string? AccountId, string? ApiKey, string TextModel, string? ImageModel, bool IsEnabled);
+    string Name, string? AccountId, string? ApiKey, string TextModel, string? ImageModel, bool IsEnabled)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append($"Name = {Name}, AccountId = {AccountId}, ApiKey = ***, TextModel = {TextModel}, ImageModel = {ImageModel}, IsEnabled = {IsEnabled}");
+        return true;
+    }
+}
 
 /// <summary>
 /// Một model của nhà cung cấp. Kind: "text" | "image". Free = model Cloudflare tự chạy (tiền tố @cf/, trừ vào 10.000 Neuron/ngày);

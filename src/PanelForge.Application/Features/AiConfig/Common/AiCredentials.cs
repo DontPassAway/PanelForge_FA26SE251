@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -11,7 +12,14 @@ namespace PanelForge.Application.Features.AiConfig.Common;
 
 /// <summary>Provider/model/key thực sự dùng cho một lần gọi AI. ApiKey đã giải mã: chỉ giữ trong bộ nhớ, không log.</summary>
 public sealed record ResolvedAiCredential(
-    string Provider, string TextModel, string? ImageModel, string? ApiKey, string? AccountId, bool FromCredential);
+    string Provider, string TextModel, string? ImageModel, string? ApiKey, string? AccountId, bool FromCredential)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append($"Provider = {Provider}, TextModel = {TextModel}, ImageModel = {ImageModel}, ApiKey = ***, AccountId = {AccountId}, FromCredential = {FromCredential}");
+        return true;
+    }
+}
 
 /// <summary>
 /// Một nơi duy nhất chọn API cho Workspace: chỉ credential Admin gắn (bảng ai_provider_credentials).
@@ -78,14 +86,30 @@ public static class AiCredentials
         return null;
     }
 
-    /// <summary>Gọi thử provider; 429/5xx không kết luận key sai nên vẫn cho qua (như UC-02).</summary>
+    /// <summary>Kiểm tra định dạng key thô trước khi gắn vào HTTP header (chặn chuỗi mask "••••" hoặc ký tự ngoài ASCII in được).</summary>
+    public static string? ValidateApiKey(string? apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey)) return "API key không được để trống.";
+        var trimmed = apiKey.Trim();
+        if (trimmed.StartsWith("••••", StringComparison.Ordinal))
+            return "Không thể lưu chuỗi gợi ý '••••'. Hãy nhập API key gốc hoặc để trống khi sửa để giữ key cũ.";
+        if (trimmed.Length > 512 || trimmed.Any(c => c is < '!' or > '~'))
+            return "API key chứa khoảng trắng hoặc ký tự không hợp lệ.";
+        return null;
+    }
+
+    /// <summary>Gọi thử provider; 429 vẫn cho qua khi lưu (key đã qua xác thực), 5xx từ chối.</summary>
     public static Task<Result<bool>> CheckKeyAsync(IAiProviderValidator validator, string providerType, string? accountId,
         string apiKey, CancellationToken ct) =>
         providerType == AiProviderCredential.Cloudflare
             ? validator.ValidateCloudflareAsync(accountId!.Trim(), apiKey.Trim(), ct)
             : validator.ValidateCredentialsAsync(AiProviderCredential.Gemini, apiKey.Trim(), ct);
 
-    public static AiProviderCredentialDto ToDto(AiProviderCredential c, IAiKeyProtector protector, int workspaceCount) =>
-        new(c.Id, c.Name, c.ProviderType, c.AccountId, KeyHint(Unprotect(protector, c.ApiKeyEncrypted)), c.TextModel,
-            c.ImageModel, c.IsEnabled, workspaceCount, c.CreatedAt, c.UpdatedAt, c.IsDefaultText, c.IsDefaultImage);
+    public static AiProviderCredentialDto ToDto(AiProviderCredential c, IAiKeyProtector protector, int workspaceCount)
+    {
+        var raw = Unprotect(protector, c.ApiKeyEncrypted);
+        return new(c.Id, c.Name, c.ProviderType, c.AccountId, KeyHint(raw), c.TextModel,
+            c.ImageModel, c.IsEnabled, workspaceCount, c.CreatedAt, c.UpdatedAt, c.IsDefaultText, c.IsDefaultImage,
+            KeyDecryptable: raw is not null);
+    }
 }

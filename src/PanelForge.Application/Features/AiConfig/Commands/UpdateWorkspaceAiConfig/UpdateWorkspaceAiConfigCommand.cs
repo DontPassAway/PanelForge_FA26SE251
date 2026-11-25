@@ -21,7 +21,9 @@ public sealed record UpdateWorkspaceAiConfigCommand(
     long? MonthlyImageQuota = null
 ) : IRequest<Result<WorkspaceAiConfigDto>>;
 
-public sealed class UpdateWorkspaceAiConfigCommandHandler(IPanelForgeDbContext db)
+public sealed class UpdateWorkspaceAiConfigCommandHandler(
+    IPanelForgeDbContext db,
+    PanelForge.Application.Common.Interfaces.Services.IAiKeyProtector? protector = null)
     : IRequestHandler<UpdateWorkspaceAiConfigCommand, Result<WorkspaceAiConfigDto>>
 {
     public async Task<Result<WorkspaceAiConfigDto>> Handle(UpdateWorkspaceAiConfigCommand request, CancellationToken ct)
@@ -53,6 +55,6 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler(IPanelForgeDbContext d
         await db.SaveChangesAsync(ct);
 
         return Result<WorkspaceAiConfigDto>.Success(
-            await GetWorkspaceAiConfigQueryHandler.ToDtoAsync(db, config, [.. allowedModels], ct));
+            await GetWorkspaceAiConfigQueryHandler.ToDtoAsync(db, config, [.. allowedModels], ct, protector));
     }
 }

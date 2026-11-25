@@ -166,7 +166,7 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
             ? ImageGen.Fail(started, "SAFETY_BLOCKED", "Cloudflare chặn nội dung prompt. Sửa prompt rồi sinh lại.", safety: true)
             : ImageGen.Fail(started, "PROVIDER_ERROR", res.IsSuccessStatusCode
                 ? "Cloudflare không trả ảnh."
-                : $"{ImageGen.HttpError(res.StatusCode)} {(error.Length > 200 ? error[..200] : error)}".Trim());
+                : ImageGen.HttpError(res.StatusCode));
     }
 
     /// <summary>Model Cloudflare chính chủ có tiền tố @cf/ (hoặc @hf/); model đối tác dạng vendor/name.</summary>

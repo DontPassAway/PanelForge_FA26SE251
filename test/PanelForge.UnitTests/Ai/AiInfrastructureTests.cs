@@ -76,19 +76,30 @@ public class AiInfrastructureTests
     }
 
     [Fact]
-    public void AiRunJob_ToString_NeverRevealsApiKey()
+    public void AiRunJob_And_KeyCarryingRecords_ToString_NeverRevealApiKey()
     {
         var job = new AiRunJob(Guid.NewGuid(), "Gemini", "gemini-2.5-flash", "AIza-TOP-SECRET", 2);
+        var createReq = new PanelForge.Application.Features.AiConfig.Models.CreateAiProviderCredentialRequest(
+            "G", "Gemini", null, "AIza-TOP-SECRET", "gemini-3.8-flash", null);
+        var updateReq = new PanelForge.Application.Features.AiConfig.Models.UpdateAiProviderCredentialRequest(
+            "G", null, "AIza-TOP-SECRET", "gemini-3.8-flash", null, true);
+        var resolved = new PanelForge.Application.Features.AiConfig.Common.ResolvedAiCredential(
+            "Gemini", "gemini-3.8-flash", null, "AIza-TOP-SECRET", null, true);
 
-        job.ToString().Should().NotContain("AIza-TOP-SECRET");
-        $"{job}".Should().NotContain("TOP-SECRET");
+        foreach (var text in new[] { job.ToString(), createReq.ToString(), updateReq.ToString(), resolved.ToString() })
+        {
+            text.Should().NotContain("AIza-TOP-SECRET");
+            text.Should().NotContain("TOP-SECRET");
+        }
     }
 
     // ── Khoá dịch vụ cho API nội bộ ──────────────────────────────────────────
-    private static async Task<IActionResult?> RunFilter(string? expectedKey, string? providedKey, IPAddress? remote)
+    private static async Task<IActionResult?> RunFilter(string? expectedKey, string? providedKey, IPAddress? remote, IPAddress? socketRemote = null)
     {
         var http = new DefaultHttpContext();
         http.Connection.RemoteIpAddress = remote;
+        if (socketRemote is not null)
+            http.Items[ServiceKeyAuthFilter.SocketRemoteIpKey] = socketRemote;
         if (providedKey is not null) http.Request.Headers[AiProtocol.ServiceKeyHeader] = providedKey;
         var actionContext = new ActionContext(http, new RouteData(), new ActionDescriptor());
         var ctx = new ActionExecutingContext(actionContext, [], new Dictionary<string, object?>(), new object());
@@ -99,7 +110,7 @@ public class AiInfrastructureTests
     }
 
     [Fact]
-    public async Task ServiceKeyFilter_AllowsOnlyCorrectKey_FromLoopbackOrPrivateNetwork()
+    public async Task ServiceKeyFilter_AllowsOnlyCorrectKey_FromLoopbackOrPrivateNetwork_AndBlocksSpoofedForwardedFor()
     {
         (await RunFilter("k", "k", IPAddress.Loopback)).Should().BeNull();
         (await RunFilter("k", "wrong", IPAddress.Loopback)).Should().BeOfType<UnauthorizedObjectResult>();
@@ -109,6 +120,10 @@ public class AiInfrastructureTests
         (await RunFilter("k", "wrong", IPAddress.Parse("10.0.0.5"))).Should().BeOfType<UnauthorizedObjectResult>();
         ((ObjectResult)(await RunFilter("k", "k", IPAddress.Parse("203.0.113.7")))!).StatusCode.Should().Be(403);
         ((ObjectResult)(await RunFilter("k", "k", IPAddress.Parse("172.32.0.1")))!).StatusCode.Should().Be(403);
+        ((ObjectResult)(await RunFilter("k", "k", remote: null))!).StatusCode.Should().Be(403, "remote null phải fail-closed");
+        // Giả lập ForwardedHeadersMiddleware đã ghi đè RemoteIpAddress = 127.0.0.1 từ X-Forwarded-For giả mạo, nhưng socket thật là IP ngoài:
+        ((ObjectResult)(await RunFilter("k", "k", remote: IPAddress.Loopback, socketRemote: IPAddress.Parse("203.0.113.7")))!)
+            .StatusCode.Should().Be(403, "X-Forwarded-For giả mạo không được lách kiểm tra IP nội bộ");
     }
 
     // ── Domain: bất biến của run/suggestion/decision ─────────────────────────

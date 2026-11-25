@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Logging;
 using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Infrastructure.Services;
@@ -8,11 +10,20 @@ namespace PanelForge.Infrastructure.Services;
 /// </summary>
 public class AiKeyProtector : IAiKeyProtector
 {
-    private readonly IDataProtector _protector;
+    public const string Purpose = "PanelForge.AiKeyProtector.v1";
 
-    public AiKeyProtector(IDataProtectionProvider provider)
+    private readonly IDataProtector _protector;
+    private readonly IDataProtector? _legacyProtector;
+    private readonly ILogger<AiKeyProtector>? _logger;
+
+    public AiKeyProtector(
+        IDataProtectionProvider provider,
+        ILogger<AiKeyProtector>? logger = null,
+        IDataProtector? legacyProtector = null)
     {
-        _protector = provider.CreateProtector("PanelForge.AiKeyProtector.v1");
+        _protector = provider.CreateProtector(Purpose);
+        _legacyProtector = legacyProtector;
+        _logger = logger;
     }
 
     public string Protect(string rawKey)
@@ -28,13 +39,31 @@ public class AiKeyProtector : IAiKeyProtector
         if (string.IsNullOrWhiteSpace(protectedKey))
             return string.Empty;
 
+        var trimmed = protectedKey.Trim();
         try
         {
-            return _protector.Unprotect(protectedKey.Trim());
+            return _protector.Unprotect(trimmed);
+        }
+        catch (CryptographicException)
+        {
+            if (_legacyProtector is not null)
+            {
+                try
+                {
+                    return _legacyProtector.Unprotect(trimmed);
+                }
+                catch (CryptographicException)
+                {
+                    // rơi xuống log cảnh báo bên dưới
+                }
+            }
+
+            _logger?.LogWarning("Không giải mã được API key AI: khoá Data Protection đã thay đổi hoặc không khớp.");
+            return string.Empty;
         }
         catch
         {
-            // Trả về chuỗi rỗng nếu key không thể giải mã (ví dụ thay đổi key ring)
+            _logger?.LogWarning("Không giải mã được API key AI: định dạng ciphertext không hợp lệ.");
             return string.Empty;
         }
     }

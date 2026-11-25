@@ -1,11 +1,30 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Features.AiAgents.Models;
 
 namespace PanelForge.API.Common.Attributes;
+
+/// <summary>
+/// Ghi lại IP kết nối TCP thật ở ngoài cùng pipeline trước khi ForwardedHeadersStartupFilter / UseForwardedHeaders
+/// ghi đè Connection.RemoteIpAddress bằng X-Forwarded-For.
+/// </summary>
+public sealed class SocketRemoteIpStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((ctx, cont) =>
+        {
+            ctx.Items[ServiceKeyAuthFilter.SocketRemoteIpKey] = ctx.Connection.RemoteIpAddress;
+            return cont();
+        });
+        next(app);
+    };
+}
 
 /// <summary>
 /// Xác thực dịch vụ-với-dịch vụ cho API nội bộ (/internal/ai/*): header X-Service-Key khớp AiService:ServiceKey (user-secrets)
@@ -18,14 +37,19 @@ public sealed class ServiceKeyAuthAttribute : TypeFilterAttribute
 
 public sealed class ServiceKeyAuthFilter : IAsyncActionFilter
 {
+    /// <summary>IP của peer TCP thực sự trước khi ForwardedHeadersMiddleware thay bằng X-Forwarded-For.</summary>
+    public const string SocketRemoteIpKey = "PanelForge.SocketRemoteIp";
+
     private readonly AiAgentSettings _settings;
 
     public ServiceKeyAuthFilter(AiAgentSettings settings) => _settings = settings;
 
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var remote = context.HttpContext.Connection.RemoteIpAddress;
-        if (remote is not null && !IsInternal(remote))
+        var remote = context.HttpContext.Items.TryGetValue(SocketRemoteIpKey, out var sock)
+            ? sock as System.Net.IPAddress
+            : context.HttpContext.Connection.RemoteIpAddress;
+        if (remote is null || !IsInternal(remote))
         {
             context.Result = new ObjectResult(new { code = "FORBIDDEN", error = "API nội bộ chỉ nhận từ localhost hoặc mạng nội bộ." }) { StatusCode = 403 };
             return Task.CompletedTask;

@@ -11,7 +11,7 @@ namespace PanelForge.Application.Features.AiConfig.Commands.SetDefaultAiProvider
 /// </summary>
 public sealed record SetDefaultAiProviderCommand(string Kind, Guid? ProviderCredentialId) : IRequest<Result<bool>>;
 
-public sealed class SetDefaultAiProviderCommandHandler(IPanelForgeDbContext db)
+public sealed class SetDefaultAiProviderCommandHandler(IPanelForgeDbContext db, IUnitOfWork? uow = null)
     : IRequestHandler<SetDefaultAiProviderCommand, Result<bool>>
 {
     public async Task<Result<bool>> Handle(SetDefaultAiProviderCommand command, CancellationToken ct)
@@ -28,18 +28,23 @@ public sealed class SetDefaultAiProviderCommandHandler(IPanelForgeDbContext db)
         if (isImage && target is { ImageModel: null })
             return Result<bool>.Failure("API này chưa có model sinh ảnh.", ResultErrorCodes.Validation);
 
-        // Bỏ mặc định cũ và lưu trước, rồi mới bật cái mới: Postgres kiểm unique index theo từng dòng.
-        var current = await db.AiProviderCredentials
-            .Where(c => isImage ? c.IsDefaultImage : c.IsDefaultText).ToListAsync(ct);
-        foreach (var c in current.Where(c => c.Id != target?.Id))
-            if (isImage) c.SetDefaultImage(false); else c.SetDefaultText(false);
-        await db.SaveChangesAsync(ct);
-
-        if (target is not null)
+        async Task<Result<bool>> ApplyAsync(CancellationToken token)
         {
-            if (isImage) target.SetDefaultImage(true); else target.SetDefaultText(true);
-            await db.SaveChangesAsync(ct);
+            // Bỏ mặc định cũ và lưu trước, rồi mới bật cái mới: Postgres kiểm unique index theo từng dòng trong cùng transaction.
+            var current = await db.AiProviderCredentials
+                .Where(c => isImage ? c.IsDefaultImage : c.IsDefaultText).ToListAsync(token);
+            foreach (var c in current.Where(c => c.Id != target?.Id))
+                if (isImage) c.SetDefaultImage(false); else c.SetDefaultText(false);
+            await db.SaveChangesAsync(token);
+
+            if (target is not null && (isImage ? !target.IsDefaultImage : !target.IsDefaultText))
+            {
+                if (isImage) target.SetDefaultImage(true); else target.SetDefaultText(true);
+                await db.SaveChangesAsync(token);
+            }
+            return Result<bool>.Success(true);
         }
-        return Result<bool>.Success(true);
+
+        return uow is not null ? await uow.ExecuteInTransactionAsync(ApplyAsync, ct) : await ApplyAsync(ct);
     }
 }

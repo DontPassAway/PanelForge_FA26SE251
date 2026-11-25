@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiConfig.Common;
 using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -11,7 +12,7 @@ namespace PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 
 public sealed record GetWorkspaceAiConfigQuery(Guid WorkspaceId) : IRequest<Result<WorkspaceAiConfigDto>>;
 
-public sealed class GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext db)
+public sealed class GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext db, IAiKeyProtector? protector = null)
     : IRequestHandler<GetWorkspaceAiConfigQuery, Result<WorkspaceAiConfigDto>>
 {
     public async Task<Result<WorkspaceAiConfigDto>> Handle(GetWorkspaceAiConfigQuery request, CancellationToken ct)
@@ -20,6 +21,9 @@ public sealed class GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext db)
 
         if (config == null)
         {
+            if (!await db.StudioWorkspaces.AnyAsync(w => w.Id == request.WorkspaceId, ct))
+                return Result<WorkspaceAiConfigDto>.Failure($"Workspace {request.WorkspaceId} không tồn tại.", ResultErrorCodes.NotFound);
+
             // Tự động khởi tạo cấu hình mặc định cho Workspace nếu chưa có
             config = WorkspaceAiConfig.Create(request.WorkspaceId);
             db.WorkspaceAiConfigs.Add(config);
@@ -36,20 +40,21 @@ public sealed class GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext db)
             models = [.. WorkspaceAiConfig.DefaultAllowedModels];
         }
 
-        return Result<WorkspaceAiConfigDto>.Success(await ToDtoAsync(db, config, models, ct));
+        return Result<WorkspaceAiConfigDto>.Success(await ToDtoAsync(db, config, models, ct, protector));
     }
 
     /// <summary>
-    /// TASK-350/355: HasApiKey = có API chữ dùng được (Studio tự chọn hoặc API mặc định); ApiKeyUsable = API đó còn bật.
-    /// Provider = loại của API đó (rỗng nếu không có). ProviderCredentialId vẫn là lựa chọn riêng của Studio (null = theo mặc định).
+    /// TASK-350/355: HasApiKey = có API chữ dùng được (Studio tự chọn hoặc API mặc định);
+    /// ApiKeyUsable = API đó còn bật và giải mã được key.
     /// </summary>
     internal static async Task<WorkspaceAiConfigDto> ToDtoAsync(
-        IPanelForgeDbContext db, WorkspaceAiConfig config, List<string> models, CancellationToken ct)
+        IPanelForgeDbContext db, WorkspaceAiConfig config, List<string> models, CancellationToken ct, IAiKeyProtector? protector = null)
     {
         var cred = await AiCredentials.EffectiveTextIdAsync(db, config, ct) is { } id
             ? await db.AiProviderCredentials.AsNoTracking()
-                .Where(c => c.Id == id).Select(c => new { c.ProviderType, c.IsEnabled }).FirstOrDefaultAsync(ct)
+                .Where(c => c.Id == id).Select(c => new { c.ProviderType, c.IsEnabled, c.ApiKeyEncrypted }).FirstOrDefaultAsync(ct)
             : null;
+        var decryptable = cred is not null && (protector is null || AiCredentials.Unprotect(protector, cred.ApiKeyEncrypted) is not null);
 
         return new WorkspaceAiConfigDto(
             Id: config.Id,
@@ -65,7 +70,7 @@ public sealed class GetWorkspaceAiConfigQueryHandler(IPanelForgeDbContext db)
             UpdatedAt: config.UpdatedAt,
             MonthlyImageQuota: config.MonthlyImageQuota,
             UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
-            ApiKeyUsable: cred?.IsEnabled == true,
+            ApiKeyUsable: cred?.IsEnabled == true && decryptable,
             ProviderCredentialId: config.ProviderCredentialId,
             ImageProviderCredentialId: config.ImageProviderCredentialId);
     }
