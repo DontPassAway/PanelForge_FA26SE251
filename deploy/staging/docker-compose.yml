@@ -51,7 +51,7 @@ services:
 
   ai:
     # Context là thư mục src/ của repo: .dockerignore ở gốc repo loại *.md, mà AI cần Prompts/*.md.
-    build: { context: ./src/src, dockerfile: /opt/panelforge/Dockerfile.ai }
+    build: { context: ./src/src, dockerfile: ../../Dockerfile.ai }
     image: panelforge-ai:stg
     restart: unless-stopped
     environment:

@@ -40,6 +40,20 @@ bash /root/panelforge-bootstrap.sh stg
 
 Trên Oracle, thêm Ingress Rule TCP 80 và 443 từ `0.0.0.0/0` vào Security List của subnet. `bootstrap.sh` mở hai cổng này trong iptables của VM, cài Docker, sinh secret vào `/opt/panelforge/.env` (chmod 600) và bật timer.
 
+## Chạy tạm trên máy cá nhân (khi chưa có VM)
+
+Máy Windows có Docker Desktop chạy được cùng stack này, đưa API ra internet qua Cloudflare quick tunnel (không cần tài khoản, không mở cổng nào trên máy):
+
+```powershell
+mkdir D:\PanelForge\staging; cd D:\PanelForge\staging
+git -c core.autocrlf=false clone --branch stg https://github.com/DontPassAway/PanelForge_FA26SE251.git src
+copy src\deploy\staging\docker-compose.yml, src\deploy\staging\selfhost.yml, src\deploy\staging\Dockerfile.ai, src\deploy\staging\Caddyfile, src\deploy\staging\watch-stg.ps1 .
+# tạo .env cùng các biến như bảng dưới (POSTGRES_PASSWORD, JWT_SECRET, AI_SERVICE_KEY sinh ngẫu nhiên)
+powershell -ExecutionPolicy Bypass -File .\watch-stg.ps1
+```
+
+`watch-stg.ps1` làm việc của `deploy.sh` + timer: mỗi 2 phút kiểm tra `stg`, có commit mới thì build lại, in URL `https://*.trycloudflare.com`. Giới hạn: máy phải bật, URL đổi khi container `tunnel` khởi động lại (`docker compose -f docker-compose.yml -f selfhost.yml logs tunnel` để xem URL hiện tại).
+
 ## Vận hành
 
 ```bash
