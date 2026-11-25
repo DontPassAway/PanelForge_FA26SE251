@@ -27,6 +27,12 @@ public sealed class ArtistAgent
 
         var sb = new StringBuilder();
         sb.AppendLine($"[[agent:artist]] [[panels:{panels.Count}]] [[direction:{ctx.ReadingDirection}]]");
+        // Cốt truyện do Writer/Producer viết: để prompt ảnh đúng không khí và diễn biến, không chỉ đúng từng dòng
+        if (!string.IsNullOrWhiteSpace(ctx.SeriesStoryArc))
+            sb.AppendLine("## Story arc của Series (dữ liệu)").AppendLine(ctx.SeriesStoryArc).AppendLine();
+        if (!string.IsNullOrWhiteSpace(ctx.ChapterOutline))
+            sb.AppendLine($"## Outline chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(ctx.ChapterOutline).AppendLine();
+        sb.AppendLine("## Scene (dữ liệu)").AppendLine($"{ctx.SceneHeading} — {ctx.SceneSummary}").AppendLine();
         sb.AppendLine($"## Style rules của Series (dữ liệu)");
         if (artist.StyleRules.Count == 0) sb.AppendLine("(Series chưa có style rule nào)");
         foreach (var r in artist.StyleRules)
