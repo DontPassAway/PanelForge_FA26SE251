@@ -2,9 +2,9 @@ name: PanelForge CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "stg", "dev", "trungkien" ]
+    branches: [ "main", "dev", "trungkien" ]
   pull_request:
-    branches: [ "main", "stg", "dev" ]
+    branches: [ "main", "dev" ]
 
 permissions:
   contents: read
@@ -78,7 +78,6 @@ jobs:
           type=ref,event=branch
           type=sha,format=short
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-          type=raw,value=staging,enable=${{ github.ref == 'refs/heads/stg' }}
           type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
     - name: Build and push Docker image
