@@ -111,7 +111,7 @@ public class LanguageEditionsAndInsightsTests
         PublishEdition(ContentLanguages.English, isPaid: true, priceVnd: 15000m);
         var reader = AddUser(balance: 20000m);
 
-        var unlock = await new UnlockChapterCommandHandler(_db).Handle(
+        var unlock = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings()).Handle(
             new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: "en")), default);
 
         unlock.Value!.RemainingBalanceVnd.Should().Be(5000);

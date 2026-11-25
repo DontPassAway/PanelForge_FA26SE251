@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
 using PanelForge.Application.Features.Payments.Commands.ProcessSePayWebhook;
+using PanelForge.Application.Features.Payments.Queries.GetWorkspaceBankSettings;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Payments;
@@ -38,7 +39,7 @@ public class SePayWebhookTests
     }
 
     private async Task<TopupResponse> CreateOrder(TopupRequest request) =>
-        (await new CreateTopupCommandHandler(_db).Handle(new CreateTopupCommand(_readerId, request), default)).Value!;
+        (await new CreateTopupCommandHandler(_db, new DefaultBankSettings()).Handle(new CreateTopupCommand(_readerId, request), default)).Value!;
 
     private static SePayWebhookPayload Payload(TopupResponse order, long amount, string? content = null,
         string transferType = "in", string? account = null, string? subAccount = null) =>
@@ -182,5 +183,39 @@ public class SePayWebhookTests
         await save.Should().ThrowAsync<DbUpdateConcurrencyException>();
         await using var check = InMemoryDb.Create(databaseName: _dbName);
         (await check.ReaderWallets.SingleAsync()).BalanceVnd.Should().Be(50000m);
+    }
+
+    [Fact]
+    public async Task StudioWithoutBankSettings_UsesConfiguredDefaultBank_AndWebhookMatchesIt()
+    {
+        var configured = new DefaultBankSettings
+        {
+            Bin = "970436", Name = "Vietcombank", AccountNo = "1029384756", AccountName = "PANELFORGE JSC"
+        };
+        var order = (await new CreateTopupCommandHandler(_db, configured)
+            .Handle(new CreateTopupCommand(_readerId, new TopupRequest(AmountVnd: 20000)), default)).Value!;
+
+        order.AccountNumber.Should().Be("1029384756");
+        order.BankName.Should().Be("Vietcombank");
+        order.AccountName.Should().Be("PANELFORGE JSC");
+        order.QrCodeUrl.Should().Contain("/970436-1029384756-");
+
+        (await Webhook(order, 20000, account: "1029384756")).Should().Be(SePayWebhookOutcome.Approved);
+        (await Webhook(await CreateOrder(new TopupRequest(AmountVnd: 30000)), 30000, account: "1029384756"))
+            .Should().Be(SePayWebhookOutcome.IgnoredAccountMismatch, "đơn tạo bằng tài khoản giả mặc định không khớp tài khoản thật");
+    }
+
+    [Fact]
+    public async Task BankSettingsQuery_FallsBackToConfiguredDefaultBank()
+    {
+        var configured = new DefaultBankSettings { Bin = "970436", Name = "Vietcombank", AccountNo = "1029384756", AccountName = "PANELFORGE JSC" };
+
+        var dto = (await new GetWorkspaceBankSettingsQueryHandler(_db, configured)
+            .Handle(new GetWorkspaceBankSettingsQuery(_studio.Id), default)).Value!;
+
+        dto.BankAccountNo.Should().Be("1029384756");
+        dto.BankName.Should().Be("Vietcombank");
+        new DefaultBankSettings().IsPlaceholder.Should().BeTrue();
+        configured.IsPlaceholder.Should().BeFalse();
     }
 }

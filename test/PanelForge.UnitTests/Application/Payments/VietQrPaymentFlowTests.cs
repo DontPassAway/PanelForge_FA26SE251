@@ -48,7 +48,7 @@ public class VietQrPaymentFlowTests
     }
 
     private Task<Result<TopupResponse>> CreateOrder(TopupRequest request) =>
-        new CreateTopupCommandHandler(_db).Handle(new CreateTopupCommand(_readerId, request), default);
+        new CreateTopupCommandHandler(_db, new DefaultBankSettings()).Handle(new CreateTopupCommand(_readerId, request), default);
 
     [Fact]
     public async Task ChapterUnlockOrder_UsesServerPrice_AndStudioContext_IgnoringClientAmount()
@@ -178,7 +178,7 @@ public class VietQrPaymentFlowTests
         _db.ReaderWallets.Add(ReaderWallet.Create(_readerId, 20000m));
         await _db.SaveChangesAsync();
 
-        var result = await new UnlockChapterCommandHandler(_db)
+        var result = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
             .Handle(new UnlockChapterCommand(_readerId, new UnlockChapterRequest(_paidChapter.Id, PriceVnd: 1)), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -194,7 +194,7 @@ public class VietQrPaymentFlowTests
         _db.ReaderWallets.Add(ReaderWallet.Create(_readerId, 50000m));
         await _db.SaveChangesAsync();
 
-        var result = await new SubscribeVipCommandHandler(_db)
+        var result = await new SubscribeVipCommandHandler(_db, new DefaultBankSettings())
             .Handle(new SubscribeVipCommand(_readerId, new SubscribeVipRequest("monthly")), default);
 
         result.IsSuccess.Should().BeTrue();

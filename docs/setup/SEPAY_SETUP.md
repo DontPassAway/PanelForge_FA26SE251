@@ -58,9 +58,18 @@ Mọi trường hợp trên đều trả `200 {"success": true, ...}` để SePa
 ### Bước 3. Khai tài khoản nhận tiền cho từng Studio
 QR của đơn dùng tài khoản trong **Cài đặt ngân hàng** của Studio (`PUT /api/workspaces/{id}/payments/bank-settings`). Số tài khoản này **phải trùng** tài khoản đã liên kết SePay, nếu không webhook trả `IgnoredAccountMismatch`.
 
-Studio chưa khai thì `CreateTopupCommand` dùng tài khoản mặc định giả (`970422` / `0123456789` / `KOMAFORGE STUDIO`). Đơn không có ngữ cảnh Studio rơi vào Studio tên chứa "komaforge". Cần:
-- Khai tài khoản thật cho Studio "KomaForge Studio" trên môi trường production, **hoặc**
-- (Việc code còn mở) đưa tài khoản mặc định ra cấu hình, ví dụ `SePay:DefaultBank:{Bin,Name,AccountNo,AccountName}`, thay cho hằng số trong `CreateTopupCommand.cs`.
+Studio chưa khai thì QR dùng tài khoản mặc định trong cấu hình `SePay:DefaultBank` (đơn không có ngữ cảnh Studio rơi vào Studio tên chứa "komaforge"). Màn Cài đặt ngân hàng của Producer cũng hiện tài khoản này khi Studio chưa khai. Giá trị mặc định trong code là tài khoản **giả** chỉ cho dev (`970422` / `MB Bank` / `0123456789` / `KOMAFORGE STUDIO`); môi trường không phải Development mà còn dùng tài khoản giả thì API ghi cảnh báo lúc khởi động.
+
+Production: đặt tài khoản thật đã liên kết SePay (không cần khai cho từng Studio):
+
+| Khoá cấu hình | Biến trong `.env` cạnh `docker-compose.yml` của repo | Biến khi compose dùng `env_file` |
+|---|---|---|
+| `SePay:DefaultBank:Bin` (mã BIN, vd `970436` Vietcombank) | `SEPAY_DEFAULT_BANK_BIN` | `SePay__DefaultBank__Bin` |
+| `SePay:DefaultBank:Name` | `SEPAY_DEFAULT_BANK_NAME` | `SePay__DefaultBank__Name` |
+| `SePay:DefaultBank:AccountNo` | `SEPAY_DEFAULT_BANK_ACCOUNT_NO` | `SePay__DefaultBank__AccountNo` |
+| `SePay:DefaultBank:AccountName` (in hoa, không dấu) | `SEPAY_DEFAULT_BANK_ACCOUNT_NAME` | `SePay__DefaultBank__AccountName` |
+
+Đổi tài khoản mặc định chỉ ảnh hưởng đơn tạo sau đó; đơn Pending cũ vẫn mang tài khoản cũ (webhook đối chiếu theo tài khoản ghi trên đơn).
 
 ### Bước 4. Kiểm thử
 1. Gọi thử không cần chuyển tiền thật:

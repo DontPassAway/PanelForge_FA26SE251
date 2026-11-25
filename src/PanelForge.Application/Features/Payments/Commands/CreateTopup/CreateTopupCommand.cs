@@ -28,8 +28,13 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
     private static readonly TimeSpan PendingReuseWindow = TimeSpan.FromMinutes(15);
 
     private readonly IPanelForgeDbContext _db;
+    private readonly DefaultBankSettings _defaultBank;
 
-    public CreateTopupCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public CreateTopupCommandHandler(IPanelForgeDbContext db, DefaultBankSettings defaultBank)
+    {
+        _db = db;
+        _defaultBank = defaultBank;
+    }
 
     public async Task<Result<TopupResponse>> Handle(CreateTopupCommand command, CancellationToken ct)
     {
@@ -116,11 +121,11 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             return Result<TopupResponse>.Failure("Hệ thống chưa có Studio nào nhận thanh toán. Vui lòng thử lại sau.", ResultErrorCodes.Validation);
         workspaceId = ws.Id;
 
-        // Tài khoản thụ hưởng: của Studio nếu đã cấu hình, ngược lại dùng tài khoản mặc định của hệ thống.
-        string bankBin = "970422";
-        string bankName = "MB Bank";
-        string accountNo = "0123456789";
-        string accountName = "KOMAFORGE STUDIO";
+        // Tài khoản thụ hưởng: của Studio nếu đã cấu hình, ngược lại dùng SePay:DefaultBank.
+        string bankBin = _defaultBank.Bin;
+        string bankName = _defaultBank.Name;
+        string accountNo = _defaultBank.AccountNo;
+        string accountName = _defaultBank.AccountName;
 
         if (!string.IsNullOrWhiteSpace(ws.BankBin) && !string.IsNullOrWhiteSpace(ws.BankAccountNo))
         {

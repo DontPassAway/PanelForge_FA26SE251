@@ -17,8 +17,13 @@ public sealed record UnlockChapterCommand(
 public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterCommand, Result<UnlockChapterResponse>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly DefaultBankSettings _defaultBank;
 
-    public UnlockChapterCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public UnlockChapterCommandHandler(IPanelForgeDbContext db, DefaultBankSettings defaultBank)
+    {
+        _db = db;
+        _defaultBank = defaultBank;
+    }
 
     public async Task<Result<UnlockChapterResponse>> Handle(UnlockChapterCommand command, CancellationToken ct)
     {
@@ -119,9 +124,9 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             type: PaymentTransactionType.ChapterUnlock,
             amountVnd: priceVnd,
             qrImageUrl: "",
-            bankBin: "970422",
-            bankAccountNo: "0123456789",
-            bankAccountName: "KOMAFORGE STUDIO",
+            bankBin: _defaultBank.Bin,
+            bankAccountNo: _defaultBank.AccountNo,
+            bankAccountName: _defaultBank.AccountName,
             workspaceId: chapter.Series.WorkspaceId,
             seriesId: chapter.SeriesId,
             chapterId: chapter.Id,
