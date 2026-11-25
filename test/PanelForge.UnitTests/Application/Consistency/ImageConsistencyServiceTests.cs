@@ -1,3 +1,4 @@
+using PanelForge.Domain.Entities.Ai;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -76,7 +77,11 @@ public class ImageConsistencyServiceTests
             Db.Assets.Add(asset);
             Db.AssetReferences.Add(AssetReference.Create(asset.Id, WorkspaceId, Chapter.Id, Page.Id, Guid.NewGuid(), 1, null,
                 "panel1.png", Guid.NewGuid(), Panel.Id));
-            Db.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(WorkspaceId, "Google Gemini", "encrypted-workspace-key"));
+            var cred = AiProviderCredential.Create("Gemini", AiProviderCredential.Gemini, null, "encrypted-workspace-key", "gemini-2.5-flash", null);
+            Db.AiProviderCredentials.Add(cred);
+            var aiConfig = WorkspaceAiConfig.Create(WorkspaceId);
+            aiConfig.UseProviderCredential(cred.Id);
+            Db.WorkspaceAiConfigs.Add(aiConfig);
             Db.SaveChanges();
 
             StorageMock.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

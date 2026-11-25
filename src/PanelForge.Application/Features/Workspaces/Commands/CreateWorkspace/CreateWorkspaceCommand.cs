@@ -46,6 +46,8 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
 
         _dbContext.StudioWorkspaces.Add(workspace);
         _dbContext.WorkspaceMembers.Add(WorkspaceMember.Create(workspace.Id, owner.Id, WorkspaceRole.Producer));
+        // TASK-355: Studio mới có sẵn cấu hình AI mặc định → dùng ngay API mặc định Admin đã đặt
+        _dbContext.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(workspace.Id));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<WorkspaceDto>.Success(new WorkspaceDto(

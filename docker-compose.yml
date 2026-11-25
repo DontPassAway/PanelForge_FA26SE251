@@ -27,11 +27,30 @@ services:
       - TranslationService__BaseUrl=http://translation-service:5000
       # API Key webhook SePay (đặt trong file .env cạnh compose, không commit). Để trống = tắt webhook (trả 503).
       - SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}
+      # TASK-354: AI service cùng mạng Docker. AI_SERVICE_KEY đặt trong .env (không commit), giống bên panelforge-ai.
+      - AiService__ServiceUrl=http://panelforge-ai:5055
+      - AiService__ServiceKey=${AI_SERVICE_KEY:-}
+      # TASK-352: khoá Data Protection nằm trên volume để API key AI không mất khi dựng lại container
+      - DataProtection__KeysPath=/app/dpkeys
+    volumes:
+      - panelforge_dpkeys:/app/dpkeys
     ports:
       - "7274:8080"
     depends_on:
       - postgres-db
       - translation-service
+      - panelforge-ai
+
+  panelforge-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: panelforge_ai
+    restart: always
+    environment:
+      - Backend__BaseUrl=http://panelforge-api:8080
+      - AiService__ServiceKey=${AI_SERVICE_KEY:-}
+    # Không publish port: chỉ panelforge-api gọi qua mạng nội bộ.
 
   translation-service:
     image: libretranslate/libretranslate:latest
@@ -46,3 +65,5 @@ services:
 volumes:
   # Và đổi tên ở đây
   panelforge_data:
+  # TASK-352: khoá Data Protection của API
+  panelforge_dpkeys:

@@ -7,6 +7,7 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiConfig.Commands.CreateAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiImageProvider;
+using PanelForge.Application.Features.AiConfig.Commands.SetDefaultAiProvider;
 using PanelForge.Application.Features.AiConfig.Common;
 using PanelForge.Application.Features.AiConfig.Models;
 using PanelForge.Domain.Entities.Ai;
@@ -27,6 +28,7 @@ public class AiProviderCredentialTests
     {
         _protector.Setup(p => p.Protect(It.IsAny<string>())).Returns<string>(k => "enc:" + k);
         _protector.Setup(p => p.Unprotect(It.IsAny<string>())).Returns<string>(k => k.StartsWith("enc:") ? k[4..] : "");
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential>()));
     }
 
     private static AiProviderCredential Cloudflare(bool enabled = true)
@@ -37,13 +39,13 @@ public class AiProviderCredentialTests
     }
 
     [Fact]
-    public async Task Resolve_WithoutCredential_UsesLegacyGeminiKey()
+    public async Task Resolve_WithoutCredential_HasNoKey_EvenIfLegacyStudioKeyExists()
     {
         var config = WorkspaceAiConfig.Create(Guid.NewGuid(), apiKey: "enc:gemini-key");
 
         var r = await AiCredentials.ResolveAsync(_db.Object, _protector.Object, config, "gemini-x", default);
 
-        r.Should().Be(new ResolvedAiCredential(AiProtocol.ProviderGemini, "gemini-x", null, "gemini-key", null, false));
+        r.ApiKey.Should().BeNull("TASK-350: không còn rơi về key Gemini riêng của Studio");
     }
 
     [Fact]
@@ -74,7 +76,7 @@ public class AiProviderCredentialTests
     }
 
     [Fact]
-    public async Task ResolveImage_UsesSeparateImageCredential_WhileTextKeepsGeminiKey()
+    public async Task ResolveImage_UsesSeparateImageCredential_WhileTextWithoutCredentialHasNoKey()
     {
         var cred = Cloudflare();
         _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { cred }));
@@ -84,7 +86,7 @@ public class AiProviderCredentialTests
         var text = await AiCredentials.ResolveAsync(_db.Object, _protector.Object, config, "gemini-x", default);
         var image = await AiCredentials.ResolveImageAsync(_db.Object, _protector.Object, config, "gemini-x", default);
 
-        text.Should().Be(new ResolvedAiCredential(AiProtocol.ProviderGemini, "gemini-x", null, "gemini-key", null, false));
+        text.ApiKey.Should().BeNull();
         image.Should().Be(new ResolvedAiCredential("Cloudflare", "@cf/meta/llama", "@cf/flux", "cf-token", "acc-1", true));
     }
 
@@ -177,5 +179,67 @@ public class AiProviderCredentialTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── TASK-355: API mặc định ────────────────────────────────────────────────
+    private static AiProviderCredential Gemini(string key = "enc:g-key")
+        => AiProviderCredential.Create("G", AiProviderCredential.Gemini, null, key, "gemini-2.5-flash", null);
+
+    [Fact]
+    public async Task Resolve_StudioWithoutChoice_UsesDefaultText_AndDefaultImage()
+    {
+        var text = Gemini(); text.SetDefaultText(true);
+        var img = Cloudflare(); img.SetDefaultImage(true);
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { text, img }));
+        var config = WorkspaceAiConfig.Create(Guid.NewGuid());
+
+        var t = await AiCredentials.ResolveAsync(_db.Object, _protector.Object, config, "gemini-x", default);
+        var i = await AiCredentials.ResolveImageAsync(_db.Object, _protector.Object, config, "gemini-x", default);
+
+        t.ApiKey.Should().Be("g-key");
+        t.TextModel.Should().Be("gemini-2.5-flash");
+        i.ApiKey.Should().Be("cf-token");
+        i.ImageModel.Should().Be("@cf/flux");
+    }
+
+    [Fact]
+    public async Task Resolve_StudioChoice_BeatsDefault_AndDisabledDefaultIsIgnored()
+    {
+        var def = Gemini("enc:default"); def.SetDefaultText(true);
+        var own = Gemini("enc:own");
+        var off = Gemini("enc:off"); off.SetDefaultText(true); off.Update("G", null, null, "gemini-2.5-flash", null, isEnabled: false);
+        var config = WorkspaceAiConfig.Create(Guid.NewGuid());
+        config.UseProviderCredential(own.Id);
+
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { def, own }));
+        (await AiCredentials.ResolveAsync(_db.Object, _protector.Object, config, "x", default)).ApiKey.Should().Be("own");
+
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { off }));
+        (await AiCredentials.ResolveAsync(_db.Object, _protector.Object, WorkspaceAiConfig.Create(Guid.NewGuid()), "x", default))
+            .ApiKey.Should().BeNull("API mặc định đang tắt thì không dùng");
+    }
+
+    [Fact]
+    public async Task SetDefault_MovesTheFlag_AndValidatesKindAndImageModel()
+    {
+        var a = Gemini(); a.SetDefaultText(true);
+        var b = Gemini();
+        var cf = Cloudflare();
+        var textOnly = Gemini();
+        _db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiProviderCredential> { a, b, cf, textOnly }));
+        _db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        var handler = new SetDefaultAiProviderCommandHandler(_db.Object);
+
+        (await handler.Handle(new("text", b.Id), default)).IsSuccess.Should().BeTrue();
+        a.IsDefaultText.Should().BeFalse();
+        b.IsDefaultText.Should().BeTrue();
+
+        (await handler.Handle(new("image", cf.Id), default)).IsSuccess.Should().BeTrue();
+        cf.IsDefaultImage.Should().BeTrue();
+        (await handler.Handle(new("image", textOnly.Id), default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        (await handler.Handle(new("video", b.Id), default)).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+
+        (await handler.Handle(new("text", null), default)).IsSuccess.Should().BeTrue();
+        b.IsDefaultText.Should().BeFalse("null = bỏ API mặc định");
     }
 }

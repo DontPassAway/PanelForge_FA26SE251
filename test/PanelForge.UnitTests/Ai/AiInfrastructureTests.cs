@@ -99,13 +99,16 @@ public class AiInfrastructureTests
     }
 
     [Fact]
-    public async Task ServiceKeyFilter_AllowsOnlyCorrectKeyFromLoopback()
+    public async Task ServiceKeyFilter_AllowsOnlyCorrectKey_FromLoopbackOrPrivateNetwork()
     {
         (await RunFilter("k", "k", IPAddress.Loopback)).Should().BeNull();
         (await RunFilter("k", "wrong", IPAddress.Loopback)).Should().BeOfType<UnauthorizedObjectResult>();
         (await RunFilter("k", null, IPAddress.Loopback)).Should().BeOfType<UnauthorizedObjectResult>();
         (await RunFilter(null, "", IPAddress.Loopback)).Should().BeOfType<UnauthorizedObjectResult>("chưa cấu hình khoá → từ chối tất cả");
-        ((ObjectResult)(await RunFilter("k", "k", IPAddress.Parse("10.0.0.5")))!).StatusCode.Should().Be(403);
+        (await RunFilter("k", "k", IPAddress.Parse("172.18.0.3"))).Should().BeNull("container AI cùng mạng Docker");
+        (await RunFilter("k", "wrong", IPAddress.Parse("10.0.0.5"))).Should().BeOfType<UnauthorizedObjectResult>();
+        ((ObjectResult)(await RunFilter("k", "k", IPAddress.Parse("203.0.113.7")))!).StatusCode.Should().Be(403);
+        ((ObjectResult)(await RunFilter("k", "k", IPAddress.Parse("172.32.0.1")))!).StatusCode.Should().Be(403);
     }
 
     // ── Domain: bất biến của run/suggestion/decision ─────────────────────────

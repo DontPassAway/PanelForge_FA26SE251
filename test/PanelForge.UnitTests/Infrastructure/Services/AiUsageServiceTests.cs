@@ -30,6 +30,7 @@ public class AiUsageServiceTests
     private async Task<WorkspaceAiConfig> AddConfigAsync(long quota, bool enabled = true, string? apiKey = "encrypted-key")
     {
         var config = WorkspaceAiConfig.Create(_workspaceId, "OpenAI", apiKey, quota);
+        if (apiKey is not null) config.UseProviderCredential(Guid.NewGuid()); // TASK-350: chỉ API dùng chung mới tính là có key
         config.UpdateSettings("OpenAI", null, enabled, quota, "[\"gpt-4o\"]");
         _db.WorkspaceAiConfigs.Add(config);
         await _db.SaveChangesAsync();

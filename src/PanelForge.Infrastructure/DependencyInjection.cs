@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 
 using JasperFx;
 using Marten;
@@ -113,7 +114,11 @@ public static class DependencyInjection
         services.AddSingleton<IPageLetteringCompositor, PanelForge.Infrastructure.Exports.SkiaPageLetteringCompositor>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
-        services.AddDataProtection();
+        // TASK-352: khi deploy đặt DataProtection__KeysPath (volume) để khoá giải mã API key AI / link asset
+        // sống qua lần dựng lại container. Để trống (dev) = giữ chỗ lưu mặc định, key đã nhập vẫn đọc được.
+        var dp = services.AddDataProtection();
+        if (configuration["DataProtection:KeysPath"] is { Length: > 0 } keysPath)
+            dp.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
         services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
         services.AddHttpClient(AiProviderValidator.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));

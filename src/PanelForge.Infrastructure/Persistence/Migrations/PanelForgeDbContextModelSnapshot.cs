@@ -183,6 +183,18 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("image_model");
 
+                    b.Property<bool>("IsDefaultImage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_default_image");
+
+                    b.Property<bool>("IsDefaultText")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_default_text");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -217,6 +229,16 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("updated_by");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IsDefaultImage")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_credentials_default_image")
+                        .HasFilter("is_default_image AND NOT is_deleted");
+
+                    b.HasIndex("IsDefaultText")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_credentials_default_text")
+                        .HasFilter("is_default_text AND NOT is_deleted");
 
                     b.ToTable("ai_provider_credentials", (string)null);
                 });

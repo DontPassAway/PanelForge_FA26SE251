@@ -25,7 +25,9 @@ public enum AiSuggestionKind
     /// <summary>Hồ sơ nháp cho mục Bible stub (Accept không ghi Bible, người viết tự sửa rồi lưu).</summary>
     BibleStub = 8,
     /// <summary>Gợi ý Keep/Rework cho ô bị ảnh hưởng do sửa kịch bản (Accept chạy Impact Review).</summary>
-    ImpactRipple = 9
+    ImpactRipple = 9,
+    /// <summary>TASK-358: Copilot viết MỘT dòng mới (thoại/SFX/hành động); áp dụng = chèn ScriptLine + revision Script mới.</summary>
+    ScriptLineInsert = 10
 }
 
 public enum AiStepStatus

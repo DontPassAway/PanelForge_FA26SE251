@@ -12,7 +12,9 @@ public sealed record AiProviderCredentialDto(
     bool IsEnabled,
     int WorkspaceCount,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool IsDefaultText = false,
+    bool IsDefaultImage = false);
 
 /// <summary>ProviderType: "Gemini" | "Cloudflare" (Cloudflare bắt buộc AccountId).</summary>
 public sealed record CreateAiProviderCredentialRequest(
@@ -28,5 +30,8 @@ public sealed record UpdateAiProviderCredentialRequest(
 /// </summary>
 public sealed record AiProviderModelDto(string Id, string Kind, bool Free, string? Description);
 
-/// <summary>null = Workspace quay về key Gemini riêng trong ai-config.</summary>
+/// <summary>null = bỏ chọn API (Studio không gọi được AI tới khi chọn lại).</summary>
 public sealed record SetWorkspaceAiProviderRequest(Guid? ProviderCredentialId);
+
+/// <summary>TASK-355: Kind "text" | "image"; ProviderCredentialId null = bỏ API mặc định loại đó.</summary>
+public sealed record SetDefaultAiProviderRequest(string Kind, Guid? ProviderCredentialId);

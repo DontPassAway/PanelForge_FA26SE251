@@ -25,9 +25,9 @@ public sealed class ServiceKeyAuthFilter : IAsyncActionFilter
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var remote = context.HttpContext.Connection.RemoteIpAddress;
-        if (remote is not null && !System.Net.IPAddress.IsLoopback(remote))
+        if (remote is not null && !IsInternal(remote))
         {
-            context.Result = new ObjectResult(new { code = "FORBIDDEN", error = "API nội bộ chỉ nhận từ localhost." }) { StatusCode = 403 };
+            context.Result = new ObjectResult(new { code = "FORBIDDEN", error = "API nội bộ chỉ nhận từ localhost hoặc mạng nội bộ." }) { StatusCode = 403 };
             return Task.CompletedTask;
         }
 
@@ -39,6 +39,20 @@ public sealed class ServiceKeyAuthFilter : IAsyncActionFilter
             return Task.CompletedTask;
         }
         return next();
+    }
+
+    /// <summary>
+    /// TASK-353: loopback hoặc IP mạng riêng (10/8, 172.16/12, 192.168/16, IPv6 ULA fc00::/7) để container
+    /// PanelForge.AI trong cùng mạng Docker gọi được. IP công khai vẫn bị chặn; X-Service-Key vẫn bắt buộc.
+    /// </summary>
+    internal static bool IsInternal(System.Net.IPAddress ip)
+    {
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (System.Net.IPAddress.IsLoopback(ip)) return true;
+        var b = ip.GetAddressBytes();
+        return ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+            ? b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and <= 31) || (b[0] == 192 && b[1] == 168)
+            : (b[0] & 0xFE) == 0xFC;
     }
 
     private static bool FixedTimeEquals(string a, string b) =>
