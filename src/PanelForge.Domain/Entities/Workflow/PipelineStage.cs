@@ -21,6 +21,20 @@ public class PipelineStage : BaseEntity
     public int? EstimatedDurationDays { get; private set; }
 
     /// <summary>
+    /// Vai trò Workspace được giữ việc của stage có <paramref name="allowedRole"/>.
+    /// BR-31: Lettering mặc định do Artist của trang làm; Letterer chỉ là phụ việc tuỳ chọn,
+    /// nên stage dành cho Letterer cũng nhận Artist.
+    /// </summary>
+    public static IReadOnlyList<WorkspaceRole> RolesAllowedFor(WorkspaceRole allowedRole) =>
+        allowedRole == WorkspaceRole.Letterer
+            ? [WorkspaceRole.Letterer, WorkspaceRole.Artist]
+            : [allowedRole];
+
+    /// <summary>Người có vai trò <paramref name="role"/> có được giữ việc của stage này không (BR-31).</summary>
+    public bool CanBeHeldBy(WorkspaceRole role) =>
+        AllowedRole is not { } allowed || RolesAllowedFor(allowed).Contains(role);
+
+    /// <summary>
     /// Nhánh chạy song song (BR-19), vd "A" = Ink → Color, "B" = Lettering. null = bước chung, chờ mọi nhánh trước nó.
     /// Xem <see cref="StageDependencies"/>.
     /// </summary>

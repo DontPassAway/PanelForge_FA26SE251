@@ -96,7 +96,10 @@ public sealed class GetAutoAssignPlanQueryHandler : IRequestHandler<GetAutoAssig
                 skipped.Add(new(stage.Id, stage.Name, cells.Count, "Công đoạn chưa cấu hình vai trò phụ trách."));
                 continue;
             }
-            var candidates = members.Where(m => m.Role == role).Select(m => m.UserId)
+            // Ưu tiên đúng vai trò của stage; stage Letterer không có Letterer thì giao Artist (BR-31)
+            var holders = members.Where(m => m.Role == role).ToList();
+            if (holders.Count == 0) holders = members.Where(m => stage.CanBeHeldBy(m.Role)).ToList();
+            var candidates = holders.Select(m => m.UserId)
                 .OrderBy(id => lastAssigned.TryGetValue(id, out var at) ? at : DateTime.MinValue).ThenBy(id => id).ToList();
             if (candidates.Count == 0)
             {
