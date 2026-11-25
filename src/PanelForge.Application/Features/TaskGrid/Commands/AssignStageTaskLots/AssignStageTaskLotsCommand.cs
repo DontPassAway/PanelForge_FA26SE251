@@ -76,8 +76,8 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
                 return Fail($"Công đoạn {request.PipelineStageId} không tồn tại hoặc đang tắt.", ResultErrorCodes.NotFound);
             if (!members.TryGetValue(request.AssigneeUserId, out var role))
                 return Fail("Người nhận không phải thành viên đang hoạt động của Workspace.", ResultErrorCodes.Conflict);
-            if (stage.AllowedRole is { } allowed && role != allowed)
-                return Fail($"Công đoạn '{stage.Name}' cần vai trò {allowed}, người nhận đang là {role}.", ResultErrorCodes.Conflict);
+            if (!stage.CanBeHeldBy(role))
+                return Fail($"Công đoạn '{stage.Name}' cần vai trò {stage.AllowedRole}, người nhận đang là {role}.", ResultErrorCodes.Conflict);
 
             var lotTasks = tasks.Where(t => request.TaskIds.Contains(t.Id)).ToList();
             if (lotTasks.Any(t => t.PipelineStageId != stage.Id))

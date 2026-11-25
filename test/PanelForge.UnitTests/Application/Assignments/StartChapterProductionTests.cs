@@ -89,10 +89,11 @@ public sealed class StartChapterProductionTests
         // Gate 1 giao trên Lưới V3, không tạo Assignment V2.
         result.Value.Assignments.Should().BeEmpty();
         f.Db.Assignments.Should().BeEmpty();
-        result.Value.Lots.Should().HaveCount(2);
+        // Không giao Letterer phụ việc → Artist nhận cả Pencil lẫn Lettering trên dải trang của mình (BR-31)
+        result.Value.Lots.Should().HaveCount(4);
         result.Value.Lots.Select(l => (l.AssigneeUserId, l.TaskCount))
-            .Should().BeEquivalentTo([(f.Artist1Id, 2), (f.Artist2Id, 2)]);
-        f.Db.StageTasks.Count(t => t.Status == StageTaskStatus.Assigned).Should().Be(4);
+            .Should().BeEquivalentTo([(f.Artist1Id, 2), (f.Artist1Id, 2), (f.Artist2Id, 2), (f.Artist2Id, 2)]);
+        f.Db.StageTasks.Count(t => t.Status == StageTaskStatus.Assigned).Should().Be(8);
         // Người nhận lô vào SeriesMembers, nếu không mở chương sẽ bị 403.
         f.Db.SeriesMembers.Select(m => m.UserId).Should().Contain([f.Artist1Id, f.Artist2Id]);
         f.Db.AuditLogs.Should().ContainSingle(a => a.Action == "START_CHAPTER_PRODUCTION");
@@ -111,7 +112,29 @@ public sealed class StartChapterProductionTests
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         f.Chapter.Status.Should().Be(ChapterStatus.InProduction);
-        result.Value!.Lots.Should().HaveCount(2);
+        result.Value!.Lots.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task ArtistRangesCoverEveryArtistStage_AndLettererRangesTakeLettering()
+    {
+        var f = new Fixture();
+        var pipelineId = f.Db.PipelineStages.First().PipelineDefinitionId;
+        var ink = PipelineStage.Create(pipelineId, "Ink", "ink", 3, allowedRole: WorkspaceRole.Artist);
+        var lettererId = Guid.NewGuid();
+        var workspaceId = f.Db.WorkspaceMembers.First().WorkspaceId;
+        f.Db.AddRange(ink, WorkspaceMember.Create(workspaceId, lettererId, WorkspaceRole.Letterer));
+        f.Db.SaveChanges();
+
+        var result = await f.Handler.Handle(
+            new StartChapterProductionCommand(f.Chapter.Id, f.ProducerId,
+                [new(f.Artist1Id, 1, 4)], [new(lettererId, 1, 4)]),
+            default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        var stageNames = f.Db.PipelineStages.ToDictionary(s => s.Id, s => s.Name);
+        result.Value!.Lots.Select(l => (stageNames[l.PipelineStageId], l.AssigneeUserId, l.TaskCount))
+            .Should().BeEquivalentTo([("Pencil", f.Artist1Id, 4), ("Ink", f.Artist1Id, 4), ("Lettering", lettererId, 4)]);
     }
 
     [Fact]
