@@ -179,7 +179,7 @@ public class PreviewPageAccessTests
         var reader = AddUser(balance: 50000m);
 
         (await Read(reader, ContentLanguages.English)).Pages.Should().OnlyContain(p => p.IsLocked && p.ImageUrl == null);
-        var unlock = await new UnlockChapterCommandHandler(_db).Handle(
+        var unlock = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings()).Handle(
             new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: ContentLanguages.English)), default);
         unlock.ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }

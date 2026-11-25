@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Payments.Models;
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +63,7 @@ public class BankSettingsRoleTests
     [Fact]
     public async Task GetWorkspaceBankSettings_ShouldReturnConfiguredBankInfo()
     {
-        var handler = new GetWorkspaceBankSettingsQueryHandler(_db);
+        var handler = new GetWorkspaceBankSettingsQueryHandler(_db, new DefaultBankSettings());
         var result = await handler.Handle(new GetWorkspaceBankSettingsQuery(_studio.Id), default);
 
         result.IsSuccess.Should().BeTrue();

@@ -1,15 +1,30 @@
 ---
 trigger: always_on
 ---
-# Git Branch & Multi-Agent Workflow (nhánh theo máy)
+# Git Branch & Multi-Agent Workflow (THBMinh)
 
-- **Nhánh làm việc: `{work-branch}`** — nhánh do người code trên máy này chọn (mỗi người push nhánh riêng), lưu ở `git config --local panelforge.workBranch` (chỉ trên máy này, không commit). Đầu phiên chạy `git config --local --get panelforge.workBranch`: có giá trị → dùng, không hỏi lại; trống → hỏi người dùng tên nhánh rồi lưu bằng `powershell -File ../panelforge-hub/.agents/scripts/work_branch.ps1 -Action set -Branch <tên>`; repo đang ở nhánh khác → hỏi trước khi checkout. Không commit/push lên `main` hay nhánh của người khác; không tạo nhánh `feature/*` để làm việc thường ngày.
-- **Một agent:** làm trực tiếp trên `{work-branch}` trong repo chính (`git checkout {work-branch}`), không tạo worktree.
-- **Nhiều agent song song (multi-agent / subagent / session song song):** mỗi agent làm trong **git worktree riêng**, tách nhánh con từ `{work-branch}`:
-  - `git worktree add ../.worktrees/<repo>-<task> -b {work-branch}-<task> {work-branch}`
-  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không được sửa cùng file.
-  - Không agent nào sửa trực tiếp working tree chính khi agent khác đang chạy.
-  - Khi xong: commit trong worktree → `git checkout {work-branch} && git merge --no-ff {work-branch}-<task>` → giải quyết conflict, build → `git worktree remove <path>` và `git branch -d {work-branch}-<task>`. Không push nhánh `{work-branch}-<task>` lên remote.
-- **Lấy code mới:** khi working tree sạch, `git pull origin {work-branch}` (còn thay đổi thì commit hoặc `git stash` rồi `stash pop` sau khi pull).
-- **Push:** chỉ `git push origin {work-branch}` khi hoàn thành 1 module lớn hoặc khi user yêu cầu trực tiếp. Không push sau mỗi prompt/commit nhỏ.
-- Không force-push, không rebase lại lịch sử đã push trên `{work-branch}`.
+## Luồng nhánh (promotion flow)
+
+```
+THBMinh  ──merge──▶  dev  ──merge──▶  stg  ──(stg chạy OK)──merge──▶  main
+(code)              (tích hợp)        (môi trường giống production)     (production)
+```
+
+- **`THBMinh`**: nhánh code. Mọi thay đổi đều được commit ở đây (có ở cả BE `PanelForge_FA26SE251` và FE `panelforge-fe`).
+- **`dev`**: nhánh tích hợp. Khi xong việc trên `THBMinh` → merge `THBMinh` vào `dev`.
+- **`stg`**: staging, environment giống production. Chỉ nhận merge từ `dev`.
+- **`main`**: production. Chỉ nhận merge từ `stg`, và **chỉ sau khi `stg` đã được xác nhận chạy OK**.
+- Không bao giờ commit trực tiếp lên `dev`, `stg`, `main`; không merge nhảy cóc (ví dụ `THBMinh` → `main`, `dev` → `main`). Không force-push, không rebase lịch sử đã push.
+- Agent chỉ tự merge/push tới `dev`. Đẩy `dev` → `stg` và `stg` → `main` cần người dùng xác nhận rõ ràng.
+
+## Làm việc với agent
+
+- **Một agent**: làm trực tiếp trên `THBMinh` (`git checkout THBMinh`).
+- **Nhiều agent (multi-agent / subagent / session song song)**: mỗi agent làm trong **git worktree riêng**, trên nhánh con tách từ `THBMinh`:
+  - `git worktree add ../.worktrees/<repo>-<task> -b THBMinh-<task> THBMinh`
+  - Mỗi agent chỉ sửa file thuộc task của mình; hai agent không sửa cùng file; không sửa working tree chính khi agent khác đang chạy.
+- **Khi hoàn thành task**:
+  1. Commit trong worktree → `git checkout THBMinh && git merge --no-ff THBMinh-<task>`, giải quyết conflict, chạy build/test.
+  2. `git push origin THBMinh`.
+  3. Merge vào dev: `git checkout dev && git pull && git merge --no-ff THBMinh && git push origin dev`, rồi quay lại `THBMinh`.
+  4. Dọn dẹp: `git worktree remove <path>` và `git branch -d THBMinh-<task>`.
