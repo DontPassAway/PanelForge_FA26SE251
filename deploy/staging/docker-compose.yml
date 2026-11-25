@@ -2,10 +2,16 @@
 # Biến ${...} lấy từ /opt/panelforge/.env (bootstrap.sh sinh, chmod 600). Không commit .env.
 name: panelforge-stg
 
+# Log json-file của Docker không tự xoay vòng: giới hạn 3 × 10 MB mỗi container để không đầy đĩa.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+
 services:
   caddy:
     image: caddy:2.11.2-alpine
     restart: unless-stopped
+    logging: *logging
     ports: ["80:80", "443:443"]
     environment:
       # ":80" = chỉ HTTP theo IP; đổi thành tên miền (vd panelforge-stg.duckdns.org) để Caddy tự cấp HTTPS.
@@ -20,9 +26,14 @@ services:
     build: ./src
     image: panelforge-api:stg
     restart: unless-stopped
+    logging: *logging
     ports: ["127.0.0.1:8080:8080"] # chỉ cho deploy.sh kiểm tra sức khoẻ; bên ngoài đi qua Caddy
     environment:
       ASPNETCORE_ENVIRONMENT: Staging
+      # Image không có appsettings.json (bị .gitignore): đặt mức log ở đây, bỏ log từng câu SQL.
+      Logging__LogLevel__Default: Information
+      Logging__LogLevel__Microsoft.AspNetCore: Warning
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
       # Sau Caddy: lấy IP thật của client (rate limit) và scheme https (cookie Secure).
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=panelforge;Username=panelforge;Password=${POSTGRES_PASSWORD}
@@ -54,6 +65,7 @@ services:
     build: { context: ./src/src, dockerfile: ../../Dockerfile.ai }
     image: panelforge-ai:stg
     restart: unless-stopped
+    logging: *logging
     environment:
       ASPNETCORE_URLS: http://+:5055
       AiService__ServiceKey: ${AI_SERVICE_KEY}
@@ -62,6 +74,7 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: panelforge
       POSTGRES_USER: panelforge
@@ -76,6 +89,7 @@ services:
   translate:
     image: libretranslate/libretranslate:v1.9.6
     restart: unless-stopped
+    logging: *logging
     environment:
       LT_LOAD_ONLY: en,vi
     volumes: [lt_models:/home/libretranslate/.local]
