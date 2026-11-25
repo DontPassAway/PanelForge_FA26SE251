@@ -184,16 +184,28 @@ builder.Services.AddControllers(options => options.Filters.Add<PanelForge.API.Co
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend
+// [THÊM MỚI] 1. Cấu hình chính sách CORS cấp quyền cho Frontend (hỗ trợ cả config động qua appsettings/env)
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:5174") // Cho phép cả React và Vite
+        policy.WithOrigins(configuredOrigins)
               .AllowAnyHeader()                     // Cho phép gửi mọi Header (như Authorization chứa JWT)
               .AllowAnyMethod()                     // Cho phép mọi method (GET, POST, PUT, DELETE, OPTIONS...)
               .AllowCredentials();                  // Cần thiết nếu dùng Cookie hoặc xác thực đặc thù
     });
+});
+
+// Hỗ trợ reverse proxy headers (X-Forwarded-For, X-Forwarded-Proto) khi deploy sau Nginx/Cloudflare/ALB
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                             | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // Chống dò mật khẩu / OTP: tối đa 10 request/phút/IP cho các endpoint auth ([EnableRateLimiting("auth")]).
@@ -243,6 +255,9 @@ app.UseSwaggerUI(options =>
 });
 
 //app.UseHttpsRedirection();
+
+// Nhận diện HTTPS/IP thực từ reverse proxy (Nginx, Traefik, Cloudflare, ALB)
+app.UseForwardedHeaders();
 
 // [THÊM MỚI] 2. Kích hoạt middleware CORS (Phải đặt TRƯỚC UseAuthentication)
 app.UseCors("AllowFrontend");

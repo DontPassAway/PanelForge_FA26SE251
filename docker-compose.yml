@@ -29,6 +29,8 @@ services:
       - SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}
     ports:
       - "7274:8080"
+    volumes:
+      - panelforge_assets:/app/App_Data
     depends_on:
       - postgres-db
       - translation-service
@@ -46,3 +48,4 @@ services:
 volumes:
   # Và đổi tên ở đây
   panelforge_data:
+  panelforge_assets:
