@@ -433,6 +433,7 @@ appsettings.json
 appsettings.*.json
 !appsettings.Example.json
 !appsettings.Development.Example.json
+!appsettings.Staging.Example.json
 **/firebase-key.json
 **/google-play-key.json
 
