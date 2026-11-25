@@ -57,6 +57,8 @@ Studio chưa khai thì `CreateTopupCommand` dùng tài khoản mặc định gi�
 - (Việc code còn mở) đưa tài khoản mặc định ra cấu hình, ví dụ `SePay:DefaultBank:{Bin,Name,AccountNo,AccountName}`, thay cho hằng số trong `CreateTopupCommand.cs`.
 
 ### Bước 4. Kiểm thử
+
+Hướng dẫn đầy đủ (local, giả lập, SePay Test mode, gỡ lỗi): `SEPAY_TESTING.md`. Tóm tắt:
 1. Gọi thử không cần chuyển tiền thật:
    ```bash
    curl -X POST https://<domain>/api/payments/sepay/webhook \
