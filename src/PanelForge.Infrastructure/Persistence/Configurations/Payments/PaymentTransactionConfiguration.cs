@@ -103,9 +103,11 @@ internal sealed class PaymentTransactionConfiguration : IEntityTypeConfiguration
                .HasColumnType("timestamptz")
                .IsRequired();
 
+        // Webhook SePay gửi lại / Producer duyệt tay cùng lúc: lần lưu sau thấy updated_at đã đổi → 409, không duyệt hai lần
         builder.Property(t => t.UpdatedAt)
                .HasColumnName("updated_at")
-               .HasColumnType("timestamptz");
+               .HasColumnType("timestamptz")
+               .IsConcurrencyToken();
 
         builder.Property(t => t.IsDeleted)
                .HasColumnName("is_deleted")

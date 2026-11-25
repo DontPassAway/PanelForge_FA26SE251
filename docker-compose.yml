@@ -27,15 +27,21 @@ services:
       - TranslationService__BaseUrl=http://translation-service:5000
       # API Key webhook SePay (đặt trong file .env cạnh compose, không commit). Để trống = tắt webhook (trả 503).
       - SePay__WebhookApiKey=${SEPAY_WEBHOOK_API_KEY:-}
+      # Tài khoản nhận tiền VietQR khi Studio chưa khai ngân hàng; phải trùng tài khoản liên kết SePay. Mặc định là tài khoản giả cho dev.
+      - SePay__DefaultBank__Bin=${SEPAY_DEFAULT_BANK_BIN:-970422}
+      - SePay__DefaultBank__Name=${SEPAY_DEFAULT_BANK_NAME:-MB Bank}
+      - SePay__DefaultBank__AccountNo=${SEPAY_DEFAULT_BANK_ACCOUNT_NO:-0123456789}
+      - SePay__DefaultBank__AccountName=${SEPAY_DEFAULT_BANK_ACCOUNT_NAME:-KOMAFORGE STUDIO}
       # TASK-354: AI service cùng mạng Docker. AI_SERVICE_KEY đặt trong .env (không commit), giống bên panelforge-ai.
       - AiService__ServiceUrl=http://panelforge-ai:5055
       - AiService__ServiceKey=${AI_SERVICE_KEY:-}
       # TASK-352: khoá Data Protection nằm trên volume để API key AI không mất khi dựng lại container
       - DataProtection__KeysPath=/app/dpkeys
-    volumes:
-      - panelforge_dpkeys:/app/dpkeys
     ports:
       - "7274:8080"
+    volumes:
+      - panelforge_assets:/app/App_Data
+      - panelforge_dpkeys:/app/dpkeys
     depends_on:
       - postgres-db
       - translation-service
@@ -65,5 +71,6 @@ services:
 volumes:
   # Và đổi tên ở đây
   panelforge_data:
+  panelforge_assets:
   # TASK-352: khoá Data Protection của API
   panelforge_dpkeys:

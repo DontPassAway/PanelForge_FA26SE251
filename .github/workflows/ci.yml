@@ -2,9 +2,9 @@ name: PanelForge CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "test-feature" ]
+    branches: [ "main", "stg", "dev", "trungkien" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "stg", "dev" ]
 
 permissions:
   contents: read
@@ -53,7 +53,7 @@ jobs:
     name: Build & Push Docker Image
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test-feature'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stg' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/trungkien')
 
     steps:
     - name: Check out code
@@ -78,6 +78,8 @@ jobs:
           type=ref,event=branch
           type=sha,format=short
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          type=raw,value=staging,enable=${{ github.ref == 'refs/heads/stg' }}
+          type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5

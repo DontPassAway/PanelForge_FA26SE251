@@ -43,6 +43,17 @@ public sealed class PublishEditionCommandHandler
         if (normLang is null)
             return Result<ChapterEditionDto>.Failure($"Mã ngôn ngữ '{cmd.LanguageCode}' không hợp lệ.", ResultErrorCodes.Validation);
 
+        // Ấn bản ngôn ngữ gốc phát hành cùng chương (PublishChapter đổi trạng thái chương → Catalog). Phát hành riêng ấn bản
+        // gốc khi chương chưa phát hành sẽ để chương kẹt ở ChapterApproved, Reader không thấy (BR-24, BR-34).
+        var originalLanguage = await _db.Series.AsNoTracking()
+            .Where(s => s.Id == chapter.SeriesId)
+            .Select(s => s.OriginalLanguage)
+            .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
+        if (normLang == ContentLanguages.Normalize(originalLanguage) && chapter.Status == ChapterStatus.ChapterApproved)
+            return Result<ChapterEditionDto>.Failure(
+                $"Ấn bản ngôn ngữ gốc '{normLang}' được phát hành cùng chương: Publisher dùng \"Phát hành chương\" để chương lên Catalog.",
+                ResultErrorCodes.Conflict);
+
         var edition = await _db.ChapterEditions
             .Include(e => e.TranslatorUser)
             .FirstOrDefaultAsync(e => e.ChapterId == cmd.ChapterId && e.LanguageCode == normLang, ct);

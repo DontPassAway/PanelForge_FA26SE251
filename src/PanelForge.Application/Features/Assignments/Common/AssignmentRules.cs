@@ -132,9 +132,9 @@ internal static class AssignmentRules
             return Result<WorkspaceRole>.Failure(
                 "Người nhận chưa chấp nhận lời mời vào Workspace nên chưa thể nhận việc.", ResultErrorCodes.Validation);
 
-        if (stage.AllowedRole is { } allowed && allowed != member.Role)
+        if (!stage.CanBeHeldBy(member.Role))
             return Result<WorkspaceRole>.Failure(
-                $"Stage '{stage.Name}' dành cho vai trò {allowed}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
+                $"Stage '{stage.Name}' dành cho vai trò {stage.AllowedRole}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
 
         return Result<WorkspaceRole>.Success(member.Role);
     }

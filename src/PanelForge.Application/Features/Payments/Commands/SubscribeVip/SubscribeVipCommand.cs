@@ -16,8 +16,13 @@ public sealed record SubscribeVipCommand(
 public sealed class SubscribeVipCommandHandler : IRequestHandler<SubscribeVipCommand, Result<SubscribeVipResponse>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly DefaultBankSettings _defaultBank;
 
-    public SubscribeVipCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public SubscribeVipCommandHandler(IPanelForgeDbContext db, DefaultBankSettings defaultBank)
+    {
+        _db = db;
+        _defaultBank = defaultBank;
+    }
 
     public async Task<Result<SubscribeVipResponse>> Handle(SubscribeVipCommand command, CancellationToken ct)
     {
@@ -56,9 +61,9 @@ public sealed class SubscribeVipCommandHandler : IRequestHandler<SubscribeVipCom
             type: PaymentTransactionType.VipSubscription,
             amountVnd: costVnd,
             qrImageUrl: "",
-            bankBin: "970422",
-            bankAccountNo: "0123456789",
-            bankAccountName: "KOMAFORGE STUDIO"
+            bankBin: _defaultBank.Bin,
+            bankAccountNo: _defaultBank.AccountNo,
+            bankAccountName: _defaultBank.AccountName
         );
         transaction.Approve(command.UserId, DateTime.UtcNow);
         _db.PaymentTransactions.Add(transaction);

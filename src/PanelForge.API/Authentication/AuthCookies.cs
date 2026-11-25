@@ -29,11 +29,17 @@ public static class AuthCookies
                 DateTimeOffset.UtcNow.Add(RefreshLifetime)));
     }
 
-    public static void Clear(HttpResponse response)
+    public static void Clear(HttpResponse response, HttpRequest? request = null)
     {
-        response.Cookies.Delete(Access, new CookieOptions { Path = "/api" });
-        response.Cookies.Delete(Refresh, new CookieOptions { Path = RefreshPath });
-        response.Cookies.Delete(Refresh, new CookieOptions { Path = LegacyRefreshPath }); // cookie cũ trước bản sửa path
+        var isHttps = request?.IsHttps ?? false;
+        var sameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax;
+        var deleteOptApi = new CookieOptions { Path = "/api", HttpOnly = true, Secure = isHttps, SameSite = sameSite };
+        var deleteOptRefresh = new CookieOptions { Path = RefreshPath, HttpOnly = true, Secure = isHttps, SameSite = sameSite };
+        var deleteOptLegacy = new CookieOptions { Path = LegacyRefreshPath, HttpOnly = true, Secure = isHttps, SameSite = sameSite };
+
+        response.Cookies.Delete(Access, deleteOptApi);
+        response.Cookies.Delete(Refresh, deleteOptRefresh);
+        response.Cookies.Delete(Refresh, deleteOptLegacy); // cookie cũ trước bản sửa path
     }
 
     // Header tuỳ chỉnh (trang khác không tự gắn được), hoặc request cùng origin – vd. Swagger UI trên chính API
@@ -42,12 +48,18 @@ public static class AuthCookies
         => !string.IsNullOrEmpty(request.Headers[CsrfHeader])
            || string.Equals(request.Headers["Sec-Fetch-Site"], "same-origin", StringComparison.OrdinalIgnoreCase);
 
-    private static CookieOptions Options(HttpRequest request, string path, DateTimeOffset? expires) => new()
+    private static CookieOptions Options(HttpRequest request, string path, DateTimeOffset? expires)
     {
-        HttpOnly = true,
-        Secure = request.IsHttps, // dev chạy http://localhost
-        SameSite = SameSiteMode.Lax,
-        Path = path,
-        Expires = expires
-    };
+        var isHttps = request.IsHttps;
+        return new()
+        {
+            HttpOnly = true,
+            Secure = isHttps, // dev chạy http://localhost
+            // Cross-site (FE và BE khác domain) yêu cầu SameSite=None + Secure=true trên HTTPS.
+            // Chạy local HTTP fallback SameSite=Lax vì trình duyệt từ chối SameSite=None nếu không Secure.
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = path,
+            Expires = expires
+        };
+    }
 }

@@ -1,0 +1,16 @@
+# PanelForge.AI (service chạy agent). Build context = thư mục src/ của repo (xem docker-compose.yml).
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /app
+COPY PanelForge.AI.Contracts/PanelForge.AI.Contracts.csproj PanelForge.AI.Contracts/
+COPY PanelForge.AI/PanelForge.AI.csproj PanelForge.AI/
+RUN dotnet restore PanelForge.AI/PanelForge.AI.csproj
+COPY PanelForge.AI.Contracts/ PanelForge.AI.Contracts/
+COPY PanelForge.AI/ PanelForge.AI/
+RUN dotnet publish PanelForge.AI/PanelForge.AI.csproj -c Release -o /out /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /app
+COPY --from=build /out .
+ENV ASPNETCORE_URLS=http://+:5055
+EXPOSE 5055
+ENTRYPOINT ["dotnet", "PanelForge.AI.dll"]
