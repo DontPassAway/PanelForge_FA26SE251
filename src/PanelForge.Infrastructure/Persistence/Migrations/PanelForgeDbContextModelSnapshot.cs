@@ -4078,6 +4078,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
 
@@ -4155,6 +4156,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("is_vip");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
 
