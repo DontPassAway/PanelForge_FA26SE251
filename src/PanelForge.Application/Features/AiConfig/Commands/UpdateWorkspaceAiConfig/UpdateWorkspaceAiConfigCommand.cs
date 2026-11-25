@@ -3,129 +3,58 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.AiConfig.Models;
-using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Workspaces;
 
 namespace PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
 
+/// <summary>
+/// Bật/tắt, quota, model của Studio. API dùng (chữ/ảnh) chọn qua SetWorkspaceAiProvider/SetWorkspaceAiImageProvider;
+/// TASK-350: không còn nhận Provider/ApiKey riêng theo Studio.
+/// </summary>
 public sealed record UpdateWorkspaceAiConfigCommand(
     Guid WorkspaceId,
-    string Provider,
-    string? ApiKey,
     bool IsEnabled,
     long MonthlyTokenQuota,
     IReadOnlyList<string> AllowedModels,
     long? MonthlyImageQuota = null
 ) : IRequest<Result<WorkspaceAiConfigDto>>;
 
-public sealed class UpdateWorkspaceAiConfigCommandHandler : IRequestHandler<UpdateWorkspaceAiConfigCommand, Result<WorkspaceAiConfigDto>>
+public sealed class UpdateWorkspaceAiConfigCommandHandler(
+    IPanelForgeDbContext db,
+    PanelForge.Application.Common.Interfaces.Services.IAiKeyProtector? protector = null)
+    : IRequestHandler<UpdateWorkspaceAiConfigCommand, Result<WorkspaceAiConfigDto>>
 {
-    private readonly IPanelForgeDbContext _dbContext;
-    private readonly IAiKeyProtector _keyProtector;
-    private readonly IAiProviderValidator _providerValidator;
-
-    public UpdateWorkspaceAiConfigCommandHandler(
-        IPanelForgeDbContext dbContext,
-        IAiKeyProtector keyProtector,
-        IAiProviderValidator providerValidator)
+    public async Task<Result<WorkspaceAiConfigDto>> Handle(UpdateWorkspaceAiConfigCommand request, CancellationToken ct)
     {
-        _dbContext = dbContext;
-        _keyProtector = keyProtector;
-        _providerValidator = providerValidator;
-    }
-
-    public async Task<Result<WorkspaceAiConfigDto>> Handle(UpdateWorkspaceAiConfigCommand request, CancellationToken cancellationToken)
-    {
-        var workspaceExists = await _dbContext.StudioWorkspaces
-            .AnyAsync(w => w.Id == request.WorkspaceId, cancellationToken);
-
-        if (!workspaceExists)
-        {
+        if (!await db.StudioWorkspaces.AnyAsync(w => w.Id == request.WorkspaceId, ct))
             return Result<WorkspaceAiConfigDto>.Failure($"Workspace {request.WorkspaceId} không tồn tại.");
-        }
 
-        string? encryptedKey = null;
-
-        // UC-02 Alternate Flow: Kiểm tra credentials khi Administrator nhập/thay đổi API Key
-        if (!string.IsNullOrWhiteSpace(request.ApiKey))
-        {
-            var validationResult = await _providerValidator.ValidateCredentialsAsync(
-                request.Provider, request.ApiKey, cancellationToken);
-
-            if (!validationResult.IsSuccess)
-            {
-                return Result<WorkspaceAiConfigDto>.Failure(
-                    $"Xác thực thông tin cấu hình AI Provider thất bại: {validationResult.ErrorMessage}");
-            }
-
-            // UC-02 / NFR-03: Mã hóa API Key trước khi lưu trữ
-            encryptedKey = _keyProtector.Protect(request.ApiKey);
-        }
-
-        var config = await _dbContext.WorkspaceAiConfigs
-            .FirstOrDefaultAsync(c => c.WorkspaceId == request.WorkspaceId, cancellationToken);
+        var config = await db.WorkspaceAiConfigs.FirstOrDefaultAsync(c => c.WorkspaceId == request.WorkspaceId, ct);
 
         var allowedModels = request.AllowedModels is { Count: > 0 }
             ? request.AllowedModels
             : (config != null
                 ? (JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [.. WorkspaceAiConfig.DefaultAllowedModels])
                 : [.. WorkspaceAiConfig.DefaultAllowedModels]);
-
         var modelsJson = JsonSerializer.Serialize(allowedModels);
 
         if (config == null)
         {
-            config = WorkspaceAiConfig.Create(
-                request.WorkspaceId,
-                request.Provider,
-                encryptedKey,
-                request.MonthlyTokenQuota,
-                modelsJson
-            );
-            config.UpdateSettings(
-                request.Provider,
-                encryptedKey,
-                request.IsEnabled,
-                request.MonthlyTokenQuota,
-                modelsJson
-            );
-            _dbContext.WorkspaceAiConfigs.Add(config);
+            config = WorkspaceAiConfig.Create(request.WorkspaceId);
+            db.WorkspaceAiConfigs.Add(config);
         }
-        else
-        {
-            config.UpdateSettings(
-                request.Provider,
-                encryptedKey,
-                request.IsEnabled,
-                request.MonthlyTokenQuota,
-                modelsJson
-            );
-        }
+        // provider rỗng = giữ nguyên, apiKey null = không đụng cột key cũ
+        config.UpdateSettings("", null, request.IsEnabled, request.MonthlyTokenQuota, modelsJson);
 
         // V1.2: null = giữ nguyên quota ảnh hiện tại
         if (request.MonthlyImageQuota.HasValue)
             config.SetMonthlyImageQuota(request.MonthlyImageQuota.Value);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(ct);
 
-        return Result<WorkspaceAiConfigDto>.Success(new WorkspaceAiConfigDto(
-            Id: config.Id,
-            WorkspaceId: config.WorkspaceId,
-            Provider: config.Provider,
-            HasApiKey: !string.IsNullOrWhiteSpace(config.ApiKeyEncrypted),
-            IsEnabled: config.IsEnabled,
-            MonthlyTokenQuota: config.MonthlyTokenQuota,
-            UsedTokensCurrentMonth: config.UsedTokensCurrentMonth,
-            AllowedModels: allowedModels,
-            LastResetAt: config.LastResetAt,
-            CreatedAt: config.CreatedAt,
-            UpdatedAt: config.UpdatedAt,
-            MonthlyImageQuota: config.MonthlyImageQuota,
-            UsedImagesCurrentMonth: config.UsedImagesCurrentMonth,
-            ApiKeyUsable: !string.IsNullOrEmpty(_keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty)),
-            ProviderCredentialId: config.ProviderCredentialId,
-            ImageProviderCredentialId: config.ImageProviderCredentialId
-        ));
+        return Result<WorkspaceAiConfigDto>.Success(
+            await GetWorkspaceAiConfigQueryHandler.ToDtoAsync(db, config, [.. allowedModels], ct, protector));
     }
 }

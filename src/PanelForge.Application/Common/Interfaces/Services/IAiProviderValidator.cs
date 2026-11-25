@@ -13,6 +13,9 @@ public interface IAiProviderValidator
     /// <summary>Kiểm tra API token Cloudflare Workers AI với Account ID.</summary>
     Task<Result<bool>> ValidateCloudflareAsync(string accountId, string apiToken, CancellationToken cancellationToken = default);
 
+    /// <summary>Gọi thử trực tiếp cho nút "Kiểm tra" của Admin: báo lỗi rõ cả khi bị giới hạn 429 hoặc lỗi máy chủ 5xx.</summary>
+    Task<Result<bool>> ProbeAsync(string providerType, string? accountId, string apiKey, CancellationToken cancellationToken = default);
+
     /// <summary>Danh sách model sinh chữ và sinh ảnh của tài khoản Cloudflare (để Admin chọn thay vì gõ tay).</summary>
     Task<Result<IReadOnlyList<AiProviderModelDto>>> ListCloudflareModelsAsync(string accountId, string apiToken, CancellationToken cancellationToken = default);
 }

@@ -20,8 +20,6 @@ public sealed record WorkspaceAiConfigDto(
 );
 
 public sealed record UpdateWorkspaceAiConfigRequest(
-    string Provider,
-    string? ApiKey,
     bool IsEnabled,
     long MonthlyTokenQuota,
     IReadOnlyList<string> AllowedModels,

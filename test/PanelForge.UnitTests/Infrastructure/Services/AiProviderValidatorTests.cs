@@ -27,11 +27,32 @@ public class AiProviderValidatorTests
     [InlineData(HttpStatusCode.TooManyRequests, true)]
     [InlineData(HttpStatusCode.BadRequest, false)]
     [InlineData(HttpStatusCode.Forbidden, false)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, false)]
     public async Task Gemini_UsesGoogleAnswer(HttpStatusCode status, bool ok)
     {
         var handler = new Handler(status);
         (await Create(handler).ValidateCredentialsAsync("Google Gemini", " key-123 ")).IsSuccess.Should().Be(ok);
         handler.Key.Should().Be("key-123");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, true)]
+    [InlineData(HttpStatusCode.TooManyRequests, false)]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    public async Task ProbeAsync_Reports429And5xxHonestlyForTestButton(HttpStatusCode status, bool ok)
+    {
+        var handler = new Handler(status);
+        (await Create(handler).ProbeAsync("Gemini", null, "key-123")).IsSuccess.Should().Be(ok);
+    }
+
+    [Theory]
+    [InlineData("••••abcd")]
+    [InlineData("key with spaces")]
+    public async Task MaskedOrInvalidToken_IsRejectedWithoutFormatException(string badToken)
+    {
+        var validator = new AiProviderValidator(Mock.Of<IHttpClientFactory>());
+        (await validator.ValidateCredentialsAsync("Gemini", badToken)).IsSuccess.Should().BeFalse();
+        (await validator.ValidateCloudflareAsync("acc-1", badToken)).IsSuccess.Should().BeFalse();
     }
 
     [Fact]

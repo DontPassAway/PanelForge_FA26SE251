@@ -28,7 +28,7 @@ internal static class AiWorkflowPolicy
     /// </summary>
     public static WorkspaceRole[] AcceptRoles(AiSuggestionKind kind) => kind switch
     {
-        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite => [WorkspaceRole.Writer],
+        AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.ScriptLineInsert => [WorkspaceRole.Writer],
         AiSuggestionKind.Lettering => [WorkspaceRole.Letterer],
         AiSuggestionKind.BibleStub => [WorkspaceRole.Writer],
         AiSuggestionKind.ImpactRipple => [WorkspaceRole.Producer],
@@ -41,7 +41,7 @@ internal static class AiWorkflowPolicy
 
     public static WorkspaceRole[] ReviewRoles(AiSuggestionKind kind) => kind switch
     {
-        AiSuggestionKind.Script => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor],
+        AiSuggestionKind.Script or AiSuggestionKind.ScriptLineInsert => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Editor],
         AiSuggestionKind.Layout => [WorkspaceRole.Producer, WorkspaceRole.Writer, WorkspaceRole.Artist, WorkspaceRole.Editor],
         AiSuggestionKind.ImagePrompt => [WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Editor],
         AiSuggestionKind.SeriesMetadata => [WorkspaceRole.Producer, WorkspaceRole.Publisher],
@@ -68,7 +68,7 @@ internal static class AiWorkflowPolicy
     /// <summary>Vai trò được gọi từng task Copilot (Backend tự xác định, không lấy từ client).</summary>
     public static WorkspaceRole[] CopilotRoles(string task) => task switch
     {
-        CopilotTasks.WriterRewrite => [WorkspaceRole.Producer, WorkspaceRole.Writer],
+        CopilotTasks.WriterRewrite or CopilotTasks.WriterNextLine => [WorkspaceRole.Producer, WorkspaceRole.Writer],
         CopilotTasks.LettererShorten => [WorkspaceRole.Letterer],
         // Publisher chỉ kiểm duyệt thuần túy, không dùng AI → chỉ Producer xin gợi ý metadata.
         CopilotTasks.PublisherMetadata => [WorkspaceRole.Producer],

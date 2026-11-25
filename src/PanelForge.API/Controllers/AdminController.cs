@@ -43,6 +43,7 @@ using PanelForge.Application.Features.AiConfig.Commands.UpdateAiProviderCredenti
 using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.TestAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiProvider;
+using PanelForge.Application.Features.AiConfig.Commands.SetDefaultAiProvider;
 using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiImageProvider;
 using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderCredentials;
 using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderModels;
@@ -348,7 +349,7 @@ public class AdminController : ControllerBase
 
     /// <summary>
     /// PUT /api/admin/workspaces/{workspaceId}/ai-config
-    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace bởi Administrator (UC-02).
+    /// Bật/tắt AI, Models được phép và quota theo Workspace (UC-02). API chọn qua ai-provider và ai-image-provider.
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/ai-config")]
     [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
@@ -359,8 +360,6 @@ public class AdminController : ControllerBase
     {
         var command = new UpdateWorkspaceAiConfigCommand(
             WorkspaceId: workspaceId,
-            Provider: request.Provider,
-            ApiKey: request.ApiKey,
             IsEnabled: request.IsEnabled,
             MonthlyTokenQuota: request.MonthlyTokenQuota,
             AllowedModels: request.AllowedModels,
@@ -392,6 +391,20 @@ public class AdminController : ControllerBase
     {
         var result = await _mediator.Send(new CreateAiProviderCredentialCommand(request), cancellationToken);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/ai-providers/default — TASK-355: API mặc định cho Studio chưa tự chọn API.
+    /// Body { kind: "text"|"image", providerCredentialId } (null = bỏ mặc định). Trả lại danh sách API.
+    /// </summary>
+    [HttpPut("ai-providers/default")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderCredentialDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetDefaultAiProvider([FromBody] SetDefaultAiProviderRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetDefaultAiProviderCommand(request.Kind, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var list = await _mediator.Send(new GetAiProviderCredentialsQuery(), cancellationToken);
+        return list.IsSuccess ? Ok(list.Value) : ToError(list);
     }
 
     /// <summary>PUT /api/admin/ai-providers/{id} — sửa API AI (ApiKey trống = giữ key cũ).</summary>
@@ -435,7 +448,7 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = key Gemini riêng).
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = bỏ chọn).
     /// Trả lại cấu hình AI của Workspace.
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/ai-provider")]

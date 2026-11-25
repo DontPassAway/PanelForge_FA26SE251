@@ -87,24 +87,11 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (promptRevision is null || panelPrompt is null)
             return Fail("Panel chưa có prompt ảnh đã duyệt. Chạy nhiệm vụ 'Prompt ảnh cho panel' và Accept trước.", ResultErrorCodes.Validation);
 
-        // ── Gate: AI bật, quota ảnh + token, model được phép, số job ảnh đồng thời của Series ──
+        // ── Gate: AI bật, CheckAvailabilityAsync (reset tháng + token quota), quota ảnh, số job đồng thời TRƯỚC khi giải mã key ──
         var config = await _db.WorkspaceAiConfigs.FirstOrDefaultAsync(c => c.WorkspaceId == series.WorkspaceId, ct);
         if (config is null || !config.IsEnabled)
             return Fail("Tính năng AI chưa được bật cho Workspace này.", ResultErrorCodes.AiDisabled);
-        if (!config.HasImageQuotaFor(1))
-            return Fail($"Workspace đã dùng hết quota ảnh tháng này ({config.UsedImagesCurrentMonth}/{config.MonthlyImageQuota}).",
-                ResultErrorCodes.AiQuotaExceeded);
 
-        var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
-        if (provider is null)
-            return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
-        // Credential Admin gắn cho Workspace có model ảnh → dùng provider/model/key của nó thay cấu hình hệ thống
-        var cred = await AiCredentials.ResolveImageAsync(_db, _keyProtector, config, _settings.GeminiModel, ct);
-        if (config.ImageProviderCredentialId is not null && (cred.ImageModel is null || string.IsNullOrEmpty(cred.ApiKey)))
-            return Fail("API sinh ảnh của Studio đang tắt, đã xoá hoặc chưa có model ảnh. Admin hãy kiểm tra mục Cấu hình AI.",
-                ResultErrorCodes.AiUnavailable);
-        var useCred = cred.FromCredential && cred.ImageModel is not null;
-        if (useCred) (provider, model) = (cred.Provider, cred.ImageModel!);
         var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
         if (!availability.IsAvailable)
         {
@@ -113,9 +100,14 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             return Fail(availability.Message ?? "AI không khả dụng.",
                 availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
-        var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-        if (!useCred && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
-            return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
+
+        if (!config.HasImageQuotaFor(1))
+            return Fail($"Workspace đã dùng hết quota ảnh tháng này ({config.UsedImagesCurrentMonth}/{config.MonthlyImageQuota}).",
+                ResultErrorCodes.AiQuotaExceeded);
+
+        var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
+        if (provider is null)
+            return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
 
         // ponytail: đếm trên DB nên 2 request song song có thể cùng lọt ở ngưỡng; đủ để chặn lạm dụng.
         var since = DateTime.UtcNow.AddSeconds(-(_settings.ImageTimeoutSeconds + 30));
@@ -125,6 +117,18 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (running >= _settings.ImageJobsPerSeries)
             return Fail($"Series đang có {running} ảnh đang sinh (tối đa {_settings.ImageJobsPerSeries}). Chờ xong rồi thử lại.",
                 ResultErrorCodes.AiQuotaExceeded);
+
+        // Chỉ giải mã key SAU khi đã qua toàn bộ cổng bật/tắt + quota + giới hạn job
+        var cred = await AiCredentials.ResolveImageAsync(_db, _keyProtector, config, _settings.GeminiModel, ct);
+        if (config.ImageProviderCredentialId is not null && (cred.ImageModel is null || string.IsNullOrEmpty(cred.ApiKey)))
+            return Fail("API sinh ảnh của Studio đang tắt, đã xoá hoặc chưa có model ảnh. Admin hãy kiểm tra mục Cấu hình AI.",
+                ResultErrorCodes.AiUnavailable);
+        var useCred = cred.FromCredential && cred.ImageModel is not null;
+        if (useCred) (provider, model) = (cred.Provider, cred.ImageModel!);
+
+        var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
+        if (!useCred && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
         var prompt = ThumbnailRules.WithStyle(panelPrompt.Prompt, _settings.ThumbnailStylePrefix);
         if (!string.IsNullOrWhiteSpace(cmd.Instruction)) prompt = $"{prompt}\n\nYêu cầu thêm: {cmd.Instruction.Trim()}";

@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -11,19 +12,33 @@ namespace PanelForge.Application.Features.AiConfig.Common;
 
 /// <summary>Provider/model/key thực sự dùng cho một lần gọi AI. ApiKey đã giải mã: chỉ giữ trong bộ nhớ, không log.</summary>
 public sealed record ResolvedAiCredential(
-    string Provider, string TextModel, string? ImageModel, string? ApiKey, string? AccountId, bool FromCredential);
+    string Provider, string TextModel, string? ImageModel, string? ApiKey, string? AccountId, bool FromCredential)
+{
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append($"Provider = {Provider}, TextModel = {TextModel}, ImageModel = {ImageModel}, ApiKey = ***, AccountId = {AccountId}, FromCredential = {FromCredential}");
+        return true;
+    }
+}
 
 /// <summary>
-/// Một nơi duy nhất chọn API cho Workspace: credential Admin gắn (bảng ai_provider_credentials) nếu có,
-/// không thì key Gemini cũ trên WorkspaceAiConfig. Credential đã tắt/xoá → không có key (không tự rơi về key cũ).
+/// Một nơi duy nhất chọn API cho Workspace: chỉ credential Admin gắn (bảng ai_provider_credentials).
+/// Studio chưa chọn → API mặc định của Admin (TASK-355). Không có / đã tắt / đã xoá → không có key
+/// (TASK-350: bỏ key Gemini riêng theo Studio).
 /// </summary>
 public static class AiCredentials
 {
+    /// <summary>Id API chữ thực sự dùng: Studio tự chọn, không thì API mặc định đang bật. Null = không có API.</summary>
+    public static async Task<Guid?> EffectiveTextIdAsync(IPanelForgeDbContext db, WorkspaceAiConfig config, CancellationToken ct) =>
+        config.ProviderCredentialId
+        ?? await db.AiProviderCredentials.AsNoTracking().Where(x => x.IsDefaultText && x.IsEnabled)
+            .Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+
     public static async Task<ResolvedAiCredential> ResolveAsync(IPanelForgeDbContext db, IAiKeyProtector protector,
         WorkspaceAiConfig config, string defaultTextModel, CancellationToken ct)
     {
-        if (config.ProviderCredentialId is not { } id)
-            return new(AiProtocol.ProviderGemini, defaultTextModel, null, Unprotect(protector, config.ApiKeyEncrypted), null, false);
+        if (await EffectiveTextIdAsync(db, config, ct) is not { } id)
+            return new(AiProtocol.ProviderGemini, defaultTextModel, null, null, null, true);
 
         var c = await db.AiProviderCredentials.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.IsEnabled, ct);
         return c is null
@@ -32,13 +47,17 @@ public static class AiCredentials
     }
 
     /// <summary>
-    /// API dùng cho sinh ảnh: API ảnh riêng của Workspace nếu đã gán, không thì giống <see cref="ResolveAsync"/>.
-    /// API ảnh riêng đã tắt/xoá hoặc không có model ảnh → ImageModel/ApiKey null để handler chặn, không tự rơi về API khác.
+    /// API dùng cho sinh ảnh: API ảnh riêng của Workspace nếu đã gán, không thì API ảnh mặc định (TASK-355),
+    /// không có nữa thì giống <see cref="ResolveAsync"/>.
+    /// API ảnh đã chọn bị tắt/xoá hoặc không có model ảnh → ImageModel/ApiKey null để handler chặn, không tự rơi về API khác.
     /// </summary>
     public static async Task<ResolvedAiCredential> ResolveImageAsync(IPanelForgeDbContext db, IAiKeyProtector protector,
         WorkspaceAiConfig config, string defaultTextModel, CancellationToken ct)
     {
-        if (config.ImageProviderCredentialId is not { } id)
+        var imageId = config.ImageProviderCredentialId
+            ?? await db.AiProviderCredentials.AsNoTracking().Where(x => x.IsDefaultImage && x.IsEnabled)
+                .Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+        if (imageId is not { } id)
             return await ResolveAsync(db, protector, config, defaultTextModel, ct);
 
         var c = await db.AiProviderCredentials.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.IsEnabled, ct);
@@ -67,14 +86,30 @@ public static class AiCredentials
         return null;
     }
 
-    /// <summary>Gọi thử provider; 429/5xx không kết luận key sai nên vẫn cho qua (như UC-02).</summary>
+    /// <summary>Kiểm tra định dạng key thô trước khi gắn vào HTTP header (chặn chuỗi mask "••••" hoặc ký tự ngoài ASCII in được).</summary>
+    public static string? ValidateApiKey(string? apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey)) return "API key không được để trống.";
+        var trimmed = apiKey.Trim();
+        if (trimmed.StartsWith("••••", StringComparison.Ordinal))
+            return "Không thể lưu chuỗi gợi ý '••••'. Hãy nhập API key gốc hoặc để trống khi sửa để giữ key cũ.";
+        if (trimmed.Length > 512 || trimmed.Any(c => c is < '!' or > '~'))
+            return "API key chứa khoảng trắng hoặc ký tự không hợp lệ.";
+        return null;
+    }
+
+    /// <summary>Gọi thử provider; 429 vẫn cho qua khi lưu (key đã qua xác thực), 5xx từ chối.</summary>
     public static Task<Result<bool>> CheckKeyAsync(IAiProviderValidator validator, string providerType, string? accountId,
         string apiKey, CancellationToken ct) =>
         providerType == AiProviderCredential.Cloudflare
             ? validator.ValidateCloudflareAsync(accountId!.Trim(), apiKey.Trim(), ct)
             : validator.ValidateCredentialsAsync(AiProviderCredential.Gemini, apiKey.Trim(), ct);
 
-    public static AiProviderCredentialDto ToDto(AiProviderCredential c, IAiKeyProtector protector, int workspaceCount) =>
-        new(c.Id, c.Name, c.ProviderType, c.AccountId, KeyHint(Unprotect(protector, c.ApiKeyEncrypted)), c.TextModel,
-            c.ImageModel, c.IsEnabled, workspaceCount, c.CreatedAt, c.UpdatedAt);
+    public static AiProviderCredentialDto ToDto(AiProviderCredential c, IAiKeyProtector protector, int workspaceCount)
+    {
+        var raw = Unprotect(protector, c.ApiKeyEncrypted);
+        return new(c.Id, c.Name, c.ProviderType, c.AccountId, KeyHint(raw), c.TextModel,
+            c.ImageModel, c.IsEnabled, workspaceCount, c.CreatedAt, c.UpdatedAt, c.IsDefaultText, c.IsDefaultImage,
+            KeyDecryptable: raw is not null);
+    }
 }

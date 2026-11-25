@@ -10,8 +10,10 @@ public static class CopilotTasks
     public const string PublisherMetadata = "publisher.metadata";
     public const string BibleStubDraft = "bible.stub_draft";
     public const string ImpactRipple = "impact.ripple";
+    /// <summary>TASK-358: viết MỘT dòng kịch bản mới (thoại / SFX / hành động) chèn sau một dòng trong Scene.</summary>
+    public const string WriterNextLine = "writer.next_line";
 
-    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata, BibleStubDraft, ImpactRipple];
+    public static readonly string[] All = [WriterRewrite, LettererShorten, PublisherMetadata, BibleStubDraft, ImpactRipple, WriterNextLine];
     /// <summary>Task làm trên MỘT dòng thoại (cần Line); còn lại làm ở cấp Series (cần Series).</summary>
     public static bool IsLineTask(string task) => task is WriterRewrite or LettererShorten;
 }
@@ -30,7 +32,8 @@ public sealed record CopilotRequest(
     CopilotSeriesContext? Series = null,
     BibleStubContext? Stub = null,
     ImpactRippleContext? Ripple = null,
-    string? AccountId = null)
+    string? AccountId = null,
+    NextLineContext? NextLine = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {
@@ -75,7 +78,8 @@ public sealed record CopilotResponse(
     string? ErrorMessage,
     ReleaseMetadata? Metadata = null,
     BibleStubDraft? Stub = null,
-    string? ImpactDecision = null);
+    string? ImpactDecision = null,
+    string? Speaker = null);
 
 public sealed record ImpactLineChange(string Type, string? Label, string? Before, string? After);
 public sealed record ImpactRippleContext(string StageName, string Role, int PageNumber, IReadOnlyList<ImpactLineChange> Changes);
@@ -202,6 +206,65 @@ public static class CopilotRules
         }
         else if (text.Length > Math.Max(source.Length * 2, 200))
             errors.Add("text dài bất thường so với bản gốc.");
+        return errors;
+    }
+}
+
+/// <summary>
+/// TASK-358: ngữ cảnh cho writer.next_line. Kind: Dialogue | Sfx | Action. AllowedSpeakers = tên nhân vật trong Bible
+/// (Writer đã chọn người nói thì chỉ còn đúng một tên). Before/After = các dòng quanh vị trí chèn, đã định dạng sẵn.
+/// </summary>
+public sealed record NextLineContext(
+    string Kind,
+    IReadOnlyList<string> AllowedSpeakers,
+    string SceneHeading,
+    string? SceneSummary,
+    IReadOnlyList<string> Before,
+    IReadOnlyList<string> After);
+
+/// <summary>Payload của AiSuggestion kind ScriptLineInsert. Accept tạo một ScriptLine mới sau AfterLineId (null = cuối Scene).</summary>
+public sealed record NextLineSuggestion(
+    int SchemaVersion,
+    Guid RunId,
+    Guid SceneId,
+    Guid? AfterLineId,
+    string Kind,
+    string? Speaker,
+    string Text,
+    string Reason,
+    IReadOnlyList<string> AllowedSpeakers);
+
+public static class NextLineRules
+{
+    public const string Dialogue = "Dialogue", Sfx = "Sfx", Action = "Action";
+    public static readonly string[] Kinds = [Dialogue, Sfx, Action];
+    public const int MaxChars = 300, MaxSfxChars = 40;
+
+    public static string? NormalizeKind(string? kind) =>
+        Kinds.FirstOrDefault(k => string.Equals(k, kind?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Tên người nói khớp danh sách (không phân biệt hoa thường) → trả đúng cách viết trong Bible.</summary>
+    public static string? MatchSpeaker(string? speaker, IEnumerable<string> allowed) =>
+        string.IsNullOrWhiteSpace(speaker) ? null
+            : allowed.FirstOrDefault(a => string.Equals(a.Trim(), speaker.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Kiểm tra tất định dòng mới; dùng chung ở AI service (trước khi trả) và Backend (khi tạo đề xuất và khi Accept).</summary>
+    public static IReadOnlyList<string> Validate(string kind, string? speaker, string? text, IReadOnlyCollection<string> allowedSpeakers)
+    {
+        var errors = new List<string>();
+        var t = text?.Trim() ?? "";
+        if (NormalizeKind(kind) is not { } k) { errors.Add($"kind phải là {string.Join(", ", Kinds)}."); return errors; }
+        var max = k == Sfx ? MaxSfxChars : MaxChars;
+        if (t.Length == 0) errors.Add("text rỗng.");
+        else if (t.Length > max) errors.Add($"text dài quá {max} ký tự.");
+        if (k == Dialogue)
+        {
+            if (MatchSpeaker(speaker, allowedSpeakers) is null)
+                errors.Add(allowedSpeakers.Count == 0
+                    ? "Series Bible chưa có nhân vật nào để làm người nói."
+                    : $"speaker phải là một trong: {string.Join(", ", allowedSpeakers)}.");
+        }
+        else if (!string.IsNullOrWhiteSpace(speaker)) errors.Add($"Dòng {k} không có người nói (speaker phải null).");
         return errors;
     }
 }

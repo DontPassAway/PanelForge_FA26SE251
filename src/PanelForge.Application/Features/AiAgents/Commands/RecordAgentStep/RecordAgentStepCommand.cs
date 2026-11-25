@@ -197,7 +197,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
         var record = await _usage.RecordAsync(new AiUsageEntry(
             run.WorkspaceId, $"AiAgents.{step.Agent}", status, step.Model,
             step.PromptTokens ?? 0, step.CompletionTokens ?? 0, null, step.ErrorMessage, step.DurationMs,
-            run.RequestedByUserId), ct);
+            run.RequestedByUserId, Provider: step.Provider), ct);
         step.LinkUsageRecord(record.Id);
 
         if (run.IsActive)

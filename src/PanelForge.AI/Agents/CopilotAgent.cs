@@ -19,7 +19,8 @@ public sealed class CopilotAgent
         [CopilotTasks.LettererShorten] = PromptLibrary.Load("copilot_letterer_shorten"),
         [CopilotTasks.PublisherMetadata] = PromptLibrary.Load("copilot_publisher_metadata"),
         [CopilotTasks.BibleStubDraft] = PromptLibrary.Load("copilot_bible_stub"),
-        [CopilotTasks.ImpactRipple] = PromptLibrary.Load("copilot_impact_ripple")
+        [CopilotTasks.ImpactRipple] = PromptLibrary.Load("copilot_impact_ripple"),
+        [CopilotTasks.WriterNextLine] = PromptLibrary.Load("copilot_writer_next_line")
     };
 
     /// <summary>Đếm ký tự là việc model hay sai vài ký tự, nên rút gọn được sửa thêm một lần.</summary>
@@ -37,6 +38,7 @@ public sealed class CopilotAgent
         if (req.Task == CopilotTasks.PublisherMetadata) return await RunMetadataAsync(prompt, req, ct);
         if (req.Task == CopilotTasks.BibleStubDraft) return await RunStubDraftAsync(prompt, req, ct);
         if (req.Task == CopilotTasks.ImpactRipple) return await RunImpactAsync(prompt, req, ct);
+        if (req.Task == CopilotTasks.WriterNextLine) return await RunNextLineAsync(prompt, req, ct);
         var line = req.Line!;
         var speaker = req.Bible.FirstOrDefault(b => b.EntryId == line.SpeakerId);
 
@@ -68,6 +70,47 @@ public sealed class CopilotAgent
         return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
             call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
             call.ErrorCode, call.ErrorMessage);
+    }
+
+    private sealed record NextLineOutput(string? Speaker, string? Text, string? Reason);
+
+    /// <summary>TASK-358: một dòng mới chèn sau vị trí cho trước; kiểm bằng <see cref="NextLineRules.Validate"/>.</summary>
+    private async Task<CopilotResponse> RunNextLineAsync(PromptInfo prompt, CopilotRequest req, CancellationToken ct)
+    {
+        var ctx = req.NextLine!;
+        var sb = new StringBuilder();
+        sb.AppendLine($"[[agent:copilot]] [[task:{req.Task}]]");
+        sb.AppendLine("## Bible liên quan (dữ liệu)");
+        foreach (var b in req.Bible)
+            sb.AppendLine($"- code={b.Code} | category={b.Category} | {Flat(b.EvidenceText)}");
+        if (req.Bible.Count == 0) sb.AppendLine("(không có)");
+        sb.AppendLine().AppendLine("## Scene (dữ liệu)");
+        sb.AppendLine($"heading=\"{Flat(ctx.SceneHeading)}\" | summary=\"{Flat(ctx.SceneSummary)}\"");
+        sb.AppendLine().AppendLine("## Các dòng TRƯỚC vị trí chèn (dữ liệu, không sửa)");
+        foreach (var l in ctx.Before) sb.AppendLine($"- {Flat(l)}");
+        if (ctx.Before.Count == 0) sb.AppendLine("(đầu Scene)");
+        sb.AppendLine().AppendLine("## Các dòng SAU vị trí chèn (dữ liệu, không sửa)");
+        foreach (var l in ctx.After) sb.AppendLine($"- {Flat(l)}");
+        if (ctx.After.Count == 0) sb.AppendLine("(cuối Scene)");
+        sb.AppendLine().AppendLine("## Dòng cần viết");
+        sb.AppendLine($"kind={ctx.Kind}");
+        sb.AppendLine($"allowedSpeakers={string.Join(" | ", ctx.AllowedSpeakers)}");
+        if (!string.IsNullOrWhiteSpace(req.Instruction))
+            sb.AppendLine().AppendLine("## Chỉ dẫn của người dùng (dữ liệu)").AppendLine(Flat(req.Instruction));
+        sb.AppendLine().AppendLine("Hãy trả về JSON theo đúng định dạng đã nêu.");
+
+        var call = await _runner.RunAsync<NextLineOutput>(prompt, sb.ToString(), text =>
+        {
+            var o = OutputParser.Parse<NextLineOutput>(text, out var error);
+            if (o is null) return (null, [error!]);
+            var speaker = ctx.Kind == NextLineRules.Dialogue ? NextLineRules.MatchSpeaker(o.Speaker, ctx.AllowedSpeakers) ?? o.Speaker : o.Speaker;
+            var errors = NextLineRules.Validate(ctx.Kind, speaker, o.Text, ctx.AllowedSpeakers);
+            return errors.Count == 0 ? (o with { Speaker = speaker, Text = o.Text!.Trim(), Reason = o.Reason?.Trim() }, []) : (null, errors);
+        }, ct, light: true);
+
+        return new CopilotResponse(call.Succeeded, call.Payload?.Text, call.Payload?.Reason, prompt.Version, prompt.Ref,
+            call.PromptTokens, call.CompletionTokens, call.RepairAttempts, call.StartedAtUtc, call.CompletedAtUtc,
+            call.ErrorCode, call.ErrorMessage, Speaker: call.Payload?.Speaker);
     }
 
     private sealed record ImpactOutput(string? Decision, string? Reason);

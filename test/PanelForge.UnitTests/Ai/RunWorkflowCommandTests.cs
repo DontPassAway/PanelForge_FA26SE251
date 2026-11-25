@@ -158,18 +158,6 @@ public class RunWorkflowCommandTests
     }
 
     [Fact]
-    public async Task Run_GeminiMode_ModelNotAllowedForWorkspace_IsRejected()
-    {
-        var h = await AiHarness.CreateAsync();
-        h.Settings.GeminiModel = "gemini-9-ultra";
-
-        var result = await h.RunHandler().Handle(h.RunCommand(), default);
-
-        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        result.ErrorMessage.Should().Contain("gemini-9-ultra");
-    }
-
-    [Fact]
     public async Task GetRun_AndSuggestions_RequireMembership_AndScopeToSeries()
     {
         var h = await AiHarness.CreateAsync();

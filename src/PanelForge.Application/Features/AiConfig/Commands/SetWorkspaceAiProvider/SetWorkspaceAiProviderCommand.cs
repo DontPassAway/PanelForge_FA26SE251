@@ -6,7 +6,7 @@ using PanelForge.Domain.Entities.Workspaces;
 
 namespace PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiProvider;
 
-/// <summary>Admin chọn API AI cho Workspace; null = quay về key Gemini riêng của Workspace. Quota/bật-tắt giữ nguyên.</summary>
+/// <summary>Admin chọn API AI cho Workspace; null = bỏ chọn (Studio không gọi được AI chữ cho tới khi chọn lại). Quota/bật-tắt giữ nguyên.</summary>
 public sealed record SetWorkspaceAiProviderCommand(Guid WorkspaceId, Guid? ProviderCredentialId) : IRequest<Result<bool>>;
 
 public sealed class SetWorkspaceAiProviderCommandHandler(IPanelForgeDbContext db)

@@ -25,8 +25,18 @@ public sealed class UpdateAiProviderCredentialCommandHandler(
         var r = command.Request;
         if (AiCredentials.Validate(r.Name, credential.ProviderType, r.AccountId, r.TextModel, r.ImageModel) is { } error)
             return Result<AiProviderCredentialDto>.Failure(error, ResultErrorCodes.Validation);
+        if (!r.IsEnabled && (credential.IsDefaultText || credential.IsDefaultImage))
+            return Result<AiProviderCredentialDto>.Failure(
+                "API này đang được đặt làm API mặc định. Hãy đổi hoặc bỏ API mặc định trước khi tắt.",
+                ResultErrorCodes.Validation);
+        if (credential.IsDefaultImage && string.IsNullOrWhiteSpace(r.ImageModel))
+            return Result<AiProviderCredentialDto>.Failure(
+                "API này đang là mặc định sinh ảnh nên không thể xoá trống model sinh ảnh.",
+                ResultErrorCodes.Validation);
 
         var newKey = string.IsNullOrWhiteSpace(r.ApiKey) ? null : r.ApiKey.Trim();
+        if (newKey is not null && AiCredentials.ValidateApiKey(newKey) is { } keyError)
+            return Result<AiProviderCredentialDto>.Failure(keyError, ResultErrorCodes.Validation);
         var accountChanged = !string.Equals(credential.AccountId, r.AccountId?.Trim() is { Length: > 0 } a ? a : null, StringComparison.Ordinal);
         if (newKey is not null || accountChanged)
         {
