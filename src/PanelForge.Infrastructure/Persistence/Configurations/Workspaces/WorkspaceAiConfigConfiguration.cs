@@ -33,6 +33,14 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
                .HasColumnName("api_key_encrypted")
                .HasColumnType("text");
 
+        builder.Property(c => c.ProviderCredentialId)
+               .HasColumnName("provider_credential_id")
+               .HasColumnType("uuid");
+        builder.HasOne<PanelForge.Domain.Entities.Ai.AiProviderCredential>()
+               .WithMany()
+               .HasForeignKey(c => c.ProviderCredentialId)
+               .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(c => c.IsEnabled)
                .HasColumnName("is_enabled")
                .HasColumnType("boolean")

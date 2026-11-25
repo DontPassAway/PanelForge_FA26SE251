@@ -61,7 +61,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId && c.SeriesId == cmd.SeriesId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không thuộc Series.", ResultErrorCodes.NotFound);
 
-        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, series.WorkspaceId, series.Id, cmd.UserId,
+        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, _keyProtector, series.WorkspaceId, series.Id, cmd.UserId,
             $"AiAgents.Copilot.{Task}", ct);
         if (!gate.IsSuccess) return Fail(gate.ErrorMessage!, gate.ErrorCode!);
         var p = gate.Value!;
@@ -95,7 +95,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         }
 
         var response = await _aiClient.RunCopilotAsync(
-            new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, bible, null, cmd.Instruction?.Trim(), Series: context), ct);
+            new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, bible, null, cmd.Instruction?.Trim(), Series: context, AccountId: p.AccountId), ct);
         if (response.Succeeded && CopilotRules.ValidateMetadata(response.Metadata) is { Count: > 0 } errors)
             response = response with { Succeeded = false, ErrorCode = "INVALID_OUTPUT", ErrorMessage = string.Join(" ", errors) };
 

@@ -9,6 +9,7 @@ public class AiProviderValidator : IAiProviderValidator
 {
     public const string HttpClientName = "gemini-key-check";
     private const string ModelsUrl = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1";
+    private const string CloudflareAccountsUrl = "https://api.cloudflare.com/client/v4/accounts/";
 
     private readonly IHttpClientFactory _httpFactory;
 
@@ -35,6 +36,29 @@ public class AiProviderValidator : IAiProviderValidator
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return Result<bool>.Failure("Không kết nối được Google để kiểm tra API key. Hãy thử lại.");
+        }
+    }
+
+    public async Task<Result<bool>> ValidateCloudflareAsync(string accountId, string apiToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accountId) || string.IsNullOrWhiteSpace(apiToken))
+            return Result<bool>.Failure("Cloudflare cần cả Account ID và API token.");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{CloudflareAccountsUrl}{Uri.EscapeDataString(accountId.Trim())}/ai/models/search?per_page=1");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiToken.Trim());
+        try
+        {
+            using var response = await _httpFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            // 404 = sai Account ID; 400/401/403 = token sai hoặc thiếu quyền Workers AI
+            return response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized
+                    or HttpStatusCode.Forbidden or HttpStatusCode.NotFound
+                ? Result<bool>.Failure("Cloudflare từ chối Account ID/API token này (token cần quyền Workers AI Read).")
+                : Result<bool>.Success(true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return Result<bool>.Failure("Không kết nối được Cloudflare để kiểm tra token. Hãy thử lại.");
         }
     }
 }

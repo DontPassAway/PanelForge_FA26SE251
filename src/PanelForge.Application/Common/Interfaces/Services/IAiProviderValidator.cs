@@ -8,4 +8,7 @@ namespace PanelForge.Application.Common.Interfaces.Services;
 public interface IAiProviderValidator
 {
     Task<Result<bool>> ValidateCredentialsAsync(string provider, string apiKey, CancellationToken cancellationToken = default);
+
+    /// <summary>Kiểm tra API token Cloudflare Workers AI với Account ID.</summary>
+    Task<Result<bool>> ValidateCloudflareAsync(string accountId, string apiToken, CancellationToken cancellationToken = default);
 }

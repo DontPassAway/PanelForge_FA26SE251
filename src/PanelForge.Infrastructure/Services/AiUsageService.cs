@@ -25,7 +25,7 @@ public sealed class AiUsageService : IAiUsageService
         var config = await _dbContext.WorkspaceAiConfigs
             .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
 
-        if (config is null || string.IsNullOrWhiteSpace(config.ApiKeyEncrypted))
+        if (config is null || (config.ProviderCredentialId is null && string.IsNullOrWhiteSpace(config.ApiKeyEncrypted)))
             return AiAvailability.Blocked(AiUsageStatus.Disabled, "Workspace chưa được Administrator cấu hình AI Provider.");
 
         if (!config.IsEnabled)

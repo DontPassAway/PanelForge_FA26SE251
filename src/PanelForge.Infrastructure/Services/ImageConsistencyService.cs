@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.AiConfig.Common;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -223,16 +224,18 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         var availability = await _usageService.CheckAvailabilityAsync(input.WorkspaceId, cancellationToken);
         if (!availability.IsAvailable)
             throw new InvalidOperationException(availability.Message ?? "AI không khả dụng cho Workspace này.");
-        var (provider, model) = (AiProtocol.ProviderGemini, _aiSettings.GeminiModel);
         var config = await _db.WorkspaceAiConfigs.AsNoTracking()
             .FirstOrDefaultAsync(c => c.WorkspaceId == input.WorkspaceId, cancellationToken);
-        var apiKey = string.IsNullOrWhiteSpace(config?.ApiKeyEncrypted) ? null : _keyProtector.Unprotect(config.ApiKeyEncrypted);
+        var cred = config is null ? null
+            : await AiCredentials.ResolveAsync(_db, _keyProtector, config, _aiSettings.GeminiModel, cancellationToken);
+        var (provider, model) = (cred?.Provider ?? AiProtocol.ProviderGemini, cred?.TextModel ?? _aiSettings.GeminiModel);
+        var apiKey = cred?.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("Workspace chưa có API key Gemini hợp lệ (Admin cần nhập/nhập lại key).");
 
         var response = await _aiClient.CompareImagesAsync(new VisionCompareRequest(provider, model, apiKey, input.CharacterName,
             new ImageReference("character-sheet", input.CharacterSheetMimeType, Convert.ToBase64String(input.CharacterSheetBytes)),
-            new ImageReference("artwork", input.ArtworkMimeType, Convert.ToBase64String(input.ArtworkBytes))), cancellationToken);
+            new ImageReference("artwork", input.ArtworkMimeType, Convert.ToBase64String(input.ArtworkBytes)), AccountId: cred?.AccountId), cancellationToken);
 
         var durationMs = (int)(response.CompletedAtUtc - response.StartedAtUtc).TotalMilliseconds;
         await _usageService.RecordAsync(new AiUsageEntry(input.WorkspaceId, feature,

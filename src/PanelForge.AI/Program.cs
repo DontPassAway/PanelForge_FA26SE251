@@ -66,10 +66,9 @@ app.MapPost("/runs", (AiRunJob job, HttpContext http, RunQueue queue) =>
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
 
     if (job.RunId == Guid.Empty || job.SchemaVersion != AiProtocol.SchemaVersion
-        || job.Provider != AiProtocol.ProviderGemini
+        || !AiProtocol.CredentialsOk(job.Provider, job.ApiKey, job.AccountId)
         || string.IsNullOrWhiteSpace(job.Model)
-        || job.MaxRevisionRounds is < 0 or > 5
-        || (job.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(job.ApiKey)))
+        || job.MaxRevisionRounds is < 0 or > 5)
         return Results.Json(new AiRunAck(false, "INVALID_JOB", "Job không hợp lệ."), statusCode: 400);
 
     return queue.TryEnqueue(job) switch
@@ -85,15 +84,14 @@ app.MapPost("/copilot/{task}", async (string task, CopilotRequest req, HttpConte
 {
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
     if (task != req.Task || !PanelForge.AI.Agents.CopilotAgent.Supports(task) || req.SchemaVersion != AiProtocol.SchemaVersion
-        || req.Provider != AiProtocol.ProviderGemini || string.IsNullOrWhiteSpace(req.Model)
-        || (req.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(req.ApiKey))
+        || !AiProtocol.CredentialsOk(req.Provider, req.ApiKey, req.AccountId) || string.IsNullOrWhiteSpace(req.Model)
         || (task == CopilotTasks.ImpactRipple ? req.Ripple is not { Changes.Count: > 0 }
             : task == CopilotTasks.BibleStubDraft ? req.Stub is not { Evidence.Count: > 0 }
             : CopilotTasks.IsLineTask(task) ? string.IsNullOrWhiteSpace(req.Line?.Dialogue) : req.Series is null)
         || (task == CopilotTasks.LettererShorten && req.MaxChars is not (> 0 and <= CopilotRules.MaxCharsLimit)))
         return Results.Json(new AiRunAck(false, "INVALID_JOB", "Request Copilot không hợp lệ."), statusCode: 400);
 
-    var chat = factory.Create(new AiRunJob(Guid.NewGuid(), req.Provider, req.Model, req.ApiKey, 0));
+    var chat = factory.Create(new AiRunJob(Guid.NewGuid(), req.Provider, req.Model, req.ApiKey, 0, AccountId: req.AccountId));
     var agent = new PanelForge.AI.Agents.CopilotAgent(new PanelForge.AI.Agents.AgentRunner(chat, options, req.Model));
     return Results.Json(await agent.RunAsync(req, ct), AiJson.Options);
 });
@@ -129,13 +127,12 @@ app.MapPost("/images/generate", async (ImageGenRequest req, HttpContext http, Im
 app.MapPost("/vision/compare", async (VisionCompareRequest req, HttpContext http, ChatClientFactory factory, CancellationToken ct) =>
 {
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
-    if (req.SchemaVersion != AiProtocol.SchemaVersion || req.Provider != AiProtocol.ProviderGemini
+    if (req.SchemaVersion != AiProtocol.SchemaVersion || !AiProtocol.CredentialsOk(req.Provider, req.ApiKey, req.AccountId)
         || string.IsNullOrWhiteSpace(req.Model) || string.IsNullOrWhiteSpace(req.CharacterName)
-        || string.IsNullOrEmpty(req.CharacterSheet.Base64) || string.IsNullOrEmpty(req.Artwork.Base64)
-        || (req.Provider == AiProtocol.ProviderGemini && string.IsNullOrWhiteSpace(req.ApiKey)))
+        || string.IsNullOrEmpty(req.CharacterSheet.Base64) || string.IsNullOrEmpty(req.Artwork.Base64))
         return Results.Json(new AiRunAck(false, "INVALID_JOB", "Request vision không hợp lệ."), statusCode: 400);
 
-    var chat = factory.Create(new AiRunJob(Guid.NewGuid(), req.Provider, req.Model, req.ApiKey, 0));
+    var chat = factory.Create(new AiRunJob(Guid.NewGuid(), req.Provider, req.Model, req.ApiKey, 0, AccountId: req.AccountId));
     return Results.Json(await new PanelForge.AI.Agents.VisionAgent(chat).RunAsync(req, ct), AiJson.Options);
 });
 

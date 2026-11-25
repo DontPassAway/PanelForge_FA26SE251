@@ -144,7 +144,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
             instruction = AiRunHelpers.AppendFeedback(instruction, feedback, CopilotRules.MaxInstructionLength);
         }
 
-        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, workspaceId.Value, cmd.SeriesId, cmd.UserId,
+        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, _keyProtector, workspaceId.Value, cmd.SeriesId, cmd.UserId,
             $"AiAgents.Copilot.{cmd.Task}", ct);
         if (!gate.IsSuccess) return Fail(gate.ErrorMessage!, gate.ErrorCode!);
         var p = gate.Value!;
@@ -182,7 +182,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         }
 
         var request = new CopilotRequest(cmd.Task, p.Provider, p.Model, apiKey,
-            new CopilotLine(line?.Id ?? element!.ElementId, speakerId, original, line?.StageDirection, neighbors), bible, maxChars, instruction?.Trim());
+            new CopilotLine(line?.Id ?? element!.ElementId, speakerId, original, line?.StageDirection, neighbors), bible, maxChars, instruction?.Trim(), AccountId: p.AccountId);
         var response = await _aiClient.RunCopilotAsync(request, ct);
 
         // Backend kiểm lại output bằng cùng luật tất định (không tin AI service tuyệt đối)

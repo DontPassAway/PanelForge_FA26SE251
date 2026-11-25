@@ -10,6 +10,8 @@ public class WorkspaceAiConfig : BaseEntity
     public Guid WorkspaceId { get; private set; }
     public string Provider { get; private set; } = "Google Gemini";
     public string? ApiKeyEncrypted { get; private set; }
+    /// <summary>API do Admin khai báo trong bảng ai_provider_credentials. Có giá trị thì thay cho Provider/ApiKeyEncrypted ở trên.</summary>
+    public Guid? ProviderCredentialId { get; private set; }
     public bool IsEnabled { get; private set; } = true;
     public long MonthlyTokenQuota { get; private set; } = 1_000_000;
     public long UsedTokensCurrentMonth { get; private set; } = 0;
@@ -76,6 +78,13 @@ public class WorkspaceAiConfig : BaseEntity
         {
             AllowedModelsJson = allowedModelsJson.Trim();
         }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>null = quay về key Gemini riêng của Workspace.</summary>
+    public void UseProviderCredential(Guid? credentialId)
+    {
+        ProviderCredentialId = credentialId;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -12,7 +12,8 @@ public sealed record ImageGenRequest(
     string? ApiKey,
     string Prompt,
     IReadOnlyList<ImageReference> References,
-    int SchemaVersion = AiProtocol.SchemaVersion)
+    int SchemaVersion = AiProtocol.SchemaVersion,
+    string? AccountId = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {
@@ -52,7 +53,7 @@ public sealed record ThumbnailSuggestion(
 public static class ImageProviders
 {
     public const string Gemini = AiProtocol.ProviderGemini;
-    public const string Cloudflare = "Cloudflare";
+    public const string Cloudflare = AiProtocol.ProviderCloudflare;
 
     public static bool IsKnown(string? p) => p is Gemini or Cloudflare;
 }
@@ -65,7 +66,8 @@ public sealed record VisionCompareRequest(
     string CharacterName,
     ImageReference CharacterSheet,
     ImageReference Artwork,
-    int SchemaVersion = AiProtocol.SchemaVersion)
+    int SchemaVersion = AiProtocol.SchemaVersion,
+    string? AccountId = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {

@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.AiConfig.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.AI.Contracts;
@@ -11,7 +12,7 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Common;
 
-internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config);
+internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config, string? ApiKey = null, string? AccountId = null);
 
 /// <summary>
 /// Phần dùng chung của mọi task Copilot sync: AI bật + quota Workspace + model được phép, giới hạn lượt/phút theo Series,
@@ -20,7 +21,7 @@ internal sealed record CopilotProvider(string Provider, string Model, WorkspaceA
 internal static class CopilotGate
 {
     public static async Task<Result<CopilotProvider>> ResolveAsync(
-        IPanelForgeDbContext db, IAiUsageService usage, AiAgentSettings settings,
+        IPanelForgeDbContext db, IAiUsageService usage, AiAgentSettings settings, IAiKeyProtector protector,
         Guid workspaceId, Guid seriesId, Guid userId, string feature, CancellationToken ct)
     {
         var config = await db.WorkspaceAiConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, ct);
@@ -35,9 +36,11 @@ internal static class CopilotGate
             return Result<CopilotProvider>.Failure(availability.Message ?? "AI không khả dụng.",
                 availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
-        var (provider, model) = (AiProtocol.ProviderGemini, settings.GeminiModel);
+        var cred = await AiCredentials.ResolveAsync(db, protector, config, settings.GeminiModel, ct);
+        var (provider, model) = (cred.Provider, cred.TextModel);
         var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-        if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+        // Credential Admin khai báo đã chọn model riêng: không cần nằm trong AllowedModels (danh sách cho key Gemini cũ)
+        if (!cred.FromCredential && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
             return Result<CopilotProvider>.Failure(
                 $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
@@ -50,12 +53,11 @@ internal static class CopilotGate
                 $"Series đã dùng {recent} lượt Copilot trong 1 phút qua (giới hạn {settings.CopilotCallsPerMinutePerSeries}). Thử lại sau ít giây.",
                 ResultErrorCodes.AiQuotaExceeded);
 
-        return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config));
+        return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config, cred.ApiKey, cred.AccountId));
     }
 
     /// <summary>Key chỉ giải mã trong bộ nhớ cho lần gọi này; rỗng = Studio chưa có key dùng được.</summary>
-    public static string ApiKey(IAiKeyProtector protector, CopilotProvider p) =>
-        protector.Unprotect(p.Config.ApiKeyEncrypted ?? string.Empty) ?? "";
+    public static string ApiKey(IAiKeyProtector protector, CopilotProvider p) => p.ApiKey ?? "";
 
     /// <summary>Ghi step (provenance BR-10) + usage cho một lần gọi Copilot; chưa SaveChanges.</summary>
     public static async Task<AiAgentStep> RecordStepAsync(

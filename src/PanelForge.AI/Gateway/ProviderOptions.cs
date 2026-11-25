@@ -7,6 +7,8 @@ public sealed class ProviderOptions
 
     public string GeminiOpenAiEndpoint { get; set; } = "https://generativelanguage.googleapis.com/v1beta/openai/";
     public string GeminiModelsUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta/models/";
+    /// <summary>Gốc API Cloudflare; endpoint chat = {base}/{accountId}/ai/v1/.</summary>
+    public string CloudflareBaseUrl { get; set; } = "https://api.cloudflare.com/client/v4/accounts/";
 
     /// <summary>Timeout cho MỘT lần gọi model.</summary>
     public int CallTimeoutSeconds { get; set; } = 60;

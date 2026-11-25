@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.AiConfig.Common;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -97,6 +98,10 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
         if (provider is null)
             return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
+        // Credential Admin gắn cho Workspace có model ảnh → dùng provider/model/key của nó thay cấu hình hệ thống
+        var cred = await AiCredentials.ResolveAsync(_db, _keyProtector, config, _settings.GeminiModel, ct);
+        var useCred = cred.FromCredential && cred.ImageModel is not null;
+        if (useCred) (provider, model) = (cred.Provider, cred.ImageModel!);
         var availability = await _usage.CheckAvailabilityAsync(series.WorkspaceId, ct);
         if (!availability.IsAvailable)
         {
@@ -106,7 +111,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
                 availability.BlockedReason == AiUsageStatus.QuotaExceeded ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
         var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
-        if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+        if (!useCred && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
             return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
         // ponytail: đếm trên DB nên 2 request song song có thể cùng lọt ở ngưỡng; đủ để chặn lạm dụng.
@@ -135,10 +140,12 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         _db.AiWorkflowRuns.Add(run);
         await _db.SaveChangesAsync(ct);
 
-        string? apiKey = null;
-        if (provider == ImageProviders.Gemini)
+        // Provider ảnh trùng provider của credential → dùng chung key; Cloudflare không gắn credential vẫn dùng token của AI service
+        var keyFromCred = useCred || cred.Provider == provider;
+        var apiKey = keyFromCred ? cred.ApiKey : null;
+        var accountId = keyFromCred ? cred.AccountId : null;
+        if (keyFromCred || provider == ImageProviders.Gemini)
         {
-            apiKey = _keyProtector.Unprotect(config.ApiKeyEncrypted ?? string.Empty);
             if (string.IsNullOrEmpty(apiKey))
             {
                 run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
@@ -147,7 +154,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             }
         }
 
-        var response = await _aiClient.GenerateImageAsync(new ImageGenRequest(provider, model, apiKey, prompt, references), ct);
+        var response = await _aiClient.GenerateImageAsync(new ImageGenRequest(provider!, model, apiKey, prompt, references, AccountId: accountId), ct);
         var bytes = response is { Succeeded: true, ImageBase64: { Length: > 0 } b64 } ? TryDecode(b64) : null;
         var contentType = bytes is null ? null : AssetRules.DetectImageContentType(bytes);
         if (response.Succeeded && (contentType is null || bytes!.Length > AssetRules.MaxArtworkBytes))

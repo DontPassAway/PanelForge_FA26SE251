@@ -33,14 +33,19 @@ public sealed class ChatClientFactory
 
     public IChatClient Create(AiRunJob job)
     {
-        if (job.Provider != AiProtocol.ProviderGemini || string.IsNullOrWhiteSpace(job.ApiKey))
-            throw new InvalidOperationException("Provider không hỗ trợ hoặc thiếu API key.");
+        if (!AiProtocol.CredentialsOk(job.Provider, job.ApiKey, job.AccountId))
+            throw new InvalidOperationException("Provider không hỗ trợ hoặc thiếu API key/AccountId.");
 
         var client = new OpenAIClient(
-            new ApiKeyCredential(job.ApiKey),
-            new OpenAIClientOptions { Endpoint = new Uri(_options.GeminiOpenAiEndpoint) });
-        return new LlmGateway(client.GetChatClient(job.Model).AsIChatClient(), ResilienceFor(job.ApiKey));
+            new ApiKeyCredential(job.ApiKey!),
+            new OpenAIClientOptions { Endpoint = EndpointFor(job) });
+        return new LlmGateway(client.GetChatClient(job.Model).AsIChatClient(), ResilienceFor(job.ApiKey!));
     }
+
+    /// <summary>Cả Gemini và Cloudflare Workers AI đều có endpoint OpenAI-compatible: chỉ khác địa chỉ gốc.</summary>
+    public Uri EndpointFor(AiRunJob job) => job.Provider == AiProtocol.ProviderCloudflare
+        ? new Uri($"{_options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(job.AccountId!.Trim())}/ai/v1/")
+        : new Uri(_options.GeminiOpenAiEndpoint);
 
     /// <summary>Giới hạn tần suất và circuit breaker tính theo từng key: đổi key mới không bị key cũ chặn.</summary>
     public LlmResilience ResilienceFor(string apiKey) =>

@@ -121,17 +121,21 @@ public sealed class CloudflareImageGenerator(HttpClient http, ImageGenOptions op
     public async Task<ImageGenResponse> GenerateAsync(ImageGenRequest req, CancellationToken ct)
     {
         var started = DateTime.UtcNow;
-        if (string.IsNullOrWhiteSpace(options.CloudflareAccountId) || string.IsNullOrWhiteSpace(options.CloudflareApiToken))
+        // Credential Admin cấu hình (đi theo request) ưu tiên hơn cấu hình tĩnh của AI service
+        var perRequest = !string.IsNullOrWhiteSpace(req.ApiKey) && !string.IsNullOrWhiteSpace(req.AccountId);
+        var accountId = perRequest ? req.AccountId!.Trim() : options.CloudflareAccountId;
+        var token = perRequest ? req.ApiKey!.Trim() : options.CloudflareApiToken;
+        if (string.IsNullOrWhiteSpace(accountId) || string.IsNullOrWhiteSpace(token))
             return ImageGen.Fail(started, "AI_UNAVAILABLE", "Chưa cấu hình ImageGen:CloudflareAccountId / CloudflareApiToken cho AI service.");
 
         // Tên model dạng @cf/vendor/name: giữ dấu '/', chỉ escape từng đoạn
         var model = string.Join('/', req.Model.Split('/').Select(Uri.EscapeDataString));
         using var msg = new HttpRequestMessage(HttpMethod.Post,
-            $"{options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(options.CloudflareAccountId)}/ai/run/{model}")
+            $"{options.CloudflareBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(accountId)}/ai/run/{model}")
         {
             Content = JsonContent.Create(new { prompt = req.Prompt, steps = Math.Clamp(options.CloudflareSteps, 1, 8) })
         };
-        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.CloudflareApiToken);
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var res = await http.SendAsync(msg, ct);
 
         var mime = res.Content.Headers.ContentType?.MediaType ?? "";

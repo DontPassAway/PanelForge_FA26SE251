@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.AiConfig.Common;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -145,9 +146,10 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
                 availability.BlockedReason == AiUsageStatus.QuotaExceeded
                     ? ResultErrorCodes.AiQuotaExceeded : ResultErrorCodes.AiDisabled);
         }
-        var (provider, model) = (AiProtocol.ProviderGemini, _settings.GeminiModel);
+        var cred = await AiCredentials.ResolveAsync(_db, _keyProtector, config!, _settings.GeminiModel, ct);
+        var (provider, model) = (cred.Provider, cred.TextModel);
         var allowed = JsonSerializer.Deserialize<List<string>>(config!.AllowedModelsJson) ?? [];
-        if (!allowed.Contains(model, StringComparer.OrdinalIgnoreCase))
+        if (!cred.FromCredential && !allowed.Contains(model, StringComparer.OrdinalIgnoreCase))
             return AiRunHelpers.Fail<RunWorkflowResponse>(
                 $"Model '{model}' chưa nằm trong danh sách model được phép của Workspace; Admin cần thêm qua PUT /api/Admin/workspaces/{{id}}/ai-config.",
                 ResultErrorCodes.Validation);
@@ -169,13 +171,13 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         await _db.SaveChangesAsync(ct);
 
         // Key do Backend giải mã và chỉ gửi qua localhost cho lần chạy này; không lưu, không log.
-        var apiKey = _keyProtector.Unprotect(config!.ApiKeyEncrypted ?? string.Empty);
+        var apiKey = cred.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
             return await FailRunAsync(run, workspaceId.Value, cmd.UserId,
                 "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ct);
 
         var ack = await _aiClient.StartRunAsync(
-            new AiRunJob(run.Id, provider, model, apiKey, run.MaxRevisionRounds), ct);
+            new AiRunJob(run.Id, provider, model, apiKey, run.MaxRevisionRounds, AccountId: cred.AccountId), ct);
         if (!ack.Accepted)
             return await FailRunAsync(run, workspaceId.Value, cmd.UserId, ack.Message ?? "AI service không khả dụng.", ct);
 

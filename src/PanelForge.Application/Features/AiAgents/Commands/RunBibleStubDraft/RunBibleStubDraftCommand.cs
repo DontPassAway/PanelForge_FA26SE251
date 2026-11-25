@@ -78,7 +78,7 @@ public sealed class RunBibleStubDraftCommandHandler : IRequestHandler<RunBibleSt
             return Fail("Chưa có dòng kịch bản nào nhắc tới mục này, nên không có căn cứ để soạn.", ResultErrorCodes.Conflict);
 
         var chapter = await _db.Chapters.AsNoTracking().FirstAsync(c => c.Id == mentions[0].ChapterId, ct);
-        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, series.WorkspaceId, series.Id, cmd.UserId, $"AiAgents.Copilot.{Task}", ct);
+        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, _keyProtector, series.WorkspaceId, series.Id, cmd.UserId, $"AiAgents.Copilot.{Task}", ct);
         if (!gate.IsSuccess) return Fail(gate.ErrorMessage!, gate.ErrorCode!);
         var p = gate.Value!;
 
@@ -98,7 +98,7 @@ public sealed class RunBibleStubDraftCommandHandler : IRequestHandler<RunBibleSt
         }
 
         var response = await _aiClient.RunCopilotAsync(
-            new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, [], null, cmd.Instruction?.Trim(), Stub: context), ct);
+            new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, [], null, cmd.Instruction?.Trim(), Stub: context, AccountId: p.AccountId), ct);
         // Backend kiểm lại trích dẫn bằng cùng luật tất định, không tin AI service tuyệt đối
         if (response.Succeeded && CopilotRules.ValidateStubDraft(response.Stub, context) is { Count: > 0 } errors)
             response = response with { Succeeded = false, ErrorCode = "INVALID_OUTPUT", ErrorMessage = string.Join(" ", errors) };

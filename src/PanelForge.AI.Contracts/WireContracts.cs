@@ -9,7 +9,8 @@ public sealed record AiRunJob(
     string Model,
     string? ApiKey,
     int MaxRevisionRounds,
-    int SchemaVersion = AiProtocol.SchemaVersion)
+    int SchemaVersion = AiProtocol.SchemaVersion,
+    string? AccountId = null)
 {
     // Record tự sinh ToString() in mọi property → ẩn ApiKey để không lọt vào log/exception.
     private bool PrintMembers(StringBuilder builder)

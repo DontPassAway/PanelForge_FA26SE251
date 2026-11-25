@@ -65,7 +65,7 @@ public sealed class RunImpactSuggestionCommandHandler : IRequestHandler<RunImpac
         if (changes.Count == 0) return Fail("Không tìm thấy thay đổi kịch bản của trang này để so sánh.", ResultErrorCodes.Conflict);
 
         var stage = (await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct)).First(s => s.Id == task.PipelineStageId);
-        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, series.WorkspaceId, series.Id, cmd.UserId, $"AiAgents.Copilot.{Task}", ct);
+        var gate = await CopilotGate.ResolveAsync(_db, _usage, _settings, _keyProtector, series.WorkspaceId, series.Id, cmd.UserId, $"AiAgents.Copilot.{Task}", ct);
         if (!gate.IsSuccess) return Fail(gate.ErrorMessage!, gate.ErrorCode!);
         var p = gate.Value!;
 
@@ -83,7 +83,7 @@ public sealed class RunImpactSuggestionCommandHandler : IRequestHandler<RunImpac
             return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
         }
 
-        var response = await _aiClient.RunCopilotAsync(new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, [], null, null, Ripple: context), ct);
+        var response = await _aiClient.RunCopilotAsync(new CopilotRequest(Task, p.Provider, p.Model, apiKey, null, [], null, null, Ripple: context, AccountId: p.AccountId), ct);
         if (response.Succeeded && CopilotRules.ValidateImpact(response.ImpactDecision, response.Reason) is { Count: > 0 } errors)
             response = response with { Succeeded = false, ErrorCode = "INVALID_OUTPUT", ErrorMessage = string.Join(" ", errors) };
 

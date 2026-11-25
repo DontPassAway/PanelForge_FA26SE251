@@ -38,6 +38,12 @@ using PanelForge.Application.Features.MasterData.PipelineTemplates.Queries.GetPi
 using PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Queries.GetWorkspaceAiConfig;
 using PanelForge.Application.Features.AiConfig.Models;
+using PanelForge.Application.Features.AiConfig.Commands.CreateAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.UpdateAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.TestAiProviderCredential;
+using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiProvider;
+using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderCredentials;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspaceSessionPolicy;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceSessionPolicy;
@@ -364,6 +370,69 @@ public class AdminController : ControllerBase
             return BadRequest(new { message = result.ErrorMessage });
 
         return Ok(result.Value);
+    }
+
+    // ─── UC-02 mở rộng: nhiều API AI (Gemini / Cloudflare Workers AI) ─────────
+
+    /// <summary>GET /api/admin/ai-providers — danh sách API AI đã khai báo (không trả key, chỉ KeyHint).</summary>
+    [HttpGet("ai-providers")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderCredentialDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAiProviders(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAiProviderCredentialsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/ai-providers — thêm API AI; key được gọi thử rồi mã hoá trước khi lưu.</summary>
+    [HttpPost("ai-providers")]
+    [ProducesResponseType(typeof(AiProviderCredentialDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateAiProvider([FromBody] CreateAiProviderCredentialRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CreateAiProviderCredentialCommand(request), cancellationToken);
+        return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/admin/ai-providers/{id} — sửa API AI (ApiKey trống = giữ key cũ).</summary>
+    [HttpPut("ai-providers/{id:guid}")]
+    [ProducesResponseType(typeof(AiProviderCredentialDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateAiProvider(Guid id, [FromBody] UpdateAiProviderCredentialRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateAiProviderCredentialCommand(id, request), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>DELETE /api/admin/ai-providers/{id} — xoá mềm; 409 nếu còn Workspace đang dùng.</summary>
+    [HttpDelete("ai-providers/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteAiProvider(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteAiProviderCredentialCommand(id), cancellationToken);
+        if (result.IsSuccess) return NoContent();
+        return result.ErrorCode == ResultErrorCodes.Conflict ? Conflict(new { message = result.ErrorMessage }) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/ai-providers/{id}/test — gọi thử provider bằng key đã lưu.</summary>
+    [HttpPost("ai-providers/{id:guid}/test")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> TestAiProvider(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new TestAiProviderCredentialCommand(id), cancellationToken);
+        return result.IsSuccess ? Ok(new { ok = true }) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = key Gemini riêng).
+    /// Trả lại cấu hình AI của Workspace.
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-provider")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetWorkspaceAiProvider(Guid workspaceId, [FromBody] SetWorkspaceAiProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetWorkspaceAiProviderCommand(workspaceId, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var config = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        return config.IsSuccess ? Ok(config.Value) : ToError(config);
     }
 
     // ─── V1.2: Workspace Session Policy (Admin Only) ──────────────────────────

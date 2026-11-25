@@ -27,6 +27,16 @@ public static class AiProtocol
 
     public const string ServiceKeyHeader = "X-Service-Key";
     public const string ProviderGemini = "Gemini";
+    /// <summary>Cloudflare Workers AI: văn bản qua endpoint OpenAI-compatible, cần thêm AccountId.</summary>
+    public const string ProviderCloudflare = "Cloudflare";
+
+    /// <summary>Provider văn bản/vision được hỗ trợ và đủ thông tin xác thực (Cloudflare cần cả AccountId).</summary>
+    public static bool CredentialsOk(string? provider, string? apiKey, string? accountId) => provider switch
+    {
+        ProviderGemini => !string.IsNullOrWhiteSpace(apiKey),
+        ProviderCloudflare => !string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(accountId),
+        _ => false
+    };
 
     public const string AgentSupervisor = "Supervisor";
     public const string AgentWriter = "Writer";

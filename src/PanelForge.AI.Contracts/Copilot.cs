@@ -29,7 +29,8 @@ public sealed record CopilotRequest(
     int SchemaVersion = AiProtocol.SchemaVersion,
     CopilotSeriesContext? Series = null,
     BibleStubContext? Stub = null,
-    ImpactRippleContext? Ripple = null)
+    ImpactRippleContext? Ripple = null,
+    string? AccountId = null)
 {
     private bool PrintMembers(StringBuilder builder)
     {

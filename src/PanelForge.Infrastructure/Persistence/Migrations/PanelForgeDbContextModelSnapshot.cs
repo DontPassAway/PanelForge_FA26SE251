@@ -148,6 +148,79 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("ai_agent_steps", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiProviderCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountId")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("ApiKeyEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("api_key_encrypted");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("ImageModel")
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("image_model");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProviderType")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("provider_type");
+
+                    b.Property<string>("TextModel")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("text_model");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ai_provider_credentials", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Ai.AiSuggestion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5970,6 +6043,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(100)")
                         .HasColumnName("provider");
 
+                    b.Property<Guid?>("ProviderCredentialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_credential_id");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
@@ -5995,6 +6072,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("workspace_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ProviderCredentialId");
 
                     b.HasIndex("WorkspaceId")
                         .IsUnique()
@@ -7002,6 +7081,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
+                    b.HasOne("PanelForge.Domain.Entities.Ai.AiProviderCredential", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderCredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
                         .WithOne()
                         .HasForeignKey("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", "WorkspaceId")
