@@ -41,6 +41,14 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
                .HasForeignKey(c => c.ProviderCredentialId)
                .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Property(c => c.ImageProviderCredentialId)
+               .HasColumnName("image_provider_credential_id")
+               .HasColumnType("uuid");
+        builder.HasOne<PanelForge.Domain.Entities.Ai.AiProviderCredential>()
+               .WithMany()
+               .HasForeignKey(c => c.ImageProviderCredentialId)
+               .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(c => c.IsEnabled)
                .HasColumnName("is_enabled")
                .HasColumnType("boolean")

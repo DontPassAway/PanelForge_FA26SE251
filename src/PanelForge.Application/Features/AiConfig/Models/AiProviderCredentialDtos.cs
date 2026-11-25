@@ -22,5 +22,11 @@ public sealed record CreateAiProviderCredentialRequest(
 public sealed record UpdateAiProviderCredentialRequest(
     string Name, string? AccountId, string? ApiKey, string TextModel, string? ImageModel, bool IsEnabled);
 
+/// <summary>
+/// Một model của nhà cung cấp. Kind: "text" | "image". Free = model Cloudflare tự chạy (tiền tố @cf/, trừ vào 10.000 Neuron/ngày);
+/// false = model đối tác cần credit AI Gateway.
+/// </summary>
+public sealed record AiProviderModelDto(string Id, string Kind, bool Free, string? Description);
+
 /// <summary>null = Workspace quay về key Gemini riêng trong ai-config.</summary>
 public sealed record SetWorkspaceAiProviderRequest(Guid? ProviderCredentialId);

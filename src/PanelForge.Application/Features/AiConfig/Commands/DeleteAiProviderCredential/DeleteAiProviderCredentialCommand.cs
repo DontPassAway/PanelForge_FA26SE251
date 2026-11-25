@@ -17,7 +17,7 @@ public sealed class DeleteAiProviderCredentialCommandHandler(IPanelForgeDbContex
         if (credential is null)
             return Result<bool>.Failure("Không tìm thấy API AI này.", ResultErrorCodes.NotFound);
 
-        var inUse = await db.WorkspaceAiConfigs.CountAsync(w => w.ProviderCredentialId == command.Id, ct);
+        var inUse = await db.WorkspaceAiConfigs.CountAsync(w => w.ProviderCredentialId == command.Id || w.ImageProviderCredentialId == command.Id, ct);
         if (inUse > 0)
             return Result<bool>.Failure($"Còn {inUse} Workspace đang dùng API này. Đổi API cho các Workspace đó trước khi xoá.",
                 ResultErrorCodes.Conflict);

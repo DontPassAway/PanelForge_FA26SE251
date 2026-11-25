@@ -136,4 +136,15 @@ public sealed class ThumbnailTests
 
         accept.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
+
+    [Theory]
+    [InlineData("A young man searching for herbs", "Manga style. A young man searching for herbs")]
+    [InlineData("Manga comic panel, a young man", "Manga comic panel, a young man")]
+    [InlineData("Full-color webtoon, a young man", "Full-color webtoon, a young man")]
+    public void WithStyle_AddsComicStyleOnlyWhenPromptHasNone(string prompt, string expected) =>
+        ThumbnailRules.WithStyle(prompt, "Manga style.").Should().Be(expected);
+
+    [Fact]
+    public void WithStyle_EmptyPrefix_LeavesPromptUnchanged() =>
+        ThumbnailRules.WithStyle("A young man", "  ").Should().Be("A young man");
 }

@@ -31,6 +31,22 @@ public static class AiCredentials
             : new(c.ProviderType, c.TextModel, c.ImageModel, Unprotect(protector, c.ApiKeyEncrypted), c.AccountId, true);
     }
 
+    /// <summary>
+    /// API dùng cho sinh ảnh: API ảnh riêng của Workspace nếu đã gán, không thì giống <see cref="ResolveAsync"/>.
+    /// API ảnh riêng đã tắt/xoá hoặc không có model ảnh → ImageModel/ApiKey null để handler chặn, không tự rơi về API khác.
+    /// </summary>
+    public static async Task<ResolvedAiCredential> ResolveImageAsync(IPanelForgeDbContext db, IAiKeyProtector protector,
+        WorkspaceAiConfig config, string defaultTextModel, CancellationToken ct)
+    {
+        if (config.ImageProviderCredentialId is not { } id)
+            return await ResolveAsync(db, protector, config, defaultTextModel, ct);
+
+        var c = await db.AiProviderCredentials.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.IsEnabled, ct);
+        return c is null || c.ImageModel is null
+            ? new(c?.ProviderType ?? AiProtocol.ProviderGemini, defaultTextModel, null, null, null, true)
+            : new(c.ProviderType, c.TextModel, c.ImageModel, Unprotect(protector, c.ApiKeyEncrypted), c.AccountId, true);
+    }
+
     public static string? Unprotect(IAiKeyProtector protector, string? encrypted) =>
         protector.Unprotect(encrypted ?? string.Empty) is { Length: > 0 } k ? k : null; // giữ đúng cách gọi cũ: luôn hỏi protector
 

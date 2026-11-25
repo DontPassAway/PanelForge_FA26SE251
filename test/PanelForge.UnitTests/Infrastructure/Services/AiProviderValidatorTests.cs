@@ -35,6 +35,41 @@ public class AiProviderValidatorTests
     }
 
     [Fact]
+    public async Task CloudflareModels_KeepsTextAndImageOnly_AndMarksCfModelsFree()
+    {
+        const string body = """
+            {"success":true,"result":[
+              {"name":"@cf/meta/llama-3.1-8b-instruct","task":{"name":"Text Generation"},"description":"small"},
+              {"name":"pruna/z-image-turbo","task":{"name":"Text-to-Image"}},
+              {"name":"@cf/black-forest-labs/flux-1-schnell","task":{"name":"Text-to-Image"}},
+              {"name":"@cf/openai/whisper","task":{"name":"Automatic Speech Recognition"}}
+            ]}
+            """;
+        HttpRequestMessage? sent = null;
+        var http = new HttpClient(new StubHandler(r =>
+        {
+            sent = r;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        }));
+        var validator = new AiProviderValidator(Mock.Of<IHttpClientFactory>(f => f.CreateClient(It.IsAny<string>()) == http));
+
+        var result = await validator.ListCloudflareModelsAsync("acc-1", "cf-token");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Select(m => (m.Id, m.Kind, m.Free)).Should().Equal(
+            ("@cf/black-forest-labs/flux-1-schnell", "image", true),
+            ("pruna/z-image-turbo", "image", false),
+            ("@cf/meta/llama-3.1-8b-instruct", "text", true));
+        sent!.RequestUri!.AbsolutePath.Should().Be("/client/v4/accounts/acc-1/ai/models/search");
+        sent.Headers.Authorization!.Parameter.Should().Be("cf-token");
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> f) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) => Task.FromResult(f(r));
+    }
+
+    [Fact]
     public async Task OtherProviders_AreRejected_WithoutCallingNetwork()
     {
         var handler = new Handler(HttpStatusCode.OK);

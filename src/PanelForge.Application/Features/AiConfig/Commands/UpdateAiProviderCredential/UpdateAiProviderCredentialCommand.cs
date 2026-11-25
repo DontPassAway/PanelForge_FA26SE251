@@ -41,7 +41,7 @@ public sealed class UpdateAiProviderCredentialCommandHandler(
         credential.Update(r.Name, r.AccountId, newKey is null ? null : protector.Protect(newKey), r.TextModel, r.ImageModel, r.IsEnabled);
         await db.SaveChangesAsync(ct);
 
-        var count = await db.WorkspaceAiConfigs.CountAsync(w => w.ProviderCredentialId == credential.Id, ct);
+        var count = await db.WorkspaceAiConfigs.CountAsync(w => w.ProviderCredentialId == credential.Id || w.ImageProviderCredentialId == credential.Id, ct);
         return Result<AiProviderCredentialDto>.Success(AiCredentials.ToDto(credential, protector, count));
     }
 }
