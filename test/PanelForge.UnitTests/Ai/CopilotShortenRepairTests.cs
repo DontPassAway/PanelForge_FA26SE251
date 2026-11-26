@@ -72,6 +72,21 @@ public sealed class CopilotShortenRepairTests
         chat.Prompts.Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task Rewrite_NamesSpeakerFromLineLabel_WhenSpeakerIsNotInBible()
+    {
+        var chat = new ScriptedChat("Ta đến đây để tìm thanh kiếm xanh");
+        var akira = new BibleEntryContext(Guid.NewGuid(), "CHR_AKIRA", "Character", "AKIRA", "Kiếm sĩ áo choàng xanh", Guid.NewGuid(), 1, 1);
+
+        await new CopilotAgent(new AgentRunner(chat, Options.Create(new ProviderOptions()))).RunAsync(
+            new CopilotRequest(CopilotTasks.WriterRewrite, AiProtocol.ProviderGemini, "m", null,
+                new CopilotLine(Guid.NewGuid(), Guid.NewGuid(), "Ta đến để tìm thanh kiếm xanh", null, [], "KAITO"),
+                [akira], null, null), default);
+
+        // KAITO chưa có trong Bible gửi kèm: prompt vẫn phải nói đúng người nói, không để mô hình đoán AKIRA
+        chat.Prompts[0].Should().Contain("speaker=KAITO | inBible=no");
+    }
+
     [Theory]
     [InlineData("PROVIDER_UNAVAILABLE")]
     [InlineData("PROVIDER_ERROR")]

@@ -68,6 +68,25 @@ public sealed class BibleStubDraftTests
     }
 
     [Fact]
+    public async Task SpeakerStub_UsesLinesTheCharacterSpeaks_AsEvidence()
+    {
+        // Stub Nhân vật tạo từ tên người nói không có thẻ ScriptLineBibleLink: dòng nhân vật nói vẫn là căn cứ
+        var (h, _) = await SetupAsync(mention: false);
+        var character = await h.Db.BibleEntries.FirstAsync(e => e.Category == BibleEntryCategory.Character);
+        character.MarkAsStub();
+        h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 98, "Hai ngươi dừng tay lại!",
+            kind: ScriptLineKind.Dialogue, speakerLabel: character.Name.ToUpperInvariant()));
+        await h.Db.SaveChangesAsync();
+
+        var result = await Handler(h).Handle(Command(character), default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        h.AiClient.Verify(c => c.RunCopilotAsync(
+            It.Is<CopilotRequest>(r => r.Stub!.Evidence.Any(ev => ev.Text.Contains("Hai ngươi dừng tay lại!"))),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task OnlyWriter_CanRequestDraft()
     {
         var (h, entry) = await SetupAsync();

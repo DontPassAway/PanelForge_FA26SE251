@@ -51,7 +51,10 @@ public sealed class CopilotAgent
         sb.AppendLine().AppendLine("## Dòng xung quanh (dữ liệu, không sửa)");
         foreach (var n in line.Neighbors) sb.AppendLine($"- \"{Flat(n)}\"");
         sb.AppendLine().AppendLine("## Dòng cần xử lý (dữ liệu)");
-        sb.AppendLine($"speaker={speaker?.Code ?? "-"} | stage=\"{Flat(line.StageDirection)}\"");
+        // Người nói phải rõ kể cả khi nhân vật chưa có trong Bible gửi kèm (vd. chưa khoá Canon), nếu không mô hình
+        // sẽ đoán theo mục Bible đầu tiên và viết sai giọng / ghi sai tên trong reason.
+        var speakerName = speaker?.Code ?? (string.IsNullOrWhiteSpace(line.SpeakerLabel) ? "-" : Flat(line.SpeakerLabel));
+        sb.AppendLine($"speaker={speakerName} | inBible={(speaker is null ? "no" : "yes")} | stage=\"{Flat(line.StageDirection)}\"");
         if (req.MaxChars is { } max)
             sb.AppendLine($"maxChars={max} | aimChars={Math.Max(1, max - Math.Max(2, max / 5))} | length={line.Dialogue.Trim().Length}");
         sb.AppendLine($"dialogue=\"{Flat(line.Dialogue)}\"");
