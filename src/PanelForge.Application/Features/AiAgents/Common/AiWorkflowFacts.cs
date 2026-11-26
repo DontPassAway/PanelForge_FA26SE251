@@ -176,7 +176,7 @@ internal sealed record AiWorkflowFacts(
     }
 
     /// <summary>Danh sách điều kiện còn thiếu cho một loại workflow; rỗng = chạy được. Thứ tự: quyền → cấu hình → trạng thái → context.</summary>
-    public IReadOnlyList<AiMissingConditionDto> Evaluate(AiWorkflowType type)
+    public IReadOnlyList<AiMissingConditionDto> Evaluate(AiWorkflowType type, bool appendScript = false)
     {
         var missing = new List<AiMissingConditionDto>();
         void Add(string code, string kind, string message) => missing.Add(new AiMissingConditionDto(code, kind, message));
@@ -207,7 +207,8 @@ internal sealed record AiWorkflowFacts(
         switch (type)
         {
             case AiWorkflowType.Script or AiWorkflowType.FullScene:
-                if (LinkedLineCount > 0)
+                // Viết nối chỉ thêm dòng mới nên không đụng liên kết Panel của dòng cũ
+                if (LinkedLineCount > 0 && !(appendScript && type == AiWorkflowType.Script))
                     Add("SCENE_LINES_LINKED", "State", "Scene có dòng đã gắn Panel; thay cả script bằng AI sẽ làm mất liên kết này.");
                 break;
             case AiWorkflowType.Storyboard:
