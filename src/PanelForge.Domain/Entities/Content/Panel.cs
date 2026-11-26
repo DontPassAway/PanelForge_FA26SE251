@@ -89,5 +89,14 @@ public class Panel : BaseEntity
         Version++;
     }
 
+    public void Reorder(int panelNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(panelNumber);
+        if (PanelNumber == panelNumber && ReadingOrder == panelNumber) return;
+        PanelNumber = panelNumber;
+        ReadingOrder = panelNumber;
+        Version++;
+    }
+
     public void AdvanceToStage(Guid? stageId) => CurrentStageId = stageId;
 }

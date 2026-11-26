@@ -83,6 +83,14 @@ internal static class ChapterScriptSaver
         var touchedPanelIds = new HashSet<Guid>();
         var modifiedLines = new List<ScriptLine>();
         var placedPanels = new List<(Panel Panel, ScriptTreePanel Wanted)>();
+        var claimedPanelIds = payloadPages
+            .SelectMany(p => p.Panels ?? [])
+            .Where(p => p.Id.HasValue)
+            .Select(p => p.Id!.Value)
+            .ToHashSet();
+        var nextTemporaryPanelNumber = panels.Count == 0
+            ? 1
+            : panels.Max(p => p.PanelNumber) + payloadPages.Sum(p => p.Panels?.Count ?? 0) + 1;
         var order = 0;
 
         foreach (var wantedPage in payloadPages)
@@ -91,7 +99,26 @@ internal static class ChapterScriptSaver
 
             foreach (var wantedPanel in (wantedPage.Panels ?? []).OrderBy(p => p.Number))
             {
-                var (panel, _) = ScriptStructureRules.EnsurePanel(db, panels, page.Id, wantedPanel.Number, userId);
+                Panel panel;
+                try
+                {
+                    (panel, _) = ScriptStructureRules.EnsurePanel(
+                        db,
+                        panels,
+                        page.Id,
+                        wantedPanel.Id,
+                        wantedPanel.Number,
+                        nextTemporaryPanelNumber++,
+                        claimedPanelIds,
+                        touchedPanelIds,
+                        userId);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new ScriptSaveAbortException(
+                        $"Trang {wantedPage.Number}, panel {wantedPanel.Number}: {ex.Message}",
+                        ResultErrorCodes.Validation);
+                }
                 touchedPanelIds.Add(panel.Id);
                 placedPanels.Add((panel, wantedPanel));
 
@@ -151,8 +178,9 @@ internal static class ChapterScriptSaver
         ScriptVersion version;
         try
         {
-            // Snapshot đọc từ DB nên phải ghi khung và dòng trước; tất cả vẫn nằm trong transaction của handler.
+            // Ghi panel mới bằng số tạm và hoàn tất xoá mềm trước, tránh đụng unique index khi chèn/xoá giữa trang.
             await db.SaveChangesAsync(ct);
+            await NormalizePanelNumbersAsync(db, placedPanels, touchedPanelIds, ct);
             version = await ScriptSnapshotBuilder.CommitAsync(db, chapterId, userId, message, ct, castService);
             await db.SaveChangesAsync(ct);
         }
@@ -166,6 +194,54 @@ internal static class ChapterScriptSaver
             await new GenerateStageTasksCommandHandler(db).Handle(new GenerateStageTasksCommand(chapterId, userId), ct);
 
         return new ChapterScriptSaveOutcome(chapter, workspaceId, version, version.Id != latest?.Id, warnings.Distinct().ToList());
+    }
+
+    private static async Task NormalizePanelNumbersAsync(
+        IPanelForgeDbContext db,
+        IReadOnlyList<(Panel Panel, ScriptTreePanel Wanted)> placedPanels,
+        IReadOnlySet<Guid> touchedPanelIds,
+        CancellationToken ct)
+    {
+        var retainedFinalNumbers = new List<(Panel Panel, int Number)>();
+        foreach (var pageGroup in placedPanels.GroupBy(x => x.Panel.PageId))
+        {
+            var activePanels = await db.Panels
+                .Where(p => p.PageId == pageGroup.Key)
+                .ToListAsync(ct);
+            var desiredNumbers = pageGroup.Select(x => x.Wanted.Number).ToHashSet();
+            var retainedDroppedPanels = activePanels
+                .Where(p => !touchedPanelIds.Contains(p.Id) && desiredNumbers.Contains(p.PanelNumber))
+                .ToList();
+            var needsReorder = pageGroup.Any(x => x.Panel.PanelNumber != x.Wanted.Number) ||
+                               retainedDroppedPanels.Count > 0;
+            if (!needsReorder) continue;
+
+            var temporaryNumber = Math.Max(
+                activePanels.Count == 0 ? 0 : activePanels.Max(p => p.PanelNumber),
+                desiredNumbers.Count == 0 ? 0 : desiredNumbers.Max()) + activePanels.Count + 1;
+
+            foreach (var (panel, _) in pageGroup)
+                panel.Reorder(temporaryNumber++);
+            var retainedFinalNumber = Math.Max(
+                activePanels.Count == 0 ? 0 : activePanels.Max(p => p.PanelNumber),
+                desiredNumbers.Count == 0 ? 0 : desiredNumbers.Max()) + 1;
+            foreach (var retained in retainedDroppedPanels)
+            {
+                retained.Reorder(temporaryNumber++);
+                retainedFinalNumbers.Add((retained, retainedFinalNumber++));
+            }
+        }
+
+        // Pha 1 giải phóng toàn bộ số thứ tự cũ trong unique index.
+        await db.SaveChangesAsync(ct);
+
+        foreach (var (panel, wanted) in placedPanels)
+            panel.Reorder(wanted.Number);
+        foreach (var (panel, number) in retainedFinalNumbers)
+            panel.Reorder(number);
+
+        // Pha 2 gán lại số thứ tự cuối cùng đúng theo payload, nhưng giữ nguyên Panel ID và mọi artwork liên kết.
+        await db.SaveChangesAsync(ct);
     }
 
     private static ScriptLine UpsertLine(

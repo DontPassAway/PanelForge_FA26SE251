@@ -56,12 +56,32 @@ internal static class ScriptStructureRules
     }
 
     public static (Panel Panel, bool Created) EnsurePanel(
-        IPanelForgeDbContext db, List<Panel> panels, Guid pageId, int panelNumber, Guid userId)
+        IPanelForgeDbContext db,
+        List<Panel> panels,
+        Guid pageId,
+        Guid? panelId,
+        int panelNumber,
+        int temporaryPanelNumber,
+        IReadOnlySet<Guid> claimedPanelIds,
+        IReadOnlySet<Guid> touchedPanelIds,
+        Guid userId)
     {
-        var panel = panels.FirstOrDefault(p => p.PageId == pageId && p.PanelNumber == panelNumber);
+        var panel = panelId.HasValue
+            ? panels.FirstOrDefault(p => p.Id == panelId.Value)
+            : panels.FirstOrDefault(p =>
+                p.PageId == pageId &&
+                p.PanelNumber == panelNumber &&
+                !claimedPanelIds.Contains(p.Id) &&
+                !touchedPanelIds.Contains(p.Id));
+
+        if (panelId.HasValue && panel is null)
+            throw new InvalidOperationException($"Panel '{panelId}' không tồn tại trong chương này.");
+        if (panel is not null && panel.PageId != pageId)
+            throw new InvalidOperationException($"Panel '{panel.Id}' không thuộc trang đang lưu.");
         if (panel is not null) return (panel, false);
 
-        panel = Panel.Create(pageId, panelNumber, panelNumber, "{}");
+        // Panel mới dùng số tạm để không đụng unique index khi chèn vào giữa các panel hiện có.
+        panel = Panel.Create(pageId, temporaryPanelNumber, temporaryPanelNumber, "{}");
         panel.CreatedBy = userId.ToString();
         db.Panels.Add(panel);
         panels.Add(panel);
