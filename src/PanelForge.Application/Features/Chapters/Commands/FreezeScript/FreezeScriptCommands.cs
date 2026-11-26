@@ -169,7 +169,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         var affectedTargets = affectedPanelIds.Concat(affectedPageIds).ToHashSet();
         var startedAssignmentStatuses = new[]
         {
-            AssignmentStatus.InProgress, AssignmentStatus.Submitted, AssignmentStatus.UnderReview,
+            AssignmentStatus.Assigned, AssignmentStatus.InProgress, AssignmentStatus.Submitted, AssignmentStatus.UnderReview,
             AssignmentStatus.Approved, AssignmentStatus.ReworkRequired
         };
 
@@ -180,6 +180,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         {
             var lineId = lineByPanel.GetValueOrDefault(a.TargetEntityId, actionLines.FirstOrDefault()?.Id ?? Guid.Empty);
             a.FlagScriptImpact(lineId);
+            a.FlagImpactReview("Nội dung hình ảnh hoặc Series Bible đã thay đổi khi chốt lại kịch bản (⚑).");
         }
 
         foreach (var sp in await _dbContext.StageProgresses

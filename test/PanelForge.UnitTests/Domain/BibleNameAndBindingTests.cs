@@ -28,13 +28,12 @@ public class BibleNameAndBindingTests
         stub.IsStub.Should().BeTrue();
         stub.Name.Should().Be("Kuro");
         stub.Description.Should().BeEmpty();
-        stub.Code.Should().StartWith("STUB_");
     }
 
     [Fact]
     public void SetCrowd_ShouldToggleFlag()
     {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Dân làng A", "Mô tả");
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "Dân làng A", "Mô tả");
         entry.IsCrowd.Should().BeFalse();
 
         entry.SetCrowd(true);
@@ -108,7 +107,7 @@ public class BibleNameAndBindingTests
     public void BibleEntry_Create_ShouldStoreNormalizedName()
     {
         var seriesBibleId = Guid.NewGuid();
-        var entry = BibleEntry.Create(seriesBibleId, BibleEntryCategory.Character, "CHR-01", "  Hắc   Long  ", "Mô tả");
+        var entry = BibleEntry.Create(seriesBibleId, BibleEntryCategory.Character, "  Hắc   Long  ", "Mô tả");
 
         entry.NormalizedName.Should().Be("hắc long");
     }

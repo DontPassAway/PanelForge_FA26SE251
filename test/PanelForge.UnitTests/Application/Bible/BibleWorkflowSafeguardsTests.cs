@@ -10,12 +10,12 @@ using PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.EndorseBibleRevision;
 using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
-using PanelForge.Application.Features.Bible.Commands.UpdateBibleEntryAliases;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
@@ -280,30 +280,22 @@ public class BibleWorkflowSafeguardsTests
     }
 
     [Fact]
-    public async Task AliasesCrud_SpeakerAutoLinksByAlias_AndDraftRenameAllowedBeforeLockOnly()
+    public async Task SpeakerAutoLinksByName_AndDraftRenameAllowedBeforeLockOnly()
     {
         var (db, seriesId, _, bible) = CreateContextWithSeries();
         var writerId = Guid.NewGuid();
-        var entry = bible.AddEntry(BibleEntryCategory.Character, "CHR-09", "Rin Tachibana", "Detective");
+        var entry = bible.AddEntry(BibleEntryCategory.Character, "Rin Tachibana", "Detective");
         var v1 = entry.AddRevision("v1", "{}", "h1", authorId: writerId, isInitialVersion: true);
         db.BibleEntries.Add(entry);
         db.BibleEntryRevisions.Add(v1);
 
         var chapter = Chapter.Create(seriesId, 1m, "Ch1");
         var scene = Scene.CreateDefault(chapter.Id);
-        var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Follow me!", speakerLabel: "Rin-chan");
+        var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Follow me!", speakerLabel: "Rin Tachibana");
         db.Chapters.Add(chapter);
         db.Scenes.Add(scene);
         db.ScriptLines.Add(line);
         await db.SaveChangesAsync();
-
-        // Update aliases via handler
-        var aliasHandler = new UpdateBibleEntryAliasesCommandHandler(db);
-        var aliasRes = await aliasHandler.Handle(
-            new UpdateBibleEntryAliasesCommand(seriesId, entry.Id, writerId, ["Rin-chan", "Detective Rin"]),
-            CancellationToken.None);
-        aliasRes.IsSuccess.Should().BeTrue();
-        aliasRes.Value!.Aliases.Should().Contain("Rin-chan");
 
         // Rename typo before lock succeeds
         var addRevHandler = new AddBibleEntryRevisionCommandHandler(db);
@@ -318,7 +310,10 @@ public class BibleWorkflowSafeguardsTests
         renameRes.IsSuccess.Should().BeTrue();
         entry.Name.Should().Be("Rin Tachibane");
 
-        // Auto-link speaker via alias instead of creating a duplicate stub
+        // Auto-link speaker via name instead of creating a duplicate stub
+        line.UpdateContent("Follow me!", null, speakerLabel: "Rin Tachibane");
+        await db.SaveChangesAsync();
+
         var inheritance = new ChapterCastInheritanceResolver(db);
         var castService = new ChapterCastService(db, inheritance);
         await castService.RecomputeAsync(chapter.Id, writerId);
@@ -370,18 +365,6 @@ public class BibleWorkflowSafeguardsTests
         var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Let's go!", speakerLabel: "Akira");
         line.AssignToPanel(panel.Id);
 
-        chapter.SubmitScript(writerId);
-        chapter.StartProduction(producerId, "frozen-hash");
-        await Task.Delay(15);
-        chapter.UnfreezeScript(producerId, "Need flashback costume variant");
-        await Task.Delay(15);
-        chapter.SubmitScript(writerId);
-
-        var binding = ChapterBibleBinding.Create(chapter.Id, entry.Id, v1.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: true);
-        var variant = PanelBibleVariant.Create(panel.Id, entry.Id, v2.Id, writerId);
-        var panelAssignment = Assignment.Create(
-            seriesId, chapter.Id, WorkflowEntityType.Panel, panel.Id, Guid.NewGuid(), artistId, WorkspaceRole.Artist, "Draw Panel 1");
-
         db.BibleEntries.Add(entry);
         db.BibleEntryRevisions.AddRange(v1, v2);
         db.Chapters.Add(chapter);
@@ -389,7 +372,33 @@ public class BibleWorkflowSafeguardsTests
         db.Pages.Add(page);
         db.Panels.Add(panel);
         db.ScriptLines.Add(line);
-        db.ChapterBibleBindings.Add(binding);
+        await db.SaveChangesAsync();
+
+        var inheritanceInit = new ChapterCastInheritanceResolver(db);
+        var castServiceInit = new ChapterCastService(db, inheritanceInit);
+        var initialCommit = await ScriptSnapshotBuilder.CommitAsync(db, chapter.Id, writerId, "v1", CancellationToken.None, castServiceInit);
+        chapter.SubmitScript(writerId);
+        chapter.StartProduction(producerId, "frozen-hash", initialCommit.Id);
+        await Task.Delay(15);
+        chapter.UnfreezeScript(producerId, "Need flashback costume variant");
+        await Task.Delay(15);
+        chapter.SubmitScript(writerId);
+
+        var binding = db.ChapterBibleBindings.Local.FirstOrDefault(b => b.ChapterId == chapter.Id && b.BibleEntryId == entry.Id)
+            ?? await db.ChapterBibleBindings.FirstOrDefaultAsync(b => b.ChapterId == chapter.Id && b.BibleEntryId == entry.Id);
+        if (binding == null)
+        {
+            binding = ChapterBibleBinding.Create(chapter.Id, entry.Id, v1.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: true);
+            db.ChapterBibleBindings.Add(binding);
+        }
+        else
+        {
+            binding.UpdateBinding(v1.Id, ChapterBibleBindingSource.Speaker, true, writerId);
+        }
+        var variant = PanelBibleVariant.Create(panel.Id, entry.Id, v2.Id, writerId);
+        var panelAssignment = Assignment.Create(
+            seriesId, chapter.Id, WorkflowEntityType.Panel, panel.Id, Guid.NewGuid(), artistId, WorkspaceRole.Artist, "Draw Panel 1");
+
         db.PanelBibleVariants.Add(variant);
         db.Assignments.Add(panelAssignment);
         await db.SaveChangesAsync();

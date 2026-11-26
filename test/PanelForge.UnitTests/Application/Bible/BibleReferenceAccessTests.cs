@@ -47,7 +47,7 @@ public class BibleReferenceAccessTests
     [Fact]
     public async Task CanonOnly_ShouldSkipUnlockedRevision_AndReturnImageOfLockedVersion()
     {
-        var hero = (await AtChapter(6, canonOnly: true)).Single(e => e.Code == "HERO");
+        var hero = (await AtChapter(6, canonOnly: true)).Single(e => e.Name == "Hero");
 
         hero.Description.Should().Be("Grey coat");
         hero.ReferenceImageUrl.Should().Be("/img/grey");
@@ -57,7 +57,7 @@ public class BibleReferenceAccessTests
     [Fact]
     public async Task Default_ShouldStillShowLatestDraftForProducerScreen()
     {
-        var hero = (await AtChapter(6, canonOnly: false)).Single(e => e.Code == "HERO");
+        var hero = (await AtChapter(6, canonOnly: false)).Single(e => e.Name == "Hero");
 
         hero.ReferenceImageUrl.Should().Be("/img/red");
     }
@@ -65,13 +65,13 @@ public class BibleReferenceAccessTests
     [Fact]
     public async Task CanonOnly_ShouldDropCharacterWithoutAnyLockedVersion()
     {
-        (await AtChapter(1, canonOnly: true)).Select(e => e.Code).Should().Equal("HERO");
+        (await AtChapter(1, canonOnly: true)).Select(e => e.Name).Should().Equal("Hero");
     }
 
     [Fact]
     public async Task EntryIds_ShouldLimitResultToRequestedEntries()
     {
-        (await AtChapter(1, canonOnly: false, [_villain.Id])).Select(e => e.Code).Should().Equal("VILLAIN");
+        (await AtChapter(1, canonOnly: false, [_villain.Id])).Select(e => e.Name).Should().Equal("Villain");
     }
 
     [Fact]

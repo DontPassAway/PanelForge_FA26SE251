@@ -61,8 +61,7 @@ public sealed class ChapterCastService : IChapterCastService
 
         var existingEntries = await _db.BibleEntries
             .Where(e => e.SeriesBibleId == seriesBible.Id
-                && e.Category == BibleEntryCategory.Character
-                && e.IsActive)
+                && e.Category == BibleEntryCategory.Character)
             .ToListAsync(ct);
 
         var resolvedSpeakerMap = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
@@ -71,19 +70,6 @@ public sealed class ChapterCastService : IChapterCastService
             if (normKeys.Contains(entry.NormalizedName))
             {
                 resolvedSpeakerMap[entry.NormalizedName] = entry.Id;
-            }
-        }
-
-        // Sau tên chính, khớp tiếp theo danh sách Aliases (không ghi đè tên chính nếu trùng)
-        foreach (var entry in existingEntries)
-        {
-            foreach (var alias in entry.Aliases)
-            {
-                var aliasNorm = BibleNameNormalizer.Normalize(alias);
-                if (!string.IsNullOrEmpty(aliasNorm) && normKeys.Contains(aliasNorm) && !resolvedSpeakerMap.ContainsKey(aliasNorm))
-                {
-                    resolvedSpeakerMap[aliasNorm] = entry.Id;
-                }
             }
         }
 
@@ -96,7 +82,6 @@ public sealed class ChapterCastService : IChapterCastService
             var localEntry = _db.BibleEntries.Local.FirstOrDefault(e =>
                 e.SeriesBibleId == seriesBible.Id
                 && e.Category == BibleEntryCategory.Character
-                && e.IsActive
                 && e.NormalizedName == cand.NormalizedName);
             if (localEntry is not null)
             {

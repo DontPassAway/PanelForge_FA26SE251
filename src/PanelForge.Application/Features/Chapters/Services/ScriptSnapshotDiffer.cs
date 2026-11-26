@@ -460,18 +460,12 @@ internal static class ScriptSnapshotDiffer
 
         var entries = await db.BibleEntries.AsNoTracking()
             .Where(e => entryIds.Contains(e.Id))
-            .Select(e => new { e.NormalizedName, e.Aliases })
+            .Select(e => e.NormalizedName)
             .ToListAsync(ct);
 
-        foreach (var e in entries)
+        foreach (var name in entries)
         {
-            names.Add(e.NormalizedName);
-            foreach (var alias in e.Aliases)
-            {
-                var norm = Domain.Common.BibleNameNormalizer.Normalize(alias);
-                if (!string.IsNullOrEmpty(norm))
-                    names.Add(norm);
-            }
+            names.Add(name);
         }
         return names;
     }

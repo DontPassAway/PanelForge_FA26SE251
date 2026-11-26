@@ -13,20 +13,13 @@ public class BibleEntry : BaseEntity
 
     public Guid SeriesBibleId { get; private set; }
     public BibleEntryCategory Category { get; private set; }
-    public string Code { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public string NormalizedName { get; private set; } = default!;
-    public string? Subtitle { get; private set; }
     public string Description { get; private set; } = default!;
     public string DetailsJson { get; private set; } = "{}";
     public string? ReferenceImageUrl { get; private set; }
-    public BiblePriority Priority { get; private set; } = BiblePriority.Standard;
-    public bool StrictCheck { get; private set; } = true;
-    public bool IsActive { get; private set; } = true;
-    /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ cú pháp @-mention trong kịch bản (Write First, Bible Later).</summary>
+    /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ kịch bản (Write First, Bible Later).</summary>
     public bool IsStub { get; private set; } = false;
-    /// <summary>BIB-09 & 9A: Danh sách bí danh của mục (tối đa 20 bí danh, mỗi bí danh <= 100 ký tự).</summary>
-    public List<string> Aliases { get; private set; } = [];
     /// <summary>BIB-11 & 7A: Cờ Quần chúng; mục quần chúng không bắt buộc khoá Canon ở Gate 1.</summary>
     public bool IsCrowd { get; private set; } = false;
 
@@ -43,13 +36,9 @@ public class BibleEntry : BaseEntity
         string code,
         string name,
         string description,
-        string? subtitle = null,
         string? detailsJson = null,
-        string? referenceImageUrl = null,
-        BiblePriority priority = BiblePriority.Standard,
-        bool strictCheck = true)
+        string? referenceImageUrl = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
@@ -57,23 +46,27 @@ public class BibleEntry : BaseEntity
         {
             SeriesBibleId = seriesBibleId,
             Category = category,
-            Code = code.Trim().ToUpperInvariant(),
             Name = name.Trim(),
             NormalizedName = BibleNameNormalizer.Normalize(name),
-            Subtitle = subtitle?.Trim(),
             Description = description.Trim(),
             DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim(),
             ReferenceImageUrl = referenceImageUrl?.Trim(),
-            Priority = priority,
-            StrictCheck = strictCheck,
-            IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
     }
 
+    public static BibleEntry Create(
+        Guid seriesBibleId,
+        BibleEntryCategory category,
+        string name,
+        string description)
+    {
+        return Create(seriesBibleId, category, string.Empty, name, description);
+    }
+
     /// <summary>
-    /// V2.5: Tạo nhanh thực thể tạm (Stub) khi Writer gõ @-mention trong kịch bản.
+    /// V2.5: Tạo nhanh thực thể tạm (Stub) khi Writer đề cập trong kịch bản.
     /// Cho phép Writer viết tự do (Write First, Bible Later).
     /// </summary>
     public static BibleEntry CreateStub(
@@ -85,20 +78,15 @@ public class BibleEntry : BaseEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         var trimmedName = name.Trim();
-        var code = "STUB_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
         return new BibleEntry
         {
             SeriesBibleId = seriesBibleId,
             Category = category,
-            Code = code,
             Name = trimmedName,
             NormalizedName = BibleNameNormalizer.Normalize(trimmedName),
             Description = description?.Trim() ?? string.Empty,
             DetailsJson = "{}",
-            Priority = BiblePriority.Standard,
-            StrictCheck = false,
-            IsActive = true,
             IsStub = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -113,20 +101,14 @@ public class BibleEntry : BaseEntity
 
     public void UpdateDetails(
         string description,
-        string? subtitle,
         string? detailsJson,
-        string? referenceImageUrl,
-        BiblePriority priority,
-        bool strictCheck)
+        string? referenceImageUrl)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
         Description = description.Trim();
-        Subtitle = subtitle?.Trim();
         DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim();
         ReferenceImageUrl = referenceImageUrl?.Trim();
-        Priority = priority;
-        StrictCheck = strictCheck;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -137,69 +119,20 @@ public class BibleEntry : BaseEntity
     }
 
     public void PromoteFromStub(
-        string code,
         string name,
         string description,
-        string? subtitle = null,
         string? detailsJson = null,
-        string? referenceImageUrl = null,
-        BiblePriority priority = BiblePriority.Standard,
-        bool strictCheck = true)
+        string? referenceImageUrl = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
-        Code = code.Trim().ToUpperInvariant();
         Name = name.Trim();
         NormalizedName = BibleNameNormalizer.Normalize(name);
         Description = description.Trim();
-        Subtitle = subtitle?.Trim();
         DetailsJson = string.IsNullOrWhiteSpace(detailsJson) ? "{}" : detailsJson.Trim();
         ReferenceImageUrl = referenceImageUrl?.Trim();
-        Priority = priority;
-        StrictCheck = strictCheck;
         IsStub = false;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void SetActiveStatus(bool isActive)
-    {
-        IsActive = isActive;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void SetAliases(IEnumerable<string>? aliases)
-    {
-        var normalizedOwnName = BibleNameNormalizer.Normalize(Name);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var cleaned = new List<string>();
-
-        if (aliases != null)
-        {
-            foreach (var raw in aliases)
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                var trimmed = raw.Trim();
-                if (trimmed.Length > 100)
-                    throw new ArgumentException("Mỗi bí danh tối đa 100 ký tự.");
-
-                var norm = BibleNameNormalizer.Normalize(trimmed);
-                if (string.IsNullOrEmpty(norm)) continue;
-                if (string.Equals(norm, normalizedOwnName, StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException("Bí danh không được trùng với tên chính của mục Bible.");
-
-                if (seen.Add(norm))
-                {
-                    cleaned.Add(trimmed);
-                }
-            }
-        }
-
-        if (cleaned.Count > 20)
-            throw new ArgumentException("Mỗi mục Bible chỉ được có tối đa 20 bí danh.");
-
-        Aliases = cleaned;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -217,9 +150,7 @@ public class BibleEntry : BaseEntity
     public bool MatchesNormalizedName(string normalizedKey)
     {
         if (string.IsNullOrWhiteSpace(normalizedKey)) return false;
-        if (string.Equals(NormalizedName, normalizedKey, StringComparison.OrdinalIgnoreCase))
-            return true;
-        return Aliases.Any(a => string.Equals(BibleNameNormalizer.Normalize(a), normalizedKey, StringComparison.OrdinalIgnoreCase));
+        return string.Equals(NormalizedName, normalizedKey, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -229,7 +160,6 @@ public class BibleEntry : BaseEntity
     public bool IsVisualDesign
         => Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop;
 
-    /// <summary>
     /// <summary>Bản mới nhất của từng biến thể / giai đoạn.</summary>
     public IEnumerable<BibleEntryRevision> LatestRevisionPerStage()
         => Revisions

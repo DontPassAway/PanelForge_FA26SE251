@@ -148,11 +148,8 @@ public class BibleConceptVersioningAndConfirmTests
             {
                 Name = _heroEntry.Name,
                 Description = "Mô tả Canon mới",
-                Subtitle = "Bản trưởng thành",
                 DetailsJson = "{\"age\":18}",
-                ReferenceImageUrl = "draft.png",
-                Priority = BiblePriority.StrictCheck,
-                StrictCheck = false
+                ReferenceImageUrl = "draft.png"
             }),
             "hash-v2");
         revision.SubmitConcept(_artistId, "canon-v2.png", "Bản hoàn chỉnh");
@@ -166,8 +163,6 @@ public class BibleConceptVersioningAndConfirmTests
         _heroEntry.Name.Should().Be("Naruto");
         _heroEntry.Description.Should().Be("Mô tả Canon mới");
         _heroEntry.ReferenceImageUrl.Should().Be("canon-v2.png");
-        _heroEntry.Priority.Should().Be(BiblePriority.StrictCheck);
-        _heroEntry.StrictCheck.Should().BeFalse();
     }
 
     [Fact]

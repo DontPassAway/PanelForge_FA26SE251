@@ -34,7 +34,6 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
         var entries = await _dbContext.BibleEntries
             .AsNoTracking()
             .Where(e => e.SeriesBibleId == bible.Id
-                && e.IsActive
                 && !e.IsStub
                 && !e.IsCrowd
                 && (e.Category == BibleEntryCategory.Character
@@ -84,7 +83,7 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                 queue.Add(new BibleDesignQueueItemDto(
                     EntryId: entry.Id,
                     SeriesId: query.SeriesId,
-                    Code: entry.Code,
+                    Code: entry.Id.ToString("N")[..8].ToUpperInvariant(),
                     Name: entry.Name,
                     Category: entry.Category,
                     Description: entry.Description,

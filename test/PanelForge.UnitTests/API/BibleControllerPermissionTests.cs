@@ -178,17 +178,4 @@ public class BibleControllerPermissionTests
         roles.Should().NotContain(WorkspaceRole.Producer);
         roles.Should().NotContain(WorkspaceRole.Artist);
     }
-
-    [Fact]
-    public void UpdateBibleEntryAliases_AllowsOnlyWriter_AndRejectsOtherRoles()
-    {
-        var method = GetAction(nameof(BibleController.UpdateBibleEntryAliases));
-        var roles = GetAllowedRoles(method);
-
-        roles.Should().ContainSingle()
-            .Which.Should().Be(WorkspaceRole.Writer, "BIB-01: Chỉ Writer được quản lý danh sách tên phụ (aliases)");
-        roles.Should().NotContain(WorkspaceRole.Editor);
-        roles.Should().NotContain(WorkspaceRole.Producer);
-        roles.Should().NotContain(WorkspaceRole.Artist);
-    }
 }

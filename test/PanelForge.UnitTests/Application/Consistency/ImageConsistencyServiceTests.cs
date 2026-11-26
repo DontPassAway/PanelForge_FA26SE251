@@ -157,8 +157,7 @@ public class ImageConsistencyServiceTests
     public async Task NoCharacterSheet_IsSkipped_WithoutCallingAi()
     {
         var fixture = new TestFixture(Reply(0.9m));
-        fixture.Character.UpdateDetails(fixture.Character.Description, null, null, null,
-            fixture.Character.Priority, fixture.Character.StrictCheck);
+        fixture.Character.UpdateDetails(fixture.Character.Description, null, null);
         fixture.Db.SaveChanges();
 
         var result = await fixture.CreateService().CheckPanelConsistencyAsync(fixture.Panel.Id);

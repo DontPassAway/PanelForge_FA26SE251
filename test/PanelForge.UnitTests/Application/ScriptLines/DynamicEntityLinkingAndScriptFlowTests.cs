@@ -109,11 +109,10 @@ public class DynamicEntityLinkingAndScriptFlowTests
         var updatedLink = await _db.ScriptLineBibleLinks.FirstAsync(l => l.ScriptLineId == _line1.Id);
         updatedLink.BibleEntryId.Should().Be(formalEntryId);
 
-        // Stub trở thành entry chính thức và vẫn active.
+        // Stub trở thành entry chính thức.
         var definedEntry = await _db.BibleEntries.FirstAsync(e => e.Id == stub.Id);
         definedEntry.IsStub.Should().BeFalse();
-        definedEntry.IsActive.Should().BeTrue();
-        definedEntry.Code.Should().Be("CHR_AKIRA");
+        definedEntry.Name.Should().Be("Akira");
     }
 
     [Fact]

@@ -17,12 +17,15 @@ public sealed record DefineBibleEntryCommand(
     Guid UserId,
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
+    bool? IsCrowd = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Code = null,
+    string? Subtitle = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    string? Code = null,
     IReadOnlyList<string>? Aliases = null
 ) : IRequest<Result<BibleEntryDto>>;
 
@@ -64,13 +67,12 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
                 cmd.UserId,
                 cmd.Name,
                 cmd.Description,
-                cmd.Subtitle,
                 cmd.DetailsJson,
                 cmd.ReferenceImageUrl,
-                cmd.Priority,
-                cmd.StrictCheck,
-                cmd.Code,
-                Aliases: cmd.Aliases),
+                cmd.IsCrowd,
+                cmd.Age,
+                cmd.ArtistNotes,
+                cmd.Subtitle),
             ct);
     }
 }

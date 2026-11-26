@@ -89,13 +89,14 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 Summary: body.EffectiveSummary,
                 Name: body.Name,
                 Description: body.Description,
-                Subtitle: body.Subtitle,
-                DetailsJson: body.DetailsJson,
+                DetailsJson: body.EffectiveDetailsJson,
                 ReferenceImageUrl: body.EffectiveImageUrl,
                 StageName: body.EffectiveStageName,
                 ExpectedVersionNumber: body.ExpectedVersionNumber,
                 ArtistUserId: cmd.ArtistUserId,
-                TargetRevisionId: target?.Id), ct);
+                TargetRevisionId: target?.Id,
+                Age: body.Age,
+                ArtistNotes: body.ArtistNotes), ct);
 
         if (target.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure(
@@ -121,7 +122,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
 
         return Differs(b.Name, entry.Name)
             || Differs(b.Description, snapshot.Description)
-            || Differs(b.Subtitle, snapshot.Subtitle)
             || Differs(b.DetailsJson, snapshot.DetailsJson)
             || Differs(b.EffectiveStageName, target.StageName);
     }

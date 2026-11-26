@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Bible.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
@@ -15,14 +16,12 @@ internal sealed record BibleEntryDefinition(
     Guid UserId,
     string Name,
     string Description,
-    string? Subtitle,
-    string? DetailsJson,
-    string? ReferenceImageUrl,
-    BiblePriority Priority,
-    bool StrictCheck,
-    string? Code,
+    string? DetailsJson = null,
+    string? ReferenceImageUrl = null,
     bool? IsCrowd = null,
-    IReadOnlyList<string>? Aliases = null);
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Subtitle = null);
 
 internal static class BibleEntryStubDefinition
 {
@@ -64,66 +63,25 @@ internal static class BibleEntryStubDefinition
                 ResultErrorCodes.Conflict);
         }
 
-        string finalCode;
-        if (!string.IsNullOrWhiteSpace(definition.Code))
-        {
-            finalCode = definition.Code.Trim().ToUpperInvariant();
-            var codeConflict = await dbContext.BibleEntries
-                .AnyAsync(e => e.SeriesBibleId == bible.Id && e.Id != entry.Id && e.Code == finalCode, cancellationToken);
-            if (codeConflict)
-            {
-                return Result<BibleEntryDto>.Failure(
-                    $"Mã định danh (Code) '{finalCode}' đã tồn tại trong Series Bible.", ResultErrorCodes.Conflict);
-            }
-        }
-        else
-        {
-            var prefix = entry.Category switch
-            {
-                BibleEntryCategory.Character => "CHR",
-                BibleEntryCategory.Location => "LOC",
-                BibleEntryCategory.Prop => "PRP",
-                BibleEntryCategory.Terminology => "TRM",
-                BibleEntryCategory.StyleRule => "STY",
-                BibleEntryCategory.PlotFact => "PLT",
-                _ => "BIB"
-            };
+        var detailsJson = (!string.IsNullOrWhiteSpace(definition.Age) || !string.IsNullOrWhiteSpace(definition.ArtistNotes))
+            ? BibleDetailsParser.Serialize(definition.Age, definition.ArtistNotes)
+            : (string.IsNullOrWhiteSpace(definition.DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(definition.DetailsJson));
 
-            var cleanNameChars = definition.Name.Where(char.IsAsciiLetterOrDigit).ToArray();
-            var cleanName = cleanNameChars.Length > 0
-                ? new string(cleanNameChars).ToUpperInvariant()
-                : Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-
-            finalCode = $"{prefix}_{cleanName}";
-            var exists = await dbContext.BibleEntries
-                .AnyAsync(e => e.SeriesBibleId == bible.Id && e.Id != entry.Id && e.Code == finalCode, cancellationToken);
-
-            if (exists)
-            {
-                finalCode = $"{prefix}_{cleanName}_{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}";
-            }
-        }
+        var description = !string.IsNullOrWhiteSpace(definition.Description)
+            ? definition.Description.Trim()
+            : (definition.Subtitle?.Trim() ?? string.Empty);
 
         try
         {
             entry.PromoteFromStub(
-                code: finalCode,
                 name: definition.Name,
-                description: definition.Description,
-                subtitle: definition.Subtitle,
-                detailsJson: definition.DetailsJson,
-                referenceImageUrl: definition.ReferenceImageUrl,
-                priority: definition.Priority,
-                strictCheck: definition.StrictCheck);
+                description: description,
+                detailsJson: detailsJson,
+                referenceImageUrl: definition.ReferenceImageUrl);
 
             if (definition.IsCrowd.HasValue)
             {
                 entry.SetCrowd(definition.IsCrowd.Value);
-            }
-
-            if (definition.Aliases is { Count: > 0 })
-            {
-                entry.SetAliases(definition.Aliases);
             }
 
             entry.UpdatedBy = definition.UserId.ToString();
@@ -138,14 +96,10 @@ internal static class BibleEntryStubDefinition
         var snapshotObj = new
         {
             entry.Id,
-            entry.Code,
             entry.Name,
-            entry.Subtitle,
             entry.Description,
             entry.DetailsJson,
             entry.ReferenceImageUrl,
-            entry.Priority,
-            entry.StrictCheck,
             StageName = stageName
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);

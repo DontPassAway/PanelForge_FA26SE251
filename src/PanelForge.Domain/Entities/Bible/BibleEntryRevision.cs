@@ -69,7 +69,7 @@ public class BibleEntryRevision : BaseEntity
     /// <summary>Editor đã xác nhận và khoá revision này làm Canon tham chiếu. Chỉ thêm metadata, nội dung vẫn bất biến; không có thao tác mở khoá.</summary>
     public DateTime? LockedAt { get; private set; }
     public Guid? LockedById { get; private set; }
-    public bool IsLocked => LockedAt.HasValue || ReviewStatus == BibleRevisionStatus.CanonLocked;
+    public bool IsLocked => ReviewStatus == BibleRevisionStatus.CanonLocked;
     public bool IsSuperseded => Events.Any(e => e.Type == BibleRevisionEventType.Superseded);
 
     /// <summary>
