@@ -42,7 +42,9 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-        var tasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id && allTaskIds.Contains(t.Id)).ToListAsync(ct);
+        // N4: cần mọi ô của chương để biết tiền đề đã duyệt chưa (ghi ReadyAt khi giao)
+        var chapterTasks = await _db.StageTasks.Where(t => t.ChapterId == chapter.Id).ToListAsync(ct);
+        var tasks = chapterTasks.Where(t => allTaskIds.Contains(t.Id)).ToList();
         if (tasks.Count != allTaskIds.Count) return Fail("Có ô không thuộc chương này.", ResultErrorCodes.NotFound);
 
         if (cmd.Reassign)
@@ -112,11 +114,12 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
                 _db.Notifications.Add(TaskGridNotifications.Unassigned(old.AssigneeUserId, chapter.Id,
                     tasks.Count(t => t.LotId == old.Id)));
 
+        var allStages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
         foreach (var (lot, lotTasks) in lots)
         {
             lot.CreatedBy = cmd.UserId.ToString();
             _db.StageTaskLots.Add(lot);
-            foreach (var task in lotTasks) task.AssignTo(lot.Id);
+            foreach (var task in lotTasks) task.AssignTo(lot.Id, TaskGridRules.PrerequisitesApproved(task, allStages, chapterTasks));
             _db.Notifications.Add(TaskGridNotifications.Assigned(lot, lotTasks.Count, stages[lot.PipelineStageId].Name));
         }
         // Người nhận phải có trong SeriesMembers, nếu không vào trang/chương sẽ bị RequireWorkspaceRole chặn 403 (như V2).

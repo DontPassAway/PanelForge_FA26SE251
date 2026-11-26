@@ -34,8 +34,10 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
         var pid = cmd.ProducerUserId;
         var chapterIds = _db.Chapters
             .Where(c => c.Status == ChapterStatus.InProduction &&
-                        (pid == null || _db.Series.Any(s => s.Id == c.SeriesId && _db.WorkspaceMembers.Any(m =>
-                            m.WorkspaceId == s.WorkspaceId && m.UserId == pid && m.Role == WorkspaceRole.Producer))))
+                        (pid == null || _db.Series.Any(s => s.Id == c.SeriesId &&
+                            (_db.StudioWorkspaces.Any(w => w.Id == s.WorkspaceId && w.OwnerId == pid) ||
+                             _db.WorkspaceMembers.Any(m => m.WorkspaceId == s.WorkspaceId && m.UserId == pid
+                                 && m.Role == WorkspaceRole.Producer && m.Status == WorkspaceMemberStatus.Active)))))
             .Select(c => c.Id);
 
         var candidates = await _db.Assignments.AsNoTracking()

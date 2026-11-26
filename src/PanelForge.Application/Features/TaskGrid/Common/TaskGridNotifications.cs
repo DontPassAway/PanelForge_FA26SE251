@@ -74,6 +74,7 @@ internal static class TaskGridNotifications
                 && approved.Any(a => a.PageId is null || t.PageId is null || a.PageId == t.PageId)
                 && TaskGridRules.PrerequisitesApproved(t, stages, chapterTasks))
             .ToList();
+        foreach (var t in ready) t.MarkReady(); // N4: tiền đề cuối cùng vừa duyệt
         if (ready.Count == 0) return;
 
         var assigneeByLot = await AssigneesByLotAsync(db, ready, ct);

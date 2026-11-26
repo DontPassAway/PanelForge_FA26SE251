@@ -38,7 +38,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var member = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId, cancellationToken);
 
-        return member?.Role == WorkspaceRole.Producer;
+        return member is { Status: WorkspaceMemberStatus.Active, Role: WorkspaceRole.Producer };
     }
 
     public async Task<bool> HasWorkspaceRoleAsync(Guid userId, Guid workspaceId, WorkspaceRole[] allowedRoles, CancellationToken cancellationToken = default)

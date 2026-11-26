@@ -168,6 +168,28 @@ public class TaskGridHandlerTests
         }
     }
 
+    // ── Assign Automation Bước 1 (N4): ReadyAt ──
+
+    [Fact]
+    public async Task Assign_SetsReadyAt_ForFirstStageOnly_ThenNoGateSubmitMakesNextStageReady()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+
+        f.Cell(f.Pencil, 0).ReadyAt.Should().NotBeNull("Pencil không có tiền đề");
+        f.Cell(f.Ink, 0).ReadyAt.Should().BeNull("Pencil chưa duyệt");
+        f.Cell(f.Lettering, 0).ReadyAt.Should().BeNull();
+
+        (await f.Start(f.Cell(f.Pencil, 0), f.ArtistId)).IsSuccess.Should().BeTrue();
+        f.Cell(f.Pencil, 0).ReadyAt.Should().BeNull("đã bắt đầu");
+        (await f.Submit(f.ArtistId, f.Cell(f.Pencil, 0))).IsSuccess.Should().BeTrue();
+
+        // Pencil không cổng duyệt: nộp là duyệt, Ink và Lettering của trang 1 sẵn sàng
+        f.Cell(f.Ink, 0).ReadyAt.Should().NotBeNull();
+        f.Cell(f.Lettering, 0).ReadyAt.Should().NotBeNull();
+        f.Cell(f.Color, 0).ReadyAt.Should().BeNull("Ink chưa duyệt");
+    }
+
     [Fact]
     public async Task AutoAssignPlan_SplitsContiguousPages_KeepsSameArtistAcrossStages_AndCanBeApplied()
     {

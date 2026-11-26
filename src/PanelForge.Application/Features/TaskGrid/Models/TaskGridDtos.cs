@@ -37,11 +37,12 @@ public sealed record StageTaskDto(
 
 public sealed record StageTaskLotDto(
     Guid Id, Guid PipelineStageId, Guid AssigneeUserId, WorkspaceRole AssignedRole, string? Brief, DateTime? DueDate,
-    StageTaskLotStatus Status, bool IsOverdue, int TaskCount, int ApprovedCount, uint RowVersion)
+    StageTaskLotStatus Status, bool IsOverdue, int TaskCount, int ApprovedCount, uint RowVersion,
+    bool IsAutoAssigned = false, string? AutoAssignReason = null)
 {
     public static StageTaskLotDto From(StageTaskLot l, IReadOnlyCollection<StageTask> tasks, DateTime nowUtc) => new(
         l.Id, l.PipelineStageId, l.AssigneeUserId, l.AssignedRole, l.Brief, l.DueDate, l.Status, l.IsOverdue(nowUtc),
-        tasks.Count, tasks.Count(t => t.Status == StageTaskStatus.Approved), l.RowVersion);
+        tasks.Count, tasks.Count(t => t.Status == StageTaskStatus.Approved), l.RowVersion, l.IsAutoAssigned, l.AutoAssignReason);
 }
 
 // ─── Requests ─────────────────────────────────────────────────────────────────

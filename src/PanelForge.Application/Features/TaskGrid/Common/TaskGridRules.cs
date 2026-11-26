@@ -101,6 +101,8 @@ internal static class TaskGridRules
     public static async Task ReleaseMemberCellsAsync(
         IPanelForgeDbContext db, Guid userId, Guid workspaceId, Guid ownerId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
     {
+        // N5: làm trước đoạn thoát sớm, vì Editor thường không giữ lô nào
+        await ReleaseReviewerAsync(db, userId, seriesIds, ct);
         var cells = await UnfinishedCellsOf(db, userId, seriesIds)
             .Where(t => t.Status == StageTaskStatus.Assigned || t.Status == StageTaskStatus.InProgress ||
                         t.Status == StageTaskStatus.ReworkRequired)
@@ -121,6 +123,23 @@ internal static class TaskGridRules
             foreach (var recipient in recipients)
                 db.Notifications.Add(TaskGridNotifications.NeedsReassign(
                     recipient, chapter.Id, chapter.ChapterNumber, cells.Count(c => c.ChapterId == chapter.Id)));
+    }
+
+    /// <summary>
+    /// N5: người dùng thôi là Editor (rời Studio hoặc đổi vai trò). Bỏ gợi ý người duyệt trên ô Submitted và trả ô
+    /// UnderReview của họ về hàng đợi Submitted để Editor khác nhận.
+    /// </summary>
+    public static async Task ReleaseReviewerAsync(IPanelForgeDbContext db, Guid userId, IReadOnlyCollection<Guid> seriesIds, CancellationToken ct)
+    {
+        var cells = await db.StageTasks
+            .Where(t => t.ReviewerUserId == userId && seriesIds.Contains(t.SeriesId)
+                        && (t.Status == StageTaskStatus.Submitted || t.Status == StageTaskStatus.UnderReview))
+            .ToListAsync(ct);
+        foreach (var c in cells)
+        {
+            if (c.Status == StageTaskStatus.UnderReview) c.ReleaseReview();
+            else c.ClearSuggestedReviewer();
+        }
     }
 
     /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>

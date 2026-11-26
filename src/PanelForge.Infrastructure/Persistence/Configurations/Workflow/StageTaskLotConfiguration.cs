@@ -34,6 +34,9 @@ internal sealed class StageTaskLotConfiguration : IEntityTypeConfiguration<Stage
 
         builder.Property(l => l.Brief).HasColumnName("brief").HasColumnType($"varchar({StageTaskLot.MaxBriefLength})");
         builder.Property(l => l.DueDate).HasColumnName("due_date").HasColumnType("timestamptz");
+        builder.Property(l => l.IsAutoAssigned).HasColumnName("is_auto_assigned").HasColumnType("boolean").IsRequired();
+        builder.Property(l => l.AutoAssignReason).HasColumnName("auto_assign_reason")
+               .HasColumnType($"varchar({StageTaskLot.MaxAutoAssignReasonLength})");
         builder.Property(l => l.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(l => l.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");
 
