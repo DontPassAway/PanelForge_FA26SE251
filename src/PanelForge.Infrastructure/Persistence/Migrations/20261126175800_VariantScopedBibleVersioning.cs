@@ -17,6 +17,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 WHERE stage_name IS NULL OR TRIM(stage_name) = '';
             ");
 
+            // 4 (chạy trước 2). Xóa unique index cũ (bible_entry_id, version_number) trước khi đánh số lại,
+            // nếu không bước 2 sẽ đụng unique khi một entry có nhiều variant.
+            migrationBuilder.DropIndex(
+                name: "ix_bible_entry_revisions_bible_entry_id_version",
+                table: "bible_entry_revisions");
+
             // 2. Đánh số lại version_number bắt đầu từ 1 cho từng nhóm (bible_entry_id, stage_name)
             // theo thứ tự created_at asc, id asc
             migrationBuilder.Sql(@"
@@ -43,11 +49,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 oldClrType: typeof(string),
                 oldType: "varchar(100)",
                 oldNullable: true);
-
-            // 4. Xóa unique index cũ (bible_entry_id, version_number)
-            migrationBuilder.DropIndex(
-                name: "ix_bible_entry_revisions_bible_entry_id_version",
-                table: "bible_entry_revisions");
 
             // 5. Tạo unique index mới (bible_entry_id, stage_name, version_number)
             migrationBuilder.CreateIndex(
