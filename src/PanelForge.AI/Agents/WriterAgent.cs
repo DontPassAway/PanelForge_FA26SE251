@@ -58,6 +58,16 @@ public sealed class WriterAgent
     private static string? Clean(string? s) =>
         string.IsNullOrWhiteSpace(s) || s.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ? null : s.Trim();
 
+    /// <summary>Đoán loại mục Bible từ tiền tố mã model tự đặt (CHR_/LOC_/PROP_...); null nếu không đoán được.</summary>
+    private static string? CategoryFromCode(string? code)
+    {
+        var c = code?.ToUpperInvariant() ?? "";
+        if (c.StartsWith("CHR") || c.StartsWith("CHAR")) return "Character";
+        if (c.StartsWith("LOC") || c.StartsWith("PLACE")) return "Location";
+        if (c.StartsWith("PROP") || c.StartsWith("ITEM") || c.StartsWith("OBJ")) return "Prop";
+        return null;
+    }
+
     private static (ScriptDraft?, IReadOnlyList<string>) Parse(string text, AgentContext ctx, KeyMaps keys, int round)
     {
         var model = OutputParser.Parse<WriterOutput>(text, out var error);
@@ -66,7 +76,6 @@ public sealed class WriterAgent
 
         var unknownSpeakers = new Dictionary<string, List<int>>();
         var lines = new List<ScriptDraftLine>();
-        var badRefs = new List<string>();
         for (var i = 0; i < model.Lines.Count; i++)
         {
             var l = model.Lines[i];
@@ -97,8 +106,16 @@ public sealed class WriterAgent
                 if (string.IsNullOrEmpty(surface) || !refText.Contains(surface, StringComparison.OrdinalIgnoreCase)) continue;
                 var code = Clean(r.Code);
                 var entry = code is null ? null : ctx.Bible.FirstOrDefault(b => b.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
-                if (code is not null && entry is null) badRefs.Add($"Tham chiếu code '{code}' ở dòng {i + 1} không có trong Bible.");
-                else refs.Add(new ScriptDraftRef(surface, entry?.EntryId, entry is null ? Clean(r.NewName) : null, entry is null ? Clean(r.Category) : null));
+                if (entry is not null)
+                {
+                    refs.Add(new ScriptDraftRef(surface, entry.EntryId));
+                    continue;
+                }
+                // Mã không có trong Bible (model tự đặt, vd LOC_GATE): coi như mục mới cần định nghĩa thay vì huỷ cả bản nháp.
+                // Không đoán được loại thì bỏ thẻ — thẻ chỉ để tô sáng, nội dung dòng vẫn giữ nguyên.
+                var category = Clean(r.Category) ?? CategoryFromCode(code);
+                if (category is "Character" or "Location" or "Prop")
+                    refs.Add(new ScriptDraftRef(surface, null, Clean(r.NewName) ?? surface, category));
             }
             // LineId do ứng dụng cấp, không phải model
             lines.Add(new ScriptDraftLine(Guid.NewGuid(), i + 1, speaker, dialogue, stage, kind, label, refs.Count > 0 ? refs : null));
@@ -114,7 +131,6 @@ public sealed class WriterAgent
                 "Nhân vật phải có hồ sơ đã được Producer khoá thì AI mới dùng được.").ToList());
         }
 
-        if (badRefs.Count > 0) return (null, badRefs);
 
         var draft = new ScriptDraft(AiProtocol.SchemaVersion, ctx.RunId, ctx.SceneId, round, lines,
             ctx.BibleRevisionIds, model.RevisionNotes);
