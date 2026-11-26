@@ -49,6 +49,7 @@ public sealed class ResolveStageTaskImpactCommandHandler : IRequestHandler<Resol
             await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, [task], stages, chapterTasks, ct);
         }
         await _db.SaveChangesAsync(ct);
+        if (cmd.Keep) await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
 
         return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false)], ct))[0]);
     }

@@ -95,6 +95,7 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
         await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, tasks, stages, chapterTasks, ct);
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
+        await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(await TaskGridRules.WithSummaryAsync(_db,
             tasks.Select(t => StageTaskDto.From(t, t.LotId is { } lid ? lots.GetValueOrDefault(lid)?.AssigneeUserId : null, isStartable: false)), ct));
     }

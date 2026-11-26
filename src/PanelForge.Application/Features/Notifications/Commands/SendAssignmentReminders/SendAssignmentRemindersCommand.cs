@@ -76,12 +76,47 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
             created++;
         }
 
-        // Lưới V3: lô còn ô chưa xong (chưa nộp) sắp/đã quá hạn. Quá hạn thì báo cả Producer đã giao để gia hạn hoặc chia lại.
+        // Lưới V3 (R3): giờ nhắc theo Studio (chưa lưu cấu hình thì dùng cmd.Lead như trước). Workspace của từng chương đang sản xuất:
+        var chapterWorkspace = await (from c in _db.Chapters.AsNoTracking()
+                                      join s in _db.Series.AsNoTracking() on c.SeriesId equals s.Id
+                                      where chapterIds.Contains(c.Id)
+                                      select new { c.Id, c.ChapterNumber, s.WorkspaceId }).ToListAsync(ct);
+        var workspaceIds = chapterWorkspace.Select(c => c.WorkspaceId).Distinct().ToList();
+        var settings = await _db.WorkspaceAutomationSettings.AsNoTracking().Where(s => workspaceIds.Contains(s.WorkspaceId))
+            .ToDictionaryAsync(s => s.WorkspaceId, ct);
+        var workspaceOf = chapterWorkspace.ToDictionary(c => c.Id, c => c.WorkspaceId);
+        TimeSpan LeadOf(Guid chapterId) =>
+            settings.TryGetValue(workspaceOf.GetValueOrDefault(chapterId), out var s) ? TimeSpan.FromHours(s.LeadHours) : cmd.Lead;
+        int? EscalationOf(Guid workspaceId) => settings.TryGetValue(workspaceId, out var s) ? s.EscalationHours : null;
+
+        var producersCache = new Dictionary<Guid, List<Guid>>();
+        async Task<List<Guid>> ProducersOf(Guid workspaceId)
+        {
+            if (producersCache.TryGetValue(workspaceId, out var cached)) return cached;
+            var ownerId = await _db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == workspaceId).Select(w => w.OwnerId).FirstOrDefaultAsync(ct);
+            return producersCache[workspaceId] = (await _db.WorkspaceMembers.AsNoTracking()
+                    .Where(m => m.WorkspaceId == workspaceId && m.Role == WorkspaceRole.Producer && m.Status == WorkspaceMemberStatus.Active)
+                    .Select(m => m.UserId).ToListAsync(ct))
+                .Append(ownerId).Where(id => id != Guid.Empty).Distinct().ToList();
+        }
+        async Task Send(Domain.Entities.Workflow.Notification note)
+        {
+            // Nội dung cố định cho cùng một sự việc nên chống trùng bằng (người nhận, loại, chương, nội dung)
+            if (await _db.Notifications.AnyAsync(n => n.UserId == note.UserId && n.Type == note.Type && n.ChapterId == note.ChapterId
+                                                      && n.Message == note.Message, ct))
+                return;
+            _db.Notifications.Add(note);
+            created++;
+        }
+
+        // Vòng lô: lô còn ô chưa xong (chưa nộp) sắp/đã quá hạn. Quá hạn thì báo cả người giao để gia hạn hoặc chia lại;
+        // trễ quá escalation_hours thì báo thêm Producer/Owner (leo thang).
+        var maxUpper = now + TimeSpan.FromHours(Math.Max(cmd.Lead.TotalHours, Domain.Entities.Workspaces.WorkspaceAutomationSettings.MaxHours));
         var lots = await _db.StageTaskLots.AsNoTracking()
-            .Where(l => l.Status == StageTaskLotStatus.Active && l.DueDate != null && l.DueDate <= upper && l.DueDate >= lower &&
+            .Where(l => l.Status == StageTaskLotStatus.Active && l.DueDate != null && l.DueDate <= maxUpper && l.DueDate >= lower &&
                         chapterIds.Contains(l.ChapterId))
             .ToListAsync(ct);
-        foreach (var lot in lots)
+        foreach (var lot in lots.Where(l => l.DueDate <= now + LeadOf(l.ChapterId)))
         {
             var open = await _db.StageTasks.CountAsync(t => t.LotId == lot.Id && (t.Status == StageTaskStatus.Assigned ||
                 t.Status == StageTaskStatus.InProgress || t.Status == StageTaskStatus.ReworkRequired), ct);
@@ -89,14 +124,29 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
             var overdue = lot.DueDate < now;
             Guid[] recipients = overdue ? [.. new[] { lot.AssigneeUserId, lot.AssignedByUserId }.Distinct()] : [lot.AssigneeUserId];
             foreach (var userId in recipients)
-            {
-                var note = TaskGrid.Common.TaskGridNotifications.LotDue(userId, lot, open, overdue);
-                if (await _db.Notifications.AnyAsync(n => n.UserId == userId && n.Type == note.Type && n.ChapterId == lot.ChapterId
-                                                          && n.Message == note.Message, ct))
-                    continue;
-                _db.Notifications.Add(note);
-                created++;
-            }
+                await Send(TaskGrid.Common.TaskGridNotifications.LotDue(userId, lot, open, overdue));
+
+            var workspaceId = workspaceOf.GetValueOrDefault(lot.ChapterId);
+            if (overdue && EscalationOf(workspaceId) is { } hours && now - lot.DueDate!.Value >= TimeSpan.FromHours(hours))
+                foreach (var producer in (await ProducersOf(workspaceId)).Except(recipients))
+                    await Send(TaskGrid.Common.TaskGridNotifications.LotEscalated(producer, lot, hours));
+        }
+
+        // Vòng ô (bật khi Studio đặt escalation_hours): ô đã có người, đủ tiền đề nhưng quá lâu chưa bắt đầu (ready_at, N4).
+        // Dữ liệu cũ có ready_at = null được bỏ qua.
+        foreach (var group in chapterWorkspace.Where(c => EscalationOf(c.WorkspaceId) is not null).GroupBy(c => c.WorkspaceId))
+        {
+            var hours = EscalationOf(group.Key)!.Value;
+            var cutoff = now - TimeSpan.FromHours(hours);
+            var ids = group.Select(c => c.Id).ToList();
+            var stale = await _db.StageTasks.AsNoTracking()
+                .Where(t => ids.Contains(t.ChapterId) && t.ReadyAt != null && t.ReadyAt <= cutoff
+                            && (t.Status == StageTaskStatus.Assigned || t.Status == StageTaskStatus.ReworkRequired))
+                .GroupBy(t => t.ChapterId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(ct);
+            foreach (var chapter in stale)
+                foreach (var producer in await ProducersOf(group.Key))
+                    await Send(TaskGrid.Common.TaskGridNotifications.CellsStale(producer, chapter.Key,
+                        group.First(c => c.Id == chapter.Key).ChapterNumber, hours));
         }
 
         // ponytail: hai instance Backend chạy cùng lúc có thể gửi trùng một lần ở cùng chu kỳ; chấp nhận được, cần thì thêm cột reminded_at + unique index

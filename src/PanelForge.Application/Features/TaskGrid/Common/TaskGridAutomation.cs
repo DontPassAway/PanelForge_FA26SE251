@@ -15,6 +15,34 @@ namespace PanelForge.Application.Features.TaskGrid.Common;
 /// </summary>
 public static class TaskGridAutomation
 {
+    /// <summary>
+    /// G3: sau khi duyệt/nộp, chương đang sản xuất không còn điều kiện chặn nào của <see cref="Chapters.Common.ChapterLockGate"/>
+    /// thì nhắc Producer + Owner chốt chương (một lần). Không tự chốt. Chạy khi Studio bật auto_next_stage.
+    /// Gọi SAU SaveChanges và trước commit: ChapterLockGate đếm thẳng từ DB nên phải thấy trạng thái vừa ghi. Tự lưu thông báo.
+    /// </summary>
+    public static async Task NudgeChapterLockAsync(IPanelForgeDbContext db, Chapter chapter, CancellationToken ct)
+    {
+        if (chapter.Status != ChapterStatus.InProduction) return;
+        var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+        if (!await db.WorkspaceAutomationSettings.AsNoTracking().AnyAsync(s => s.WorkspaceId == workspaceId && s.AutoNextStage, ct)) return;
+        if ((await Chapters.Common.ChapterLockGate.EvaluateAsync(db, chapter, ct)).Any(i => i.Blocking)) return;
+
+        var ownerId = await db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == workspaceId).Select(w => w.OwnerId).FirstOrDefaultAsync(ct);
+        var producers = (await db.WorkspaceMembers.AsNoTracking()
+                .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active && m.Role == WorkspaceRole.Producer)
+                .Select(m => m.UserId).ToListAsync(ct))
+            .Append(ownerId).Where(id => id != Guid.Empty).Distinct().ToList();
+        var added = false;
+        foreach (var producer in producers)
+        {
+            var note = TaskGridNotifications.ChapterReadyToLock(producer, chapter.Id, chapter.ChapterNumber);
+            if (await db.Notifications.AnyAsync(n => n.UserId == producer && n.ChapterId == chapter.Id && n.Message == note.Message, ct)) continue;
+            db.Notifications.Add(note);
+            added = true;
+        }
+        if (added) await db.SaveChangesAsync(ct);
+    }
+
     public static async Task AssignNextStagesAsync(IPanelForgeDbContext db, Chapter chapter, IReadOnlyList<StageTask> approved,
         IReadOnlyList<PipelineStage> stages, IReadOnlyList<StageTask> chapterTasks, CancellationToken ct)
     {

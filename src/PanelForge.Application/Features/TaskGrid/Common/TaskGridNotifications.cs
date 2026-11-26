@@ -29,6 +29,21 @@ internal static class TaskGridNotifications
         userId, NotificationType.AssignmentUnassigned, "Bạn đã được gỡ khỏi việc", $"Producer gỡ bạn khỏi {Cells(taskCount)}.",
         chapterId: chapterId);
 
+    /// <summary>R3 leo thang: lô trễ quá số giờ Studio đặt. Nội dung cố định theo lô + hạn để chỉ báo một lần.</summary>
+    public static Notification LotEscalated(Guid producerId, StageTaskLot lot, int hours) => Notification.Create(
+        producerId, NotificationType.AssignmentOverdue, $"Lô việc trễ hạn quá {hours} giờ",
+        $"Hạn {lot.DueDate:yyyy-MM-dd HH:mm} UTC · lô {lot.Id}. Gia hạn, chia lại hoặc nhắc người làm.", chapterId: lot.ChapterId);
+
+    /// <summary>R3 vòng ô: ô đã có người và đủ tiền đề nhưng quá lâu chưa bắt đầu. Nội dung cố định theo chương để không báo lặp.</summary>
+    public static Notification CellsStale(Guid producerId, Guid chapterId, decimal chapterNumber, int hours) => Notification.Create(
+        producerId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: có ô bị ngâm",
+        $"Có ô đã giao và đủ điều kiện quá {hours} giờ mà chưa bắt đầu. Mở lưới giao việc để nhắc hoặc giao lại.", chapterId: chapterId);
+
+    /// <summary>G3: mọi ô đã duyệt, không còn gì chặn; Producer vẫn tự bấm chốt chương.</summary>
+    public static Notification ChapterReadyToLock(Guid producerId, Guid chapterId, decimal chapterNumber) => Notification.Create(
+        producerId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber} sẵn sàng chốt",
+        "Mọi ô đã duyệt và không còn điều kiện chặn. Mở chương để duyệt/chốt.", chapterId: chapterId);
+
     /// <summary>R1 không tìm được người cho một số ô; báo Producer kèm lý do để giao tay.</summary>
     public static Notification AutoAssignSkipped(Guid userId, Guid chapterId, decimal chapterNumber, string reason) => Notification.Create(
         userId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: có ô chưa tự giao được", reason, chapterId: chapterId);

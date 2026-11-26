@@ -142,6 +142,7 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
         }
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
+        if (autoApproved.Count > 0) await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(
             await TaskGridRules.WithSummaryAsync(_db, tasks.Select(t => StageTaskDto.From(t, cmd.UserId, isStartable: false)), ct));
     }
