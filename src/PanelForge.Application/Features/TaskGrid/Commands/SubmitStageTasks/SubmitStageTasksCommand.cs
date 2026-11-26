@@ -117,7 +117,10 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
         }
 
         if (autoApproved.Count > 0)
+        {
             await TaskGridNotifications.AddReadyAsync(_db, autoApproved, stages, chapterTasks, chapter.Id, ct);
+            await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, autoApproved, stages, chapterTasks, ct);
+        }
 
         // Có ô cần duyệt: báo Editor (không có Editor thì Producer), trừ chính người nộp; một thông báo cho cả lần nộp
         var waitingCells = tasks.Where(t => t.Status == StageTaskStatus.Submitted).ToList();

@@ -92,6 +92,7 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
                 group.Count() == 1 ? group.Key.Item2 : $"{group.Key.Item2} ({group.Count()} ô)"));
 
         await TaskGridNotifications.AddReadyAsync(_db, tasks, stages, chapterTasks, chapter.Id, ct);
+        await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, tasks, stages, chapterTasks, ct);
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(await TaskGridRules.WithSummaryAsync(_db,

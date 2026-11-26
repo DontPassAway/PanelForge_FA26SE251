@@ -145,6 +145,25 @@ public class TaskGridHandlerTests
             AutomationSettings.Add(s);
         }
 
+        public void EnableAutoNextStage(AutoAssignMode mode)
+        {
+            var s = WorkspaceAutomationSettings.Create(_workspaceId);
+            s.Update(autoNextStage: true, mode, false, 24, null);
+            AutomationSettings.Add(s);
+        }
+
+        /// <summary>Sinh ô, chỉ giao Pencil cả 2 trang cho Artist rồi làm xong Pencil (không cổng: nộp là duyệt).</summary>
+        public async Task FinishPencilOnly(Action? beforeSubmit = null)
+        {
+            (await Generate()).IsSuccess.Should().BeTrue();
+            (await Assign(false, Lot(Pencil, ArtistId, Cell(Pencil, 0), Cell(Pencil, 1)))).IsSuccess.Should().BeTrue();
+            foreach (var i in new[] { 0, 1 }) (await Start(Cell(Pencil, i), ArtistId)).IsSuccess.Should().BeTrue();
+            beforeSubmit?.Invoke();
+            (await Submit(ArtistId, Cell(Pencil, 0), Cell(Pencil, 1))).IsSuccess.Should().BeTrue();
+        }
+
+        public StageTaskLot LotOf(StageTask cell) => Lots.Single(l => l.Id == cell.LotId);
+
         public Task<Result<IReadOnlyList<StageTaskDto>>> ApproveMany(Guid userId, params StageTask[] tasks) =>
             new PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTasks.ApproveStageTasksCommandHandler(Db.Object)
                 .Handle(new(Chapter.Id, tasks.Select(t => t.Id).ToList(), userId), default);
@@ -193,6 +212,83 @@ public class TaskGridHandlerTests
                 Lot(Color, ArtistId, Cell(Color, 0)), Lot(Lettering, LettererId, Cell(Lettering, 0)));
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         }
+    }
+
+    // ── Assign Automation Bước 4 (R1) ──
+
+    [Fact]
+    public async Task R1_Off_LeavesNextStageUnassigned()
+    {
+        var f = new Fixture();
+        await f.FinishPencilOnly();
+
+        f.Cell(f.Ink, 0).Status.Should().Be(StageTaskStatus.Unassigned);
+        f.Cell(f.Lettering, 0).Status.Should().Be(StageTaskStatus.Unassigned);
+    }
+
+    [Fact]
+    public async Task R1_KeepPageOwner_GivesInkToPencilArtist_InOneLot_AndLetteringToLetterer()
+    {
+        var f = new Fixture();
+        f.AddMember(Guid.NewGuid(), WorkspaceRole.Artist);
+        f.EnableAutoNextStage(AutoAssignMode.KeepPageOwner);
+
+        await f.FinishPencilOnly();
+
+        var ink = new[] { f.Cell(f.Ink, 0), f.Cell(f.Ink, 1) };
+        ink.Should().OnlyContain(c => c.Status == StageTaskStatus.Assigned && c.ReadyAt != null);
+        ink.Select(c => c.LotId).Distinct().Should().ContainSingle("trang liền nhau cùng người gom một lô");
+        var inkLot = f.LotOf(ink[0]);
+        inkLot.AssigneeUserId.Should().Be(f.ArtistId);
+        inkLot.IsAutoAssigned.Should().BeTrue();
+        inkLot.AutoAssignReason.Should().Contain("Giữ người");
+
+        f.LotOf(f.Cell(f.Lettering, 0)).AssigneeUserId.Should().Be(f.LettererId);
+        f.Cell(f.Color, 0).Status.Should().Be(StageTaskStatus.Unassigned, "Ink chưa duyệt");
+        f.Notifications.Should().Contain(n => n.Type == NotificationType.AssignmentAssigned && n.UserId == f.ArtistId);
+    }
+
+    [Fact]
+    public async Task R1_BalanceOnly_SpreadsPagesAcrossArtists()
+    {
+        var f = new Fixture();
+        var second = Guid.NewGuid();
+        f.AddMember(second, WorkspaceRole.Artist);
+        f.EnableAutoNextStage(AutoAssignMode.BalanceOnly);
+
+        await f.FinishPencilOnly();
+
+        new[] { f.LotOf(f.Cell(f.Ink, 0)).AssigneeUserId, f.LotOf(f.Cell(f.Ink, 1)).AssigneeUserId }
+            .Should().BeEquivalentTo([f.ArtistId, second]);
+        f.LotOf(f.Cell(f.Ink, 0)).AutoAssignReason.Should().StartWith("Cân tải");
+    }
+
+    [Fact]
+    public async Task R1_NoLetterer_GivesLetteringToPageArtist_BR31()
+    {
+        var f = new Fixture();
+        f.EnableAutoNextStage(AutoAssignMode.BalanceOnly);
+
+        await f.FinishPencilOnly(() => f.RemoveMember(f.LettererId));
+
+        var lot = f.LotOf(f.Cell(f.Lettering, 0));
+        lot.AssigneeUserId.Should().Be(f.ArtistId);
+        lot.AssignedRole.Should().Be(WorkspaceRole.Artist, "lưu vai trò thật của người nhận");
+    }
+
+    [Fact]
+    public async Task R1_NobodyActive_LeavesCellsEmpty_AndTellsProducerWhy()
+    {
+        var f = new Fixture();
+        f.AddMember(f.ProducerId, WorkspaceRole.Producer);
+        f.EnableAutoNextStage(AutoAssignMode.KeepPageOwner);
+
+        await f.FinishPencilOnly(() => { f.RemoveMember(f.ArtistId); f.RemoveMember(f.LettererId); });
+
+        f.Cell(f.Ink, 0).Status.Should().Be(StageTaskStatus.Unassigned);
+        f.Cell(f.Lettering, 0).Status.Should().Be(StageTaskStatus.Unassigned);
+        f.Notifications.Should().ContainSingle(n => n.UserId == f.ProducerId && n.Type == NotificationType.AssignmentUpdated)
+            .Which.Message.Should().Contain("2 ô Ink để trống").And.Contain("Lettering");
     }
 
     // ── Assign Automation Bước 2 (R2) và Bước 3 (N3) ──

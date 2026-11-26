@@ -29,6 +29,10 @@ internal static class TaskGridNotifications
         userId, NotificationType.AssignmentUnassigned, "Bạn đã được gỡ khỏi việc", $"Producer gỡ bạn khỏi {Cells(taskCount)}.",
         chapterId: chapterId);
 
+    /// <summary>R1 không tìm được người cho một số ô; báo Producer kèm lý do để giao tay.</summary>
+    public static Notification AutoAssignSkipped(Guid userId, Guid chapterId, decimal chapterNumber, string reason) => Notification.Create(
+        userId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: có ô chưa tự giao được", reason, chapterId: chapterId);
+
     public static Notification NeedsReassign(Guid userId, Guid chapterId, decimal chapterNumber, int taskCount) => Notification.Create(
         userId, NotificationType.AssignmentUpdated, $"Có {Cells(taskCount)} cần giao lại",
         $"Chương {chapterNumber}: một thành viên đã rời Studio. Mở lưới giao việc và dùng Giao tự động để xem người thay.",
