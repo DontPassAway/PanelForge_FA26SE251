@@ -11,6 +11,10 @@ namespace PanelForge.Application.Features.TaskGrid.Common;
 /// </summary>
 internal static class TaskGridNotifications
 {
+    /// <summary>Đoạn tiêu đề cố định để nhật ký Automation nhận ra thông báo R1 bỏ qua / R3 báo trễ.</summary>
+    public const string SkippedTitleMarker = "có ô chưa tự giao được";
+    public const string EscalatedTitlePrefix = "Lô việc trễ hạn quá";
+
     private static string Cells(int count) => count == 1 ? "1 ô" : $"{count} ô";
 
     public static Notification Assigned(StageTaskLot lot, int taskCount, string stageName)
@@ -31,7 +35,7 @@ internal static class TaskGridNotifications
 
     /// <summary>R3 leo thang: lô trễ quá số giờ Studio đặt. Nội dung cố định theo lô + hạn để chỉ báo một lần.</summary>
     public static Notification LotEscalated(Guid producerId, StageTaskLot lot, int hours) => Notification.Create(
-        producerId, NotificationType.AssignmentOverdue, $"Lô việc trễ hạn quá {hours} giờ",
+        producerId, NotificationType.AssignmentOverdue, $"{EscalatedTitlePrefix} {hours} giờ",
         $"Hạn {lot.DueDate:yyyy-MM-dd HH:mm} UTC · lô {lot.Id}. Gia hạn, chia lại hoặc nhắc người làm.", chapterId: lot.ChapterId);
 
     /// <summary>R3 vòng ô: ô đã có người và đủ tiền đề nhưng quá lâu chưa bắt đầu. Nội dung cố định theo chương để không báo lặp.</summary>
@@ -46,7 +50,7 @@ internal static class TaskGridNotifications
 
     /// <summary>R1 không tìm được người cho một số ô; báo Producer kèm lý do để giao tay.</summary>
     public static Notification AutoAssignSkipped(Guid userId, Guid chapterId, decimal chapterNumber, string reason) => Notification.Create(
-        userId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: có ô chưa tự giao được", reason, chapterId: chapterId);
+        userId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: {SkippedTitleMarker}", reason, chapterId: chapterId);
 
     public static Notification NeedsReassign(Guid userId, Guid chapterId, decimal chapterNumber, int taskCount) => Notification.Create(
         userId, NotificationType.AssignmentUpdated, $"Có {Cells(taskCount)} cần giao lại",
