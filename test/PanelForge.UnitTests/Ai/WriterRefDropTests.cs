@@ -42,4 +42,29 @@ public class WriterRefDropTests
         var refs = call.Payload!.Lines.Single().Refs!;
         refs.Should().ContainSingle().Which.BibleEntryId.Should().Be(kha.EntryId);
     }
+
+    [Fact]
+    public async Task Unknown_bible_code_becomes_new_entry_ref_instead_of_failing_draft()
+    {
+        // Lỗi thật trên llama-3.3-70b (Cloudflare): model tự đặt code LOC_GATE / PROP_SWORD không có trong Bible
+        var akira = new BibleEntryContext(Guid.NewGuid(), "CHR_AKIRA", "Character", "AKIRA", "Kiếm sĩ.", Guid.NewGuid(), 1, 1, null);
+        var ctx = new AgentContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, Guid.NewGuid(), "H", null, "b", "LeftToRight",
+            0, "Cloudflare", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", 2, [akira], [akira.RevisionId], []);
+        const string output = """
+            {"lines":[{"kind":"Action","text":"AKIRA rút thanh kiếm phát sáng trước cổng làng.",
+              "refs":[{"code":"CHR_AKIRA","text":"AKIRA"},{"code":"PROP_SWORD","text":"thanh kiếm phát sáng"},
+                      {"code":"LOC_GATE","text":"cổng làng"},{"code":"XYZ_1","text":"rút"}]}],
+             "revisionNotes":null}
+            """;
+        var runner = new AgentRunner(new OneReply(output), Options.Create(new ProviderOptions()), "llama");
+
+        var (call, _) = await new WriterAgent(runner).RunAsync(ctx, new KeyMaps(ctx), 0, null, null, CancellationToken.None);
+
+        call.Succeeded.Should().BeTrue(call.ErrorMessage);
+        var refs = call.Payload!.Lines.Single().Refs!;
+        refs.Should().HaveCount(3, "mã không đoán được loại (XYZ_1) bị bỏ, không làm hỏng bản nháp");
+        refs.Should().Contain(r => r.BibleEntryId == akira.EntryId);
+        refs.Should().Contain(r => r.BibleEntryId == null && r.NewName == "thanh kiếm phát sáng" && r.NewCategory == "Prop");
+        refs.Should().Contain(r => r.BibleEntryId == null && r.NewName == "cổng làng" && r.NewCategory == "Location");
+    }
 }
