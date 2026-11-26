@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Chapters.Services;
 using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Enums;
 
@@ -68,8 +69,30 @@ public sealed class RunBibleStubDraftCommandHandler : IRequestHandler<RunBibleSt
                               join c in _db.Chapters.AsNoTracking() on s.ChapterId equals c.Id
                               where k.BibleEntryId == entry.Id && c.SeriesId == cmd.SeriesId
                               orderby c.ChapterNumber, s.SceneNumber, l.LineOrder
-                              select new { l.Id, l.DialogueText, l.StageDirection, l.SpeakerLabel, SceneId = s.Id, ChapterId = c.Id })
+                              select new MentionRow(l.Id, l.DialogueText, l.StageDirection, l.SpeakerLabel, s.Id, c.Id,
+                                  c.ChapterNumber, s.SceneNumber, l.LineOrder))
             .Take(MaxEvidenceLines).ToListAsync(ct);
+
+        // Stub Nhân vật thường được tạo tự động từ tên người nói (ChapterCastService, không có thẻ ScriptLineBibleLink):
+        // các dòng nhân vật đó nói cũng là căn cứ, so khớp tên đã chuẩn hoá như lúc tạo stub.
+        if (entry.Category == BibleEntryCategory.Character)
+        {
+            var spoken = await (from l in _db.ScriptLines.AsNoTracking()
+                                join s in _db.Scenes.AsNoTracking() on l.SceneId equals s.Id
+                                join c in _db.Chapters.AsNoTracking() on s.ChapterId equals c.Id
+                                where c.SeriesId == cmd.SeriesId && l.SpeakerLabel != null
+                                select new MentionRow(l.Id, l.DialogueText, l.StageDirection, l.SpeakerLabel, s.Id, c.Id,
+                                    c.ChapterNumber, s.SceneNumber, l.LineOrder))
+                .ToListAsync(ct);
+            var known = mentions.Select(m => m.Id).ToHashSet();
+            mentions = mentions
+                .Concat(spoken.Where(m => !known.Contains(m.Id)
+                    && SpeakerResolver.NormalizeSpeaker(m.SpeakerLabel) == entry.NormalizedName))
+                .OrderBy(m => m.ChapterNumber).ThenBy(m => m.SceneNumber).ThenBy(m => m.LineOrder)
+                .Take(MaxEvidenceLines)
+                .ToList();
+        }
+
         var evidence = mentions
             .Select(m => new BibleStubEvidence(m.Id, string.Join(" ", new[] { m.SpeakerLabel, m.DialogueText, m.StageDirection }
                 .Where(t => !string.IsNullOrWhiteSpace(t)))))
@@ -127,3 +150,7 @@ public sealed class RunBibleStubDraftCommandHandler : IRequestHandler<RunBibleSt
         return Result<AiSuggestionDto>.Success(AiRunHelpers.ToDto(suggestion, [], role));
     }
 }
+
+internal sealed record MentionRow(
+    Guid Id, string? DialogueText, string? StageDirection, string? SpeakerLabel, Guid SceneId, Guid ChapterId,
+    decimal ChapterNumber, int SceneNumber, int LineOrder);
