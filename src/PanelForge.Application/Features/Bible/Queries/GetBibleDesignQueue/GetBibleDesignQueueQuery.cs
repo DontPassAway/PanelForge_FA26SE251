@@ -97,7 +97,8 @@ public sealed class GetBibleDesignQueueQueryHandler : IRequestHandler<GetBibleDe
                     UpdatedAt: entry.UpdatedAt,
                     IsStub: entry.IsStub,
                     RevisionId: latestRev.Id,
-                    WaitingChapterNumbers: waitingNumbers
+                    WaitingChapterNumbers: waitingNumbers,
+                    IsPriorityRework: latestRev.ReviewStatus == BibleRevisionStatus.ReworkRequired
                 ));
             }
         }

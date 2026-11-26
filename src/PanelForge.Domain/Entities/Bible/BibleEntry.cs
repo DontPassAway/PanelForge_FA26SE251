@@ -26,8 +26,11 @@ public class BibleEntry : BaseEntity
     /// <summary>V2.5: Đánh dấu thực thể được tạo tạm thời từ cú pháp @-mention trong kịch bản (Write First, Bible Later).</summary>
     public bool IsStub { get; private set; } = false;
     /// <summary>BIB-09 & 9A: Danh sách bí danh của mục (tối đa 20 bí danh, mỗi bí danh <= 100 ký tự).</summary>
+    public List<string> Aliases { get; private set; } = [];
     /// <summary>BIB-11 & 7A: Cờ Quần chúng; mục quần chúng không bắt buộc khoá Canon ở Gate 1.</summary>
     public bool IsCrowd { get; private set; } = false;
+
+    public bool HasLockedRevision => Revisions.Any(r => r.IsLocked);
 
     public SeriesBible SeriesBible { get; private set; } = default!;
     public ICollection<BibleEntryRevision> Revisions { get; private set; } = [];
@@ -166,6 +169,59 @@ public class BibleEntry : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void SetAliases(IEnumerable<string>? aliases)
+    {
+        var normalizedOwnName = BibleNameNormalizer.Normalize(Name);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cleaned = new List<string>();
+
+        if (aliases != null)
+        {
+            foreach (var raw in aliases)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var trimmed = raw.Trim();
+                if (trimmed.Length > 100)
+                    throw new ArgumentException("Mỗi bí danh tối đa 100 ký tự.");
+
+                var norm = BibleNameNormalizer.Normalize(trimmed);
+                if (string.IsNullOrEmpty(norm)) continue;
+                if (string.Equals(norm, normalizedOwnName, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Bí danh không được trùng với tên chính của mục Bible.");
+
+                if (seen.Add(norm))
+                {
+                    cleaned.Add(trimmed);
+                }
+            }
+        }
+
+        if (cleaned.Count > 20)
+            throw new ArgumentException("Mỗi mục Bible chỉ được có tối đa 20 bí danh.");
+
+        Aliases = cleaned;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RenameBeforeFirstLock(string newName)
+    {
+        if (HasLockedRevision)
+            throw new InvalidOperationException("Không thể đổi tên mục Bible sau khi đã có phiên bản khoá Canon.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        Name = newName.Trim();
+        NormalizedName = BibleNameNormalizer.Normalize(Name);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool MatchesNormalizedName(string normalizedKey)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedKey)) return false;
+        if (string.Equals(NormalizedName, normalizedKey, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return Aliases.Any(a => string.Equals(BibleNameNormalizer.Normalize(a), normalizedKey, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>
     /// Danh mục có thiết kế hình (Nhân vật, Địa điểm, Đạo cụ): Artist nộp Concept → Editor duyệt → Producer khoá Canon,
     /// và AI chỉ dùng bản đã khoá. Thuật ngữ/Quy tắc/Sự kiện chỉ là văn bản, có hiệu lực ngay không cần khoá.
@@ -292,18 +348,27 @@ public class BibleEntry : BaseEntity
 
     /// <summary>
     /// Đi theo chuỗi supersedes_revision_id tới bản đã khoá Canon mới nhất (Q23, Q24).
+    /// Dừng lại nếu bản thay thế mới nhất vẫn đang ở Draft/ConceptSubmitted/ReworkRequired.
     /// </summary>
     public BibleEntryRevision ResolveLatestLockedReplacement(Guid initialRevisionId)
     {
-        var currentId = initialRevisionId;
+        var current = Revisions.FirstOrDefault(r => r.Id == initialRevisionId);
+        if (current == null)
+            return GetDefaultVariantRevision(canonOnly: true) ?? GetDefaultVariantRevision(canonOnly: false)
+                ?? throw new InvalidOperationException($"Revision {initialRevisionId} không tồn tại trong mục Bible {Id}.");
+
+        var currentId = current.Id;
+        var visited = new HashSet<Guid> { currentId };
+
         while (true)
         {
             var nextLocked = Revisions
-                .Where(r => r.SupersedesRevisionId == currentId && r.IsLocked)
+                .Where(r => r.SupersedesRevisionId == currentId && r.IsLocked && !visited.Contains(r.Id))
                 .OrderByDescending(r => r.VersionNumber)
                 .FirstOrDefault();
 
             if (nextLocked == null) break;
+            visited.Add(nextLocked.Id);
             currentId = nextLocked.Id;
         }
 

@@ -22,7 +22,8 @@ public sealed record SeriesDto(
     string? BannerUrl = null,
     bool IsCompleted = false,
     string OriginalLanguage = ContentLanguages.Original,
-    IReadOnlyList<string>? ReleaseLanguages = null
+    IReadOnlyList<string>? ReleaseLanguages = null,
+    bool AllowSoloCreatorReview = false
 );
 
 public sealed record SeriesChapterSummaryDto(
@@ -57,7 +58,8 @@ public sealed record SeriesDetailDto(
     IReadOnlyList<string>? ReleaseLanguages = null,
     string? Logline = null,
     string? Teaser = null,
-    string? AgeRating = null
+    string? AgeRating = null,
+    bool AllowSoloCreatorReview = false
 );
 
 public sealed record UpdateSeriesLanguagesRequest(
@@ -84,5 +86,6 @@ public sealed record UpdateSeriesRequest(
     string? Format = null,
     string? ReleaseScheduleJson = null,
     string? StoryArc = null,
-    bool? IsCompleted = null
+    bool? IsCompleted = null,
+    bool? AllowSoloCreatorReview = null
 );

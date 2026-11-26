@@ -90,6 +90,18 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("current_concept_event_id")
                .HasColumnType("uuid");
 
+        builder.Property(r => r.WriterEndorsedByUserId)
+               .HasColumnName("writer_endorsed_by_user_id")
+               .HasColumnType("uuid");
+
+        builder.Property(r => r.WriterEndorsedAt)
+               .HasColumnName("writer_endorsed_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(r => r.WriterEndorsedConceptVersion)
+               .HasColumnName("writer_endorsed_concept_version")
+               .HasColumnType("integer");
+
         builder.HasOne(r => r.CurrentConceptEvent)
                .WithMany()
                .HasForeignKey(r => r.CurrentConceptEventId)

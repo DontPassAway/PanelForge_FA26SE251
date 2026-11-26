@@ -90,6 +90,10 @@ public class BibleRevisionCurrentStateTests
     [Fact]
     public async Task Revision_WithDifferentName_ShouldFail_AndNotAddVersion()
     {
+        var v1 = _entry.Revisions.First();
+        v1.SubmitConcept(Guid.NewGuid(), "https://r2/hero.png", null);
+        v1.Lock(Guid.NewGuid());
+
         var result = await AddRevision("Desc v2", name: "Hero renamed");
 
         result.IsSuccess.Should().BeFalse();

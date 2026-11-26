@@ -9,5 +9,7 @@ public enum BibleRevisionEventType
     Locked = 4,
     Superseded = 5,
     /// <summary>Bản nháp v1 (tạo từ stub) được Writer định nghĩa lại nội dung; lưu nội dung mới để lịch sử khớp bản hiện tại.</summary>
-    DraftOverwritten = 6
+    DraftOverwritten = 6,
+    /// <summary>Writer xác nhận mềm (non-blocking) bản vẽ Concept đang nộp.</summary>
+    Endorsed = 7
 }

@@ -44,6 +44,22 @@ public class BibleEntryRevision : BaseEntity
     public Guid? CurrentConceptEventId { get; private set; }
     public BibleRevisionEvent? CurrentConceptEvent { get; private set; }
 
+    /// <summary>Soft endorsement (non-blocking) của Writer cho phiên bản Concept hiện hành.</summary>
+    public Guid? WriterEndorsedByUserId { get; private set; }
+    public DateTime? WriterEndorsedAt { get; private set; }
+    public int? WriterEndorsedConceptVersion { get; private set; }
+
+    public int? CurrentConceptVersionNumber =>
+        CurrentConceptEventId.HasValue
+            ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value)?.ConceptVersionNumber
+            : null;
+
+    public bool IsWriterEndorsedForCurrentConcept =>
+        WriterEndorsedAt.HasValue
+        && WriterEndorsedConceptVersion.HasValue
+        && CurrentConceptVersionNumber.HasValue
+        && WriterEndorsedConceptVersion.Value == CurrentConceptVersionNumber.Value;
+
     /// <summary>Dòng thời gian duyệt append-only của phiên bản này.</summary>
     public ICollection<BibleRevisionEvent> Events { get; private set; } = [];
 
@@ -85,9 +101,9 @@ public class BibleEntryRevision : BaseEntity
 
     /// <summary>
     /// V2.6 (Q20): Editor xác nhận = khoá Canon. Chỉ từ ConceptSubmitted, conceptEventId phải là phiên bản đang nộp.
-    /// Editor phải khác Artist đã nộp phiên bản đó (BR-06).
+    /// Editor phải khác Artist đã nộp phiên bản đó (BR-06), trừ khi Series bật AllowSoloCreatorReview.
     /// </summary>
-    public void ConfirmCanon(Guid editorId, Guid conceptEventId)
+    public void ConfirmCanon(Guid editorId, Guid conceptEventId, bool allowSoloCreatorReview = false)
     {
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
         if (ReviewStatus != BibleRevisionStatus.ConceptSubmitted)
@@ -101,8 +117,9 @@ public class BibleEntryRevision : BaseEntity
             throw new InvalidOperationException("Phiên bản concept xác nhận không phải phiên bản đang nộp.");
 
         var currentEvt = Events.FirstOrDefault(e => e.Id == conceptEventId);
-        if ((currentEvt?.ActorId.HasValue == true && currentEvt.ActorId.Value == editorId)
-            || (ArtistUserId.HasValue && ArtistUserId.Value == editorId))
+        var isSelfApproval = (currentEvt?.ActorId.HasValue == true && currentEvt.ActorId.Value == editorId)
+            || (ArtistUserId.HasValue && ArtistUserId.Value == editorId);
+        if (isSelfApproval && !allowSoloCreatorReview)
         {
             throw new UnauthorizedAccessException("Editor không thể tự xác nhận bản vẽ do chính mình nộp (BR-06).");
         }
@@ -119,9 +136,60 @@ public class BibleEntryRevision : BaseEntity
             assetSha256: currentEvt?.AssetSha256));
     }
 
+    public void ClearWriterEndorsement()
+    {
+        WriterEndorsedByUserId = null;
+        WriterEndorsedAt = null;
+        WriterEndorsedConceptVersion = null;
+    }
+
+    /// <summary>
+    /// Soft endorsement (non-blocking) của Writer cho phiên bản ConceptSubmitted hiện tại.
+    /// </summary>
+    public void SetWriterEndorsement(Guid writerId, bool? endorse = null)
+    {
+        if (IsLocked)
+            throw new InvalidOperationException("Revision đã được khoá Canon.");
+        if (ReviewStatus != BibleRevisionStatus.ConceptSubmitted)
+            throw new InvalidOperationException("Chỉ xác nhận tạo hình được khi phiên bản đang ở trạng thái ConceptSubmitted.");
+
+        var currentEvt = CurrentConceptEventId.HasValue
+            ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value)
+            : null;
+        if (currentEvt is null || !currentEvt.ConceptVersionNumber.HasValue)
+            throw new InvalidOperationException("Revision chưa có bản vẽ Concept đang nộp.");
+
+        var currentVersion = currentEvt.ConceptVersionNumber.Value;
+        var shouldEndorse = endorse ?? !IsWriterEndorsedForCurrentConcept;
+
+        if (!shouldEndorse)
+        {
+            ClearWriterEndorsement();
+            return;
+        }
+
+        if (IsWriterEndorsedForCurrentConcept && WriterEndorsedByUserId == writerId)
+        {
+            return;
+        }
+
+        WriterEndorsedByUserId = writerId;
+        WriterEndorsedAt = DateTime.UtcNow;
+        WriterEndorsedConceptVersion = currentVersion;
+        Events.Add(BibleRevisionEvent.Create(
+            Id,
+            BibleRevisionEventType.Endorsed,
+            writerId,
+            comment: $"Writer xác nhận tạo hình v{currentVersion}",
+            imageUrl: ConceptImageUrl,
+            conceptVersionNumber: currentVersion,
+            assetSha256: currentEvt.AssetSha256));
+    }
+
     /// <summary>
     /// Artist nộp bản vẽ Concept (v1, v2, ...). Trạng thái chuyển thành ConceptSubmitted, tăng ConceptVersionNumber.
     /// Cho phép nộp từ Draft, ReworkRequired hoặc ConceptSubmitted (nộp đè phiên bản mới khi chưa duyệt).
+    /// Luôn xoá soft endorsement cũ để không áp dụng nhầm sang bản vẽ mới.
     /// </summary>
     public void SubmitConcept(Guid artistId, string imageUrl, string? note, string? assetSha256 = null)
     {
@@ -131,6 +199,7 @@ public class BibleEntryRevision : BaseEntity
         ConceptImageUrl = imageUrl.Trim();
         ReviewStatus = BibleRevisionStatus.ConceptSubmitted;
         ReworkFeedback = null;
+        ClearWriterEndorsement();
 
         var nextVersion = (Events
             .Where(e => e.Type == BibleRevisionEventType.ConceptSubmitted && e.ConceptVersionNumber.HasValue)
@@ -165,6 +234,7 @@ public class BibleEntryRevision : BaseEntity
                 : "Chưa có Concept để yêu cầu vẽ lại; muốn sửa nội dung hãy tạo bản sửa mới.");
         ReviewStatus = BibleRevisionStatus.ReworkRequired;
         ReworkFeedback = feedback.Trim();
+        ClearWriterEndorsement();
         var currentEvt = CurrentConceptEventId.HasValue ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value) : null;
         Events.Add(BibleRevisionEvent.Create(
             Id,

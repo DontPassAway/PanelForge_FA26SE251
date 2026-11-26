@@ -22,7 +22,8 @@ public sealed record DefineBibleEntryCommand(
     string? ReferenceImageUrl = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    string? Code = null
+    string? Code = null,
+    IReadOnlyList<string>? Aliases = null
 ) : IRequest<Result<BibleEntryDto>>;
 
 public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBibleEntryCommand, Result<BibleEntryDto>>
@@ -68,7 +69,8 @@ public sealed class DefineBibleEntryCommandHandler : IRequestHandler<DefineBible
                 cmd.ReferenceImageUrl,
                 cmd.Priority,
                 cmd.StrictCheck,
-                cmd.Code),
+                cmd.Code,
+                Aliases: cmd.Aliases),
             ct);
     }
 }

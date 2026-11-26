@@ -8,7 +8,7 @@ namespace PanelForge.Application.Features.Bible.Commands.CancelReplacementRevisi
 
 public sealed record CancelReplacementRevisionCommand(
     Guid SeriesId,
-    Guid BibleEntryId,
+    Guid? BibleEntryId,
     Guid RevisionId,
     Guid UserId
 ) : IRequest<Result<bool>>;
@@ -29,15 +29,25 @@ public sealed class CancelReplacementRevisionCommandHandler : IRequestHandler<Ca
             .Select(b => (Guid?)b.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var entry = bibleId == null
-            ? null
-            : await _dbContext.BibleEntries
-                .Include(e => e.Revisions).ThenInclude(r => r.Events)
-                .FirstOrDefaultAsync(e => e.Id == command.BibleEntryId && e.SeriesBibleId == bibleId.Value, cancellationToken);
+        BibleEntry? entry = null;
+        if (bibleId != null)
+        {
+            entry = command.BibleEntryId.HasValue
+                ? await _dbContext.BibleEntries
+                    .Include(e => e.Revisions).ThenInclude(r => r.Events)
+                    .FirstOrDefaultAsync(e => e.Id == command.BibleEntryId.Value && e.SeriesBibleId == bibleId.Value, cancellationToken)
+                : await _dbContext.BibleEntries
+                    .Include(e => e.Revisions).ThenInclude(r => r.Events)
+                    .FirstOrDefaultAsync(e => e.SeriesBibleId == bibleId.Value && e.Revisions.Any(r => r.Id == command.RevisionId), cancellationToken);
+        }
 
         if (entry == null)
         {
-            return Result<bool>.Failure($"Mục BibleEntry {command.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
+            return Result<bool>.Failure(
+                command.BibleEntryId.HasValue
+                    ? $"Mục BibleEntry {command.BibleEntryId} không tồn tại."
+                    : $"Revision {command.RevisionId} không tồn tại.",
+                ResultErrorCodes.NotFound);
         }
 
         var revision = entry.Revisions.FirstOrDefault(r => r.Id == command.RevisionId);
@@ -49,6 +59,11 @@ public sealed class CancelReplacementRevisionCommandHandler : IRequestHandler<Ca
         if (revision.SupersedesRevisionId == null)
         {
             return Result<bool>.Failure("Chỉ có thể huỷ bản thay thế (bản có supersedes_revision_id).", ResultErrorCodes.Conflict);
+        }
+
+        if (revision.IsLocked)
+        {
+            return Result<bool>.Failure("Không thể huỷ bản thay thế đã được khoá Canon.", ResultErrorCodes.Conflict);
         }
 
         if (revision.HasReviewHistory)

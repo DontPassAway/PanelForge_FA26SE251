@@ -3,6 +3,13 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Models;
 
+public sealed record WriterEndorsementDto(
+    bool Endorsed,
+    string? EndorsedByName = null,
+    DateTime? EndorsedAt = null,
+    int? ConceptVersion = null
+);
+
 public sealed record BibleEntryRevisionDto(
     Guid Id,
     Guid BibleEntryId,
@@ -28,14 +35,26 @@ public sealed record BibleEntryRevisionDto(
     IReadOnlyList<BibleRevisionEventDto>? Events = null,
     Guid? SupersedesRevisionId = null,
     Guid? CurrentConceptEventId = null,
-    int? CurrentConceptVersionNumber = null
+    int? CurrentConceptVersionNumber = null,
+    WriterEndorsementDto? WriterEndorsement = null
 )
 {
     public string VariantLabel => StageName ?? string.Empty;
     /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
-    public static BibleEntryRevisionDto From(BibleEntryRevision r)
+    public static BibleEntryRevisionDto From(BibleEntryRevision r, IReadOnlyDictionary<Guid, string>? userNames = null)
     {
         var currentEvt = r.CurrentConceptEventId.HasValue ? r.Events.FirstOrDefault(e => e.Id == r.CurrentConceptEventId.Value) : null;
+        var currentConceptVer = currentEvt?.ConceptVersionNumber;
+        var isEndorsed = r.IsWriterEndorsedForCurrentConcept;
+        var endorserName = isEndorsed && r.WriterEndorsedByUserId.HasValue && userNames != null
+            ? userNames.GetValueOrDefault(r.WriterEndorsedByUserId.Value)
+            : null;
+        var endorsement = new WriterEndorsementDto(
+            Endorsed: isEndorsed,
+            EndorsedByName: endorserName,
+            EndorsedAt: isEndorsed ? r.WriterEndorsedAt : null,
+            ConceptVersion: isEndorsed ? r.WriterEndorsedConceptVersion : currentConceptVer);
+
         return new(
             r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
             r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
@@ -43,7 +62,8 @@ public sealed record BibleEntryRevisionDto(
             r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
             r.SupersedesRevisionId,
             r.CurrentConceptEventId,
-            currentEvt?.ConceptVersionNumber);
+            currentConceptVer,
+            endorsement);
     }
 }
 
@@ -81,21 +101,28 @@ public sealed record BibleEntryDto(
     DateTime? UpdatedAt,
     bool IsStub = false,
     bool IsCrowd = false,
-    int? LatestDraftVersionNumber = null
+    int? LatestDraftVersionNumber = null,
+    IReadOnlyList<string>? Aliases = null,
+    BibleEntryRevisionDto? PendingReviewRevision = null
 )
 {
-    public static BibleEntryDto From(BibleEntry entry)
+    public static BibleEntryDto From(BibleEntry entry, IReadOnlyDictionary<Guid, string>? userNames = null)
     {
         var rev = entry.GetDisplayRevision();
         var snapshot = BibleEntrySnapshot.From(entry, rev);
-        var latestDraftVersionNumber = rev is null
-            ? null
-            : entry.Revisions
+        var latestDraftVersionNumber = rev is { ReviewStatus: BibleRevisionStatus.CanonLocked }
+            ? entry.Revisions
                 .Where(r => r.VersionNumber > rev.VersionNumber
                     && r.ReviewStatus != BibleRevisionStatus.CanonLocked
                     && !entry.IsRevisionSuperseded(r))
                 .Select(r => (int?)r.VersionNumber)
-                .Max();
+                .Max()
+            : null;
+        var pendingReview = entry.Revisions
+            .Where(r => !r.IsLocked && (r.ReviewStatus == BibleRevisionStatus.ConceptSubmitted || r.ReviewStatus == BibleRevisionStatus.ReworkRequired))
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
         return new(
             entry.Id,
             entry.SeriesBibleId,
@@ -109,12 +136,14 @@ public sealed record BibleEntryDto(
             snapshot.Priority,
             snapshot.StrictCheck,
             entry.IsActive,
-            rev != null ? BibleEntryRevisionDto.From(rev) : null,
+            rev != null ? BibleEntryRevisionDto.From(rev, userNames) : null,
             entry.CreatedAt,
             entry.UpdatedAt,
             entry.IsStub,
             entry.IsCrowd,
-            latestDraftVersionNumber
+            latestDraftVersionNumber,
+            entry.Aliases.ToList(),
+            pendingReview != null ? BibleEntryRevisionDto.From(pendingReview, userNames) : null
         );
     }
 }
@@ -141,7 +170,8 @@ public sealed record CreateBibleEntryRequest(
     bool StrictCheck = true,
     string? StageName = null,
     bool IsCrowd = false,
-    string? VariantLabel = null
+    string? VariantLabel = null,
+    IReadOnlyList<string>? Aliases = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
@@ -208,6 +238,10 @@ public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, st
 }
 
 public sealed record ConfirmBibleRevisionRequest(Guid? ConceptEventId = null);
+
+public sealed record EndorseBibleRevisionRequest(bool? Endorse = null);
+
+public sealed record UpdateBibleEntryAliasesRequest(IReadOnlyList<string> Aliases);
 
 public sealed record BibleConceptCommentDto(
     Guid Id,
@@ -287,7 +321,8 @@ public sealed record BibleDesignQueueItemDto(
     DateTime? UpdatedAt,
     bool IsStub = false,
     Guid? RevisionId = null,
-    IReadOnlyList<decimal>? WaitingChapterNumbers = null
+    IReadOnlyList<decimal>? WaitingChapterNumbers = null,
+    bool IsPriorityRework = false
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;

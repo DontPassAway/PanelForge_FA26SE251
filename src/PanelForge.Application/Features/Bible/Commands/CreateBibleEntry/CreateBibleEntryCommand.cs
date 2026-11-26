@@ -26,7 +26,8 @@ public sealed record CreateBibleEntryCommand(
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
     string? StageName = null,
-    bool IsCrowd = false
+    bool IsCrowd = false,
+    IReadOnlyList<string>? Aliases = null
 ) : IRequest<Result<BibleEntryDto>>;
 
 public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBibleEntryCommand, Result<BibleEntryDto>>
@@ -85,13 +86,38 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
                         command.Priority,
                         command.StrictCheck,
                         codeUpper,
-                        command.IsCrowd),
+                        command.IsCrowd,
+                        command.Aliases),
                     cancellationToken);
             }
 
             return Result<BibleEntryDto>.Failure(
                 $"Tên '{command.Name}' đã trùng với mục '{existingPrimary.Name}' trong Series Bible.",
                 ResultErrorCodes.Conflict);
+        }
+
+        if (command.Aliases is { Count: > 0 })
+        {
+            var aliasNorms = command.Aliases
+                .Select(BibleNameNormalizer.Normalize)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var siblings = await _dbContext.BibleEntries
+                .AsNoTracking()
+                .Where(e => e.SeriesBibleId == bible.Id)
+                .Select(e => new { e.Name, e.NormalizedName, e.Aliases })
+                .ToListAsync(cancellationToken);
+
+            var colliding = siblings.FirstOrDefault(s =>
+                aliasNorms.Contains(s.NormalizedName)
+                || s.Aliases.Any(a => aliasNorms.Contains(BibleNameNormalizer.Normalize(a))));
+            if (colliding != null)
+            {
+                return Result<BibleEntryDto>.Failure(
+                    $"Bí danh trùng với mục '{colliding.Name}' trong Series Bible.",
+                    ResultErrorCodes.Conflict);
+            }
         }
 
         BibleEntry entry;
@@ -111,6 +137,10 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             if (command.IsCrowd)
             {
                 entry.SetCrowd(true);
+            }
+            if (command.Aliases is { Count: > 0 })
+            {
+                entry.SetAliases(command.Aliases);
             }
             entry.CreatedBy = command.UserId.ToString();
         }
@@ -170,7 +200,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             CreatedAt: entry.CreatedAt,
             UpdatedAt: entry.UpdatedAt,
             IsStub: entry.IsStub,
-            IsCrowd: entry.IsCrowd
+            IsCrowd: entry.IsCrowd,
+            Aliases: entry.Aliases.ToList()
         ));
     }
 }

@@ -72,6 +72,8 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
             return Result<BibleEntryRevisionDto>.Failure($"Mục BibleEntry {command.BibleEntryId} không tồn tại.", ResultErrorCodes.NotFound);
         }
 
+        var resolvedBibleId = bibleId!.Value;
+
         // UC-04: phát hiện chỉnh sửa đồng thời (optimistic concurrency)
         var latestVersion = entry.Revisions.Count > 0 ? entry.Revisions.Max(r => r.VersionNumber) : 0;
         if (command.ExpectedVersionNumber.HasValue && command.ExpectedVersionNumber.Value != latestVersion)
@@ -84,8 +86,36 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
 
         if (command.Name is not null && !string.Equals(command.Name.Trim(), entry.Name, StringComparison.Ordinal))
         {
-            return Result<BibleEntryRevisionDto>.Failure(
-                "Tên của mục Bible không thể thay đổi sau khi đã được định nghĩa.", ResultErrorCodes.Validation);
+            if (entry.HasLockedRevision)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Tên của mục Bible không thể thay đổi sau khi đã có phiên bản khoá Canon.", ResultErrorCodes.Validation);
+            }
+
+            var trimmedNewName = command.Name.Trim();
+            if (string.IsNullOrWhiteSpace(trimmedNewName))
+            {
+                return Result<BibleEntryRevisionDto>.Failure("Tên của mục Bible không được để trống.", ResultErrorCodes.Validation);
+            }
+
+            var normalizedNewName = BibleNameNormalizer.Normalize(trimmedNewName);
+            var siblings = await _dbContext.BibleEntries
+                .AsNoTracking()
+                .Where(e => e.SeriesBibleId == resolvedBibleId && e.Id != entry.Id)
+                .Select(e => new { e.Name, e.NormalizedName, e.Aliases })
+                .ToListAsync(cancellationToken);
+
+            var conflict = siblings.FirstOrDefault(s =>
+                string.Equals(s.NormalizedName, normalizedNewName, StringComparison.OrdinalIgnoreCase)
+                || s.Aliases.Any(a => string.Equals(BibleNameNormalizer.Normalize(a), normalizedNewName, StringComparison.OrdinalIgnoreCase)));
+            if (conflict != null)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    $"Tên '{trimmedNewName}' đã trùng với mục '{conflict.Name}' trong Series Bible.",
+                    ResultErrorCodes.Conflict);
+            }
+
+            entry.RenameBeforeFirstLock(trimmedNewName);
         }
 
         if (command.Description is not null && string.IsNullOrWhiteSpace(command.Description))

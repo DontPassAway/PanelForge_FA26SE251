@@ -152,4 +152,43 @@ public class BibleControllerPermissionTests
         roles.Should().NotContain(WorkspaceRole.Editor);
         roles.Should().NotContain(WorkspaceRole.Artist);
     }
+
+    [Fact]
+    public void EndorseBibleRevision_AllowsOnlyWriter_AndRejectsEditorProducerArtist()
+    {
+        var method = GetAction(nameof(BibleController.EndorseBibleRevision));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "Chỉ Writer được xác nhận tạo hình (soft endorsement)");
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public void CancelReplacementRevisionById_AllowsOnlyWriter_AndRejectsOtherRoles()
+    {
+        var method = GetAction(nameof(BibleController.CancelReplacementRevisionById));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "Chỉ Writer được huỷ bản thay thế nháp chưa khoá");
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
+
+    [Fact]
+    public void UpdateBibleEntryAliases_AllowsOnlyWriter_AndRejectsOtherRoles()
+    {
+        var method = GetAction(nameof(BibleController.UpdateBibleEntryAliases));
+        var roles = GetAllowedRoles(method);
+
+        roles.Should().ContainSingle()
+            .Which.Should().Be(WorkspaceRole.Writer, "BIB-01: Chỉ Writer được quản lý danh sách tên phụ (aliases)");
+        roles.Should().NotContain(WorkspaceRole.Editor);
+        roles.Should().NotContain(WorkspaceRole.Producer);
+        roles.Should().NotContain(WorkspaceRole.Artist);
+    }
 }

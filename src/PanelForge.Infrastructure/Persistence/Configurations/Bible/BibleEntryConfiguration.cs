@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
@@ -7,6 +9,11 @@ namespace PanelForge.Infrastructure.Persistence.Configurations.Bible;
 
 internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEntry>
 {
+    private static readonly ValueComparer<List<string>> AliasesComparer = new(
+        (c1, c2) => (c1 == null && c2 == null) || (c1 != null && c2 != null && c1.SequenceEqual(c2)),
+        c => c == null ? 0 : c.Aggregate(0, (a, v) => HashCode.Combine(a, StringComparer.Ordinal.GetHashCode(v))),
+        c => c == null ? new List<string>() : c.ToList());
+
     public void Configure(EntityTypeBuilder<BibleEntry> builder)
     {
         builder.ToTable("bible_entries");
@@ -107,6 +114,18 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
                .HasColumnType("boolean")
                .HasDefaultValue(false)
                .IsRequired();
+
+        var aliasesProp = builder.Property(e => e.Aliases)
+               .HasColumnName("aliases")
+               .HasColumnType("jsonb")
+               .HasDefaultValueSql("'[]'::jsonb")
+               .HasConversion(
+                   v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                   v => string.IsNullOrWhiteSpace(v)
+                       ? new List<string>()
+                       : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+               .IsRequired();
+        aliasesProp.Metadata.SetValueComparer(AliasesComparer);
 
         builder.Property(e => e.CreatedAt)
                .HasColumnName("created_at")

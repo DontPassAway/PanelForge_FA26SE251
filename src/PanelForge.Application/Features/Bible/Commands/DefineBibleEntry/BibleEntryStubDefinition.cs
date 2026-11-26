@@ -21,7 +21,8 @@ internal sealed record BibleEntryDefinition(
     BiblePriority Priority,
     bool StrictCheck,
     string? Code,
-    bool? IsCrowd = null);
+    bool? IsCrowd = null,
+    IReadOnlyList<string>? Aliases = null);
 
 internal static class BibleEntryStubDefinition
 {
@@ -118,6 +119,11 @@ internal static class BibleEntryStubDefinition
             if (definition.IsCrowd.HasValue)
             {
                 entry.SetCrowd(definition.IsCrowd.Value);
+            }
+
+            if (definition.Aliases is { Count: > 0 })
+            {
+                entry.SetAliases(definition.Aliases);
             }
 
             entry.UpdatedBy = definition.UserId.ToString();
