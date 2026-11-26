@@ -1267,7 +1267,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("snapshot_json");
 
                     b.Property<string>("StageName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("varchar(100)")
+                        .HasDefaultValue("Mặc định")
                         .HasColumnName("stage_name");
 
                     b.Property<string>("Summary")
@@ -1316,9 +1319,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("SupersedesRevisionId")
                         .HasDatabaseName("ix_bible_entry_revisions_supersedes_revision_id");
 
-                    b.HasIndex("BibleEntryId", "VersionNumber")
+                    b.HasIndex("BibleEntryId", "StageName", "VersionNumber")
                         .IsUnique()
-                        .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version")
+                        .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_stage_version")
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("bible_entry_revisions", (string)null);

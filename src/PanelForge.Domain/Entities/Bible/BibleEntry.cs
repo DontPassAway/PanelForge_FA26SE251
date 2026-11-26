@@ -233,7 +233,8 @@ public class BibleEntry : BaseEntity
     /// <summary>Bản mới nhất của từng biến thể / giai đoạn.</summary>
     public IEnumerable<BibleEntryRevision> LatestRevisionPerStage()
         => Revisions
-            .GroupBy(r => r.StageName ?? string.Empty)
+            .GroupBy(r => BibleNameNormalizer.Normalize(r.StageName))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
             .Select(g => g.MaxBy(r => r.VersionNumber)!);
 
     public BibleEntryRevision AddRevision(
@@ -249,7 +250,15 @@ public class BibleEntry : BaseEntity
         string? reworkFeedback = null,
         Guid? supersedesRevisionId = null)
     {
-        var nextVersion = (Revisions.Count > 0) ? Revisions.Max(r => r.VersionNumber) + 1 : 1;
+        var effectiveStage = string.IsNullOrWhiteSpace(stageName) ? "Mặc định" : stageName.Trim();
+        var normalizedStage = BibleNameNormalizer.Normalize(effectiveStage);
+
+        var existingVersions = Revisions
+            .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normalizedStage, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.VersionNumber)
+            .ToList();
+        var nextVersion = existingVersions.Count > 0 ? existingVersions.Max() + 1 : 1;
+
         var revision = BibleEntryRevision.Create(
             Id,
             nextVersion,
@@ -259,7 +268,7 @@ public class BibleEntry : BaseEntity
             authorId,
             associatedChapterId,
             isInitialVersion,
-            stageName,
+            effectiveStage,
             artistUserId,
             reviewStatus,
             reworkFeedback,
@@ -289,31 +298,59 @@ public class BibleEntry : BaseEntity
 
     /// <summary>
     /// Revision dùng để hiển thị ở cấp mục Bible: ưu tiên CanonLocked mới nhất chưa bị
-    /// Superseded của biến thể mặc định; khi chưa có Canon thì dùng version mới nhất.
+    /// Superseded của biến thể "Mặc định"; nếu chưa có thì tìm CanonLocked mới nhất của biến thể bất kỳ;
+    /// nếu chưa có Canon nào thì dùng version mới nhất. Tuyệt đối không để bản nháp Draft ghi đè khi đã có bản Canon.
     /// </summary>
     public BibleEntryRevision? GetDisplayRevision()
     {
         if (Revisions.Count == 0) return null;
 
-        var defaultStageName = GetDefaultVariantStageName();
-        var canon = Revisions
-            .Where(r => string.Equals(r.StageName, defaultStageName, StringComparison.OrdinalIgnoreCase))
+        var defaultStageName = GetDefaultVariantStageName() ?? "Mặc định";
+        var normDefault = BibleNameNormalizer.Normalize(defaultStageName);
+
+        // 1. Ưu tiên bản CanonLocked mới nhất chưa bị Superseded của biến thể mặc định
+        var defaultCanon = Revisions
+            .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normDefault, StringComparison.OrdinalIgnoreCase))
             .Where(r => r.ReviewStatus == BibleRevisionStatus.CanonLocked && !IsRevisionSuperseded(r))
             .OrderByDescending(r => r.VersionNumber)
             .FirstOrDefault();
 
-        return canon ?? GetLatestRevision();
+        if (defaultCanon != null) return defaultCanon;
+
+        // 2. Nếu biến thể mặc định chưa có Canon, tìm bản CanonLocked mới nhất của biến thể khác
+        var anyCanon = Revisions
+            .Where(r => r.ReviewStatus == BibleRevisionStatus.CanonLocked && !IsRevisionSuperseded(r))
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
+        if (anyCanon != null) return anyCanon;
+
+        // 3. Fallback khi hoàn toàn chưa có bản Canon nào: lấy bản mới nhất của biến thể mặc định, hoặc bản mới nhất bất kỳ
+        var defaultLatest = Revisions
+            .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normDefault, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
+        return defaultLatest ?? GetLatestRevision();
     }
+
+    public BibleEntryRevision? GetCurrentRevision() => GetDisplayRevision();
 
     /// <summary>Revision mới nhất theo VersionNumber, bất kể trạng thái duyệt.</summary>
     public BibleEntryRevision? GetLatestRevision()
         => Revisions.OrderByDescending(r => r.VersionNumber).FirstOrDefault();
 
     /// <summary>
-    /// Tên biến thể mặc định của mục = StageName của bản đầu tiên (VersionNumber nhỏ nhất).
+    /// Tên biến thể mặc định của mục: ưu tiên "Mặc định" hoặc stageName của bản tạo sớm nhất.
     /// </summary>
     public string? GetDefaultVariantStageName()
-        => Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault()?.StageName;
+    {
+        var defaultNamed = Revisions.FirstOrDefault(r =>
+            string.Equals(BibleNameNormalizer.Normalize(r.StageName), "mac dinh", StringComparison.OrdinalIgnoreCase));
+        if (defaultNamed != null) return defaultNamed.StageName;
+
+        return Revisions.OrderBy(r => r.CreatedAt).FirstOrDefault()?.StageName ?? "Mặc định";
+    }
 
     /// <summary>
     /// Lấy bản của biến thể mặc định (Q23, Q24):
@@ -324,14 +361,20 @@ public class BibleEntry : BaseEntity
     {
         if (Revisions.Count == 0) return null;
 
-        var firstRev = Revisions.OrderBy(r => r.VersionNumber).FirstOrDefault();
-        var defaultStageName = firstRev?.StageName;
+        var defaultStageName = GetDefaultVariantStageName() ?? "Mặc định";
+        var normDefault = BibleNameNormalizer.Normalize(defaultStageName);
 
         var defaultVariantRevisions = Revisions
-            .Where(r => string.Equals(r.StageName, defaultStageName, StringComparison.OrdinalIgnoreCase))
+            .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normDefault, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (defaultVariantRevisions.Count == 0) return firstRev;
+        if (defaultVariantRevisions.Count == 0)
+        {
+            var firstRev = Revisions.OrderBy(r => r.CreatedAt).FirstOrDefault();
+            if (canonOnly && IsVisualDesign)
+                return (firstRev != null && firstRev.IsLocked && !IsRevisionSuperseded(firstRev)) ? firstRev : null;
+            return firstRev;
+        }
 
         if (canonOnly && IsVisualDesign)
         {
@@ -382,6 +425,20 @@ public class BibleEntry : BaseEntity
     {
         return rev.Events.Any(e => e.Type == BibleRevisionEventType.Superseded)
             || Revisions.Any(other => other.SupersedesRevisionId == rev.Id && other.IsLocked);
+    }
+
+    /// <summary>
+    /// Kiểm tra xem mục đã có biến thể mang nhãn này (so sánh chuẩn hoá không phân biệt hoa thường/dấu).
+    /// </summary>
+    public bool HasVariant(string variantLabel)
+    {
+        if (string.IsNullOrWhiteSpace(variantLabel)) return false;
+        var normalized = BibleNameNormalizer.Normalize(variantLabel);
+        if (string.IsNullOrEmpty(normalized)) return false;
+
+        return Revisions
+            .Any(r => !r.IsDeleted && !IsRevisionSuperseded(r) &&
+                      string.Equals(BibleNameNormalizer.Normalize(r.StageName), normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

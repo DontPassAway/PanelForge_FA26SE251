@@ -1,3 +1,4 @@
+using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
@@ -110,9 +111,11 @@ public sealed record BibleEntryDto(
     {
         var rev = entry.GetDisplayRevision();
         var snapshot = BibleEntrySnapshot.From(entry, rev);
+        var normRevStage = rev != null ? BibleNameNormalizer.Normalize(rev.StageName) : "";
         var latestDraftVersionNumber = rev is { ReviewStatus: BibleRevisionStatus.CanonLocked }
             ? entry.Revisions
-                .Where(r => r.VersionNumber > rev.VersionNumber
+                .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normRevStage, StringComparison.OrdinalIgnoreCase)
+                    && r.VersionNumber > rev.VersionNumber
                     && r.ReviewStatus != BibleRevisionStatus.CanonLocked
                     && !entry.IsRevisionSuperseded(r))
                 .Select(r => (int?)r.VersionNumber)

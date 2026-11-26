@@ -154,7 +154,7 @@ public class BibleVariantValidationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.StageName.Should().Be("Armor");
-        result.Value.VersionNumber.Should().Be(3);
+        result.Value.VersionNumber.Should().Be(2);
     }
 
     [Fact]

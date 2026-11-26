@@ -13,6 +13,7 @@ using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 using PanelForge.Application.Features.Bible.Commands.UpdateBibleEntryAliases;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
@@ -371,7 +372,9 @@ public class BibleWorkflowSafeguardsTests
         line.AssignToPanel(panel.Id);
 
         chapter.SubmitScript(writerId);
-        chapter.StartProduction(producerId, "frozen-hash");
+        var oldScriptVersion = ScriptVersion.Create(chapter.Id, 1, "seed", producerId, "frozen-hash", ScriptSnapshotBuilder.Serialize([]), 0);
+        db.ScriptVersions.Add(oldScriptVersion);
+        chapter.StartProduction(producerId, "frozen-hash", oldScriptVersion.Id);
         await Task.Delay(15);
         chapter.UnfreezeScript(producerId, "Need flashback costume variant");
         await Task.Delay(15);
@@ -381,6 +384,7 @@ public class BibleWorkflowSafeguardsTests
         var variant = PanelBibleVariant.Create(panel.Id, entry.Id, v2.Id, writerId);
         var panelAssignment = Assignment.Create(
             seriesId, chapter.Id, WorkflowEntityType.Panel, panel.Id, Guid.NewGuid(), artistId, WorkspaceRole.Artist, "Draw Panel 1");
+        panelAssignment.StartWork();
 
         db.BibleEntries.Add(entry);
         db.BibleEntryRevisions.AddRange(v1, v2);

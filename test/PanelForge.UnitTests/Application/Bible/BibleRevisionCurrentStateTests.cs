@@ -60,16 +60,42 @@ public class BibleRevisionCurrentStateTests
         _entry.Name.Should().Be("Hero ch1");
         _entry.Description.Should().Be("Desc ch1");
         _entry.ReferenceImageUrl.Should().BeNull();
-        _entry.GetLatestRevision()!.VersionNumber.Should().Be(2);
+        _entry.GetLatestRevision()!.VersionNumber.Should().Be(1);
     }
 
     [Fact]
     public async Task Revision_WithStaleExpectedVersion_ShouldReturnConflict_AndNotSave()
     {
-        // Người A và B cùng mở entry ở version 1; A lưu trước → version 2
-        (await AddRevision("Desc by A", expectedVersion: 1)).IsSuccess.Should().BeTrue();
+        // Khóa Canon cho bản v1 để cho phép supersede tạo v2
+        var v1 = _entry.Revisions.First();
+        v1.SubmitConcept(Guid.NewGuid(), "https://r2/hero.png", null);
+        v1.Lock(Guid.NewGuid());
 
-        var resultB = await AddRevision("Desc by B", expectedVersion: 1);
+        // Người A thay thế bản khóa (/supersede) -> sinh version 2
+        var supersedeA = await _handler.Handle(new AddBibleEntryRevisionCommand(
+            SeriesId: _seriesId,
+            BibleEntryId: _entry.Id,
+            UserId: Guid.NewGuid(),
+            Summary: "Desc by A",
+            Name: _entry.Name,
+            Description: "Desc by A",
+            SupersedesRevisionId: v1.Id,
+            SupersedeReason: "Lý do thay thế A",
+            ExpectedVersionNumber: 1), CancellationToken.None);
+        supersedeA.IsSuccess.Should().BeTrue();
+        supersedeA.Value!.VersionNumber.Should().Be(2);
+
+        // Người B cố thay thế từ version 1 khi đã có version 2 -> Xung đột 409
+        var resultB = await _handler.Handle(new AddBibleEntryRevisionCommand(
+            SeriesId: _seriesId,
+            BibleEntryId: _entry.Id,
+            UserId: Guid.NewGuid(),
+            Summary: "Desc by B",
+            Name: _entry.Name,
+            Description: "Desc by B",
+            SupersedesRevisionId: v1.Id,
+            SupersedeReason: "Lý do thay thế B",
+            ExpectedVersionNumber: 1), CancellationToken.None);
 
         resultB.IsSuccess.Should().BeFalse();
         resultB.ErrorCode.Should().Be(PanelForge.Application.Common.ResultErrorCodes.Conflict);
@@ -84,7 +110,7 @@ public class BibleRevisionCurrentStateTests
         var result = await AddRevision("Desc v2", expectedVersion: 1);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.VersionNumber.Should().Be(2);
+        result.Value!.VersionNumber.Should().Be(1);
     }
 
     [Fact]

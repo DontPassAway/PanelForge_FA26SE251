@@ -74,12 +74,29 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
 
         var resolvedBibleId = bibleId!.Value;
 
-        // UC-04: phát hiện chỉnh sửa đồng thời (optimistic concurrency)
-        var latestVersion = entry.Revisions.Count > 0 ? entry.Revisions.Max(r => r.VersionNumber) : 0;
-        if (command.ExpectedVersionNumber.HasValue && command.ExpectedVersionNumber.Value != latestVersion)
+        // UC-04: phát hiện chỉnh sửa đồng thời (optimistic concurrency theo biến thể đích)
+        string? targetStageForCheck = command.EffectiveStageName;
+        if (command.SupersedesRevisionId is { } supIdCheck)
+        {
+            var sup = entry.Revisions.FirstOrDefault(r => r.Id == supIdCheck);
+            if (sup != null) targetStageForCheck = sup.StageName;
+        }
+        else if (string.IsNullOrWhiteSpace(targetStageForCheck))
+        {
+            targetStageForCheck = (command.TargetRevisionId.HasValue
+                ? entry.Revisions.FirstOrDefault(r => r.Id == command.TargetRevisionId.Value)
+                : null)?.StageName ?? entry.GetDefaultVariantStageName();
+        }
+        var normTargetStage = BibleNameNormalizer.Normalize(targetStageForCheck ?? "Mặc định");
+        var latestStageVersion = entry.Revisions
+            .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normTargetStage, StringComparison.OrdinalIgnoreCase))
+            .Select(r => (int?)r.VersionNumber)
+            .Max() ?? 0;
+
+        if (command.ExpectedVersionNumber.HasValue && !command.IsNewVariant && command.ExpectedVersionNumber.Value != latestStageVersion)
         {
             return Result<BibleEntryRevisionDto>.Failure(
-                $"Xung đột phiên bản: bạn đang sửa từ version {command.ExpectedVersionNumber.Value} nhưng mục này đã có version {latestVersion}. " +
+                $"Xung đột phiên bản: bạn đang sửa từ version {command.ExpectedVersionNumber.Value} nhưng biến thể '{targetStageForCheck}' đã có version {latestStageVersion}. " +
                 "Vui lòng tải lại nội dung mới nhất, đối chiếu thay đổi rồi gửi lại.",
                 ResultErrorCodes.Conflict);
         }
@@ -153,7 +170,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                     "Tên biến thể tối đa 100 ký tự.", ResultErrorCodes.Validation);
             }
 
-            if (entry.HasActiveVariant(trimmedLabel))
+            if (entry.HasVariant(trimmedLabel))
             {
                 return Result<BibleEntryRevisionDto>.Failure(
                     $"Biến thể '{trimmedLabel}' đã tồn tại và đang hoạt động.", ResultErrorCodes.Conflict);
@@ -201,7 +218,14 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                     : null)
                 ?? entry.GetDisplayRevision();
 
-            var baseStageName = baseRevision?.StageName;
+            if (baseRevision != null && baseRevision.IsLocked)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(
+                    "Phiên bản đã khoá Canon không thể sửa trực tiếp; muốn thay đổi thiết kế phải dùng /supersede.",
+                    ResultErrorCodes.Conflict);
+            }
+
+            var baseStageName = baseRevision?.StageName ?? "Mặc định";
             if (command.EffectiveStageName is not null)
             {
                 var normalizedSent = BibleNameNormalizer.Normalize(command.EffectiveStageName);
@@ -233,22 +257,49 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson)));
 
-        var reviewStatus = command.SupersedesRevisionId.HasValue
-            ? BibleRevisionStatus.Draft
-            : (command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value);
+        BibleEntryRevision revision;
+        var isNewRevision = command.IsNewVariant || command.SupersedesRevisionId.HasValue;
 
-        var revision = entry.AddRevision(
-            summary: summary,
-            snapshotJson: snapshotJson,
-            contentHash: contentHash,
-            authorId: command.UserId,
-            associatedChapterId: command.ChapterId,
-            isInitialVersion: false,
-            stageName: stageName,
-            artistUserId: command.ArtistUserId,
-            reviewStatus: reviewStatus,
-            supersedesRevisionId: command.SupersedesRevisionId
-        );
+        if (isNewRevision)
+        {
+            var reviewStatus = command.SupersedesRevisionId.HasValue
+                ? BibleRevisionStatus.Draft
+                : (command.ReviewStatus is BibleRevisionStatus.ConceptSubmitted or null ? BibleRevisionStatus.Draft : command.ReviewStatus.Value);
+
+            revision = entry.AddRevision(
+                summary: summary,
+                snapshotJson: snapshotJson,
+                contentHash: contentHash,
+                authorId: command.UserId,
+                associatedChapterId: command.ChapterId,
+                isInitialVersion: false,
+                stageName: stageName,
+                artistUserId: command.ArtistUserId,
+                reviewStatus: reviewStatus,
+                supersedesRevisionId: command.SupersedesRevisionId
+            );
+
+            _dbContext.BibleEntryRevisions.Add(revision);
+        }
+        else
+        {
+            // Sửa nháp Draft hiện tại: cập nhật nội dung trên chính revision, giữ nguyên VersionNumber và RevisionId
+            var targetDraft = (command.TargetRevisionId.HasValue
+                ? entry.Revisions.FirstOrDefault(r => r.Id == command.TargetRevisionId.Value)
+                : null)
+                ?? (command.ExpectedVersionNumber.HasValue
+                    ? entry.Revisions.FirstOrDefault(r => r.VersionNumber == command.ExpectedVersionNumber.Value)
+                    : null)
+                ?? entry.GetDisplayRevision();
+
+            if (targetDraft == null)
+            {
+                return Result<BibleEntryRevisionDto>.Failure("Không tìm thấy bản nháp để cập nhật.", ResultErrorCodes.NotFound);
+            }
+
+            targetDraft.UpdateDraft(summary, snapshotJson, contentHash, command.UserId, stageName);
+            revision = targetDraft;
+        }
 
         // BIB-09, Q23: Bản thay thế KHÔNG khoá ngay và KHÔNG đánh dấu bản cũ Superseded sớm.
         // Bản cũ vẫn CanonLocked dùng được. Khi Editor khoá bản mới (BIB-10 ConfirmCanon) mới ghi sự kiện Superseded cho bản cũ.
@@ -278,14 +329,13 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
 
         entry.UpdatedBy = command.UserId.ToString();
 
-        _dbContext.BibleEntryRevisions.Add(revision);
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (IsVersionUniqueViolation(ex))
         {
-            // Hai người lưu cùng lúc: cả hai cùng tính ra version N+1, unique index (entry, version) chặn người thứ hai.
+            // Hai người lưu cùng lúc: cả hai cùng tính ra version N+1, unique index chặn người thứ hai.
             return Result<BibleEntryRevisionDto>.Failure(
                 "Xung đột phiên bản: một người khác vừa lưu thay đổi cho mục này. Vui lòng tải lại và thử lại.",
                 ResultErrorCodes.Conflict);
@@ -308,5 +358,6 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
     private const int MaxSupersedeReasonLength = 400;
 
     private static bool IsVersionUniqueViolation(DbUpdateException ex)
-        => ex.InnerException?.Message.Contains("ix_bible_entry_revisions_bible_entry_id_version", StringComparison.OrdinalIgnoreCase) == true;
+        => ex.InnerException?.Message.Contains("ix_bible_entry_revisions_bible_entry_id_stage_version", StringComparison.OrdinalIgnoreCase) == true
+           || ex.InnerException?.Message.Contains("ix_bible_entry_revisions_bible_entry_id_version", StringComparison.OrdinalIgnoreCase) == true;
 }

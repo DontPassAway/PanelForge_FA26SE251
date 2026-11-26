@@ -180,6 +180,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         {
             var lineId = lineByPanel.GetValueOrDefault(a.TargetEntityId, actionLines.FirstOrDefault()?.Id ?? Guid.Empty);
             a.FlagScriptImpact(lineId);
+            a.FlagImpactReview("Kịch bản hoặc phân vai nhân vật bị sửa đổi sau khi đóng băng.");
         }
 
         foreach (var sp in await _dbContext.StageProgresses
