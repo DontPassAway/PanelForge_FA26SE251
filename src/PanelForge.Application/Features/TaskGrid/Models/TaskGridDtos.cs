@@ -63,6 +63,9 @@ public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate,
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
+/// <summary>Duyệt nhiều ô một lần (N3), tất cả hoặc không.</summary>
+public sealed record ApproveStageTasksRequest(IReadOnlyList<Guid> TaskIds);
+
 /// <summary>Nhận xét bắt buộc (BR-06), lưu vào lần nộp bị từ chối và gửi người làm.</summary>
 public sealed record RequestStageTaskChangesRequest(string Comment);
 

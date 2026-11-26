@@ -62,6 +62,7 @@ public class TaskGridHandlerTests
         public readonly Mock<IPageRepository> PageRepo = new();
         public readonly List<ScriptVersion> ScriptVersions = [];
         public readonly List<Assignment> Assignments = [];
+        public readonly List<WorkspaceAutomationSettings> AutomationSettings = [];
         public Guid WorkspaceId => _workspaceId;
         private readonly Guid _workspaceId;
         private readonly List<WorkspaceMember> _members;
@@ -134,6 +135,32 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(SeriesMembers));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
             Db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace>()));
+            Db.Setup(d => d.WorkspaceAutomationSettings).Returns(DbSetMockHelper.CreateDbSetMock(AutomationSettings));
+        }
+
+        public void EnableReviewRouting()
+        {
+            var s = WorkspaceAutomationSettings.Create(_workspaceId);
+            s.Update(false, AutoAssignMode.KeepPageOwner, autoRouteReview: true, 24, null);
+            AutomationSettings.Add(s);
+        }
+
+        public Task<Result<IReadOnlyList<StageTaskDto>>> ApproveMany(Guid userId, params StageTask[] tasks) =>
+            new PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTasks.ApproveStageTasksCommandHandler(Db.Object)
+                .Handle(new(Chapter.Id, tasks.Select(t => t.Id).ToList(), userId), default);
+
+        /// <summary>Giao cả 2 trang cho Artist, làm xong Pencil + Ink (không cổng), rồi nộp Color (có cổng) của cả 2 trang.</summary>
+        public async Task<StageTask[]> SubmitColorBothPages()
+        {
+            (await Generate()).IsSuccess.Should().BeTrue();
+            (await Assign(false, Lot(Pencil, ArtistId, Cell(Pencil, 0), Cell(Pencil, 1)), Lot(Ink, ArtistId, Cell(Ink, 0), Cell(Ink, 1)),
+                Lot(Color, ArtistId, Cell(Color, 0), Cell(Color, 1)))).IsSuccess.Should().BeTrue();
+            foreach (var stage in new[] { Pencil, Ink, Color })
+            {
+                foreach (var i in new[] { 0, 1 }) (await Start(Cell(stage, i), ArtistId)).IsSuccess.Should().BeTrue();
+                (await Submit(ArtistId, Cell(stage, 0), Cell(stage, 1))).IsSuccess.Should().BeTrue();
+            }
+            return [Cell(Color, 0), Cell(Color, 1)];
         }
 
         public Task<Result<GenerateStageTasksResultDto>> Generate() =>
@@ -166,6 +193,73 @@ public class TaskGridHandlerTests
                 Lot(Color, ArtistId, Cell(Color, 0)), Lot(Lettering, LettererId, Cell(Lettering, 0)));
             result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         }
+    }
+
+    // ── Assign Automation Bước 2 (R2) và Bước 3 (N3) ──
+
+    [Fact]
+    public async Task R2_On_SuggestsLeastLoadedEditorPerCell_NotifiesOnlyThem_AnyEditorCanStillApprove()
+    {
+        var f = new Fixture();
+        var secondEditor = Guid.NewGuid();
+        f.AddMember(secondEditor, WorkspaceRole.Editor);
+        f.EnableReviewRouting();
+
+        var color = await f.SubmitColorBothPages();
+
+        color.Should().OnlyContain(c => c.Status == StageTaskStatus.Submitted, "gán mềm, không khoá");
+        color.Select(c => c.ReviewerUserId).Should().BeEquivalentTo(new Guid?[] { f.EditorId, secondEditor }, "chia đều theo tải");
+        f.Notifications.Where(n => n.Type == NotificationType.AssignmentSubmitted).Select(n => n.UserId)
+            .Should().BeEquivalentTo([f.EditorId, secondEditor]);
+
+        // Editor không được gợi ý vẫn duyệt được
+        var other = color.First(c => c.ReviewerUserId != f.EditorId);
+        (await f.Approve(other, f.EditorId)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task R2_Off_KeepsBroadcastToEveryEditor_AndNoSuggestion()
+    {
+        var f = new Fixture();
+        f.AddMember(Guid.NewGuid(), WorkspaceRole.Editor);
+
+        var color = await f.SubmitColorBothPages();
+
+        color.Should().OnlyContain(c => c.ReviewerUserId == null);
+        f.Notifications.Count(n => n.Type == NotificationType.AssignmentSubmitted).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ApproveMany_ApprovesAll_GroupsApprovedNotification()
+    {
+        var f = new Fixture();
+        var color = await f.SubmitColorBothPages();
+
+        var result = await f.ApproveMany(f.EditorId, color);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        color.Should().OnlyContain(c => c.Status == StageTaskStatus.Approved);
+        f.Submissions.Where(s => color.Select(c => c.Id).Contains(s.StageTaskId) && s.Status == SubmissionStatus.Approved)
+            .Should().HaveCount(2);
+        f.Notifications.Where(n => n.Type == NotificationType.AssignmentApproved && n.Message!.StartsWith("Color"))
+            .Should().ContainSingle().Which.Message.Should().Be("Color (2 ô)");
+    }
+
+    [Fact]
+    public async Task ApproveMany_SelfApprovalOrNotSubmitted_RejectsWholeBatch_ListingPages()
+    {
+        var f = new Fixture();
+        var color = await f.SubmitColorBothPages();
+
+        var self = await f.ApproveMany(f.ArtistId, color);
+        self.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        self.ErrorMessage.Should().Contain("Trang 1").And.Contain("Trang 2");
+
+        (await f.Approve(color[1], f.EditorId)).IsSuccess.Should().BeTrue();
+        var mixed = await f.ApproveMany(f.EditorId, color);
+        mixed.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        mixed.ErrorMessage.Should().Contain("Trang 2");
+        color[0].Status.Should().Be(StageTaskStatus.Submitted, "tất cả hoặc không");
     }
 
     // ── Assign Automation Bước 1 (N4): ReadyAt ──

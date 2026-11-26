@@ -110,6 +110,31 @@ public class StageTaskReadyAtTests
     }
 
     [Fact]
+    public void SuggestReviewer_KeepsSubmitted_WithdrawClearsIt_OpenReviewOverrides()
+    {
+        var suggested = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var cell = NewCell();
+        cell.AssignTo(Guid.NewGuid(), true);
+        cell.Start(true);
+        cell.Submit(null, true);
+
+        cell.SuggestReviewer(suggested);
+        cell.Status.Should().Be(StageTaskStatus.Submitted);
+        cell.ReviewerUserId.Should().Be(suggested);
+
+        cell.OpenReview(other);
+        cell.ReviewerUserId.Should().Be(other);
+        cell.ReleaseReview();
+
+        cell.SuggestReviewer(suggested);
+        cell.Withdraw();
+        cell.ReviewerUserId.Should().BeNull();
+        var act = () => cell.SuggestReviewer(suggested);
+        act.Should().Throw<InvalidOperationException>("chỉ gợi ý cho ô Submitted");
+    }
+
+    [Fact]
     public void ClearSuggestedReviewer_RejectsUnderReview()
     {
         var cell = NewCell();

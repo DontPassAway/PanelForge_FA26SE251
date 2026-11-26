@@ -131,6 +131,18 @@ public class StageTask : BaseEntity
         Touch();
     }
 
+    /// <summary>
+    /// R2 (Assign Automation): gợi ý người duyệt cho ô vừa nộp. Gán mềm: ô vẫn Submitted, người khác vẫn mở duyệt được
+    /// (OpenReview ghi đè), người làm vẫn rút bài được.
+    /// </summary>
+    public void SuggestReviewer(Guid reviewerUserId)
+    {
+        if (reviewerUserId == Guid.Empty) throw new ArgumentException("Thiếu người duyệt.", nameof(reviewerUserId));
+        if (Status != StageTaskStatus.Submitted) throw Invalid("gợi ý người duyệt");
+        ReviewerUserId = reviewerUserId;
+        Touch();
+    }
+
     public void OpenReview(Guid reviewerUserId)
     {
         if (Status != StageTaskStatus.Submitted) throw Invalid("mở duyệt");

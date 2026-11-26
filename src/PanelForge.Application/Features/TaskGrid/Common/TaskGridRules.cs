@@ -142,6 +142,43 @@ internal static class TaskGridRules
         }
     }
 
+    /// <summary>
+    /// R2: gợi ý một người duyệt cho mỗi ô vừa nộp (đang Submitted). Ứng viên là Editor Active, không có thì Producer Active
+    /// và Owner; luôn khác người nộp (BR-06; Submit chỉ nhận ô của chính người nộp nên đó cũng là người giữ lô).
+    /// Chọn người đang có ít ô Submitted + UnderReview nhất, tính cả các ô vừa gợi ý trong lần này.
+    /// Trả false khi không có ứng viên (giữ cách báo cũ).
+    /// </summary>
+    public static async Task<bool> SuggestReviewersAsync(
+        IPanelForgeDbContext db, Guid workspaceId, Guid ownerId, Guid submitterId, IReadOnlyList<StageTask> cells, CancellationToken ct)
+    {
+        if (cells.Count == 0) return false;
+        async Task<List<Guid>> Active(WorkspaceRole role) => await db.WorkspaceMembers.AsNoTracking()
+            .Where(m => m.WorkspaceId == workspaceId && m.Role == role && m.Status == WorkspaceMemberStatus.Active && m.UserId != submitterId)
+            .Select(m => m.UserId).ToListAsync(ct);
+
+        var candidates = await Active(WorkspaceRole.Editor);
+        if (candidates.Count == 0)
+            candidates = (await Active(WorkspaceRole.Producer)).Append(ownerId).Where(id => id != submitterId && id != Guid.Empty).Distinct().ToList();
+        if (candidates.Count == 0) return false;
+
+        var cellIds = cells.Select(c => c.Id).ToList();
+        var counts = await db.StageTasks.AsNoTracking()
+            .Where(t => t.ReviewerUserId != null && candidates.Contains(t.ReviewerUserId.Value) && !cellIds.Contains(t.Id)
+                        && (t.Status == StageTaskStatus.Submitted || t.Status == StageTaskStatus.UnderReview))
+            .GroupBy(t => t.ReviewerUserId!.Value).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        var load = candidates.ToDictionary(id => id, id => counts.GetValueOrDefault(id));
+
+        foreach (var cell in cells)
+        {
+            // ponytail: hoà tải thì lấy theo Guid cho ổn định; cần công bằng hơn thì thêm mốc "lần cuối được gợi ý"
+            var pick = load.OrderBy(kv => kv.Value).ThenBy(kv => kv.Key).First().Key;
+            cell.SuggestReviewer(pick);
+            load[pick]++;
+        }
+        return true;
+    }
+
     /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>
     public static Task<StageTaskSubmission?> PendingSubmissionAsync(IPanelForgeDbContext db, StageTask task, CancellationToken ct) =>
         task.CurrentSubmissionId is { } id

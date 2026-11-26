@@ -16,6 +16,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.WithdrawStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UpdateStageTaskLot;
 using PanelForge.Application.Features.TaskGrid.Commands.ClaimStageTaskReview;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
@@ -90,6 +91,13 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Approve(Guid chapterId, Guid taskId, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ApproveStageTaskCommand(chapterId, taskId, CurrentUserId), ct));
+
+    /// <summary>POST /tasks/approve — Editor/Producer duyệt nhiều ô một lần, tất cả hoặc không (Assign Automation N3).</summary>
+    [HttpPost("tasks/approve")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<StageTaskDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApproveMany(Guid chapterId, [FromBody] ApproveStageTasksRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new ApproveStageTasksCommand(chapterId, body.TaskIds, CurrentUserId), ct));
 
     /// <summary>POST /tasks/{taskId}/request-changes — Editor/Producer trả ô về ReworkRequired (BR-06).</summary>
     [HttpPost("tasks/{taskId:guid}/request-changes")]
