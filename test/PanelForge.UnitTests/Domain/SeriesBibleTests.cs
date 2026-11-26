@@ -13,7 +13,7 @@ public class SeriesBibleTests
     [Fact]
     public void BibleEntryDto_WithoutCanon_UsesNewestRevision()
     {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Cached");
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "Hero", "Cached");
         entry.AddRevision("v1", JsonSerializer.Serialize(new { Description = "Draft 1" }), "h1", isInitialVersion: true);
         entry.AddRevision("v2", JsonSerializer.Serialize(new { Description = "Draft 2" }), "h2");
 
@@ -27,7 +27,7 @@ public class SeriesBibleTests
     [Fact]
     public void BibleEntryDto_WithCanon_UsesCanonAndReportsNewerDraft()
     {
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Cached");
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "Hero", "Cached");
         var canon = entry.AddRevision(
             "v1", JsonSerializer.Serialize(new { Description = "Canon description", ReferenceImageUrl = "canon.png" }),
             "h1", isInitialVersion: true);
@@ -89,47 +89,33 @@ public class SeriesBibleTests
         // Act - Add 6 categories
         var character = bible.AddEntry(
             BibleEntryCategory.Character,
-            "CHR-01",
             "Ren Kusanagi",
-            "Lead cyber warrior",
-            subtitle: "Protagonist",
-            priority: BiblePriority.StrictCheck,
-            strictCheck: true);
+            "Lead cyber warrior");
 
         var location = bible.AddEntry(
             BibleEntryCategory.Location,
-            "LOC-01",
             "District 9 Sector B",
-            "Neon alleyways with rain reflections",
-            subtitle: "Slum District");
+            "Neon alleyways with rain reflections");
 
         var prop = bible.AddEntry(
             BibleEntryCategory.Prop,
-            "PROP-01",
             "Plasma Blade Mk-IV",
-            "Ceramic hilt with blue energy emitter",
-            subtitle: "Primary Weapon");
+            "Ceramic hilt with blue energy emitter");
 
         var term = bible.AddEntry(
             BibleEntryCategory.Terminology,
-            "TERM-01",
             "Synapse Link",
-            "Neural communication protocol across cyberware",
-            subtitle: "Lore Concept");
+            "Neural communication protocol across cyberware");
 
         var rule = bible.AddEntry(
             BibleEntryCategory.StyleRule,
-            "RULE-01",
             "Screentone Density",
-            "Limit screentone layers to 60 lines per inch for print",
-            subtitle: "Inking Spec");
+            "Limit screentone layers to 60 lines per inch for print");
 
         var fact = bible.AddEntry(
             BibleEntryCategory.PlotFact,
-            "FACT-01",
             "The Fall of Old Shibuya (Year 2088)",
-            "Shibuya was quarantined following the cyber-outbreak",
-            subtitle: "Canon Timeline");
+            "Shibuya was quarantined following the cyber-outbreak");
 
         // Assert
         bible.Entries.Should().HaveCount(6);
@@ -178,30 +164,27 @@ public class SeriesBibleTests
     public void BibleEntry_UpdateDetails_ShouldUpdateFieldsProperly()
     {
         // Arrange
-        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "CHR-01", "Old Name", "Old Desc");
+        var entry = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "Old Name", "Old Desc");
 
         // Act
-        entry.UpdateDetails("New Desc", "New Subtitle", "{\"key\":\"val\"}", "https://img.png", BiblePriority.StrictCheck, true);
+        entry.UpdateDetails("New Desc", "{\"key\":\"val\"}", "https://img.png");
 
         // Assert
         entry.Name.Should().Be("Old Name");
         entry.Description.Should().Be("New Desc");
-        entry.Subtitle.Should().Be("New Subtitle");
         entry.DetailsJson.Should().Be("{\"key\":\"val\"}");
         entry.ReferenceImageUrl.Should().Be("https://img.png");
-        entry.Priority.Should().Be(BiblePriority.StrictCheck);
-        entry.StrictCheck.Should().BeTrue();
     }
 
     [Fact]
     public void GetDefaultVariantRevision_CanonOnly_UsesLatestLockedDesign_ButNotForTextOnlyCategories()
     {
-        var hero = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "HERO", "Hero", "Desc");
+        var hero = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Character, "Hero", "Desc");
         var v1 = hero.AddRevision("v1", "{}", "h1", isInitialVersion: true);
         hero.AddRevision("v2 nháp", "{}", "h2");
-        var shop = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Location, "SHOP", "Tiệm", "Desc");
+        var shop = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Location, "Tiệm", "Desc");
         shop.AddRevision("v1", "{}", "h3", isInitialVersion: true);
-        var term = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Terminology, "AURA", "Aura", "Desc");
+        var term = BibleEntry.Create(Guid.NewGuid(), BibleEntryCategory.Terminology, "Aura", "Desc");
         term.AddRevision("v1", "{}", "h4", isInitialVersion: true);
 
         hero.GetDefaultVariantRevision(canonOnly: true).Should().BeNull("chưa khoá bản nào");

@@ -415,7 +415,7 @@ public class ChapterCastGateTests
     }
 
     [Fact]
-    public async Task RefreezeAfterReopen_FlagsImpactedPanelsViaScr01()
+    public async Task RefreezeAfterReopen_DialogueOnly_DoesNotFlagVisualWork()
     {
         var hero = _bible.AddEntry(BibleEntryCategory.Character, "SHIKAMARU", "Shikamaru", "Ninja");
         var v1 = hero.AddRevision("v1", "{}", "hash-s1", authorId: _writerId, isInitialVersion: true);
@@ -469,14 +469,14 @@ public class ChapterCastGateTests
 
         refreezeResult.IsSuccess.Should().BeTrue();
 
-        // Kiểm tra SCR-01: assignment và stageProgress được gắn cờ tác động
+        // Sửa lời thoại thuần túy chỉ làm bóng thoại lỗi thời, không yêu cầu Artist vẽ lại.
         var reloadedAssignment = await _db.Assignments.SingleAsync(a => a.Id == assignment.Id);
-        reloadedAssignment.HasScriptImpact.Should().BeTrue();
-        reloadedAssignment.ImpactedScriptLineId.Should().Be(line.Id);
+        reloadedAssignment.HasScriptImpact.Should().BeFalse();
+        reloadedAssignment.ImpactedScriptLineId.Should().BeNull();
 
         var reloadedStageProgress = await _db.StageProgresses.SingleAsync(sp => sp.Id == stageProgress.Id);
-        reloadedStageProgress.HasScriptImpact.Should().BeTrue();
-        reloadedStageProgress.ImpactedScriptLineId.Should().Be(line.Id);
+        reloadedStageProgress.HasScriptImpact.Should().BeFalse();
+        reloadedStageProgress.ImpactedScriptLineId.Should().BeNull();
     }
 
     [Fact]

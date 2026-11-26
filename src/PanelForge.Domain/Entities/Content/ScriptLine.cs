@@ -51,9 +51,11 @@ public class ScriptLine : BaseEntity
         if (trimmedSpeakerLabel?.Length > 100)
             throw new ArgumentException("SpeakerLabel không được vượt quá 100 ký tự.");
 
-        // SCR-04 Luật domain: Action không có speaker
+        // SCR-04 Luật domain: Action không có speaker; Thought bắt buộc có speaker
         if (resolvedKind == ScriptLineKind.Action && !string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
             throw new InvalidOperationException("Dòng Action không được có người nói (SpeakerLabel).");
+        if (resolvedKind == ScriptLineKind.Thought && string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
+            throw new InvalidOperationException("Dòng suy nghĩ (Thought) bắt buộc phải có nhân vật phát biểu (SpeakerLabel).");
 
         return new ScriptLine
         {
@@ -88,6 +90,8 @@ public class ScriptLine : BaseEntity
 
         if (resolvedKind == ScriptLineKind.Action && !string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
             throw new InvalidOperationException("Dòng Action không được có người nói.");
+        if (resolvedKind == ScriptLineKind.Thought && string.IsNullOrWhiteSpace(trimmedSpeakerLabel))
+            throw new InvalidOperationException("Dòng suy nghĩ (Thought) bắt buộc phải có nhân vật phát biểu (SpeakerLabel).");
 
         Kind = resolvedKind;
         Text = resolvedText;

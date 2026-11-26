@@ -120,6 +120,18 @@ internal sealed class ChapterConfiguration : IEntityTypeConfiguration<Chapter>
                .HasColumnName("frozen_script_version_id")
                .HasColumnType("uuid");
 
+        builder.Property(c => c.PreviousFrozenScriptVersionId)
+               .HasColumnName("previous_frozen_script_version_id")
+               .HasColumnType("uuid");
+
+        builder.HasOne<ScriptVersion>()
+               .WithMany()
+               .HasForeignKey(c => c.PreviousFrozenScriptVersionId)
+               .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(c => c.PreviousFrozenScriptVersionId)
+               .HasDatabaseName("ix_chapters_previous_frozen_script_version_id");
+
         builder.Property(c => c.ScriptContentHash)
                .HasColumnName("script_content_hash")
                .HasColumnType("varchar(64)");

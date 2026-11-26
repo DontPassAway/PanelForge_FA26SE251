@@ -69,7 +69,7 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
 
         var results = new List<BibleEntryDto>();
 
-        var entries = bible.Entries.Where(e => e.IsActive && (request.EntryIds == null || request.EntryIds.Contains(e.Id)));
+        var entries = bible.Entries.Where(e => request.EntryIds == null || request.EntryIds.Contains(e.Id));
         foreach (var entry in entries.OrderBy(e => e.Category).ThenBy(e => e.Name))
         {
             // BIB-15, Q16, Q23: Thay EffectiveRevisionAt(N) bằng binding của chương.
@@ -95,10 +95,9 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
                 continue;
             }
 
-            // Trích xuất snapshot để tái hiện lại trạng thái chính xác tại Chapter N
+            // Trích xuất snapshot để tái hiện lại trạng thái chính xác tại Chapter N (Name là bất biến trên BibleEntry)
             string name = entry.Name;
             string description = entry.Description;
-            string? subtitle = entry.Subtitle;
             string detailsJson = entry.DetailsJson;
             string? refImg = entry.ReferenceImageUrl;
 
@@ -106,9 +105,7 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
             {
                 using var doc = JsonDocument.Parse(effectiveRev.SnapshotJson);
                 var root = doc.RootElement;
-                if (root.TryGetProperty("Name", out var n) || root.TryGetProperty("name", out n)) name = n.GetString() ?? name;
                 if (root.TryGetProperty("Description", out var d) || root.TryGetProperty("description", out d)) description = d.GetString() ?? description;
-                if (root.TryGetProperty("Subtitle", out var s) || root.TryGetProperty("subtitle", out s)) subtitle = s.GetString();
                 if (root.TryGetProperty("DetailsJson", out var dj) || root.TryGetProperty("detailsJson", out dj)) detailsJson = dj.GetString() ?? detailsJson;
                 if (root.TryGetProperty("ReferenceImageUrl", out var ri) || root.TryGetProperty("referenceImageUrl", out ri)) refImg = ri.GetString();
             }
@@ -123,25 +120,23 @@ public sealed class GetBibleEntriesAtChapterQueryHandler : IRequestHandler<GetBi
             }
 
             var revDto = BibleEntryRevisionDto.From(effectiveRev);
+            var parsed = PanelForge.Application.Features.Bible.Common.BibleDetailsParser.Parse(detailsJson);
 
             results.Add(new BibleEntryDto(
                 Id: entry.Id,
                 SeriesBibleId: entry.SeriesBibleId,
                 Category: entry.Category,
-                Code: entry.Code,
                 Name: name,
-                Subtitle: subtitle,
                 Description: description,
                 DetailsJson: detailsJson,
                 ReferenceImageUrl: refImg,
-                Priority: entry.Priority,
-                StrictCheck: entry.StrictCheck,
-                IsActive: entry.IsActive,
                 EffectiveRevision: revDto,
                 CreatedAt: entry.CreatedAt,
                 UpdatedAt: entry.UpdatedAt,
                 IsStub: entry.IsStub,
-                IsCrowd: (bindings != null && bindings.TryGetValue(entry.Id, out var cb)) ? cb.IsCrowdAtBind : entry.IsCrowd
+                IsCrowd: (bindings != null && bindings.TryGetValue(entry.Id, out var cb)) ? cb.IsCrowdAtBind : entry.IsCrowd,
+                Age: parsed.Age,
+                ArtistNotes: parsed.ArtistNotes
             ));
         }
 

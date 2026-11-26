@@ -29,6 +29,8 @@ using PanelForge.Application.Features.Consistency.Models;
 using PanelForge.Application.Features.Consistency.Queries;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
+using PanelForge.Application.Features.Chapters.Commands.RefreezeScript;
+using PanelForge.Application.Features.Chapters.Queries.GetRefreezeScriptPreview;
 using PanelForge.Application.Features.ScriptComments;
 using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
@@ -390,6 +392,36 @@ public sealed class ChaptersController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/chapters/{chapterId}/refreeze-preview — V2.6: Producer xem trước diff (trang thêm/bớt, tác động Nét vẽ vs Lời thoại) trước khi chốt lại kịch bản.
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/refreeze-preview")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(RefreezeScriptPreviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GetRefreezePreview(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetRefreezeScriptPreviewQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/refreeze-script — V2.6: Producer chốt lại kịch bản khi chương đang InProduction trong một ACID transaction.
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/refreeze-script")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(RefreezeScriptResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RefreezeChapterScript(
+        [FromRoute] Guid chapterId,
+        [FromBody] RefreezeScriptRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new RefreezeScriptCommand(chapterId, GetCurrentUserId(), body.ExpectedScriptHash, body.NewPageAssignments),
+            cancellationToken));
+
+    /// <summary>
     /// POST /api/chapters/{chapterId}/unfreeze-script
     /// V2.5: Producer mở lại kịch bản cho Writer sửa đổi.
     /// </summary>
@@ -583,9 +615,16 @@ public sealed class ChaptersController : ControllerBase
 
     private IActionResult ToActionResult<T>(Result<T> result) => result.IsSuccess ? Ok(result.Value) : result.ErrorCode switch
     {
-        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
-        ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
-        _ => BadRequest(new { error = result.ErrorMessage })
+        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage, code = result.ErrorCode }),
+        ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage, code = result.ErrorCode }),
+        ResultErrorCodes.Conflict
+            or ResultErrorCodes.ChapterReadOnly
+            or ResultErrorCodes.HashMismatch
+            or ResultErrorCodes.BibleGateBlocked
+            or ResultErrorCodes.ActiveArtworkOnRemovedPage
+            or ResultErrorCodes.CannotDeleteActiveProductionPage
+            => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails }),
+        _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails })
     };
 }
 

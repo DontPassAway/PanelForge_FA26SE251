@@ -24,7 +24,9 @@ public sealed record ScriptVersionRow(
     string? Label,
     string Text,
     IReadOnlyList<ScriptVersionRowRef>? Refs = null,
-    IReadOnlyList<ScriptVersionRowCast>? CastRevisions = null);
+    IReadOnlyList<ScriptVersionRowCast>? CastRevisions = null,
+    Guid? EntityId = null,
+    string? BoundingBox = null);
 
 public sealed record ScriptCastChoiceItem(Guid BibleEntryId, Guid? RevisionId);
 
@@ -65,7 +67,7 @@ public static class ScriptSnapshotBuilder
         var pageIds = pages.Select(p => p.Id).ToList();
         var panels = await db.Panels.AsNoTracking()
             .Where(p => pageIds.Contains(p.PageId))
-            .Select(p => new { p.Id, p.PageId, p.PanelNumber, p.Direction })
+            .Select(p => new { p.Id, p.PageId, p.PanelNumber, p.Direction, p.BoundingBox })
             .ToListAsync(ct);
 
         // Dòng thuộc chương qua Panel → Page; dòng chưa neo Panel lấy qua Scene khi còn Scene
@@ -114,26 +116,29 @@ public static class ScriptSnapshotBuilder
         var placed = new HashSet<Guid>();
         foreach (var page in pages)
         {
-            rows.Add(new ScriptVersionRow($"page:{page.PageNumber}", "page", page.PageNumber, 0, null, string.Empty));
+            rows.Add(new ScriptVersionRow($"page:{page.PageNumber}", "page", page.PageNumber, 0, null, string.Empty,
+                EntityId: page.Id));
             foreach (var panel in panels.Where(p => p.PageId == page.Id).OrderBy(p => p.PanelNumber))
             {
                 var pCasts = castsByPanel.GetValueOrDefault(panel.Id);
                 rows.Add(new ScriptVersionRow(
                     $"panel:{page.PageNumber}.{panel.PanelNumber}", "panel", page.PageNumber, panel.PanelNumber,
-                    null, panel.Direction ?? string.Empty, null, pCasts is { Count: > 0 } ? pCasts : null));
+                    null, panel.Direction ?? string.Empty, null, pCasts is { Count: > 0 } ? pCasts : null,
+                    panel.Id, panel.BoundingBox));
                 foreach (var l in lines.Where(l => l.PanelId == panel.Id).OrderBy(l => l.LineOrder))
                 {
                     placed.Add(l.Id);
                     var lRefs = refsByLine.GetValueOrDefault(l.Id);
                     rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), page.PageNumber, panel.PanelNumber,
-                        l.SpeakerLabel, l.Text.Trim(), lRefs is { Count: > 0 } ? lRefs : null));
+                        l.SpeakerLabel, l.Text.Trim(), lRefs is { Count: > 0 } ? lRefs : null, EntityId: l.Id));
                 }
             }
         }
         foreach (var l in lines.Where(l => !placed.Contains(l.Id)).OrderBy(l => l.LineOrder))
         {
             var lRefs = refsByLine.GetValueOrDefault(l.Id);
-            rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), 0, 0, l.SpeakerLabel, l.Text.Trim(), lRefs is { Count: > 0 } ? lRefs : null));
+            rows.Add(new ScriptVersionRow($"line:{l.Id}", l.Kind.ToString(), 0, 0, l.SpeakerLabel, l.Text.Trim(),
+                lRefs is { Count: > 0 } ? lRefs : null, EntityId: l.Id));
         }
 
         var lineCount = rows.Count(r => r.Key.StartsWith("line:", StringComparison.Ordinal));
@@ -152,6 +157,7 @@ public static class ScriptSnapshotBuilder
                 var sortedCasts = r.CastRevisions.OrderBy(x => x.EntryId).Select(x => $"{x.EntryId}:{x.RevisionId}");
                 baseLine += $"|cast:{string.Join(',', sortedCasts)}";
             }
+            if (r.BoundingBox is not null) baseLine += $"|bbox:{r.BoundingBox}";
             return baseLine;
         }).ToList();
 

@@ -101,7 +101,7 @@ public static class AiDemoSeeder
         if (db != null)
         {
         }
-        var snapshot = JsonSerializer.Serialize(new { Name = name, Description = description });
+        var snapshot = JsonSerializer.Serialize(new { Code = code, Name = name, Description = description });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
         var revision = entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, isInitialVersion: true);
         // AI chỉ dùng bản thiết kế đã khoá: khoá sẵn để demo có nhân vật, địa điểm, đạo cụ trong context

@@ -49,6 +49,8 @@ internal sealed class SeriesConfiguration : IEntityTypeConfiguration<Series>
 
         builder.Property(s => s.IsCompleted).HasColumnName("is_completed").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
 
+        builder.Property(s => s.AllowSoloCreatorReview).HasColumnName("allow_solo_creator_review").HasColumnType("boolean").HasDefaultValue(false).IsRequired();
+
         builder.Property(s => s.OriginalLanguage)
                .HasColumnName("original_language")
                .HasColumnType("varchar(10)")

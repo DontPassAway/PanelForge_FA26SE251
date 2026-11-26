@@ -84,6 +84,7 @@ public sealed class WriterAgent
             {
                 var code = l.Speaker.Trim().ToUpperInvariant();
                 if (keys.CharactersByCode.TryGetValue(code, out var c)) speaker = c.EntryId;
+                else if (keys.CharactersByCode.Values.FirstOrDefault(ch => ch.Name.Equals(l.Speaker.Trim(), StringComparison.OrdinalIgnoreCase)) is { } byName) speaker = byName.EntryId;
                 else if (unknownSpeakers.TryGetValue(code, out var at)) at.Add(i + 1);
                 else unknownSpeakers[code] = [i + 1];
             }

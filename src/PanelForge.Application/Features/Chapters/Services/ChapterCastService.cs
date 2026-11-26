@@ -55,21 +55,22 @@ public sealed class ChapterCastService : IChapterCastService
             .OrderBy(l => l.LineOrder)
             .ToListAsync(ct);
 
-        // 2. SpeakerResolver: chuẩn hoá người nói của dòng Dialogue & Thought, khớp tên mục Nhân vật
+        // 2. SpeakerResolver: chuẩn hoá người nói của dòng Dialogue & Thought, khớp tên mục Nhân vật (tên chính + bí danh)
         var candidates = SpeakerResolver.ExtractSpeakerCandidates(lines);
-        var normKeys = candidates.Select(c => c.NormalizedName).ToList();
+        var normKeys = candidates.Select(c => c.NormalizedName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var existingEntries = await _db.BibleEntries
             .Where(e => e.SeriesBibleId == seriesBible.Id
-                && e.Category == BibleEntryCategory.Character
-                && e.IsActive
-                && normKeys.Contains(e.NormalizedName))
+                && e.Category == BibleEntryCategory.Character)
             .ToListAsync(ct);
 
         var resolvedSpeakerMap = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in existingEntries)
         {
-            resolvedSpeakerMap[entry.NormalizedName] = entry.Id;
+            if (normKeys.Contains(entry.NormalizedName))
+            {
+                resolvedSpeakerMap[entry.NormalizedName] = entry.Id;
+            }
         }
 
         foreach (var cand in candidates)
@@ -81,7 +82,6 @@ public sealed class ChapterCastService : IChapterCastService
             var localEntry = _db.BibleEntries.Local.FirstOrDefault(e =>
                 e.SeriesBibleId == seriesBible.Id
                 && e.Category == BibleEntryCategory.Character
-                && e.IsActive
                 && e.NormalizedName == cand.NormalizedName);
             if (localEntry is not null)
             {

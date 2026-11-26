@@ -17,10 +17,12 @@ namespace PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript
 internal sealed class ScriptSaveAbortException : Exception
 {
     public string Code { get; }
+    public object? Details { get; }
 
-    public ScriptSaveAbortException(string message, string? code) : base(message)
+    public ScriptSaveAbortException(string message, string? code, object? details = null) : base(message)
     {
         Code = code ?? ResultErrorCodes.Validation;
+        Details = details;
     }
 }
 
@@ -81,6 +83,14 @@ internal static class ChapterScriptSaver
         var touchedPanelIds = new HashSet<Guid>();
         var modifiedLines = new List<ScriptLine>();
         var placedPanels = new List<(Panel Panel, ScriptTreePanel Wanted)>();
+        var claimedPanelIds = payloadPages
+            .SelectMany(p => p.Panels ?? [])
+            .Where(p => p.Id.HasValue)
+            .Select(p => p.Id!.Value)
+            .ToHashSet();
+        var nextTemporaryPanelNumber = panels.Count == 0
+            ? 1
+            : panels.Max(p => p.PanelNumber) + payloadPages.Sum(p => p.Panels?.Count ?? 0) + 1;
         var order = 0;
 
         foreach (var wantedPage in payloadPages)
@@ -89,7 +99,26 @@ internal static class ChapterScriptSaver
 
             foreach (var wantedPanel in (wantedPage.Panels ?? []).OrderBy(p => p.Number))
             {
-                var (panel, _) = ScriptStructureRules.EnsurePanel(db, panels, page.Id, wantedPanel.Number, userId);
+                Panel panel;
+                try
+                {
+                    (panel, _) = ScriptStructureRules.EnsurePanel(
+                        db,
+                        panels,
+                        page.Id,
+                        wantedPanel.Id,
+                        wantedPanel.Number,
+                        nextTemporaryPanelNumber++,
+                        claimedPanelIds,
+                        touchedPanelIds,
+                        userId);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new ScriptSaveAbortException(
+                        $"Trang {wantedPage.Number}, panel {wantedPanel.Number}: {ex.Message}",
+                        ResultErrorCodes.Validation);
+                }
                 touchedPanelIds.Add(panel.Id);
                 placedPanels.Add((panel, wantedPanel));
 
@@ -123,7 +152,8 @@ internal static class ChapterScriptSaver
                 throw new ScriptSaveAbortException(reworkError, ResultErrorCodes.Conflict);
         }
 
-        await RemoveDroppedStructureAsync(db, pageRepository, pages, panels, payloadPages, touchedPanelIds, userId, warnings, ct);
+        await RemoveDroppedStructureAsync(
+            db, pageRepository, chapter.Status, pages, panels, existingLines, payloadPages, touchedPanelIds, userId, warnings, ct);
 
         var variants = await db.PanelBibleVariants.Where(v => v.PanelId.HasValue && touchedPanelIds.Contains(v.PanelId.Value)).ToListAsync(ct);
         foreach (var (panel, wanted) in placedPanels)
@@ -140,11 +170,17 @@ internal static class ChapterScriptSaver
             }
         }
 
+        // SCR-42 (D9c): Manual Save / Submit đồng bộ & dọn working copy trong cùng transaction.
+        var workingCopy = await db.ChapterScriptWorkingCopies.FirstOrDefaultAsync(w => w.ChapterId == chapterId, ct);
+        if (workingCopy is not null)
+            db.ChapterScriptWorkingCopies.Remove(workingCopy);
+
         ScriptVersion version;
         try
         {
-            // Snapshot đọc từ DB nên phải ghi khung và dòng trước; tất cả vẫn nằm trong transaction của handler.
+            // Ghi panel mới bằng số tạm và hoàn tất xoá mềm trước, tránh đụng unique index khi chèn/xoá giữa trang.
             await db.SaveChangesAsync(ct);
+            await NormalizePanelNumbersAsync(db, placedPanels, touchedPanelIds, ct);
             version = await ScriptSnapshotBuilder.CommitAsync(db, chapterId, userId, message, ct, castService);
             await db.SaveChangesAsync(ct);
         }
@@ -153,11 +189,59 @@ internal static class ChapterScriptSaver
             throw new ScriptSaveAbortException("Kịch bản vừa được người khác sửa. Tải lại rồi thử lại.", ResultErrorCodes.Conflict);
         }
 
-        // Lưới V3: kịch bản thêm/bớt trang thì đồng bộ ô cho trang đó ngay (giống thêm trang ở Bàn vẽ), Producer khỏi bấm Sinh / Đồng bộ.
-        if (await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
+        // Lưới V3: ở PreProduction, thêm/bớt trang thì đồng bộ ô ngay. Ở InProduction, RefreezeScript đảm nhận đồng bộ + giao lô.
+        if (chapter.Status == ChapterStatus.PreProduction && await WorkScopeGuard.UsesGridAsync(db, chapterId, ct))
             await new GenerateStageTasksCommandHandler(db).Handle(new GenerateStageTasksCommand(chapterId, userId), ct);
 
         return new ChapterScriptSaveOutcome(chapter, workspaceId, version, version.Id != latest?.Id, warnings.Distinct().ToList());
+    }
+
+    private static async Task NormalizePanelNumbersAsync(
+        IPanelForgeDbContext db,
+        IReadOnlyList<(Panel Panel, ScriptTreePanel Wanted)> placedPanels,
+        IReadOnlySet<Guid> touchedPanelIds,
+        CancellationToken ct)
+    {
+        var retainedFinalNumbers = new List<(Panel Panel, int Number)>();
+        foreach (var pageGroup in placedPanels.GroupBy(x => x.Panel.PageId))
+        {
+            var activePanels = await db.Panels
+                .Where(p => p.PageId == pageGroup.Key)
+                .ToListAsync(ct);
+            var desiredNumbers = pageGroup.Select(x => x.Wanted.Number).ToHashSet();
+            var retainedDroppedPanels = activePanels
+                .Where(p => !touchedPanelIds.Contains(p.Id) && desiredNumbers.Contains(p.PanelNumber))
+                .ToList();
+            var needsReorder = pageGroup.Any(x => x.Panel.PanelNumber != x.Wanted.Number) ||
+                               retainedDroppedPanels.Count > 0;
+            if (!needsReorder) continue;
+
+            var temporaryNumber = Math.Max(
+                activePanels.Count == 0 ? 0 : activePanels.Max(p => p.PanelNumber),
+                desiredNumbers.Count == 0 ? 0 : desiredNumbers.Max()) + activePanels.Count + 1;
+
+            foreach (var (panel, _) in pageGroup)
+                panel.Reorder(temporaryNumber++);
+            var retainedFinalNumber = Math.Max(
+                activePanels.Count == 0 ? 0 : activePanels.Max(p => p.PanelNumber),
+                desiredNumbers.Count == 0 ? 0 : desiredNumbers.Max()) + 1;
+            foreach (var retained in retainedDroppedPanels)
+            {
+                retained.Reorder(temporaryNumber++);
+                retainedFinalNumbers.Add((retained, retainedFinalNumber++));
+            }
+        }
+
+        // Pha 1 giải phóng toàn bộ số thứ tự cũ trong unique index.
+        await db.SaveChangesAsync(ct);
+
+        foreach (var (panel, wanted) in placedPanels)
+            panel.Reorder(wanted.Number);
+        foreach (var (panel, number) in retainedFinalNumbers)
+            panel.Reorder(number);
+
+        // Pha 2 gán lại số thứ tự cuối cùng đúng theo payload, nhưng giữ nguyên Panel ID và mọi artwork liên kết.
+        await db.SaveChangesAsync(ct);
     }
 
     private static ScriptLine UpsertLine(
@@ -194,13 +278,27 @@ internal static class ChapterScriptSaver
         }
     }
 
+    private static readonly StageTaskStatus[] NotStartedTaskStatuses =
+        [StageTaskStatus.Cancelled, StageTaskStatus.Unassigned, StageTaskStatus.Assigned];
+
     /// <summary>
-    /// Page/Panel không còn trong payload: có artwork thì giữ lại kèm cảnh báo, còn lại xoá mềm
-    /// (việc đang giao thì từ chối 409 thay vì xoá).
+    /// Page/Panel không còn trong payload:
+    /// - Khi InProduction: CHỈ cho phép xóa mềm nếu toàn bộ StageTasks đều NotStarted và chưa có artwork / bóng thoại;
+    ///   ngược lại chặn 409 CANNOT_DELETE_ACTIVE_PRODUCTION_PAGE kèm blockedPageIds / blockedPanelIds.
+    /// - Khi PreProduction: có artwork thì giữ lại kèm cảnh báo, còn lại xóa mềm.
     /// </summary>
     private static async Task RemoveDroppedStructureAsync(
-        IPanelForgeDbContext db, IPageRepository pageRepository, List<Page> pages, List<Panel> panels,
-        IReadOnlyList<ScriptTreePage> payloadPages, HashSet<Guid> touchedPanelIds, Guid userId, List<string> warnings, CancellationToken ct)
+        IPanelForgeDbContext db,
+        IPageRepository pageRepository,
+        ChapterStatus chapterStatus,
+        List<Page> pages,
+        List<Panel> panels,
+        List<ScriptLine> existingLines,
+        IReadOnlyList<ScriptTreePage> payloadPages,
+        HashSet<Guid> touchedPanelIds,
+        Guid userId,
+        List<string> warnings,
+        CancellationToken ct)
     {
         var listedPageNumbers = payloadPages.Select(p => p.Number).ToHashSet();
         var droppedPages = pages.Where(p => !listedPageNumbers.Contains(p.PageNumber)).ToList();
@@ -215,6 +313,97 @@ internal static class ChapterScriptSaver
             .ToListAsync(ct);
         var pagesWithArtwork = artworkRefs.Select(r => r.PageId).ToHashSet();
         var panelsWithArtwork = artworkRefs.Where(r => r.PanelId != null).Select(r => r.PanelId!.Value).ToHashSet();
+
+        if (chapterStatus == ChapterStatus.InProduction)
+        {
+            var blockedPageIds = new HashSet<Guid>(pagesWithArtwork);
+            var blockedPanelIds = new HashSet<Guid>(panelsWithArtwork);
+
+            var allAffectedPageIds = droppedPageIds
+                .Concat(droppedPanels.Select(p => p.PageId))
+                .Distinct()
+                .ToList();
+
+            var startedPageIds = (await db.StageTasks.AsNoTracking()
+                    .Where(t => t.PageId != null && allAffectedPageIds.Contains(t.PageId.Value) &&
+                                !NotStartedTaskStatuses.Contains(t.Status))
+                    .Select(t => t.PageId!.Value)
+                    .Distinct()
+                    .ToListAsync(ct))
+                .ToHashSet();
+
+            foreach (var p in droppedPages.Where(p => startedPageIds.Contains(p.Id)))
+                blockedPageIds.Add(p.Id);
+            foreach (var panel in droppedPanels.Where(p => !droppedPageIds.Contains(p.PageId) && startedPageIds.Contains(p.PageId)))
+                blockedPanelIds.Add(panel.Id);
+
+            var allTargets = droppedPageIds.Concat(droppedPanelIds).ToList();
+            if (allTargets.Count > 0)
+            {
+                var legacyAssignedTargets = await db.Assignments.AsNoTracking()
+                    .Where(a => a.EntityType != WorkflowEntityType.Chapter && allTargets.Contains(a.TargetEntityId))
+                    .Select(a => a.TargetEntityId)
+                    .ToListAsync(ct);
+                foreach (var id in legacyAssignedTargets)
+                {
+                    if (droppedPageIds.Contains(id)) blockedPageIds.Add(id);
+                    if (droppedPanelIds.Contains(id)) blockedPanelIds.Add(id);
+                }
+            }
+
+            var lineIdsByPanel = existingLines
+                .Where(l => l.PanelId.HasValue)
+                .GroupBy(l => l.PanelId!.Value)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToHashSet());
+
+            foreach (var pageId in allAffectedPageIds)
+            {
+                var pageStream = await pageRepository.GetAsync(pageId, ct);
+                if (pageStream is null) continue;
+                var activeElements = pageStream.Elements.Values.Where(e => !e.IsRemoved).ToList();
+                if (activeElements.Count == 0) continue;
+
+                if (droppedPageIds.Contains(pageId) &&
+                    activeElements.Any(e => e.ScriptLineId.HasValue || Page.TextElementTypes.Contains(e.ElementType) || !string.IsNullOrEmpty(e.AssetId)))
+                {
+                    blockedPageIds.Add(pageId);
+                }
+
+                foreach (var panel in droppedPanels.Where(p => p.PageId == pageId && !droppedPageIds.Contains(pageId)))
+                {
+                    var panelLineIds = lineIdsByPanel.GetValueOrDefault(panel.Id);
+                    var hasBalloonOnPanel = activeElements.Any(e =>
+                        e.PanelId == panel.Id ||
+                        (e.ScriptLineId.HasValue && panelLineIds != null && panelLineIds.Contains(e.ScriptLineId.Value)));
+                    if (hasBalloonOnPanel)
+                        blockedPanelIds.Add(panel.Id);
+                }
+            }
+
+            if (blockedPageIds.Count > 0 || blockedPanelIds.Count > 0)
+            {
+                var pageNumById = pages.ToDictionary(p => p.Id, p => p.PageNumber);
+                var blockedPageNumbers = blockedPageIds
+                    .Where(pageNumById.ContainsKey)
+                    .Select(id => pageNumById[id])
+                    .OrderBy(n => n)
+                    .ToList();
+                var label = blockedPageNumbers.Count > 0
+                    ? $"Trang {string.Join(", ", blockedPageNumbers)}"
+                    : "khung tranh";
+                throw new ScriptSaveAbortException(
+                    $"Không thể xóa {label} trong giai đoạn sản xuất vì đã có bản vẽ, bóng thoại hoặc công đoạn đang thực hiện.",
+                    ResultErrorCodes.CannotDeleteActiveProductionPage,
+                    new
+                    {
+                        blockedPageIds = blockedPageIds.ToList(),
+                        blockedPanelIds = blockedPanelIds.ToList()
+                    });
+            }
+
+            await ScriptStructureRules.RemoveAsync(db, pageRepository, droppedPages, droppedPanels, userId, ct);
+            return;
+        }
 
         var keptPages = droppedPages.Where(p => pagesWithArtwork.Contains(p.Id)).ToList();
         var keptPageIds = keptPages.Select(p => p.Id).ToHashSet();
@@ -275,6 +464,8 @@ internal static class ChapterScriptSaver
                         throw Invalid($"{label}: {invalid}");
                     if (line.Kind == ScriptLineKind.Action && !string.IsNullOrWhiteSpace(line.SpeakerLabel))
                         throw Invalid($"{label}: dòng Action không có người nói.");
+                    if (line.Kind == ScriptLineKind.Thought && string.IsNullOrWhiteSpace(line.SpeakerLabel))
+                        throw Invalid($"{label}: dòng suy nghĩ (Thought) bắt buộc phải có nhân vật phát biểu.");
                     if (ScriptBibleRefs.ValidateKind(line.Refs, line.Kind, label) is { } kindError)
                         throw Invalid(kindError);
                 }

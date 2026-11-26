@@ -20,7 +20,8 @@ public sealed record UpdateSeriesCommand(
     string? Format = null,
     string? ReleaseScheduleJson = null,
     string? StoryArc = null,
-    bool? IsCompleted = null
+    bool? IsCompleted = null,
+    bool? AllowSoloCreatorReview = null
 ) : IRequest<Result<SeriesDto>>;
 
 public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCommand, Result<SeriesDto>>
@@ -54,6 +55,7 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             );
             series.SetPipelineDefinition(command.PipelineDefinitionId);
             if (command.IsCompleted is { } completed) series.SetCompleted(completed);
+            if (command.AllowSoloCreatorReview is { } allowSolo) series.SetAllowSoloCreatorReview(allowSolo);
             series.UpdatedBy = command.UserId.ToString();
         }
         catch (ArgumentException ex)
@@ -83,7 +85,8 @@ public sealed class UpdateSeriesCommandHandler : IRequestHandler<UpdateSeriesCom
             BannerUrl: SetSeriesImageCommandHandler.ImageUrl(series.Id, SeriesImageKind.Banner, series.BannerImageSha256),
             IsCompleted: series.IsCompleted,
             OriginalLanguage: series.OriginalLanguage,
-            ReleaseLanguages: series.ReleaseLanguages
+            ReleaseLanguages: series.ReleaseLanguages,
+            AllowSoloCreatorReview: series.AllowSoloCreatorReview
         ));
     }
 }

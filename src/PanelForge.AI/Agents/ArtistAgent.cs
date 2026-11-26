@@ -23,7 +23,7 @@ public sealed class ArtistAgent
         var panels = artist.Panels.OrderBy(p => p.ReadingOrder).ToList();
         var panelKeys = panels.Select((p, i) => (Key: $"P{i + 1}", Panel: p)).ToList();
         var lineText = ctx.BaselineScript.ToDictionary(l => l.LineId);
-        var codeById = keys.CharactersByCode.Values.ToDictionary(c => c.EntryId, c => c.Code);
+        var codeById = keys.CharactersByCode.Values.DistinctBy(c => c.EntryId).ToDictionary(c => c.EntryId, c => c.Code);
 
         var sb = new StringBuilder();
         sb.AppendLine($"[[agent:artist]] [[panels:{panels.Count}]] [[direction:{ctx.ReadingDirection}]]");

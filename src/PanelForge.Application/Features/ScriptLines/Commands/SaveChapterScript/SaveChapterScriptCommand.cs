@@ -47,7 +47,7 @@ public sealed class SaveChapterScriptCommandHandler : IRequestHandler<SaveChapte
         }
         catch (ScriptSaveAbortException ex)
         {
-            return Result<SaveChapterScriptResult>.Failure(ex.Message, ex.Code);
+            return Result<SaveChapterScriptResult>.Failure(ex.Message, ex.Code, ex.Details);
         }
     }
 }

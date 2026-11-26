@@ -1,9 +1,12 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Domain.Entities.Audit;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
@@ -85,9 +88,18 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
                 "Phiên bản concept xác nhận không phải phiên bản đang nộp mới nhất; Artist vừa nộp bản mới.", ResultErrorCodes.Conflict);
         }
 
+        var seriesInfo = _dbContext.Series is not null
+            ? await _dbContext.Series.AsNoTracking()
+                .Where(s => s.Id == cmd.SeriesId)
+                .Select(s => new { s.AllowSoloCreatorReview, s.WorkspaceId })
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var allowSoloCreatorReview = seriesInfo?.AllowSoloCreatorReview ?? false;
+
         var currentEvent = revision.Events.FirstOrDefault(e => e.Id == targetConceptEventId.Value);
-        if ((currentEvent?.ActorId.HasValue == true && currentEvent.ActorId.Value == cmd.UserId)
-            || (revision.ArtistUserId.HasValue && revision.ArtistUserId.Value == cmd.UserId))
+        var isSelfApproval = (currentEvent?.ActorId.HasValue == true && currentEvent.ActorId.Value == cmd.UserId)
+            || (revision.ArtistUserId.HasValue && revision.ArtistUserId.Value == cmd.UserId);
+        if (isSelfApproval && !allowSoloCreatorReview)
         {
             return Result<BibleEntryRevisionDto>.Failure(
                 "Bạn đã nộp Concept cho phiên bản này; Canon phải do một Editor khác xác nhận (BR-06).", ResultErrorCodes.Forbidden);
@@ -95,16 +107,30 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
 
         try
         {
-            revision.ConfirmCanon(cmd.UserId, targetConceptEventId.Value);
+            revision.ConfirmCanon(cmd.UserId, targetConceptEventId.Value, allowSoloCreatorReview);
+
+            if (isSelfApproval && allowSoloCreatorReview && _dbContext.AuditLogs is not null)
+            {
+                _dbContext.AuditLogs.Add(AuditLog.Create(
+                    action: "CANON_LOCK_SELF_APPROVED",
+                    entityName: nameof(BibleEntryRevision),
+                    entityId: revision.Id.ToString(),
+                    workspaceId: seriesInfo?.WorkspaceId,
+                    userId: cmd.UserId,
+                    details: JsonSerializer.Serialize(new Dictionary<string, object>
+                    {
+                        ["self-approved"] = true,
+                        ["bibleEntryId"] = entry.Id,
+                        ["revisionId"] = revision.Id,
+                        ["versionNumber"] = revision.VersionNumber
+                    })));
+            }
 
             var snapshot = BibleEntrySnapshot.From(entry, entry.GetDisplayRevision());
             entry.UpdateDetails(
                 snapshot.Description,
-                snapshot.Subtitle,
                 snapshot.DetailsJson,
-                snapshot.ReferenceImageUrl,
-                snapshot.Priority,
-                snapshot.StrictCheck);
+                snapshot.ReferenceImageUrl);
 
             // BIB-13 (Q23, Q24): Nếu đây là bản thay thế, đánh dấu bản cũ là Superseded
             // và tính lại kế thừa cho các chương chưa Frozen đang kế thừa

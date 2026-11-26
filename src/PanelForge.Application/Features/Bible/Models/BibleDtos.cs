@@ -1,7 +1,16 @@
+using PanelForge.Application.Features.Bible.Common;
+using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Bible.Models;
+
+public sealed record WriterEndorsementDto(
+    bool Endorsed,
+    string? EndorsedByName = null,
+    DateTime? EndorsedAt = null,
+    int? ConceptVersion = null
+);
 
 public sealed record BibleEntryRevisionDto(
     Guid Id,
@@ -28,14 +37,28 @@ public sealed record BibleEntryRevisionDto(
     IReadOnlyList<BibleRevisionEventDto>? Events = null,
     Guid? SupersedesRevisionId = null,
     Guid? CurrentConceptEventId = null,
-    int? CurrentConceptVersionNumber = null
+    int? CurrentConceptVersionNumber = null,
+    WriterEndorsementDto? WriterEndorsement = null
 )
 {
-    public string VariantLabel => StageName ?? string.Empty;
+    public string? Age => BibleDetailsParser.Parse(SnapshotJson).Age;
+    public string? ArtistNotes => BibleDetailsParser.Parse(SnapshotJson).ArtistNotes;
+
     /// <summary>Events chỉ có khi revision được tải kèm Events (Include) hoặc vừa tạo trong request.</summary>
-    public static BibleEntryRevisionDto From(BibleEntryRevision r)
+    public static BibleEntryRevisionDto From(BibleEntryRevision r, IReadOnlyDictionary<Guid, string>? userNames = null)
     {
         var currentEvt = r.CurrentConceptEventId.HasValue ? r.Events.FirstOrDefault(e => e.Id == r.CurrentConceptEventId.Value) : null;
+        var currentConceptVer = currentEvt?.ConceptVersionNumber;
+        var isEndorsed = r.IsWriterEndorsedForCurrentConcept;
+        var endorserName = isEndorsed && r.WriterEndorsedByUserId.HasValue && userNames != null
+            ? userNames.GetValueOrDefault(r.WriterEndorsedByUserId.Value)
+            : null;
+        var endorsement = new WriterEndorsementDto(
+            Endorsed: isEndorsed,
+            EndorsedByName: endorserName,
+            EndorsedAt: isEndorsed ? r.WriterEndorsedAt : null,
+            ConceptVersion: isEndorsed ? r.WriterEndorsedConceptVersion : currentConceptVer);
+
         return new(
             r.Id, r.BibleEntryId, r.VersionNumber, r.Summary, r.SnapshotJson, r.ContentHash, r.AuthorId, r.AssociatedChapterId,
             r.IsInitialVersion, r.CreatedAt, r.IsLocked, r.LockedAt, r.LockedById, r.StageName,
@@ -43,7 +66,8 @@ public sealed record BibleEntryRevisionDto(
             r.Events.OrderBy(e => e.CreatedAt).Select(BibleRevisionEventDto.From).ToList(),
             r.SupersedesRevisionId,
             r.CurrentConceptEventId,
-            currentEvt?.ConceptVersionNumber);
+            currentConceptVer,
+            endorsement);
     }
 }
 
@@ -67,54 +91,62 @@ public sealed record BibleEntryDto(
     Guid Id,
     Guid SeriesBibleId,
     BibleEntryCategory Category,
-    string Code,
     string Name,
-    string? Subtitle,
     string Description,
     string DetailsJson,
     string? ReferenceImageUrl,
-    BiblePriority Priority,
-    bool StrictCheck,
-    bool IsActive,
     BibleEntryRevisionDto? EffectiveRevision,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool IsStub = false,
     bool IsCrowd = false,
-    int? LatestDraftVersionNumber = null
+    int? LatestDraftVersionNumber = null,
+    BibleEntryRevisionDto? PendingReviewRevision = null,
+    string? Age = null,
+    string? ArtistNotes = null
 )
 {
-    public static BibleEntryDto From(BibleEntry entry)
+    /// <summary>Mã hiển thị rút gọn format trực tiếp từ Id</summary>
+    public string Code => Id.ToString("N")[..8].ToUpperInvariant();
+
+    public static BibleEntryDto From(BibleEntry entry, IReadOnlyDictionary<Guid, string>? userNames = null)
     {
         var rev = entry.GetDisplayRevision();
         var snapshot = BibleEntrySnapshot.From(entry, rev);
-        var latestDraftVersionNumber = rev is null
-            ? null
-            : entry.Revisions
-                .Where(r => r.VersionNumber > rev.VersionNumber
+        var normRevStage = rev != null ? BibleNameNormalizer.Normalize(rev.StageName) : "";
+        var latestDraftVersionNumber = rev is { ReviewStatus: BibleRevisionStatus.CanonLocked }
+            ? entry.Revisions
+                .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normRevStage, StringComparison.OrdinalIgnoreCase)
+                    && r.VersionNumber > rev.VersionNumber
                     && r.ReviewStatus != BibleRevisionStatus.CanonLocked
                     && !entry.IsRevisionSuperseded(r))
                 .Select(r => (int?)r.VersionNumber)
-                .Max();
+                .Max()
+            : null;
+        var pendingReview = entry.Revisions
+            .Where(r => !r.IsLocked && (r.ReviewStatus == BibleRevisionStatus.ConceptSubmitted || r.ReviewStatus == BibleRevisionStatus.ReworkRequired))
+            .OrderByDescending(r => r.VersionNumber)
+            .FirstOrDefault();
+
+        var parsedDetails = BibleDetailsParser.Parse(snapshot.DetailsJson);
+
         return new(
             entry.Id,
             entry.SeriesBibleId,
             entry.Category,
-            entry.Code,
             entry.Name,
-            snapshot.Subtitle,
             snapshot.Description,
             snapshot.DetailsJson,
             snapshot.ReferenceImageUrl,
-            snapshot.Priority,
-            snapshot.StrictCheck,
-            entry.IsActive,
-            rev != null ? BibleEntryRevisionDto.From(rev) : null,
+            rev != null ? BibleEntryRevisionDto.From(rev, userNames) : null,
             entry.CreatedAt,
             entry.UpdatedAt,
             entry.IsStub,
             entry.IsCrowd,
-            latestDraftVersionNumber
+            latestDraftVersionNumber,
+            pendingReview != null ? BibleEntryRevisionDto.From(pendingReview, userNames) : null,
+            parsedDetails.Age,
+            parsedDetails.ArtistNotes
         );
     }
 }
@@ -131,43 +163,53 @@ public sealed record SeriesBibleDto(
 
 public sealed record CreateBibleEntryRequest(
     BibleEntryCategory Category,
-    string Code,
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
-    BiblePriority Priority = BiblePriority.Standard,
-    bool StrictCheck = true,
     string? StageName = null,
     bool IsCrowd = false,
-    string? VariantLabel = null
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Code = null,
+    string? Subtitle = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true,
+    string? VariantLabel = null,
+    IReadOnlyList<string>? Aliases = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
-    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(StageName) ? StageName.Trim() : VariantLabel?.Trim();
+    public string EffectiveDetailsJson => (!string.IsNullOrWhiteSpace(Age) || !string.IsNullOrWhiteSpace(ArtistNotes))
+        ? BibleDetailsParser.Serialize(Age, ArtistNotes)
+        : (string.IsNullOrWhiteSpace(DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(DetailsJson));
 }
 
 public sealed record AddBibleEntryRevisionRequest(
     string Summary,
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
-    BiblePriority Priority = BiblePriority.Standard,
-    bool StrictCheck = true,
     string? StageName = null,
-    // UC-04: version FE đã tải về để sửa (versionNumber lớn nhất lúc mở form). Khuyến nghị luôn gửi.
     int? ExpectedVersionNumber = null,
     bool IsNewVariant = false,
     Guid? TargetRevisionId = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Subtitle = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true,
     string? VariantLabel = null
 )
 {
     public string EffectiveSummary => Summary;
     public string? EffectiveImageUrl => ReferenceImageUrl;
-    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(StageName) ? StageName.Trim() : VariantLabel?.Trim();
+    public string EffectiveDetailsJson => (!string.IsNullOrWhiteSpace(Age) || !string.IsNullOrWhiteSpace(ArtistNotes))
+        ? BibleDetailsParser.Serialize(Age, ArtistNotes)
+        : (string.IsNullOrWhiteSpace(DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(DetailsJson));
 }
 
 /// <summary>Producer thay thế bản đã khoá: nội dung mới + lý do.</summary>
@@ -175,32 +217,43 @@ public sealed record SupersedeBibleEntryRevisionRequest(
     string Reason,
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
-    BiblePriority Priority = BiblePriority.Standard,
-    bool StrictCheck = true,
     int? ExpectedVersionNumber = null,
     string? StageName = null,
     Guid? ChapterId = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Subtitle = null,
+    BiblePriority Priority = BiblePriority.Standard,
+    bool StrictCheck = true,
     string? VariantLabel = null
 )
 {
     public string? EffectiveImageUrl => ReferenceImageUrl;
-    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(StageName) ? StageName.Trim() : VariantLabel?.Trim();
+    public string EffectiveDetailsJson => (!string.IsNullOrWhiteSpace(Age) || !string.IsNullOrWhiteSpace(ArtistNotes))
+        ? BibleDetailsParser.Serialize(Age, ArtistNotes)
+        : (string.IsNullOrWhiteSpace(DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(DetailsJson));
 }
 
 public sealed record CreateBibleVariantRequest(
-    string VariantLabel,
-    string Summary,
+    string? StageName = null,
+    string Summary = "",
     string? Name = null,
     string? Description = null,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? VariantLabel = null,
+    string? Subtitle = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true
-);
+)
+{
+    public string EffectiveStageName => (!string.IsNullOrWhiteSpace(StageName) ? StageName : VariantLabel)?.Trim() ?? string.Empty;
+}
 
 public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, string? ReworkReason = null)
 {
@@ -208,6 +261,8 @@ public sealed record RequestReworkBibleRevisionRequest(string? Reason = null, st
 }
 
 public sealed record ConfirmBibleRevisionRequest(Guid? ConceptEventId = null);
+
+public sealed record EndorseBibleRevisionRequest(bool? Endorse = null);
 
 public sealed record BibleConceptCommentDto(
     Guid Id,
@@ -258,17 +313,22 @@ public sealed record SubmitConceptArtRequest(
     string? ImageAssetUrl = null,
     string? AssetSha256 = null,
     string? Note = null,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? StageName = null,
     int? ExpectedVersionNumber = null,
     Guid? RevisionId = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Subtitle = null,
     string? VariantLabel = null
 )
 {
     public string EffectiveSummary => (!string.IsNullOrWhiteSpace(Summary) ? Summary : (!string.IsNullOrWhiteSpace(Note) ? Note : "Nộp bản vẽ Concept Art")).Trim();
     public string EffectiveImageUrl => (!string.IsNullOrWhiteSpace(ReferenceImageUrl) ? ReferenceImageUrl : ImageAssetUrl)?.Trim() ?? string.Empty;
-    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(VariantLabel) ? VariantLabel.Trim() : StageName?.Trim();
+    public string? EffectiveStageName => !string.IsNullOrWhiteSpace(StageName) ? StageName.Trim() : VariantLabel?.Trim();
+    public string EffectiveDetailsJson => (!string.IsNullOrWhiteSpace(Age) || !string.IsNullOrWhiteSpace(ArtistNotes))
+        ? BibleDetailsParser.Serialize(Age, ArtistNotes)
+        : (string.IsNullOrWhiteSpace(DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(DetailsJson));
 }
 
 public sealed record BibleDesignQueueItemDto(
@@ -287,11 +347,11 @@ public sealed record BibleDesignQueueItemDto(
     DateTime? UpdatedAt,
     bool IsStub = false,
     Guid? RevisionId = null,
-    IReadOnlyList<decimal>? WaitingChapterNumbers = null
+    IReadOnlyList<decimal>? WaitingChapterNumbers = null,
+    bool IsPriorityRework = false
 )
 {
     public BibleRevisionStatus ReviewStatus => Status;
-    public string VariantLabel => StageName ?? string.Empty;
 }
 
 /// <summary>Một chương mà mục Bible xuất hiện trong kịch bản.</summary>
