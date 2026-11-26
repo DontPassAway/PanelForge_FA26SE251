@@ -75,6 +75,7 @@ public interface IPanelForgeDbContext
     DbSet<ScriptLine> ScriptLines { get; }
     DbSet<ScriptComment> ScriptComments { get; }
     DbSet<ScriptVersion> ScriptVersions { get; }
+    DbSet<ChapterScriptWorkingCopy> ChapterScriptWorkingCopies { get; }
     DbSet<Page> Pages { get; }
     DbSet<Panel> Panels { get; }
     DbSet<FrameTemplate> FrameTemplates { get; }

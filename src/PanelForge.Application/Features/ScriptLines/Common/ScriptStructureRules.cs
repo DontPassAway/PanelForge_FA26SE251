@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.ScriptLines.Common;
@@ -92,6 +93,20 @@ internal static class ScriptStructureRules
             panel.DeletedBy = userId.ToString();
             db.Panels.Remove(panel);
         }
+        var removedPageIds = removedPages.Select(p => p.Id).ToHashSet();
+        var preservedTaskPages = db is DbContext efDb && removedPageIds.Count > 0
+            ? efDb.ChangeTracker.Entries<StageTask>()
+                .Where(e => e.State != EntityState.Deleted &&
+                            e.Entity.PageId is { } pid &&
+                            removedPageIds.Contains(pid))
+                .Select(e => (
+                    Entry: e,
+                    PageId: e.Entity.PageId!.Value,
+                    OriginalState: e.State,
+                    WasPageIdModified: e.Property(t => t.PageId).IsModified))
+                .ToList()
+            : [];
+
         foreach (var page in removedPages)
         {
             var stream = await pageRepository.GetAsync(page.Id, ct);
@@ -101,6 +116,20 @@ internal static class ScriptStructureRules
                 await pageRepository.SaveAsync(stream, ct);
             }
             db.Pages.Remove(page);
+        }
+
+        // DbSet.Remove(page) khiến EF Core ChangeTracker cắt FK PageId -> null trên StageTask đang track
+        // trước khi SaveChangesAsync chuyển Delete thành soft-delete; khôi phục để RefreezeScript huỷ đúng ô việc.
+        foreach (var (entry, pageId, originalState, wasPageIdModified) in preservedTaskPages)
+        {
+            if (entry.Entity.PageId != pageId)
+            {
+                var prop = entry.Property(t => t.PageId);
+                prop.CurrentValue = pageId;
+                prop.IsModified = wasPageIdModified;
+                if (originalState == EntityState.Unchanged && !entry.Properties.Any(p => p.IsModified))
+                    entry.State = EntityState.Unchanged;
+            }
         }
 
         // FK cascade không chạy với xoá mềm

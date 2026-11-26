@@ -41,7 +41,9 @@ internal static class ChapterDetailDtoFactory
             PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId,
             IsHandedOff: chapter.IsHandedOff,
             HandedOffAt: chapter.HandedOffAt,
-            HandedOffById: chapter.HandedOffById
+            HandedOffById: chapter.HandedOffById,
+            FrozenScriptVersionId: chapter.FrozenScriptVersionId,
+            PreviousFrozenScriptVersionId: chapter.PreviousFrozenScriptVersionId
         );
     }
 }

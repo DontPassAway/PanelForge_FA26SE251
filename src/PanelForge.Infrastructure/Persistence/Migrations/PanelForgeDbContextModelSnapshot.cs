@@ -1042,6 +1042,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Aliases")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("aliases")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -1284,6 +1291,18 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("version_number");
 
+                    b.Property<DateTime?>("WriterEndorsedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("writer_endorsed_at");
+
+                    b.Property<Guid?>("WriterEndorsedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_endorsed_by_user_id");
+
+                    b.Property<int?>("WriterEndorsedConceptVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("writer_endorsed_concept_version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BibleEntryId")
@@ -1516,6 +1535,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("outline");
 
+                    b.Property<Guid?>("PreviousFrozenScriptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("previous_frozen_script_version_id");
+
                     b.Property<Guid?>("PreviousSubmittedVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_submitted_version_id");
@@ -1605,6 +1628,9 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("version_vector");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PreviousFrozenScriptVersionId")
+                        .HasDatabaseName("ix_chapters_previous_frozen_script_version_id");
 
                     b.HasIndex("SeriesId")
                         .HasDatabaseName("ix_chapters_series_id");
@@ -1939,6 +1965,50 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_chapter_scripts_chapter_id");
 
                     b.ToTable("chapter_scripts", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScriptWorkingCopy", b =>
+                {
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chapter_id");
+
+                    b.Property<Guid>("BaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("base_version_id");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content_json");
+
+                    b.Property<int>("LineCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("line_count");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("WriterUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_user_id");
+
+                    b.HasKey("ChapterId");
+
+                    b.HasIndex("BaseVersionId");
+
+                    b.HasIndex("WriterUserId")
+                        .HasDatabaseName("ix_chapter_script_working_copies_writer");
+
+                    b.ToTable("chapter_script_working_copies", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>
@@ -3200,6 +3270,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<string>("AgeRating")
                         .HasColumnType("varchar(10)")
                         .HasColumnName("age_rating");
+
+                    b.Property<bool>("AllowSoloCreatorReview")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("allow_solo_creator_review");
 
                     b.Property<string>("AvatarImageSha256")
                         .HasColumnType("varchar(64)")
@@ -6375,6 +6451,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.Chapter", b =>
                 {
+                    b.HasOne("PanelForge.Domain.Entities.Content.ScriptVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PreviousFrozenScriptVersionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PanelForge.Domain.Entities.Content.Series", "Series")
                         .WithMany("Chapters")
                         .HasForeignKey("SeriesId")
@@ -6451,6 +6532,27 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Chapter");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterScriptWorkingCopy", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Content.ScriptVersion", null)
+                        .WithMany()
+                        .HasForeignKey("BaseVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
+                        .WithOne()
+                        .HasForeignKey("PanelForge.Domain.Entities.Content.ChapterScriptWorkingCopy", "ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("WriterUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Content.ChapterSnapshot", b =>

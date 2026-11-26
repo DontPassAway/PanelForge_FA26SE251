@@ -74,6 +74,10 @@ public sealed class StartChapterProductionCommandHandler
                     .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, tct);
                 if (chapter is null)
                     return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
+                if (chapter.Status != ChapterStatus.PreProduction)
+                    return Fail(
+                        "Chương đã bắt đầu sản xuất. Vui lòng sử dụng quy trình khóa lại kịch bản (Refreeze).",
+                        ResultErrorCodes.Conflict);
 
                 // Gate 1 starts with the single authoritative Bible check. Script comments are deliberately not queried.
                 var bibleGate = await _castGate.EvaluateStartAsync(chapter.Id, tct);

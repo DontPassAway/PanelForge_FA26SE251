@@ -90,6 +90,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ScriptLine> ScriptLines => Set<ScriptLine>();
     public DbSet<ScriptComment> ScriptComments => Set<ScriptComment>();
     public DbSet<ScriptVersion> ScriptVersions => Set<ScriptVersion>();
+    public DbSet<ChapterScriptWorkingCopy> ChapterScriptWorkingCopies => Set<ChapterScriptWorkingCopy>();
     public DbSet<Page> Pages => Set<Page>();
     public DbSet<Panel> Panels => Set<Panel>();
     public DbSet<FrameTemplate> FrameTemplates => Set<FrameTemplate>();
@@ -126,7 +127,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
             // RefreshToken: đăng nhập / đăng xuất / thu hồi phiên được ghi bằng sự kiện LOGIN, LOGOUT, SESSIONS_REVOKED
             // ở tầng Application; không audit từng lần xoay vòng token.
             if (entry.Entity is not (AuditLog or AiUsageRecord or AssetAccessLog or Domain.Entities.Preview.PreviewLinkAccessLog
-                    or Notification or RefreshToken)
+                    or Notification or RefreshToken or ChapterScriptWorkingCopy)
                 && !IsTechnicalOnlyUpdate(entry) && !IsAiUsageCounter(entry))
             {
                 var action = entry.State switch
