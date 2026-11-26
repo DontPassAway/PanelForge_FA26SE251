@@ -12,6 +12,7 @@ using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleDesignQueue;
+using PanelForge.Application.Features.ScriptVersions;
 using PanelForge.Application.Features.Chapters.Commands.FreezeScript;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterCast;
 using PanelForge.Application.Features.Chapters.Services;
@@ -364,6 +365,7 @@ public class BibleWorkflowSafeguardsTests
         var panel = Panel.Create(page.Id, 1, 1);
         var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Let's go!", speakerLabel: "Akira");
         line.AssignToPanel(panel.Id);
+
 
         db.BibleEntries.Add(entry);
         db.BibleEntryRevisions.AddRange(v1, v2);

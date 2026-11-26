@@ -20,8 +20,8 @@ public class BibleEntryRevision : BaseEntity
     public string ContentHash { get; private set; } = default!;
     public Guid? AssociatedChapterId { get; private set; }
 
-    /// <summary>Tên giai đoạn do người dùng đặt, vd. "Lúc nhỏ", "Trưởng thành". Không phải số phiên bản.</summary>
-    public string? StageName { get; private set; }
+    /// <summary>Tên biến thể tạo hình do người dùng đặt, vd. "Mặc định", "Lúc nhỏ", "Trưởng thành". Không phải số phiên bản.</summary>
+    public string StageName { get; private set; } = "Mặc định";
 
     public bool IsInitialVersion { get; private set; } = false;
 
@@ -273,6 +273,21 @@ public class BibleEntryRevision : BaseEntity
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.DraftOverwritten, authorId, summary));
     }
 
+    /// <summary>
+    /// Sửa nội dung nháp Draft: cập nhật nội dung văn bản đặc tả, giữ nguyên VersionNumber và RevisionId.
+    /// Không áp dụng cho bản đã khóa Canon (phải dùng /supersede).
+    /// </summary>
+    public void UpdateDraft(string summary, string snapshotJson, string contentHash, Guid authorId, string? stageName = null)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá; muốn đổi thiết kế phải dùng /supersede.");
+        Summary = summary.Trim();
+        SnapshotJson = string.IsNullOrWhiteSpace(snapshotJson) ? "{}" : snapshotJson.Trim();
+        ContentHash = contentHash.Trim();
+        AuthorId = authorId;
+        if (!string.IsNullOrWhiteSpace(stageName)) StageName = stageName.Trim();
+        Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.DraftOverwritten, authorId, Summary));
+    }
+
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
         int versionNumber,
@@ -291,7 +306,8 @@ public class BibleEntryRevision : BaseEntity
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentHash);
-        if (stageName?.Trim().Length > 100)
+        var effectiveStage = string.IsNullOrWhiteSpace(stageName) ? "Mặc định" : stageName.Trim();
+        if (effectiveStage.Length > 100)
             throw new ArgumentException("Tên giai đoạn tối đa 100 ký tự.");
 
         var revision = new BibleEntryRevision
@@ -303,7 +319,7 @@ public class BibleEntryRevision : BaseEntity
             ContentHash = contentHash.Trim(),
             AuthorId = authorId,
             AssociatedChapterId = associatedChapterId,
-            StageName = string.IsNullOrWhiteSpace(stageName) ? null : stageName.Trim(),
+            StageName = effectiveStage,
             IsInitialVersion = isInitialVersion,
             ArtistUserId = artistUserId,
             ReviewStatus = reviewStatus,
