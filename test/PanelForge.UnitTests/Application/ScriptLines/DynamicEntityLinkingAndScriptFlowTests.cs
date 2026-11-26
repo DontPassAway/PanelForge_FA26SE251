@@ -195,11 +195,11 @@ public class DynamicEntityLinkingAndScriptFlowTests
         freezeResult.Value!.ScriptContentHash.Should().MatchRegex("^[0-9a-f]{64}$");
 
         // 5. Kiểm tra Targeted Impact Scope:
-        // Panel 2 bị đổi thoại => Chuyển sang ReworkRequired và bật has_script_impact = true
+        // Panel 2 chỉ đổi thoại => không bật cờ hình ảnh và không bắt Artist vẽ lại.
         var updatedAssign2 = await _db.Assignments.FirstAsync(a => a.Id == assignPanel2.Id);
-        updatedAssign2.HasScriptImpact.Should().BeTrue();
-        updatedAssign2.Status.Should().Be(AssignmentStatus.ReworkRequired);
-        updatedAssign2.ImpactedScriptLineId.Should().Be(_line2.Id);
+        updatedAssign2.HasScriptImpact.Should().BeFalse();
+        updatedAssign2.Status.Should().Be(AssignmentStatus.Approved);
+        updatedAssign2.ImpactedScriptLineId.Should().BeNull();
 
         // Panel 1 không bị đổi thoại => Giữ nguyên 100% trạng thái Approved!
         var updatedAssign1 = await _db.Assignments.FirstAsync(a => a.Id == assignPanel1.Id);

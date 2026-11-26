@@ -26,11 +26,21 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
 {
     private readonly IPanelForgeDbContext _dbContext;
     private readonly IChapterCastGate _castGate;
+    private readonly IScriptImpactClassifier _impactClassifier;
 
     public FreezeChapterScriptCommandHandler(IPanelForgeDbContext dbContext, IChapterCastGate castGate)
+        : this(dbContext, castGate, new ScriptImpactClassifier())
+    {
+    }
+
+    public FreezeChapterScriptCommandHandler(
+        IPanelForgeDbContext dbContext,
+        IChapterCastGate castGate,
+        IScriptImpactClassifier impactClassifier)
     {
         _dbContext = dbContext;
         _castGate = castGate;
+        _impactClassifier = impactClassifier;
     }
 
     public async Task<Result<ChapterDetailDto>> Handle(FreezeChapterScriptCommand cmd, CancellationToken ct)
@@ -51,7 +61,7 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
                     : "Writer chưa gửi duyệt kịch bản. Chỉ bắt đầu sản xuất được khi kịch bản đang chờ duyệt.",
                 ResultErrorCodes.Conflict);
 
-        var snapshot = await ScriptSnapshotBuilder.BuildAsync(_dbContext, chapter.Id, ct);
+        var snapshot = await ScriptSnapshotBuilder.BuildWithChoicesAsync(_dbContext, chapter.Id, ct);
         if (snapshot.LineCount == 0)
             return Result<ChapterDetailDto>.Failure(
                 "Kịch bản chương phải có ít nhất một dòng trước khi bắt đầu sản xuất.", ResultErrorCodes.Validation);
@@ -80,7 +90,11 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
 
         // Đóng băng lại sau khi mở sửa: gắn cờ ảnh hưởng cho Panel có dòng vừa sửa hoặc đổi binding (WF04 / SCR-01)
         if (chapter.ScriptReopenStatus == ScriptReopenStatus.Approved && chapter.ScriptReopenRequestedAt.HasValue)
-            await FlagImpactedWorkAsync(chapter.Id, chapter.ScriptReopenRequestedAt.Value, ct);
+            await FlagImpactedWorkAsync(
+                chapter.Id,
+                chapter.FrozenScriptVersionId,
+                new ScriptVersionSnapshot(snapshot.Rows, snapshot.CastChoices),
+                ct);
 
         // Đóng băng is_crowd_at_bind và bound_revision_id
         var chapterBindings = await _dbContext.ChapterBibleBindings
@@ -104,99 +118,82 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
         return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
     }
 
-    private async Task FlagImpactedWorkAsync(Guid chapterId, DateTime since, CancellationToken ct)
+    private async Task FlagImpactedWorkAsync(
+        Guid chapterId,
+        Guid? frozenScriptVersionId,
+        ScriptVersionSnapshot currentSnapshot,
+        CancellationToken ct)
     {
-        // 1. Dòng kịch bản sửa sau khi mở lại
-        var modifiedLines = await _dbContext.ScriptLines
-            .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.UpdatedAt >= since)
+        if (frozenScriptVersionId is null) return;
+        var frozenRowsJson = await _dbContext.ScriptVersions.AsNoTracking()
+            .Where(v => v.Id == frozenScriptVersionId.Value && v.ChapterId == chapterId)
+            .Select(v => v.RowsJson)
+            .FirstOrDefaultAsync(ct);
+        if (frozenRowsJson is null) return;
+
+        var impact = _impactClassifier.Classify(
+            ScriptSnapshotBuilder.DeserializeSnapshot(frozenRowsJson),
+            currentSnapshot);
+        if (!impact.HasVisualImpact) return;
+
+        var pageNumbers = impact.VisualPanels.Select(p => p.PageNumber).Distinct().ToList();
+        var pages = await _dbContext.Pages.AsNoTracking()
+            .Where(p => p.ChapterId == chapterId && pageNumbers.Contains(p.PageNumber))
+            .Select(p => new { p.Id, p.PageNumber })
+            .ToListAsync(ct);
+        var pageNumberById = pages.ToDictionary(p => p.Id, p => p.PageNumber);
+        var affectedPageIds = pages.Select(p => p.Id).ToHashSet();
+
+        var affectedPanelIds = impact.VisualPanels.Where(p => p.PanelId.HasValue)
+            .Select(p => p.PanelId!.Value)
+            .ToHashSet();
+        var currentPanels = await _dbContext.Panels.AsNoTracking()
+            .Where(p => affectedPageIds.Contains(p.PageId))
+            .Select(p => new { p.Id, p.PageId, p.PanelNumber })
+            .ToListAsync(ct);
+        foreach (var panel in currentPanels.Where(panel => impact.VisualPanels.Any(reference =>
+                     reference.PageNumber == pageNumberById[panel.PageId] &&
+                     reference.PanelNumber == panel.PanelNumber)))
+            affectedPanelIds.Add(panel.Id);
+
+        var actionLines = await _dbContext.ScriptLines.AsNoTracking()
+            .Where(l => l.PanelId.HasValue && affectedPanelIds.Contains(l.PanelId.Value) && l.Kind == ScriptLineKind.Action)
             .Select(l => new { l.Id, PanelId = l.PanelId!.Value })
             .ToListAsync(ct);
+        var lineByPanel = actionLines.GroupBy(l => l.PanelId).ToDictionary(g => g.Key, g => g.First().Id);
 
-        // 2. Biến thể Panel bị đặt/sửa sau khi mở lại
-        var modifiedVariants = await _dbContext.PanelBibleVariants
-            .Where(v => v.Panel.Page.ChapterId == chapterId && v.SetAt >= since)
-            .Where(v => v.PanelId.HasValue)
-            .Select(v => v.PanelId!.Value)
+        var artworkStageIds = await _dbContext.PipelineStages.AsNoTracking()
+            .Where(s => s.AllowedRole == WorkspaceRole.Artist)
+            .Select(s => s.Id)
             .ToListAsync(ct);
-
-        // 3. Thực thể binding đổi bound_revision_id hoặc thêm mới sau khi mở lại
-        var modifiedBindingEntryIds = await _dbContext.ChapterBibleBindings
-            .Where(b => b.ChapterId == chapterId && b.BoundAt >= since)
-            .Select(b => b.BibleEntryId)
-            .ToListAsync(ct);
-
-        List<Guid> panelsFromChangedBindings = [];
-        if (modifiedBindingEntryIds.Count > 0)
+        var affectedTargets = affectedPanelIds.Concat(affectedPageIds).ToHashSet();
+        var startedAssignmentStatuses = new[]
         {
-            var modifiedEntries = await _dbContext.BibleEntries
-                .Where(e => modifiedBindingEntryIds.Contains(e.Id))
-                .Select(e => new { e.Id, e.NormalizedName })
-                .ToListAsync(ct);
-
-            var entryNames = modifiedEntries.Select(e => e.NormalizedName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var chapterLinesWithPanel = await _dbContext.ScriptLines
-                .Where(l => l.PanelId != null && l.Panel!.Page.ChapterId == chapterId && l.SpeakerLabel != null)
-                .Select(l => new { PanelId = l.PanelId!.Value, l.SpeakerLabel })
-                .ToListAsync(ct);
-
-            var speakerPanels = chapterLinesWithPanel
-                .Where(l => entryNames.Contains(SpeakerResolver.NormalizeSpeaker(l.SpeakerLabel!)))
-                .Select(l => l.PanelId)
-                .Distinct()
-                .ToList();
-
-            var linkPanels = await _dbContext.ScriptLineBibleLinks
-                .Where(k => modifiedBindingEntryIds.Contains(k.BibleEntryId) &&
-                            k.ScriptLine.PanelId != null && k.ScriptLine.Panel!.Page.ChapterId == chapterId)
-                .Select(k => k.ScriptLine.PanelId!.Value)
-                .ToListAsync(ct);
-
-            panelsFromChangedBindings = speakerPanels.Union(linkPanels).Distinct().ToList();
-        }
-
-        var allAffectedPanelIds = modifiedLines.Select(l => l.PanelId)
-            .Union(modifiedVariants)
-            .Union(panelsFromChangedBindings)
-            .Distinct()
-            .ToList();
-
-        if (allAffectedPanelIds.Count == 0) return;
-
-        var lineByPanel = modifiedLines.GroupBy(p => p.PanelId).ToDictionary(g => g.Key, g => g.First().Id);
-        var missingPanels = allAffectedPanelIds.Where(id => !lineByPanel.ContainsKey(id)).ToList();
-        if (missingPanels.Count > 0)
-        {
-            var fallbackLines = await _dbContext.ScriptLines
-                .Where(l => l.PanelId != null && missingPanels.Contains(l.PanelId.Value))
-                .Select(l => new { l.Id, PanelId = l.PanelId!.Value })
-                .ToListAsync(ct);
-            foreach (var fl in fallbackLines)
-            {
-                lineByPanel.TryAdd(fl.PanelId, fl.Id);
-            }
-        }
+            AssignmentStatus.InProgress, AssignmentStatus.Submitted, AssignmentStatus.UnderReview,
+            AssignmentStatus.Approved, AssignmentStatus.ReworkRequired
+        };
 
         foreach (var a in await _dbContext.Assignments
-                     .Where(a => a.ChapterId == chapterId && allAffectedPanelIds.Contains(a.TargetEntityId)).ToListAsync(ct))
+                     .Where(a => a.ChapterId == chapterId && a.AssignedRole == WorkspaceRole.Artist &&
+                                 startedAssignmentStatuses.Contains(a.Status) && affectedTargets.Contains(a.TargetEntityId))
+                     .ToListAsync(ct))
         {
-            var lineId = lineByPanel.GetValueOrDefault(a.TargetEntityId, Guid.Empty);
+            var lineId = lineByPanel.GetValueOrDefault(a.TargetEntityId, actionLines.FirstOrDefault()?.Id ?? Guid.Empty);
             a.FlagScriptImpact(lineId);
         }
 
         foreach (var sp in await _dbContext.StageProgresses
-                      .Where(sp => sp.PanelId.HasValue && allAffectedPanelIds.Contains(sp.PanelId.Value)).ToListAsync(ct))
+                      .Where(sp => sp.PanelId.HasValue && affectedPanelIds.Contains(sp.PanelId.Value) &&
+                                   artworkStageIds.Contains(sp.PipelineStageId)).ToListAsync(ct))
         {
             var lineId = lineByPanel.GetValueOrDefault(sp.PanelId!.Value, Guid.Empty);
             sp.FlagScriptImpact(lineId);
         }
 
-        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review.
-        // Không gắn ô cấp Chương: ô Script chính là phần vừa sửa, gắn cờ sẽ khoá mọi ô sau nó.
-        var pageIds = await _dbContext.Panels.Where(p => allAffectedPanelIds.Contains(p.Id)).Select(p => p.PageId).Distinct().ToListAsync(ct);
         foreach (var task in await _dbContext.StageTasks
                      .Where(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled &&
-                                 t.PageId != null && pageIds.Contains(t.PageId.Value)).ToListAsync(ct))
+                                 artworkStageIds.Contains(t.PipelineStageId) && t.PageId != null &&
+                                 affectedPageIds.Contains(t.PageId.Value)).ToListAsync(ct))
             task.MarkInputOutdated(StageTask.ScriptChangedReason);
     }
 }

@@ -41,13 +41,16 @@ public sealed record AssignmentDto(
     DateTime? UpdatedAt,
     IReadOnlyList<Guid>? DependsOnAssignmentIds = null,
     string? ImpactReviewReason = null,
-    Guid? PageId = null)   // Trang của việc Page/Panel; chỉ điền ở GET /api/chapters/{chapterId}/assignments
+    Guid? PageId = null,   // Trang của việc Page/Panel; chỉ điền ở GET /api/chapters/{chapterId}/assignments
+    bool HasScriptImpact = false,
+    Guid? ImpactedScriptLineId = null)
 {
     public static AssignmentDto From(Assignment a) => new(
         a.Id, a.SeriesId, a.ChapterId, a.EntityType, a.TargetEntityId, a.PipelineStageId,
         a.AssigneeUserId, a.AssignedRole, a.Brief, a.ReferenceNotes, a.DueDate, a.Priority,
         a.Status, a.DependsOnAssignmentId, a.StartedAt, a.CompletedAt, a.LastFeedbackComment,
-        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds(), a.ImpactReviewReason);
+        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds(), a.ImpactReviewReason,
+        HasScriptImpact: a.HasScriptImpact, ImpactedScriptLineId: a.ImpactedScriptLineId);
 }
 
 /// <summary>DTO dành cho màn hình làm việc cá nhân xuyên suốt toàn bộ Studio (Cross-Chapter Worklist).</summary>

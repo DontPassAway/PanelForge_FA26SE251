@@ -25,11 +25,14 @@ public sealed record TaskGridPageDto(Guid Id, int PageNumber);
 public sealed record StageTaskDto(
     Guid Id, Guid PipelineStageId, Guid? PageId, StageTaskStatus Status, Guid? LotId, Guid? AssigneeUserId,
     bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion,
-    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null)
+    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null,
+    bool HasScriptImpact = false)
 {
     public static StageTaskDto From(StageTask t, Guid? assigneeUserId, bool isStartable) => new(
         t.Id, t.PipelineStageId, t.PageId, t.Status, t.LotId, assigneeUserId,
-        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion, ReopenReason: t.ReopenReason);
+        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion,
+        ReopenReason: t.ReopenReason,
+        HasScriptImpact: t.IsInputOutdated && t.OutdatedReason == StageTask.ScriptChangedReason);
 }
 
 public sealed record StageTaskLotDto(
