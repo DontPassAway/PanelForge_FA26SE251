@@ -36,7 +36,14 @@ public sealed class CreateUserByAdminCommandHandler
         CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(command.Role))
-            return Result<AdminUserDto>.Failure("Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User.");
+            return Result<AdminUserDto>.Failure("Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User, Publisher.");
+
+        if (command.Role == SystemRole.Publisher
+            && command.IsActive
+            && await SinglePublisherGuard.HasAnotherActivePublisherAsync(_dbContext, null, cancellationToken))
+        {
+            return Result<AdminUserDto>.Failure(SinglePublisherGuard.ConflictMessage, ResultErrorCodes.Conflict);
+        }
 
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
         var emailTaken = await _dbContext.Users

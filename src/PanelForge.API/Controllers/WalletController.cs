@@ -63,7 +63,14 @@ public class WalletController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
 
         var result = await _mediator.Send(new CreateTopupCommand(userId, request), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
+                NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { message = result.ErrorMessage }),
+        };
     }
 
     /// <summary>
@@ -78,7 +85,14 @@ public class WalletController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
 
         var result = await _mediator.Send(new UnlockChapterCommand(userId, request), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
+                NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { message = result.ErrorMessage }),
+        };
     }
 
     /// <summary>
@@ -98,15 +112,19 @@ public class WalletController : ControllerBase
 
     /// <summary>
     /// GET /api/wallet/transactions/{orderCode}/status
-    /// Mobile polling kiểm tra trạng thái giao dịch VietQR đã được Producer duyệt hay chưa.
+    /// Mobile polling kiểm tra trạng thái giao dịch VietQR đã được duyệt hay chưa (yêu cầu đăng nhập; chỉ chủ đơn hoặc Publisher/Admin).
     /// </summary>
     [HttpGet("transactions/{orderCode}/status")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(TransactionStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTransactionStatus([FromRoute] string orderCode, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetTransactionStatusQuery(orderCode), cancellationToken);
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var isPrivileged = User.IsInRole("Publisher") || User.IsInRole("Admin");
+        var result = await _mediator.Send(new GetTransactionStatusQuery(orderCode, userId, isPrivileged), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.ErrorMessage });
     }
 

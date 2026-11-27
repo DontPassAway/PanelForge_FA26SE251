@@ -22,7 +22,7 @@ public sealed class RejectPaymentCommandHandler : IRequestHandler<RejectPaymentC
     public async Task<Result<string>> Handle(RejectPaymentCommand command, CancellationToken ct)
     {
         var tx = await _db.PaymentTransactions
-            .FirstOrDefaultAsync(t => t.Id == command.TransactionId && (t.WorkspaceId == command.WorkspaceId || t.WorkspaceId == null) && !t.IsDeleted, ct);
+            .FirstOrDefaultAsync(t => t.Id == command.TransactionId && t.WorkspaceId == command.WorkspaceId && !t.IsDeleted, ct);
 
         if (tx == null)
             return Result<string>.Failure("Không tìm thấy giao dịch thanh toán trong Workspace này.", ResultErrorCodes.NotFound);

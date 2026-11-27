@@ -19,7 +19,7 @@ namespace PanelForge.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/workspaces/{workspaceId:guid}/payments")]
-[Authorize(Roles = "Publisher,Admin")]
+[Authorize]
 public class WorkspacePaymentsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -37,9 +37,10 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// GET /api/workspaces/{workspaceId}/payments
-    /// Lấy danh sách giao dịch thanh toán VietQR và KPI tổng quan của Studio.
+    /// Lấy danh sách giao dịch thanh toán VietQR và KPI tổng quan của Studio (Publisher &amp; Admin chỉ đọc — BR-32).
     /// </summary>
     [HttpGet]
+    [Authorize(Roles = "Publisher,Admin")]
     [ProducesResponseType(typeof(WorkspacePaymentsResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspacePayments(
         [FromRoute] Guid workspaceId,
@@ -59,10 +60,10 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// POST /api/workspaces/{workspaceId}/payments/{transactionId}/approve
-    /// Publisher đối soát và duyệt giao dịch VietQR đã nhận tiền.
+    /// Chỉ Publisher đối soát và duyệt giao dịch VietQR đã nhận tiền (Q13 / BR-33).
     /// </summary>
     [HttpPost("{transactionId:guid}/approve")]
-    [Authorize(Roles = "Publisher,Admin")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ApprovePayment(
         [FromRoute] Guid workspaceId,
@@ -79,10 +80,10 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// POST /api/workspaces/{workspaceId}/payments/{transactionId}/reject
-    /// Publisher từ chối giao dịch kèm lý do.
+    /// Chỉ Publisher từ chối giao dịch kèm lý do (Q13 / BR-33).
     /// </summary>
     [HttpPost("{transactionId:guid}/reject")]
-    [Authorize(Roles = "Publisher,Admin")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> RejectPayment(
         [FromRoute] Guid workspaceId,
@@ -100,9 +101,10 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// GET /api/workspaces/{workspaceId}/payments/bank-settings
-    /// Lấy thông tin tài khoản ngân hàng thụ hưởng VietQR hiện tại của Studio.
+    /// Lấy thông tin tài khoản ngân hàng thụ hưởng VietQR (chỉ Publisher — Q13).
     /// </summary>
     [HttpGet("bank-settings")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(WorkspaceBankSettingsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetBankSettings(
         [FromRoute] Guid workspaceId,
@@ -114,9 +116,10 @@ public class WorkspacePaymentsController : ControllerBase
 
     /// <summary>
     /// PUT /api/workspaces/{workspaceId}/payments/bank-settings
-    /// Cập nhật thông tin tài khoản ngân hàng thụ hưởng VietQR của Studio.
+    /// Cập nhật thông tin tài khoản ngân hàng thụ hưởng VietQR (chỉ Publisher — Q13).
     /// </summary>
     [HttpPut("bank-settings")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(WorkspaceBankSettingsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateBankSettings(
         [FromRoute] Guid workspaceId,

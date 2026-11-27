@@ -33,6 +33,8 @@ public class SePayWebhookTests
         var series = DomainSeries.Create(_studio.Id, "Moon Blade", ReadingDirection.RightToLeft, "Synopsis", "Fantasy");
         _db.Series.Add(series);
         _paidChapter = Chapter.Create(series.Id, 1, "Trả phí");
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(_paidChapter, ChapterStatus.HandedOffAndPublished);
+        typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(_paidChapter, DateTime.UtcNow.AddDays(-1));
         _db.Chapters.Add(_paidChapter);
         TestEditions.Monetize(_db, _paidChapter.Id, isPaid: true, priceVnd: 15000m);
         _db.SaveChanges();

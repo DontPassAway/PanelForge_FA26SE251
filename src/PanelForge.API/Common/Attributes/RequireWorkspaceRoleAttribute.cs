@@ -17,6 +17,16 @@ public class RequireWorkspaceRoleAttribute : TypeFilterAttribute
     }
 }
 
+/// <summary>
+/// BR-32: đánh dấu endpoint GET dùng <see cref="RequireWorkspaceRoleAttribute"/> không khai báo vai trò
+/// mà Publisher Portal được đọc (vd. danh sách ấn bản, lịch sử duyệt). Chỉ có tác dụng với GET/HEAD.
+/// Endpoint không có marker này và không khai báo <see cref="WorkspaceRole.Publisher"/> sẽ trả 403 cho Publisher.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+public sealed class AllowPublisherReadAttribute : Attribute
+{
+}
+
 public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 {
     private readonly WorkspaceRole[] _allowedRoles;
@@ -140,18 +150,28 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
         bool isPublisher = user.IsInRole("Publisher") ||
             user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && c.Value == "Publisher");
-        bool isAdmin = user.IsInRole("Admin") ||
-            user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && (c.Value == "Admin" || c.Value == "Administrator"));
+        // BR-07: Admin nền tảng không có quyền nội dung trong Studio. Không đi tắt ở đây;
+        // IWorkspaceAuthorizationService trả false cho Admin nên Admin nhận 403.
 
-        if (isAdmin)
+        // BR-32: Publisher là vai trò hệ thống, không phải thành viên Studio. Chỉ cho qua khi endpoint
+        // khai báo rõ WorkspaceRole.Publisher, hoặc là GET/HEAD được đánh dấu [AllowPublisherRead].
+        if (isPublisher)
         {
-            await next();
-            return;
-        }
+            var method = context.HttpContext.Request.Method;
+            bool isReadMethod = HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
+            bool markedReadable = context.ActionDescriptor.EndpointMetadata?
+                .OfType<AllowPublisherReadAttribute>().Any() == true;
 
-        if (isPublisher && (_allowedRoles.Length == 0 || _allowedRoles.Contains(WorkspaceRole.Publisher)))
-        {
-            await next();
+            if (_allowedRoles.Contains(WorkspaceRole.Publisher) || (isReadMethod && markedReadable))
+            {
+                await next();
+                return;
+            }
+
+            context.Result = new ObjectResult(new { message = "Publisher không có quyền thực hiện thao tác sản xuất trong Studio." })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
             return;
         }
 

@@ -53,6 +53,7 @@ public sealed class BibleController : ControllerBase
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}/bible")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(SeriesBibleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeriesBible(

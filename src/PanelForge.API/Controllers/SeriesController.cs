@@ -109,6 +109,7 @@ public sealed class SeriesController : ControllerBase
     /// </summary>
     [HttpGet("api/series/{seriesId:guid}")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(SeriesDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeriesById(

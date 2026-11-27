@@ -16,6 +16,7 @@ using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.Infrastructure.Services;
+using PanelForge.UnitTests.Common;
 using Xunit;
 
 namespace PanelForge.UnitTests.Integration;
@@ -131,6 +132,63 @@ public class BibleWorkflowPostgresIntegrationTests
 
             gateResult.CanStart.Should().BeTrue();
             gateResult.Blockers.Should().BeEmpty();
+
+            // Q12 / AUD-BE-08: Verify DB partial unique index blocks a second active Publisher even bypassing app guards
+            var pub1 = User.Create("pub1.pg@panelforge.local", "Publisher 1", role: SystemRole.Publisher);
+            db.Users.Add(pub1);
+            await db.SaveChangesAsync();
+
+            var pub2 = User.Create("pub2.pg@panelforge.local", "Publisher 2", role: SystemRole.Publisher);
+            db.Users.Add(pub2);
+            var dupAct = async () => await db.SaveChangesAsync();
+            await dupAct.Should().ThrowAsync<DbUpdateException>();
+            db.Entry(pub2).State = EntityState.Detached;
+
+            // Deactivating first Publisher allows creating a new active Publisher
+            pub1.Deactivate();
+            await db.SaveChangesAsync();
+            db.Users.Add(pub2);
+            await db.SaveChangesAsync();
+
+            // AUD-BE-10: Concurrent unlock of the same paid edition must never double-deduct wallet
+            var reader = User.Create("reader.pg@panelforge.local", "Reader PG");
+            db.Users.Add(reader);
+            db.ReaderWallets.Add(PanelForge.Domain.Entities.Payments.ReaderWallet.Create(reader.Id, 30000m));
+            var paidChapter = Chapter.Create(series.Id, 2m, "Paid PG").InProduction();
+            paidChapter.Approve();
+            paidChapter.HandOff(writer.Id);
+            paidChapter.Publish(DateTime.UtcNow.AddMinutes(-1));
+            db.Chapters.Add(paidChapter);
+            var paidEdition = ChapterEdition.Create(paidChapter.Id, "vi", EditionStatus.Approved);
+            paidEdition.SetMonetization(true, 15000m, 0, pub2.Id);
+            paidEdition.Publish();
+            db.ChapterEditions.Add(paidEdition);
+            await db.SaveChangesAsync();
+
+            async Task<bool> TryUnlockAsync()
+            {
+                await using var concurrentDb = new PanelForgeDbContext(options);
+                try
+                {
+                    var res = await new PanelForge.Application.Features.Payments.Commands.UnlockChapter.UnlockChapterCommandHandler(
+                        concurrentDb, new PanelForge.Application.Features.Payments.Models.DefaultBankSettings())
+                        .Handle(new(reader.Id, new(paidChapter.Id, ExpectedPriceVnd: 15000)), CancellationToken.None);
+                    return res.IsSuccess;
+                }
+                catch (DbUpdateException)
+                {
+                    return false;
+                }
+            }
+
+            var concurrentResults = await Task.WhenAll(TryUnlockAsync(), TryUnlockAsync());
+            concurrentResults.Should().Contain(true);
+
+            await using var verifyDb = new PanelForgeDbContext(options);
+            var finalWallet = await verifyDb.ReaderWallets.SingleAsync(w => w.UserId == reader.Id);
+            finalWallet.BalanceVnd.Should().Be(15000m, "concurrent unlock must deduct only once");
+            (await verifyDb.ChapterEntitlements.CountAsync(e => e.UserId == reader.Id && e.ChapterId == paidChapter.Id))
+                .Should().Be(1);
         }
         finally
         {

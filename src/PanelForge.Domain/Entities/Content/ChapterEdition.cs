@@ -104,6 +104,8 @@ public class ChapterEdition : BaseEntity
 
     public void Reopen()
     {
+        if (Status == EditionStatus.Published)
+            throw new InvalidOperationException("Không thể mở lại ấn bản đã phát hành (D1).");
         Status = EditionStatus.Draft;
         Version++;
         UpdatedAt = DateTime.UtcNow;

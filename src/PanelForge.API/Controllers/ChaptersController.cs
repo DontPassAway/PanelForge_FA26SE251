@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 using PanelForge.Application.Features.Chapters.Commands.HandOffChapter;
@@ -13,6 +12,7 @@ using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
@@ -525,29 +525,30 @@ public sealed class ChaptersController : ControllerBase
 
     /// <summary>
     /// POST /api/editions/{editionId}/publish
-    /// Publisher phát hành ấn bản.
+    /// Publisher phát hành ấn bản theo editionId.
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/publish")]
-    [Authorize(Roles = "Publisher,Admin")]
-    [ProducesResponseType(StatusCodes.Status200OK)] // ChapterReviewDto (ấn bản gốc) hoặc ChapterEditionDto (ấn bản dịch)
+    [Authorize(Roles = "Publisher")]
+    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> PublishEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt, IsSchedule: false), cancellationToken));
 
     /// <summary>
     /// POST /api/editions/{editionId}/schedule
-    /// Publisher lên lịch phát hành ấn bản.
+    /// Publisher lên lịch phát hành ấn bản theo editionId.
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/schedule")]
-    [Authorize(Roles = "Publisher,Admin")]
-    [ProducesResponseType(StatusCodes.Status200OK)] // ChapterReviewDto (ấn bản gốc) hoặc ChapterEditionDto (ấn bản dịch)
+    [Authorize(Roles = "Publisher")]
+    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ScheduleEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt, IsSchedule: true), cancellationToken));
 
     /// <summary>GET /api/chapters/{chapterId}/reviews — lịch sử phê duyệt cấp Chapter (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/reviews")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(IReadOnlyList<ChapterReviewDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterReviews([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterReviewsQuery(chapterId), cancellationToken));
@@ -555,6 +556,7 @@ public sealed class ChaptersController : ControllerBase
     /// <summary>GET /api/chapters/{chapterId}/snapshots — CF4 / 4.1: các bản chụp bất biến lúc Producer duyệt, mới nhất trước (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/snapshots")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(IReadOnlyList<ChapterSnapshotDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterSnapshots([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterSnapshotsQuery(chapterId), cancellationToken));
@@ -562,6 +564,7 @@ public sealed class ChaptersController : ControllerBase
     /// <summary>GET /api/chapters/{chapterId}/snapshots/{snapshotId} — manifest của một snapshot kèm kết quả kiểm hash.</summary>
     [HttpGet("api/chapters/{chapterId:guid}/snapshots/{snapshotId:guid}")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(ChapterSnapshotDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterSnapshot(
         [FromRoute] Guid chapterId, [FromRoute] Guid snapshotId, CancellationToken cancellationToken) =>

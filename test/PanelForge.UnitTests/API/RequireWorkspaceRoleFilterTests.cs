@@ -24,17 +24,19 @@ public class RequireWorkspaceRoleFilterTests
 
     private static (ActionExecutingContext context, bool executed) CreateContext(
         Guid userId,
-        RouteData routeData)
+        RouteData routeData,
+        params Claim[] extraClaims)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString())
         };
+        claims.AddRange(extraClaims);
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
         var httpContext = new DefaultHttpContext { User = user };
-        var actionContext = new ActionContext(httpContext, routeData, new ActionDescriptor());
+        var actionContext = new ActionContext(httpContext, routeData, new ActionDescriptor { EndpointMetadata = new List<object>() });
         var context = new ActionExecutingContext(
             actionContext,
             new List<IFilterMetadata>(),
@@ -150,6 +152,47 @@ public class RequireWorkspaceRoleFilterTests
         (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 
+    // BR-07: Admin nền tảng không được đi tắt qua kiểm tra quyền Workspace.
+    [Theory]
+    [InlineData(ClaimTypes.Role, "Admin", new[] { WorkspaceRole.Producer })]
+    [InlineData(ClaimTypes.Role, "Administrator", new[] { WorkspaceRole.Producer })]
+    [InlineData("role", "Admin", new[] { WorkspaceRole.Writer })]
+    [InlineData(ClaimTypes.Role, "Admin", new WorkspaceRole[0])]
+    public async Task OnActionExecutionAsync_WhenUserIsPlatformAdmin_ShouldReturnForbidden(
+        string claimType, string roleValue, WorkspaceRole[] allowedRoles)
+    {
+        // Arrange: dịch vụ phân quyền trả false cho Admin (như WorkspaceAuthorizationService thật)
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+
+        _authServiceMock
+            .Setup(a => a.HasWorkspaceRoleAsync(userId, workspaceId, It.IsAny<WorkspaceRole[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _authServiceMock
+            .Setup(a => a.IsMemberAsync(userId, workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("workspaceId", workspaceId.ToString());
+
+        var (context, _) = CreateContext(userId, routeData, new Claim(claimType, roleValue));
+        var filter = new RequireWorkspaceRoleFilter(allowedRoles, _authServiceMock.Object);
+
+        var executed = false;
+        ActionExecutionDelegate next = () =>
+        {
+            executed = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+
+        // Act
+        await filter.OnActionExecutionAsync(context, next);
+
+        // Assert
+        executed.Should().BeFalse();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
     [Fact]
     public async Task OnActionExecutionAsync_WhenRouteHasSeriesId_AndUserIsSeriesMember_ShouldProceed()
     {
@@ -260,5 +303,86 @@ public class RequireWorkspaceRoleFilterTests
         // Assert
         executed.Should().BeTrue();
         context.Result.Should().BeNull();
+    }
+
+    // BR-32: Publisher là vai trò hệ thống; chỉ vào endpoint khai báo rõ Publisher hoặc GET có [AllowPublisherRead].
+    private (ActionExecutingContext context, Func<bool> executed, ActionExecutionDelegate next) CreatePublisherContext(
+        string method, bool markedReadable)
+    {
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        _authServiceMock
+            .Setup(a => a.IsMemberAsync(userId, workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _authServiceMock
+            .Setup(a => a.HasWorkspaceRoleAsync(userId, workspaceId, It.IsAny<WorkspaceRole[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("workspaceId", workspaceId.ToString());
+        var (context, _) = CreateContext(userId, routeData, new Claim(ClaimTypes.Role, "Publisher"));
+        context.HttpContext.Request.Method = method;
+        if (markedReadable)
+            context.ActionDescriptor.EndpointMetadata.Add(new AllowPublisherReadAttribute());
+
+        var ran = false;
+        ActionExecutionDelegate next = () =>
+        {
+            ran = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+        return (context, () => ran, next);
+    }
+
+    [Theory]
+    [InlineData("POST", false)]
+    [InlineData("PUT", true)]
+    [InlineData("DELETE", true)]
+    [InlineData("GET", false)]
+    public async Task OnActionExecutionAsync_WhenPublisherOnBareEndpointWithoutReadMarker_ShouldReturnForbidden(
+        string method, bool markedReadable)
+    {
+        var (context, executed, next) = CreatePublisherContext(method, markedReadable);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeFalse();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherReadsMarkedBareEndpoint_ShouldProceed()
+    {
+        var (context, executed, next) = CreatePublisherContext("GET", markedReadable: true);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeTrue();
+        context.Result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherOnEndpointDeclaringPublisher_ShouldProceed()
+    {
+        var (context, executed, next) = CreatePublisherContext("POST", markedReadable: false);
+        var filter = new RequireWorkspaceRoleFilter([WorkspaceRole.Publisher], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherOnProducerOnlyEndpoint_ShouldReturnForbidden()
+    {
+        var (context, executed, next) = CreatePublisherContext("POST", markedReadable: false);
+        var filter = new RequireWorkspaceRoleFilter([WorkspaceRole.Producer], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeFalse();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 }

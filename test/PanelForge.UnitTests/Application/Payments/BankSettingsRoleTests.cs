@@ -31,33 +31,76 @@ public class BankSettingsRoleTests
     }
 
     [Fact]
-    public void WorkspacePaymentsController_EnforcesPublisherAndAdminRoleBoundaries()
+    public void WorkspacePaymentsController_EnforcesPublisherOnlyWrites_AndAdminDashboardRead()
     {
-        // 1. Controller chỉ cho phép Publisher và Admin (Producer bị 403 Forbidden)
+        // Class-level [Authorize] without Roles so BR-32 read endpoint can allow Admin while writes are Publisher-only
         var controllerAttr = typeof(WorkspacePaymentsController).GetCustomAttribute<AuthorizeAttribute>();
         controllerAttr.Should().NotBeNull();
-        controllerAttr!.Roles.Should().Be("Publisher,Admin");
+        controllerAttr!.Roles.Should().BeNull();
 
-        // 2. Duyệt thanh toán VietQR: Cho phép Publisher và Admin đối soát & duyệt
-        var approveMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.ApprovePayment));
-        var approveAttr = approveMethod!.GetCustomAttribute<AuthorizeAttribute>();
-        approveAttr.Should().NotBeNull();
-        approveAttr!.Roles.Should().Be("Publisher,Admin");
+        // BR-32 read-only payments list: Publisher and Admin
+        var getPaymentsAttr = typeof(WorkspacePaymentsController)
+            .GetMethod(nameof(WorkspacePaymentsController.GetWorkspacePayments))!
+            .GetCustomAttribute<AuthorizeAttribute>();
+        getPaymentsAttr.Should().NotBeNull();
+        getPaymentsAttr!.Roles.Should().Be("Publisher,Admin");
 
-        // 3. Từ chối thanh toán VietQR: Cho phép Publisher và Admin từ chối kèm lý do
-        var rejectMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.RejectPayment));
-        var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
-        rejectAttr.Should().NotBeNull();
-        rejectAttr!.Roles.Should().Be("Publisher,Admin");
+        // Q13 / BR-33: VietQR approve, reject, and bank settings are strictly Publisher-only (Admin -> 403)
+        foreach (var methodName in new[]
+        {
+            nameof(WorkspacePaymentsController.ApprovePayment),
+            nameof(WorkspacePaymentsController.RejectPayment),
+            nameof(WorkspacePaymentsController.GetBankSettings),
+            nameof(WorkspacePaymentsController.UpdateBankSettings),
+        })
+        {
+            var attr = typeof(WorkspacePaymentsController).GetMethod(methodName)!.GetCustomAttribute<AuthorizeAttribute>();
+            attr.Should().NotBeNull($"{methodName} must declare [Authorize(Roles = \"Publisher\")]");
+            attr!.Roles.Should().Be("Publisher");
+        }
+    }
 
-        // 4. Đọc & Cập nhật ngân hàng: Kế thừa [Authorize(Roles = "Publisher,Admin")] từ Controller level
-        var getBankMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.GetBankSettings));
-        getBankMethod.Should().NotBeNull();
-        getBankMethod!.GetCustomAttribute<AuthorizeAttribute>().Should().BeNull("kế thừa controller level Publisher,Admin");
+    [Fact]
+    public void PublisherControllers_EnforcePublisherOnlyMonetization_AndAdminBr32DashboardReads()
+    {
+        // PublisherMonetizationController: class-level [Authorize], insights allows Publisher,Admin (BR-32),
+        // SetEditionMonetization / GetManage / GetPageImage are Publisher-only (BR-33)
+        typeof(PublisherMonetizationController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().BeNull();
+        typeof(PublisherMonetizationController)
+            .GetMethod(nameof(PublisherMonetizationController.GetInsights))!
+            .GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Publisher,Admin");
+        foreach (var methodName in new[]
+        {
+            nameof(PublisherMonetizationController.SetEditionMonetization),
+            nameof(PublisherMonetizationController.GetManage),
+            nameof(PublisherMonetizationController.GetPageImage),
+        })
+        {
+            typeof(PublisherMonetizationController).GetMethod(methodName)!
+                .GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Publisher");
+        }
 
-        var updateBankMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.UpdateBankSettings));
-        updateBankMethod.Should().NotBeNull();
-        updateBankMethod!.GetCustomAttribute<AuthorizeAttribute>().Should().BeNull("kế thừa controller level Publisher,Admin");
+        // PublisherController: revenue & workspaces allow Publisher,Admin (BR-32); chapters/series are Publisher-only
+        typeof(PublisherController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().BeNull();
+        foreach (var readMethod in new[]
+        {
+            nameof(PublisherController.GetRevenue),
+            nameof(PublisherController.GetWorkspaces),
+        })
+        {
+            typeof(PublisherController).GetMethod(readMethod)!
+                .GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Publisher,Admin");
+        }
+        foreach (var pubOnlyMethod in new[]
+        {
+            nameof(PublisherController.GetChapters),
+            nameof(PublisherController.GetSeries),
+            nameof(PublisherController.GetSeriesDetail),
+        })
+        {
+            typeof(PublisherController).GetMethod(pubOnlyMethod)!
+                .GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Publisher");
+        }
     }
 
     [Fact]
