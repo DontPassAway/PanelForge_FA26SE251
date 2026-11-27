@@ -126,6 +126,11 @@ public class SeriesMembershipRulesTests
 
         (await Auth.HasWorkspaceRoleAsync(_artist.Id, _workspace.Id, [WorkspaceRole.Editor])).Should().BeTrue();
         (await Auth.HasWorkspaceRoleAsync(_artist.Id, _workspace.Id, [WorkspaceRole.Artist])).Should().BeFalse();
+
+        // Người khác trong Studio không được "mượn" vai trò Editor của _artist
+        var other = Guid.NewGuid();
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, other, WorkspaceRole.Member));
+        (await Auth.HasWorkspaceRoleAsync(other, _workspace.Id, [WorkspaceRole.Editor])).Should().BeFalse();
     }
 
     [Fact]

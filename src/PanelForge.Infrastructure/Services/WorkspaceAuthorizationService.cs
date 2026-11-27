@@ -61,7 +61,7 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Spec D10: vai trò chuyên môn nằm ở Series; API cấp Studio (vd hàng chờ duyệt, mẫu khung) chấp nhận người
         // giữ vai trò đó ở ít nhất một Series của Studio.
         return await _dbContext.SeriesMembers.AnyAsync(sm =>
-            !sm.IsDeleted && allowedRoles.Contains(sm.Role) &&
+            sm.UserId == userId && !sm.IsDeleted && allowedRoles.Contains(sm.Role) &&
             _dbContext.Series.Any(s => s.Id == sm.SeriesId && s.WorkspaceId == workspaceId), cancellationToken);
     }
 
