@@ -475,20 +475,19 @@ public class ChapterPublishFlowTests
         var scheduleAttr = scheduleMethod!.GetCustomAttribute<RequireWorkspaceRoleAttribute>();
         scheduleAttr.Should().NotBeNull();
 
-        // 4. WorkspacePaymentsController role rules
+        // 4. WorkspacePaymentsController role rules (BR-33 / Q13: writes are Publisher-only)
         var payCtrlAttr = typeof(WorkspacePaymentsController).GetCustomAttribute<AuthorizeAttribute>();
         payCtrlAttr.Should().NotBeNull();
-        payCtrlAttr!.Roles.Should().Be("Publisher,Admin");
 
         var approveMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.ApprovePayment));
         var approveAttr = approveMethod!.GetCustomAttribute<AuthorizeAttribute>();
         approveAttr.Should().NotBeNull();
-        approveAttr!.Roles.Should().Be("Publisher,Admin");
+        approveAttr!.Roles.Should().Be("Publisher");
 
         var rejectMethod = typeof(WorkspacePaymentsController).GetMethod(nameof(WorkspacePaymentsController.RejectPayment));
         var rejectAttr = rejectMethod!.GetCustomAttribute<AuthorizeAttribute>();
         rejectAttr.Should().NotBeNull();
-        rejectAttr!.Roles.Should().Be("Publisher,Admin");
+        rejectAttr!.Roles.Should().Be("Publisher");
     }
 
     [Fact]

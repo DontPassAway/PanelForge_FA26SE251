@@ -13,7 +13,7 @@ using PanelForge.Application.Features.Publisher.Queries.GetPublisherWorkspaces;
 namespace PanelForge.API.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Publisher,Admin")]
+[Authorize]
 [Route("api/publisher")]
 public sealed class PublisherController : ControllerBase
 {
@@ -26,9 +26,10 @@ public sealed class PublisherController : ControllerBase
 
     /// <summary>
     /// GET /api/publisher/chapters
-    /// Danh sách chương toàn hệ thống cho Publisher Portal (lọc theo status, workspaceId, seriesId, search).
+    /// Danh sách chương đã bàn giao cho Publisher Portal (chỉ Publisher).
     /// </summary>
     [HttpGet("chapters")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(PagedResult<PublisherChapterDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapters(
         [FromQuery] string? status,
@@ -53,10 +54,10 @@ public sealed class PublisherController : ControllerBase
 
     /// <summary>
     /// GET /api/publisher/series
-    /// Danh sách Series toàn hệ thống kèm số lượng chương chờ duyệt xuất bản và đã phát hành.
-    /// Hỗ trợ filter: needs_review, scheduled, all; workspaceId, search, sortBy (az, latest).
+    /// Danh sách Series toàn hệ thống cho Publisher Portal (chỉ Publisher).
     /// </summary>
     [HttpGet("series")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(IReadOnlyList<PublisherSeriesListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSeries(
         [FromQuery] string? filter,
@@ -77,9 +78,10 @@ public sealed class PublisherController : ControllerBase
 
     /// <summary>
     /// GET /api/publisher/series/{seriesId}
-    /// Chi tiết bộ truyện & danh sách chương (Approved / Published) dành cho Publisher.
+    /// Chi tiết bộ truyện &amp; danh sách chương dành cho Publisher (chỉ Publisher).
     /// </summary>
     [HttpGet("series/{seriesId:guid}")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(PublisherSeriesDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeriesDetail(
@@ -99,10 +101,10 @@ public sealed class PublisherController : ControllerBase
 
     /// <summary>
     /// GET /api/publisher/revenue
-    /// Doanh thu theo bộ truyện (mở khóa chương + trang trả phí) kèm lượt đọc; lọc theo Studio / tên truyện.
-    /// Giao dịch chi tiết và duyệt VietQR: /api/workspaces/{workspaceId}/payments (Publisher/Admin).
+    /// Dashboard BR-32: Doanh thu &amp; lượt đọc theo bộ truyện (Publisher &amp; Admin chỉ đọc).
     /// </summary>
     [HttpGet("revenue")]
+    [Authorize(Roles = "Publisher,Admin")]
     [ProducesResponseType(typeof(PublisherRevenueDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRevenue(
         [FromQuery] Guid? workspaceId,
@@ -115,9 +117,10 @@ public sealed class PublisherController : ControllerBase
 
     /// <summary>
     /// GET /api/publisher/workspaces
-    /// Danh sách Studio Workspaces toàn hệ thống cho dropdown bộ lọc của Publisher.
+    /// Danh sách Studio Workspaces cho bộ lọc Dashboard BR-32 (Publisher &amp; Admin chỉ đọc).
     /// </summary>
     [HttpGet("workspaces")]
+    [Authorize(Roles = "Publisher,Admin")]
     [ProducesResponseType(typeof(IReadOnlyList<PublisherWorkspaceDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetWorkspaces(CancellationToken ct = default)
     {
