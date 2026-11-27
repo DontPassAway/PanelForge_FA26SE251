@@ -94,7 +94,7 @@ public class LanguageEditionsAndInsightsTests
         _db.ChapterEditions.Add(draft);
         await _db.SaveChangesAsync();
 
-        (await Read(null, "en")).ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        (await Read(null, "en")).ErrorCode.Should().Be(ResultErrorCodes.EditionNotPublished);
 
         draft.Publish();
         await _db.SaveChangesAsync();
@@ -200,5 +200,98 @@ public class LanguageEditionsAndInsightsTests
         vi.Totals.Views.Should().Be(2);
         vi.Totals.RevenueVnd.Should().Be(0m);
         vi.Totals.RatingCount.Should().Be(0);
+    }
+
+    // ─── AUD-BE-04 / D9b: chặn đọc/mua ấn bản chưa phát hành & ranh giới publishAt ───
+
+    [Fact]
+    public async Task UnpublishedChapter_CannotBeReadUnlockedOrToppedUp()
+    {
+        var draft = Chapter.Create(_series.Id, 2, "Bản nháp").InProduction();
+        _db.Chapters.Add(draft);
+        TestEditions.Monetize(_db, draft.Id, isPaid: true, priceVnd: 10000m);
+        var reader = AddUser(balance: 20000m);
+        await _db.SaveChangesAsync();
+
+        (await ChapterReadAccess.AvailableLanguagesAsync(_db, draft.Id, default)).Should().BeEmpty();
+
+        var read = await new GetPublicChapterQueryHandler(_db, new FakeCurrentUser(reader))
+            .Handle(new GetPublicChapterQuery(draft.Id), default);
+        read.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+
+        var unlock = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(reader, new UnlockChapterRequest(draft.Id)), default);
+        unlock.IsSuccess.Should().BeFalse();
+        unlock.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+
+        var topup = await new PanelForge.Application.Features.Payments.Commands.CreateTopup.CreateTopupCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new PanelForge.Application.Features.Payments.Commands.CreateTopup.CreateTopupCommand(
+                reader, new TopupRequest(ChapterId: draft.Id, Purpose: "ChapterUnlock")), default);
+        topup.IsSuccess.Should().BeFalse();
+        topup.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task UnpublishedTranslationEdition_ReturnsEditionNotPublished_NoFallbackToVi()
+    {
+        MakeOriginalPaid(10000m);
+        var enDraft = ChapterEdition.Create(_chapter.Id, "en", EditionStatus.Approved);
+        enDraft.SetMonetization(true, 12000m, 0, Guid.Empty);
+        _db.ChapterEditions.Add(enDraft);
+        var reader = AddUser(balance: 50000m);
+        await _db.SaveChangesAsync();
+
+        var read = await Read(reader, "en");
+        read.IsSuccess.Should().BeFalse();
+        read.ErrorCode.Should().Be(ResultErrorCodes.EditionNotPublished);
+
+        var unlock = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(reader, new UnlockChapterRequest(_chapter.Id, Language: "en")), default);
+        unlock.IsSuccess.Should().BeFalse();
+        unlock.ErrorCode.Should().Be(ResultErrorCodes.EditionNotPublished);
+
+        var topup = await new PanelForge.Application.Features.Payments.Commands.CreateTopup.CreateTopupCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new PanelForge.Application.Features.Payments.Commands.CreateTopup.CreateTopupCommand(
+                reader, new TopupRequest(ChapterId: _chapter.Id, Purpose: "ChapterUnlock", Language: "en")), default);
+        topup.IsSuccess.Should().BeFalse();
+        topup.ErrorCode.Should().Be(ResultErrorCodes.EditionNotPublished);
+    }
+
+    [Fact]
+    public async Task ScheduledChapter_BoundaryBeforeAndAtPublishAt()
+    {
+        var publishAt = new DateTime(2026, 12, 1, 12, 0, 0, DateTimeKind.Utc);
+        var scheduled = Chapter.Create(_series.Id, 3, "Hẹn lịch");
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(scheduled, ChapterStatus.HandedOffAndPublished);
+        typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(scheduled, publishAt);
+        _db.Chapters.Add(scheduled);
+        TestEditions.Monetize(_db, scheduled.Id, isPaid: true, priceVnd: 10000m);
+        var reader = AddUser(balance: 20000m);
+        await _db.SaveChangesAsync();
+
+        // Trước publishAt 1 giây → chưa hiển thị
+        (await ChapterReadAccess.AvailableLanguagesAsync(_db, scheduled.Id, default, publishAt.AddSeconds(-1)))
+            .Should().BeEmpty();
+        scheduled.IsVisibleToReaders(publishAt.AddSeconds(-1)).Should().BeFalse();
+
+        // Đúng thời điểm publishAt → hiển thị
+        (await ChapterReadAccess.AvailableLanguagesAsync(_db, scheduled.Id, default, publishAt))
+            .Should().ContainSingle("vi");
+        scheduled.IsVisibleToReaders(publishAt).Should().BeTrue();
+
+        // Khi PublishAt ở tương lai so với UtcNow → unlock & topup bị chặn; chuyển về quá khứ/hiện tại → thành công
+        typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(scheduled, DateTime.UtcNow.AddHours(1));
+        await _db.SaveChangesAsync();
+
+        (await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(reader, new UnlockChapterRequest(scheduled.Id)), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+
+        typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(scheduled, DateTime.UtcNow);
+        await _db.SaveChangesAsync();
+
+        (await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(reader, new UnlockChapterRequest(scheduled.Id)), default))
+            .IsSuccess.Should().BeTrue();
     }
 }

@@ -38,8 +38,12 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         if (chapter == null)
             return Result<UnlockChapterResponse>.Failure("Không tìm thấy chương truyện.", ResultErrorCodes.NotFound);
 
-        if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct)).Contains(language))
-            return Result<UnlockChapterResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.Validation);
+        var now = DateTime.UtcNow;
+        if (!chapter.IsVisibleToReaders(now))
+            return Result<UnlockChapterResponse>.Failure("Chương truyện chưa được phát hành.", ResultErrorCodes.NotFound);
+
+        if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct, now)).Contains(language))
+            return Result<UnlockChapterResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
 
         var wallet = await _db.ReaderWallets
             .FirstOrDefaultAsync(w => w.UserId == command.UserId && !w.IsDeleted, ct);

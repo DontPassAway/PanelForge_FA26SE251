@@ -31,6 +31,8 @@ public sealed class Result<T>
 public static class ResultErrorCodes
 {
     public const string NotFound = "NOT_FOUND";
+    /// <summary>D9b: ấn bản ngôn ngữ chưa phát hành → HTTP 404, không fallback về ngôn ngữ gốc.</summary>
+    public const string EditionNotPublished = "EDITION_NOT_PUBLISHED";
     public const string Conflict = "CONFLICT";
     public const string HashMismatch = "HASH_MISMATCH";
     public const string BibleGateBlocked = "BIBLE_GATE_BLOCKED";

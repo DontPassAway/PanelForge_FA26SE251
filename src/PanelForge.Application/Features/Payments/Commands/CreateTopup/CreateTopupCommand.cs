@@ -43,6 +43,7 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
         if (!TryParsePurpose(req.Purpose, out var type))
             return Result<TopupResponse>.Failure("Loại giao dịch không hợp lệ.", ResultErrorCodes.Validation);
 
+        var now = DateTime.UtcNow;
         Guid? workspaceId = req.WorkspaceId;
         Guid? seriesId = req.SeriesId;
         Guid? chapterId = null;
@@ -59,17 +60,24 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 var chapter = await _db.Chapters
                     .AsNoTracking()
                     .Where(c => c.Id == req.ChapterId.Value && !c.IsDeleted)
-                    .Select(c => new { c.Id, c.SeriesId, c.Series.WorkspaceId })
+                    .Select(c => new { c.Id, c.SeriesId, c.Series.WorkspaceId, c.Status, c.PublishedAt })
                     .FirstOrDefaultAsync(ct);
 
                 if (chapter == null)
                     return Result<TopupResponse>.Failure("Không tìm thấy chương truyện.", ResultErrorCodes.NotFound);
 
+                if (chapter.Status != ChapterStatus.HandedOffAndPublished
+                    || chapter.PublishedAt is null
+                    || chapter.PublishedAt > now)
+                {
+                    return Result<TopupResponse>.Failure("Chương truyện chưa được phát hành.", ResultErrorCodes.NotFound);
+                }
+
                 language = ContentLanguages.Normalize(req.Language);
                 if (language is null)
                     return Result<TopupResponse>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
-                if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct)).Contains(language))
-                    return Result<TopupResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.Validation);
+                if (!(await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct, now)).Contains(language))
+                    return Result<TopupResponse>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
 
                 // BR-33: giá lấy từ ấn bản ngôn ngữ đang mua (server là nguồn sự thật).
                 var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, language, ct);
@@ -137,7 +145,6 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
 
         // Chống spam đơn Pending: độc giả đóng/mở popup QR nhiều lần → dùng lại đơn Pending cùng loại/số tiền/chương
         // còn mới (≤ 15 phút, cùng tài khoản nhận); đơn Pending cũ hơn cùng loại được chuyển Expired để bảng Producer gọn.
-        var now = DateTime.UtcNow;
         var reuseSince = now - PendingReuseWindow;
         var samePending = await _db.PaymentTransactions
             .Where(t => t.UserId == command.UserId

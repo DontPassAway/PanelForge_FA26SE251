@@ -63,7 +63,14 @@ public class WalletController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
 
         var result = await _mediator.Send(new CreateTopupCommand(userId, request), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
+                NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { message = result.ErrorMessage }),
+        };
     }
 
     /// <summary>
@@ -78,7 +85,14 @@ public class WalletController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
 
         var result = await _mediator.Send(new UnlockChapterCommand(userId, request), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
+                NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { message = result.ErrorMessage }),
+        };
     }
 
     /// <summary>

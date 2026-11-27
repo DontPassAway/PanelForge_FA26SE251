@@ -41,6 +41,11 @@ public class VietQrPaymentFlowTests
 
         _paidChapter = Chapter.Create(_series.Id, 2, "Trả phí");
         _freeChapter = Chapter.Create(_series.Id, 1, "Miễn phí");
+        foreach (var ch in new[] { _paidChapter, _freeChapter })
+        {
+            typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(ch, ChapterStatus.HandedOffAndPublished);
+            typeof(Chapter).GetProperty(nameof(Chapter.PublishedAt))!.SetValue(ch, DateTime.UtcNow.AddDays(-1));
+        }
         _db.Chapters.AddRange(_paidChapter, _freeChapter);
         TestEditions.Monetize(_db, _paidChapter.Id, isPaid: true, priceVnd: 15000m);
         TestEditions.Monetize(_db, _freeChapter.Id, isPaid: false);

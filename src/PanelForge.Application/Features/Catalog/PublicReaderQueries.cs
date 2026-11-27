@@ -90,9 +90,9 @@ public sealed class GetPublicChapterQueryHandler : IRequestHandler<GetPublicChap
         if (chapter is null) return NotFound();
 
         var userId = _currentUser.UserId;
-        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct);
+        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct, now);
         if (!available.Contains(language))
-            return Result<PublicChapterReadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.NotFound);
+            return Result<PublicChapterReadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
 
         // BR-33: loại/giá/N theo từng ấn bản ngôn ngữ; mua ngôn ngữ nào mở đúng ngôn ngữ đó.
         var languages = new List<PublicChapterLanguageDto>();
@@ -270,11 +270,13 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
             .FirstOrDefaultAsync(ct);
         if (chapter is null) return NotFound();
 
-        // D9b: ngôn ngữ chưa phát hành → 404, không tự rơi về ngôn ngữ gốc.
-        var language = ContentLanguages.Normalize(q.Language) ?? ContentLanguages.Original;
-        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct);
+        // D9b: ngôn ngữ chưa phát hành → 404 EDITION_NOT_PUBLISHED, không tự rơi về ngôn ngữ gốc.
+        var language = ContentLanguages.Normalize(q.Language);
+        if (language is null)
+            return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
+        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct, now);
         if (!available.Contains(language))
-            return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.NotFound);
+            return Result<AssetDownloadDto>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
 
         var pageExists = await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == q.PageId && p.ChapterId == q.ChapterId, ct);
         if (!pageExists) return NotFound();

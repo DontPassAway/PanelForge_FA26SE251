@@ -65,12 +65,26 @@ public static class ChapterReadAccess
     // ─── Ngôn ngữ & giá ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// BR-34: Các bản ngôn ngữ đã phát hành của chương dựa trên ChapterEdition Published.
-    /// Luôn có bản gốc (vi/original) nếu chương đã xuất bản.
+    /// BR-34 / D9b: Các bản ngôn ngữ đã phát hành của chương dựa trên ChapterEdition Published.
+    /// Trả rỗng nếu chương chưa phát hành hoặc chưa đến giờ hẹn (PublishedAt &gt; utcNow).
     /// </summary>
     public static async Task<IReadOnlyList<string>> AvailableLanguagesAsync(
-        IPanelForgeDbContext db, Guid chapterId, CancellationToken ct)
+        IPanelForgeDbContext db, Guid chapterId, CancellationToken ct, DateTime? utcNow = null)
     {
+        var now = utcNow ?? DateTime.UtcNow;
+        var chapter = await db.Chapters.AsNoTracking()
+            .Where(c => c.Id == chapterId && !c.IsDeleted)
+            .Select(c => new { c.Status, c.PublishedAt, OriginalLanguage = c.Series.OriginalLanguage })
+            .FirstOrDefaultAsync(ct);
+
+        if (chapter is null
+            || chapter.Status != ChapterStatus.HandedOffAndPublished
+            || chapter.PublishedAt is null
+            || chapter.PublishedAt > now)
+        {
+            return [];
+        }
+
         var publishedLangs = await db.ChapterEditions.AsNoTracking()
             .Where(e => e.ChapterId == chapterId && e.Status == EditionStatus.Published && !e.IsDeleted)
             .Select(e => e.LanguageCode)
@@ -78,19 +92,8 @@ public static class ChapterReadAccess
 
         if (publishedLangs.Count == 0)
         {
-            var chapterStatus = await db.Chapters.AsNoTracking()
-                .Where(c => c.Id == chapterId)
-                .Select(c => c.Status)
-                .FirstOrDefaultAsync(ct);
-            if (chapterStatus == ChapterStatus.HandedOffAndPublished)
-            {
-                var origLang = await db.Chapters.AsNoTracking()
-                    .Where(c => c.Id == chapterId)
-                    .Select(c => c.Series.OriginalLanguage)
-                    .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
-                return [origLang];
-            }
-            return [ContentLanguages.Original];
+            var origLang = ContentLanguages.Normalize(chapter.OriginalLanguage) ?? ContentLanguages.Original;
+            return [origLang];
         }
 
         return publishedLangs;
