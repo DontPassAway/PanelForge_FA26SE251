@@ -53,7 +53,9 @@ public sealed class GetLandingContextQueryHandler
             SystemRole: user.Role.ToString(),
             CanCreateStudio: user.CanCreateStudio,
             Workspaces: workspaces,
-            SuggestedLanding: suggestedLanding));
+            SuggestedLanding: suggestedLanding,
+            TwoFactorEnabled: user.TwoFactorEnabled,
+            TwoFactorRecoveryCodesLeft: user.TwoFactorRecoveryCodesLeft));
     }
 
     private static string DetermineLanding(SystemRole role, bool canCreateStudio, int workspaceCount)

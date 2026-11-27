@@ -40,6 +40,31 @@ internal static class AuthSecrets
 
     public static bool IsExpired(DateTime? expiresAt) => !expiresAt.HasValue || expiresAt.Value < DateTime.UtcNow;
 
+    public const int RecoveryCodeCount = 10;
+
+    // Bỏ ký tự dễ nhầm (0/O, 1/I/L): 31 ký tự × 10 vị trí ≈ 49 bit, đủ vì mỗi mã chỉ dùng một lần và có giới hạn tần suất
+    private const string RecoveryAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+    /// <summary>Bộ mã khôi phục 2FA dạng "ABCDE-FGHJK" (chỉ trả cho người dùng một lần, DB lưu hash).</summary>
+    public static IReadOnlyList<string> NewRecoveryCodes()
+        => Enumerable.Range(0, RecoveryCodeCount)
+            .Select(_ =>
+            {
+                var raw = RandomNumberGenerator.GetString(RecoveryAlphabet, 10);
+                return $"{raw[..5]}-{raw[5..]}";
+            })
+            .ToList();
+
+    /// <summary>Chuẩn hoá mã khôi phục người dùng nhập: bỏ khoảng trắng / gạch nối, viết hoa. Null nếu sai định dạng.</summary>
+    public static string? NormalizeRecoveryCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var normalized = new string(code.Where(c => c != '-' && !char.IsWhiteSpace(c)).ToArray()).ToUpperInvariant();
+        return normalized.Length == 10 && normalized.All(char.IsAsciiLetterOrDigit) ? normalized : null;
+    }
+
+    public static string HashRecoveryCode(string normalizedCode) => HashToken("rc:" + normalizedCode);
+
     /// <summary>Chia secret thành cụm 4 ký tự để người dùng nhập tay.</summary>
     public static string FormatSharedKey(string key)
     {

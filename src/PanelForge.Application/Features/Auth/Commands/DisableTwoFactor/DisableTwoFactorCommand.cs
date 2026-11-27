@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Auth.Common;
 
 namespace PanelForge.Application.Features.Auth.Commands.DisableTwoFactor;
 
@@ -40,8 +41,10 @@ public sealed class DisableTwoFactorCommandHandler : IRequestHandler<DisableTwoF
                 || !_passwordHasher.VerifyPassword(command.CurrentPassword, user.PasswordHash)))
             return Unauthorized("Mật khẩu hiện tại không chính xác.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, command.Code))
-            return Unauthorized("Mã xác thực 2FA không chính xác hoặc đã hết hạn.");
+        // Mất điện thoại vẫn tắt được 2FA bằng mật khẩu + một mã khôi phục
+        if (SecondFactor.Verify(user, _totpService, command.Code)
+            is SecondFactor.Outcome.Invalid or SecondFactor.Outcome.AlreadyUsed)
+            return Unauthorized("Mã xác thực 2FA hoặc mã khôi phục không chính xác, đã hết hạn hoặc đã được dùng.");
 
         user.DisableTwoFactor();
 
