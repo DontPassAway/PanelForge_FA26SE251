@@ -8,6 +8,7 @@ using PanelForge.Application.Features.AiAgents.Commands.RunImpactSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunBibleStubDraft;
 using PanelForge.Application.Features.AiAgents.Commands.ReviewSuggestion;
 using PanelForge.Application.Features.AiAgents.Commands.RunCopilot;
+using PanelForge.Application.Features.AiAgents.Commands.RunNextLine;
 using PanelForge.Application.Features.AiAgents.Commands.RunPublisherMetadata;
 using PanelForge.Application.Features.AiAgents.Commands.RunThumbnail;
 using PanelForge.Application.Features.AiAgents.Commands.RunWorkflow;
@@ -53,7 +54,7 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new RunWorkflowCommand(
             seriesId, CurrentUserId, body.ChapterId, body.SceneId, body.Brief, body.ReadingDirection,
-            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId), ct);
+            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId, body.AppendScript), ct);
         return result.IsSuccess
             ? Accepted($"/api/series/{seriesId}/ai/runs/{result.Value!.RunId}", result.Value)
             : ToError(result);
@@ -75,6 +76,25 @@ public sealed class AiAgentsController : ControllerBase
         var result = await _mediator.Send(new RunCopilotCommand(
             seriesId, CurrentUserId, body.Task, body.LineId, body.Instruction, body.MaxChars,
             body.PageId, body.ElementId, body.RevisionOfSuggestionId), ct);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// TASK-358: POST /api/series/{seriesId}/ai/copilot/next-line — Writer/Producer xin AI viết MỘT dòng mới (thoại / SFX / hành động)
+    /// chèn sau afterLineId. 200 + AiSuggestionDto (kind ScriptLineInsert, Pending); Accept mới chèn dòng vào kịch bản.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/ai/copilot/next-line")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AiSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> RunNextLine([FromRoute] Guid seriesId, [FromBody] RunNextLineRequest body, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RunNextLineCommand(
+            seriesId, CurrentUserId, body.SceneId, body.AfterLineId, body.Kind, body.Speaker, body.Instruction,
+            body.RevisionOfSuggestionId), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -141,9 +161,10 @@ public sealed class AiAgentsController : ControllerBase
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(AiWorkflowAvailabilityResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAvailability(
-        [FromRoute] Guid seriesId, [FromQuery] Guid chapterId, [FromQuery] Guid? sceneId, CancellationToken ct)
+        [FromRoute] Guid seriesId, [FromQuery] Guid chapterId, [FromQuery] Guid? sceneId,
+        [FromQuery] bool appendScript, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GetWorkflowAvailabilityQuery(seriesId, CurrentUserId, chapterId, sceneId), ct);
+        var result = await _mediator.Send(new GetWorkflowAvailabilityQuery(seriesId, CurrentUserId, chapterId, sceneId, appendScript), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -260,6 +281,9 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new ReviewSuggestionCommand(
             seriesId, suggestionId, CurrentUserId, decision, body?.Reason, body?.ChapterVersion), ct);
+        if (!result.IsSuccess)
+            HttpContext.RequestServices.GetRequiredService<ILogger<AiAgentsController>>().LogWarning(
+                "Review {Decision} suggestion {SuggestionId} failed: {Code} {Error}", decision, suggestionId, result.ErrorCode, result.ErrorMessage);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

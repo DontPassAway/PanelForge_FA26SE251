@@ -43,7 +43,10 @@ using PanelForge.Application.Features.AiConfig.Commands.UpdateAiProviderCredenti
 using PanelForge.Application.Features.AiConfig.Commands.DeleteAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.TestAiProviderCredential;
 using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiProvider;
+using PanelForge.Application.Features.AiConfig.Commands.SetDefaultAiProvider;
+using PanelForge.Application.Features.AiConfig.Commands.SetWorkspaceAiImageProvider;
 using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderCredentials;
+using PanelForge.Application.Features.AiConfig.Queries.GetAiProviderModels;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspaceSessionPolicy;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceSessionPolicy;
@@ -346,7 +349,7 @@ public class AdminController : ControllerBase
 
     /// <summary>
     /// PUT /api/admin/workspaces/{workspaceId}/ai-config
-    /// Cập nhật AI Provider, Models được phép và hạn ngạch Token Quota theo Workspace bởi Administrator (UC-02).
+    /// Bật/tắt AI, Models được phép và quota theo Workspace (UC-02). API chọn qua ai-provider và ai-image-provider.
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/ai-config")]
     [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
@@ -357,8 +360,6 @@ public class AdminController : ControllerBase
     {
         var command = new UpdateWorkspaceAiConfigCommand(
             WorkspaceId: workspaceId,
-            Provider: request.Provider,
-            ApiKey: request.ApiKey,
             IsEnabled: request.IsEnabled,
             MonthlyTokenQuota: request.MonthlyTokenQuota,
             AllowedModels: request.AllowedModels,
@@ -392,6 +393,20 @@ public class AdminController : ControllerBase
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : ToError(result);
     }
 
+    /// <summary>
+    /// PUT /api/admin/ai-providers/default — TASK-355: API mặc định cho Studio chưa tự chọn API.
+    /// Body { kind: "text"|"image", providerCredentialId } (null = bỏ mặc định). Trả lại danh sách API.
+    /// </summary>
+    [HttpPut("ai-providers/default")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderCredentialDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetDefaultAiProvider([FromBody] SetDefaultAiProviderRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetDefaultAiProviderCommand(request.Kind, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var list = await _mediator.Send(new GetAiProviderCredentialsQuery(), cancellationToken);
+        return list.IsSuccess ? Ok(list.Value) : ToError(list);
+    }
+
     /// <summary>PUT /api/admin/ai-providers/{id} — sửa API AI (ApiKey trống = giữ key cũ).</summary>
     [HttpPut("ai-providers/{id:guid}")]
     [ProducesResponseType(typeof(AiProviderCredentialDto), StatusCodes.Status200OK)]
@@ -411,6 +426,18 @@ public class AdminController : ControllerBase
         return result.ErrorCode == ResultErrorCodes.Conflict ? Conflict(new { message = result.ErrorMessage }) : ToError(result);
     }
 
+    /// <summary>
+    /// GET /api/admin/ai-providers/{id}/models — model sinh chữ (kind=text) và sinh ảnh (kind=image) của API Cloudflare đã lưu.
+    /// free=true: model @cf/ (phần miễn phí Workers AI); false: model đối tác cần credit.
+    /// </summary>
+    [HttpGet("ai-providers/{id:guid}/models")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiProviderModelDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAiProviderModels(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAiProviderModelsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
     /// <summary>POST /api/admin/ai-providers/{id}/test — gọi thử provider bằng key đã lưu.</summary>
     [HttpPost("ai-providers/{id:guid}/test")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -421,7 +448,7 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = key Gemini riêng).
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-provider — chọn API AI cho Workspace (body providerCredentialId, null = bỏ chọn).
     /// Trả lại cấu hình AI của Workspace.
     /// </summary>
     [HttpPut("workspaces/{workspaceId:guid}/ai-provider")]
@@ -430,6 +457,21 @@ public class AdminController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetWorkspaceAiProviderCommand(workspaceId, request.ProviderCredentialId), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+        var config = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
+        return config.IsSuccess ? Ok(config.Value) : ToError(config);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{workspaceId}/ai-image-provider — chọn API riêng cho sinh ảnh (credential phải có model ảnh).
+    /// Body providerCredentialId, null = sinh ảnh theo API chữ như trước. Trả lại cấu hình AI của Workspace.
+    /// </summary>
+    [HttpPut("workspaces/{workspaceId:guid}/ai-image-provider")]
+    [ProducesResponseType(typeof(WorkspaceAiConfigDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetWorkspaceAiImageProvider(Guid workspaceId, [FromBody] SetWorkspaceAiProviderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetWorkspaceAiImageProviderCommand(workspaceId, request.ProviderCredentialId), cancellationToken);
         if (!result.IsSuccess) return ToError(result);
         var config = await _mediator.Send(new GetWorkspaceAiConfigQuery(workspaceId), cancellationToken);
         return config.IsSuccess ? Ok(config.Value) : ToError(config);

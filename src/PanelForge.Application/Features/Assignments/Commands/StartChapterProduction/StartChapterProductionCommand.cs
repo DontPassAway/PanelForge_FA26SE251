@@ -23,13 +23,15 @@ public sealed record StartChapterProductionCommand(
     Guid ChapterId,
     Guid UserId,
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
-    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null)
+    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
+    bool FirstStageOnly = false)
     : IRequest<Result<StartChapterProductionResultDto>>;
 
 /// <summary>
-/// Gate 1 một chạm trên Lưới V3: đóng băng kịch bản (PreProduction → InProduction), sinh ô lưới và giao lô theo dải trang
-/// cho công đoạn Artist đầu tiên (Pencil) và Letterer. Ô trong dải đã giao đúng người thì giữ nguyên, nên gọi được
-/// cả với chương đã sinh/giao một phần lưới trước Gate 1.
+/// Gate 1 một chạm trên Lưới V3: đóng băng kịch bản (PreProduction → InProduction), sinh ô lưới và giao lô theo dải trang.
+/// Dải trang của Artist phủ mọi công đoạn cấp trang dành cho Artist (Pencil, Ink, ...) và cả Lettering khi không giao
+/// Letterer phụ việc (Spec §Module 2, BR-31). Ô trong dải đã giao đúng người thì giữ nguyên, nên gọi được cả với chương
+/// đã sinh/giao một phần lưới trước Gate 1; công đoạn sau Pencil mà Producer đã giao người khác thì giữ nguyên người đó.
 /// </summary>
 public sealed class StartChapterProductionCommandHandler
     : IRequestHandler<StartChapterProductionCommand, Result<StartChapterProductionResultDto>>
@@ -73,6 +75,10 @@ public sealed class StartChapterProductionCommandHandler
                     .FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, tct);
                 if (chapter is null)
                     return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
+                if (chapter.Status != ChapterStatus.PreProduction)
+                    return Fail(
+                        "Chương đã bắt đầu sản xuất. Vui lòng sử dụng quy trình khóa lại kịch bản (Refreeze).",
+                        ResultErrorCodes.Conflict);
 
                 // Gate 1 starts with the single authoritative Bible check. Script comments are deliberately not queried.
                 var bibleGate = await _castGate.EvaluateStartAsync(chapter.Id, tct);
@@ -96,15 +102,28 @@ public sealed class StartChapterProductionCommandHandler
                     .Where(s => s.IsEnabled && !(s.IsTerminal && !s.IsApprovalGate))
                     .OrderBy(s => s.StageOrder)
                     .ToList();
-                var artistStage = stages.FirstOrDefault(s => s.AllowedRole == WorkspaceRole.Artist);
-                if (artistStage is null)
+                var artistStages = stages.Where(s => s.AllowedRole == WorkspaceRole.Artist).ToList();
+                if (artistStages.Count == 0)
                     return Fail("Pipeline của Series chưa có stage Artist đang bật.");
+                var firstArtistStage = artistStages[0];
                 var lettererStage = stages.FirstOrDefault(s => s.AllowedRole == WorkspaceRole.Letterer);
-                if (cmd.LettererAssignments is { Count: > 0 } && lettererStage is null)
+                var hasLetterers = cmd.LettererAssignments is { Count: > 0 };
+                if (hasLetterers && lettererStage is null)
                     return Fail("Pipeline của Series chưa có stage Letterer đang bật.");
 
-                var ranges = cmd.PageAssignments.Select(r => (Stage: artistStage, Range: r))
-                    .Concat((cmd.LettererAssignments ?? []).Select(r => (Stage: lettererStage!, Range: r)))
+                // N2 (Assign Automation): chỉ giao công đoạn Artist đầu tiên, các công đoạn sau để R1 tự giao khi đến lượt.
+                // Bỏ nhánh Artist kiêm Letterer, nhưng Letterer Producer đã chỉ định trên form thì vẫn giao (không mất dữ liệu nhập).
+                if (cmd.FirstStageOnly) artistStages = [firstArtistStage];
+
+                // Strict = ô đã giao người khác thì báo xung đột (Pencil, Letterer được chỉ định); công đoạn còn lại
+                // chỉ nhận ô còn trống để không đè lựa chọn Producer đã làm trên lưới.
+                var ranges = cmd.PageAssignments
+                    .SelectMany(r => artistStages.Select(s => (Stage: s, Range: r, Strict: s.Id == firstArtistStage.Id)))
+                    .Concat(hasLetterers
+                        ? cmd.LettererAssignments!.Select(r => (Stage: lettererStage!, Range: r, Strict: true))
+                        : lettererStage is null || cmd.FirstStageOnly
+                            ? []
+                            : cmd.PageAssignments.Select(r => (Stage: lettererStage, Range: r, Strict: false)))
                     .ToList();
 
                 // Kiểm tra người nhận trước mọi thay đổi để lỗi không để lại chương nửa chừng.
@@ -117,12 +136,12 @@ public sealed class StartChapterProductionCommandHandler
                     .Where(m => m.WorkspaceId == workspaceId && assigneeIds.Contains(m.UserId) &&
                                 m.Status == WorkspaceMemberStatus.Active)
                     .ToDictionaryAsync(m => m.UserId, m => m.Role, tct);
-                foreach (var (stage, range) in ranges)
+                foreach (var (stage, range, _) in ranges)
                 {
                     if (!roles.TryGetValue(range.ArtistId, out var role))
                         return Fail($"Người nhận dải trang {range.PageFrom}-{range.PageTo} không phải thành viên đang hoạt động của Workspace.");
-                    if (stage.AllowedRole is { } allowed && role != allowed)
-                        return Fail($"Dải trang {range.PageFrom}-{range.PageTo} của '{stage.Name}' cần vai trò {allowed}, người nhận đang là {role}.");
+                    if (!stage.CanBeHeldBy(role))
+                        return Fail($"Dải trang {range.PageFrom}-{range.PageTo} của '{stage.Name}' cần vai trò {stage.AllowedRole}, người nhận đang là {role}.");
                 }
 
                 // Reuse D12's submitted-version hash check and freeze implementation.
@@ -146,12 +165,12 @@ public sealed class StartChapterProductionCommandHandler
                 var pageIdByNumber = pages.ToDictionary(p => p.PageNumber, p => p.Id);
 
                 var lotRequests = new List<StageTaskLotRequest>();
-                foreach (var (stage, range) in ranges)
+                foreach (var (stage, range, strict) in ranges)
                 {
                     var rangePageIds = Enumerable.Range(range.PageFrom, range.PageTo - range.PageFrom + 1)
                         .Select(n => pageIdByNumber[n]).ToHashSet();
                     var rangeCells = cells.Where(t => t.PipelineStageId == stage.Id && rangePageIds.Contains(t.PageId!.Value)).ToList();
-                    if (rangeCells.FirstOrDefault(t => t.LotId is { } lotId && lotOwners[lotId] != range.ArtistId) is not null)
+                    if (strict && rangeCells.FirstOrDefault(t => t.LotId is { } lotId && lotOwners[lotId] != range.ArtistId) is not null)
                         throw new Gate1AbortException(
                             $"Dải trang {range.PageFrom}-{range.PageTo} của '{stage.Name}' đã có ô giao cho người khác trên lưới.",
                             ResultErrorCodes.Conflict);

@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Commands.DefineBibleEntry;
+using PanelForge.Application.Features.Bible.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Common;
@@ -17,17 +18,32 @@ public sealed record CreateBibleEntryCommand(
     Guid SeriesId,
     Guid UserId,
     BibleEntryCategory Category,
-    string Code,
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
+    string? StageName = null,
+    bool IsCrowd = false,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Code = null,
+    string? Subtitle = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    string? StageName = null,
-    bool IsCrowd = false
-) : IRequest<Result<BibleEntryDto>>;
+    IReadOnlyList<string>? Aliases = null
+) : IRequest<Result<BibleEntryDto>>
+{
+    public CreateBibleEntryCommand(
+        Guid seriesId,
+        Guid userId,
+        BibleEntryCategory category,
+        string code,
+        string name,
+        string description)
+        : this(seriesId, userId, category, name, description, Code: code)
+    {
+    }
+}
 
 public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBibleEntryCommand, Result<BibleEntryDto>>
 {
@@ -46,7 +62,6 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
         if (bible == null)
         {
-            // Spec: mỗi Series có một Bible rỗng; series cũ/seed chưa có thì tạo ngay (giống LinkBibleEntries).
             var workspaceId = await _dbContext.Series.AsNoTracking()
                 .Where(s => s.Id == command.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(cancellationToken);
             if (workspaceId == null)
@@ -55,14 +70,6 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             _dbContext.SeriesBibles.Add(bible);
         }
 
-        // Kiểm tra trùng Code trong cùng một SeriesBible
-        var codeUpper = command.Code.Trim().ToUpperInvariant();
-        if (bible.Entries.Any(e => e.Code == codeUpper))
-        {
-            return Result<BibleEntryDto>.Failure($"Mã định danh (Code) '{codeUpper}' đã tồn tại trong Series Bible này.");
-        }
-
-        // BIB-09, 9A: Kiểm tra trùng tên chính và bí danh trong Series Bible (409)
         var normalizedPrimary = BibleNameNormalizer.Normalize(command.Name);
         var existingPrimary = await _dbContext.BibleEntries
             .Include(e => e.Revisions)
@@ -79,13 +86,12 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
                         command.UserId,
                         command.Name,
                         command.Description,
-                        command.Subtitle,
                         command.DetailsJson,
                         command.ReferenceImageUrl,
-                        command.Priority,
-                        command.StrictCheck,
-                        codeUpper,
-                        command.IsCrowd),
+                        command.IsCrowd,
+                        command.Age,
+                        command.ArtistNotes,
+                        command.Subtitle),
                     cancellationToken);
             }
 
@@ -94,19 +100,24 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
                 ResultErrorCodes.Conflict);
         }
 
+        var detailsJson = (!string.IsNullOrWhiteSpace(command.Age) || !string.IsNullOrWhiteSpace(command.ArtistNotes))
+            ? BibleDetailsParser.Serialize(command.Age, command.ArtistNotes)
+            : (string.IsNullOrWhiteSpace(command.DetailsJson) ? "{}" : BibleDetailsParser.NormalizeJson(command.DetailsJson));
+
+        var description = !string.IsNullOrWhiteSpace(command.Subtitle)
+            ? $"({command.Subtitle.Trim()}) {command.Description.Trim()}"
+            : command.Description.Trim();
+
         BibleEntry entry;
         try
         {
             entry = bible.AddEntry(
                 category: command.Category,
-                code: codeUpper,
+                code: string.Empty,
                 name: command.Name,
-                description: command.Description,
-                subtitle: command.Subtitle,
-                detailsJson: command.DetailsJson,
-                referenceImageUrl: command.ReferenceImageUrl,
-                priority: command.Priority,
-                strictCheck: command.StrictCheck
+                description: description,
+                detailsJson: detailsJson,
+                referenceImageUrl: command.ReferenceImageUrl
             );
             if (command.IsCrowd)
             {
@@ -119,18 +130,13 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
             return Result<BibleEntryDto>.Failure(ex.Message);
         }
 
-        // Tự động sinh snapshot & revision v1 ban đầu (BR-18, CF1 Step 8)
         var snapshotObj = new
         {
             entry.Id,
-            entry.Code,
             entry.Name,
-            entry.Subtitle,
             entry.Description,
             entry.DetailsJson,
             entry.ReferenceImageUrl,
-            entry.Priority,
-            entry.StrictCheck,
             StageName = command.StageName?.Trim()
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj);
@@ -148,29 +154,8 @@ public sealed class CreateBibleEntryCommandHandler : IRequestHandler<CreateBible
 
         _dbContext.BibleEntries.Add(entry);
         _dbContext.BibleEntryRevisions.Add(revision);
-
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var revisionDto = BibleEntryRevisionDto.From(revision);
-
-        return Result<BibleEntryDto>.Success(new BibleEntryDto(
-            Id: entry.Id,
-            SeriesBibleId: entry.SeriesBibleId,
-            Category: entry.Category,
-            Code: entry.Code,
-            Name: entry.Name,
-            Subtitle: entry.Subtitle,
-            Description: entry.Description,
-            DetailsJson: entry.DetailsJson,
-            ReferenceImageUrl: entry.ReferenceImageUrl,
-            Priority: entry.Priority,
-            StrictCheck: entry.StrictCheck,
-            IsActive: entry.IsActive,
-            EffectiveRevision: revisionDto,
-            CreatedAt: entry.CreatedAt,
-            UpdatedAt: entry.UpdatedAt,
-            IsStub: entry.IsStub,
-            IsCrowd: entry.IsCrowd
-        ));
+        return Result<BibleEntryDto>.Success(BibleEntryDto.From(entry));
     }
 }

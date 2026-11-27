@@ -21,8 +21,15 @@ public class AiProviderCredential : BaseEntity
     /// <summary>Model sinh ảnh (tuỳ chọn), vd. @cf/black-forest-labs/flux-1-schnell. Null = dùng cấu hình ảnh mặc định của hệ thống.</summary>
     public string? ImageModel { get; private set; }
     public bool IsEnabled { get; private set; } = true;
+    /// <summary>TASK-355: API chữ dùng cho Studio chưa tự chọn API. Tối đa một credential (unique index lọc).</summary>
+    public bool IsDefaultText { get; private set; }
+    /// <summary>TASK-355: API ảnh dùng cho Studio chưa tự chọn API ảnh. Tối đa một credential.</summary>
+    public bool IsDefaultImage { get; private set; }
 
     private AiProviderCredential() { }
+
+    public void SetDefaultText(bool value) { IsDefaultText = value; UpdatedAt = DateTime.UtcNow; }
+    public void SetDefaultImage(bool value) { IsDefaultImage = value; UpdatedAt = DateTime.UtcNow; }
 
     public static bool IsKnownProvider(string? p) => p is Gemini or Cloudflare;
 

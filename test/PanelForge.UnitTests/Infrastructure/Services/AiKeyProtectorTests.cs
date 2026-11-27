@@ -61,4 +61,17 @@ public class AiKeyProtectorTests
         var result = _protector.Unprotect("corrupted-ciphertext-12345");
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Unprotect_FallsBackToLegacyProtector_WhenApplicationDiscriminatorChanged()
+    {
+        var legacyProvider = new EphemeralDataProtectionProvider();
+        var legacyProtector = legacyProvider.CreateProtector(AiKeyProtector.Purpose);
+        var legacyCiphertext = legacyProtector.Protect("AIzaSyLegacyKey9999");
+
+        var newProvider = new EphemeralDataProtectionProvider();
+        var upgraded = new AiKeyProtector(newProvider, legacyProtector: legacyProtector);
+
+        upgraded.Unprotect(legacyCiphertext).Should().Be("AIzaSyLegacyKey9999");
+    }
 }

@@ -82,7 +82,8 @@ public sealed record ChapterCastItemDto(
     decimal? InheritedFromChapterNumber,
     IReadOnlyList<ChapterCastPanelRevisionDto> PanelRevisions,
     IReadOnlyList<ChapterCastAvailableRevisionDto> AvailableRevisions,
-    IReadOnlyList<ChapterCastMentionDto> Mentions
+    IReadOnlyList<ChapterCastMentionDto> Mentions,
+    bool IsCanonLocked = false
 );
 
 public sealed record ChapterCastDto(
@@ -129,13 +130,27 @@ public sealed class GetChapterCastQueryHandler
         if (role is null)
             return Result<ChapterCastDto>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
 
-        // Load chapter bindings with entry and bound revision
-        var bindings = await _db.ChapterBibleBindings.AsNoTracking()
+        // Evaluate gates FIRST so RecomputeAsync updates Local bindings before Entities are built.
+        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
+        var startGate = await _castGate.EvaluateStartAsync(chapter.Id, ct);
+
+        // Load chapter bindings (merging freshly recomputed Local bindings with DB bindings)
+        var dbBindings = await _db.ChapterBibleBindings.AsNoTracking()
             .Include(b => b.BibleEntry)
                 .ThenInclude(e => e.Revisions)
             .Include(b => b.BoundRevision)
             .Where(b => b.ChapterId == q.ChapterId)
             .ToListAsync(ct);
+        var localBindings = _db.ChapterBibleBindings.Local.Where(b => b.ChapterId == q.ChapterId).ToList();
+        var bindings = localBindings.Union(dbBindings).DistinctBy(b => (b.ChapterId, b.BibleEntryId)).ToList();
+
+        var entryIds = bindings.Select(b => b.BibleEntryId).Distinct().ToList();
+        var dbEntries = await _db.BibleEntries.AsNoTracking()
+            .Include(e => e.Revisions)
+            .Where(e => entryIds.Contains(e.Id))
+            .ToListAsync(ct);
+        var localEntries = _db.BibleEntries.Local.Where(e => entryIds.Contains(e.Id)).ToList();
+        var entryMap = localEntries.Union(dbEntries).DistinctBy(e => e.Id).ToDictionary(e => e.Id);
 
         // Load pages and panels
         var pages = await _db.Pages.AsNoTracking()
@@ -201,22 +216,53 @@ public sealed class GetChapterCastQueryHandler
 
         foreach (var binding in bindings)
         {
-            var entry = binding.BibleEntry;
+            entryMap.TryGetValue(binding.BibleEntryId, out var entry);
+            entry ??= binding.BibleEntry;
+            if (entry is null) continue;
+
             var isCrowd = binding.IsCrowdAtBind;
             var boundRev = binding.BoundRevision;
+            if (boundRev is null && binding.BoundRevisionId.HasValue)
+            {
+                boundRev = entry.Revisions.FirstOrDefault(r => r.Id == binding.BoundRevisionId.Value);
+            }
+            if (boundRev is null && entry.Revisions.Count > 0)
+            {
+                boundRev = entry.Revisions
+                    .Where(r => r.IsLocked)
+                    .OrderByDescending(r => r.VersionNumber)
+                    .FirstOrDefault()
+                    ?? entry.Revisions
+                    .OrderByDescending(r => r.VersionNumber)
+                    .FirstOrDefault();
+            }
 
-            // BibleStatus calculation
+            // BibleStatus calculation (aligned with ChapterCastGate)
             string bibleStatus;
-            if (entry.IsStub)
+            bool isCanonLocked;
+            if (isCrowd)
+            {
+                bibleStatus = "Crowd";
+                isCanonLocked = false;
+            }
+            else if (entry.IsStub)
             {
                 bibleStatus = "WaitingForDefinition";
+                isCanonLocked = false;
+            }
+            else if (!entry.IsVisualDesign)
+            {
+                bibleStatus = "CanonLocked";
+                isCanonLocked = true;
             }
             else if (boundRev is null)
             {
                 bibleStatus = "WaitingForDefinition";
+                isCanonLocked = false;
             }
             else
             {
+                isCanonLocked = boundRev.IsLocked;
                 bibleStatus = boundRev.ReviewStatus switch
                 {
                     BibleRevisionStatus.Draft => "WaitingForArtist",
@@ -311,7 +357,7 @@ public sealed class GetChapterCastQueryHandler
 
             entities.Add(new ChapterCastItemDto(
                 entry.Id,
-                entry.Code,
+                entry.Id.ToString("N")[..8].ToUpperInvariant(),
                 entry.Name,
                 entry.Category,
                 entry.IsStub,
@@ -323,11 +369,9 @@ public sealed class GetChapterCastQueryHandler
                 inheritedChapterNumber,
                 entityPanelVariants,
                 available,
-                entityMentions));
+                entityMentions,
+                isCanonLocked));
         }
-
-        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
-        var startGate = await _castGate.EvaluateStartAsync(chapter.Id, ct);
 
         return Result<ChapterCastDto>.Success(new ChapterCastDto(
             chapter.Id,

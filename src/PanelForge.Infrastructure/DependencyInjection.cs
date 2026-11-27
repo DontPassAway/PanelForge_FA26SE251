@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 
 using JasperFx;
 using Marten;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Models;
+using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Infrastructure.ExternalServices;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -113,8 +115,31 @@ public static class DependencyInjection
         services.AddSingleton<IPageLetteringCompositor, PanelForge.Infrastructure.Exports.SkiaPageLetteringCompositor>();
 
         // ── AI Configuration & Security (UC-02, NFR-03) ────────────────────────
-        services.AddDataProtection();
-        services.AddSingleton<IAiKeyProtector, AiKeyProtector>();
+        // TASK-352: khi deploy đặt DataProtection__KeysPath (volume) để khoá giải mã API key AI / link asset
+        // sống qua lần dựng lại container. SetApplicationName cố định discriminator để không phụ thuộc ContentRootPath.
+        var dp = services.AddDataProtection().SetApplicationName("PanelForge");
+        DirectoryInfo? dpKeysDir = null;
+        if (configuration["DataProtection:KeysPath"] is { Length: > 0 } keysPath)
+        {
+            dpKeysDir = new DirectoryInfo(keysPath);
+            dp.PersistKeysToFileSystem(dpKeysDir);
+        }
+        services.AddSingleton<IAiKeyProtector>(sp =>
+        {
+            var env = sp.GetService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+            IDataProtector? legacy = null;
+            if (env?.ContentRootPath is { Length: > 0 } contentRoot)
+            {
+                var legacyProvider = dpKeysDir is not null
+                    ? DataProtectionProvider.Create(dpKeysDir, b => b.SetApplicationName(contentRoot))
+                    : DataProtectionProvider.Create(contentRoot);
+                legacy = legacyProvider.CreateProtector(AiKeyProtector.Purpose);
+            }
+            return new AiKeyProtector(
+                sp.GetRequiredService<IDataProtectionProvider>(),
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<AiKeyProtector>>(),
+                legacy);
+        });
         services.AddScoped<IAiProviderValidator, AiProviderValidator>();
         services.AddHttpClient(AiProviderValidator.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IAiUsageService, AiUsageService>();
@@ -122,6 +147,11 @@ public static class DependencyInjection
 
         // ── Tách panel/bong bóng từ ảnh cả trang: OpenCV chạy trong tiến trình (thay service Python 5066) ──
         services.AddSingleton<IPanelSplitter, OpenCvPanelSplitter>();
+
+        // ── Thanh toán VietQR: tài khoản nhận tiền mặc định khi Studio chưa khai ngân hàng ──
+        var defaultBank = new DefaultBankSettings();
+        configuration.GetSection(DefaultBankSettings.SectionName).Bind(defaultBank);
+        services.AddSingleton(defaultBank);
 
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();

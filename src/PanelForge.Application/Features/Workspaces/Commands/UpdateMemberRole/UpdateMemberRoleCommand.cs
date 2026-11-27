@@ -60,6 +60,9 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
                 $"Thành viên còn {open} việc chưa xong theo vai trò {member.Role}. Hãy giao lại hoặc hoàn tất các việc đó trước khi đổi vai trò.",
                 ResultErrorCodes.Conflict);
 
+        if (member.Role == WorkspaceRole.Editor && command.NewRole != WorkspaceRole.Editor)
+            await TaskGrid.Common.TaskGridRules.ReleaseReviewerAsync(_dbContext, command.TargetUserId, seriesIds, cancellationToken);
+
         member.ChangeRole(command.NewRole);
 
         // Role Workspace là nguồn duy nhất: đồng bộ role của mọi Series Membership trong Workspace, cùng một lần lưu

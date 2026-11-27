@@ -121,7 +121,8 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             }
             // BR-01/BR-11: đề xuất đã áp vào dòng/khung kịch bản phải thành một ScriptVersion (snapshot đọc DB nên sau khi lưu)
             if (cmd.Decision == AiSuggestionStatus.Accepted &&
-                suggestion.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.Layout)
+                suggestion.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.ScriptLineInsert
+                    or AiSuggestionKind.Layout)
             {
                 await ScriptVersions.ScriptSnapshotBuilder.CommitAsync(
                     _db, chapter.Id, cmd.UserId, $"Chấp nhận đề xuất AI ({suggestion.Kind})", ct, _castService);
@@ -207,6 +208,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             AiSuggestionKind.Layout => await ApplyLayoutAsync(cmd, s, run, snapshot, scene, chapter, latestScript, ct),
             AiSuggestionKind.ImagePrompt => await ApplyImagePromptAsync(s, run, snapshot, ct),
             AiSuggestionKind.LineRewrite => await ApplyLineRewriteAsync(s, latestScript, ct),
+            AiSuggestionKind.ScriptLineInsert => await ApplyNextLineAsync(s, latestScript, ct),
             _ => Applied.Fail($"Loại đề xuất {s.Kind} không áp dụng được.", ResultErrorCodes.Validation)
         };
 
@@ -227,7 +229,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
                 $"Chỉ {string.Join(", ", acceptRoles)} mới được áp dụng đề xuất {s.Kind}; bạn có thể từ chối hoặc yêu cầu sửa.",
                 ResultErrorCodes.Forbidden);
 
-        if (s.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite
+        if (s.Kind is AiSuggestionKind.Script or AiSuggestionKind.LineRewrite or AiSuggestionKind.ScriptLineInsert
             || (s.Kind == AiSuggestionKind.Layout && role == WorkspaceRole.Writer))
         {
             var allowed = await ScriptLineRules.AuthorizeAsync(_db, _auth, cmd.UserId, chapter.Id, expectedVersion: null, ct);
@@ -290,6 +292,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
         if (errors.Count > 0) return Applied.Fail(AiContentValidator.Join(errors), ResultErrorCodes.Validation);
 
         var existing = await _db.ScriptLines.Where(l => l.SceneId == s.SceneId).OrderBy(l => l.LineOrder).ToListAsync(ct);
+        if (snapshot.AppendScript) return await AppendScriptAsync(s, run, draft, existing, latest, ct);
         // Thay cả script sẽ xoá dòng và tạo dòng mới chưa gắn Panel: mất liên kết thoại và lọt cờ ảnh hưởng khi đóng băng lại
         if (existing.Any(l => l.PanelId is not null))
             return Applied.Fail("Scene có dòng đã gắn Panel, không thể thay cả script bằng đề xuất AI.", ResultErrorCodes.Conflict);
@@ -316,22 +319,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             _db.ScriptLines.Remove(line); // soft-delete; nội dung cũ còn trong revision/baseline
         }
 
-        SeriesBible? bible = null;
-        foreach (var line in draft.Lines.OrderBy(l => l.Order))
-        {
-            // Id do ứng dụng cấp ở draft → Storyboard.sourceScriptLineIds trỏ đúng dòng này
-            var created = ScriptLine.Create(s.SceneId, line.Order, line.Dialogue, line.StageDirection, line.LineId,
-                kind: Enum.TryParse<ScriptLineKind>(line.Kind, out var kind) ? kind : null, speakerLabel: line.SpeakerLabel);
-            _db.ScriptLines.Add(created);
-            if (line.Refs is not { Count: > 0 }) continue;
-
-            // Mục Bible chưa có được tạo thành mục nháp tại đây, tức chỉ khi người viết Accept
-            bible ??= await ScriptBibleRefs.GetOrAddBibleAsync(_db, run.SeriesId, ct);
-            var refs = line.Refs.Select(r => new ScriptLineRefInput(r.SurfaceText, r.BibleEntryId,
-                r.NewName is null ? null : new NewDraftBibleEntryInput(r.NewName, Enum.Parse<BibleEntryCategory>(r.NewCategory!)))).ToList();
-            if (await ScriptBibleRefs.ApplyAsync(_db, bible, created, $"Dòng {line.Order}", refs, [], [], ct) is { } refError)
-                return Applied.Fail(refError, ResultErrorCodes.Validation);
-        }
+        if (await AddDraftLinesAsync(s, run, draft, 0, ct) is { } addError) return Applied.Fail(addError, ResultErrorCodes.Validation);
 
         var revision = ContentRevision.Create(
             s.ChapterId, s.SceneId, ContentRevisionKind.Script, nextVersion,
@@ -339,6 +327,55 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
             AiJson.Serialize(new { lineIds = draft.Lines.OrderBy(l => l.Order).Select(l => l.LineId) }));
         _db.ContentRevisions.Add(revision);
         return Applied.Ok(revision.Id);
+    }
+
+    /// <summary>
+    /// Chế độ viết nối: giữ nguyên mọi dòng cũ (kể cả dòng đã gắn Panel, nên không đụng lettering), thêm dòng AI sau dòng cuối.
+    /// Revision mới = toàn bộ script sau khi nối (append-only, BR-01); BR-11 đã kiểm ở ApplyScriptAsync qua BaseScriptRevisionId.
+    /// </summary>
+    private async Task<Applied> AppendScriptAsync(
+        AiSuggestion s, AiWorkflowRun run, ScriptDraft draft, List<ScriptLine> existing, ContentRevision? latest, CancellationToken ct)
+    {
+        var (previousId, nextVersion) = CaptureBaseline(s, latest, existing);
+        var offset = existing.Count == 0 ? 0 : existing.Max(l => l.LineOrder);
+        if (await AddDraftLinesAsync(s, run, draft, offset, ct) is { } addError) return Applied.Fail(addError, ResultErrorCodes.Validation);
+
+        var lines = existing.Select(l => new ScriptDraftLine(l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection))
+            .Concat(draft.Lines.OrderBy(l => l.Order).Select(l => l with { Order = l.Order + offset })).ToList();
+        var payload = AiJson.Serialize(draft with { Lines = lines });
+        var revision = ContentRevision.Create(
+            s.ChapterId, s.SceneId, ContentRevisionKind.Script, nextVersion,
+            $"Script viết nối {draft.Lines.Count} dòng từ đề xuất AI {s.Id} (run {s.RunId})", payload, AiContentValidator.Sha256(payload),
+            previousId, s.Id, AiJson.Serialize(new { mode = "Append", lineIds = lines.Select(l => l.LineId), appendedLineIds = draft.Lines.Select(l => l.LineId) }));
+        _db.ContentRevisions.Add(revision);
+        return Applied.Ok(revision.Id);
+    }
+
+    /// <summary>Tạo ScriptLine từ bản nháp AI (thứ tự dời thêm <paramref name="orderOffset"/>) kèm tham chiếu Bible; trả lỗi hoặc null.</summary>
+    private async Task<string?> AddDraftLinesAsync(AiSuggestion s, AiWorkflowRun run, ScriptDraft draft, int orderOffset, CancellationToken ct)
+    {
+        SeriesBible? bible = null;
+        // Đề xuất cũ có thể gắn thẻ vào mục Thuật ngữ/Luật...: thẻ chỉ để tô sáng nên bỏ thẻ đó thay vì chặn cả Accept
+        var refIds = draft.Lines.SelectMany(l => l.Refs ?? []).Where(r => r.BibleEntryId is not null).Select(r => r.BibleEntryId!.Value).Distinct().ToList();
+        var taggable = (await _db.BibleEntries.AsNoTracking()
+            .Where(e => refIds.Contains(e.Id) && (e.Category == BibleEntryCategory.Character || e.Category == BibleEntryCategory.Location || e.Category == BibleEntryCategory.Prop))
+            .Select(e => e.Id).ToListAsync(ct)).ToHashSet();
+        foreach (var line in draft.Lines.OrderBy(l => l.Order))
+        {
+            // Id do ứng dụng cấp ở draft → Storyboard.sourceScriptLineIds trỏ đúng dòng này
+            var created = ScriptLine.Create(s.SceneId, line.Order + orderOffset, line.Dialogue, line.StageDirection, line.LineId,
+                kind: Enum.TryParse<ScriptLineKind>(line.Kind, out var kind) ? kind : null, speakerLabel: line.SpeakerLabel);
+            _db.ScriptLines.Add(created);
+            if (line.Refs is not { Count: > 0 }) continue;
+
+            // Mục Bible chưa có được tạo thành mục nháp tại đây, tức chỉ khi người viết Accept
+            bible ??= await ScriptBibleRefs.GetOrAddBibleAsync(_db, run.SeriesId, ct);
+            var refs = line.Refs.Where(r => r.BibleEntryId is null || taggable.Contains(r.BibleEntryId.Value)).Select(r => new ScriptLineRefInput(r.SurfaceText, r.BibleEntryId,
+                r.NewName is null ? null : new NewDraftBibleEntryInput(r.NewName, Enum.Parse<BibleEntryCategory>(r.NewCategory!)))).ToList();
+            if (await ScriptBibleRefs.ApplyAsync(_db, bible, created, $"Dòng {line.Order + orderOffset}", refs, [], [], ct) is { } refError)
+                return refError;
+        }
+        return null;
     }
 
     /// <summary>
@@ -492,6 +529,55 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
                 task = sug.Task,
                 lineIds = existing.Select(l => l.Id),
                 changes = new[] { new { sug.SourceScriptLineId, sug.OriginalText, sug.SuggestedText, sug.MaxChars } }
+            }));
+        _db.ContentRevisions.Add(revision);
+        return Applied.Ok(revision.Id);
+    }
+
+    /// <summary>
+    /// TASK-358: chèn MỘT ScriptLine mới sau AfterLineId (null = cuối Scene), các dòng sau dời xuống một bậc; revision Script MỚI
+    /// (append-only, BR-01). Chặn khi script đã có revision mới hơn lúc AI chạy hoặc dòng làm mốc đã bị xoá (BR-11).
+    /// </summary>
+    private async Task<Applied> ApplyNextLineAsync(AiSuggestion s, ContentRevision? latestScript, CancellationToken ct)
+    {
+        var sug = AiContentValidator.TryParse<NextLineSuggestion>(s.PayloadJson, out var pe);
+        if (sug is null) return Applied.Fail($"Payload Copilot không hợp lệ: {pe}", ResultErrorCodes.Validation);
+        if (NextLineRules.Validate(sug.Kind, sug.Speaker, sug.Text, sug.AllowedSpeakers) is { Count: > 0 } errors)
+            return Applied.Fail(string.Join(" ", errors), ResultErrorCodes.Validation);
+        if (latestScript?.Id != s.BaseScriptRevisionId)
+            return Applied.Fail("Script của Scene đã có revision mới hơn lúc AI chạy.", ResultErrorCodes.Conflict);
+
+        var existing = await _db.ScriptLines.Where(l => l.SceneId == s.SceneId).OrderBy(l => l.LineOrder).ToListAsync(ct);
+        var after = sug.AfterLineId is { } afterId ? existing.FirstOrDefault(l => l.Id == afterId) : existing.LastOrDefault();
+        if (sug.AfterLineId is not null && after is null)
+            return Applied.Fail("Dòng làm mốc đã bị xoá sau khi AI đề xuất.", ResultErrorCodes.Conflict);
+
+        var (previousId, nextVersion) = CaptureBaseline(s, latestScript, existing);
+        var order = (after?.LineOrder ?? 0) + 1;
+        foreach (var l in existing.Where(l => l.LineOrder >= order).OrderByDescending(l => l.LineOrder)) l.Reorder(l.LineOrder + 1);
+        var kind = sug.Kind switch
+        {
+            NextLineRules.Dialogue => ScriptLineKind.Dialogue,
+            NextLineRules.Sfx => ScriptLineKind.Sfx,
+            _ => ScriptLineKind.Action
+        };
+        var line = ScriptLine.Create(s.SceneId, order, kind: kind, speakerLabel: sug.Speaker, text: sug.Text);
+        _db.ScriptLines.Add(line);
+        var lines = existing.Append(line).OrderBy(l => l.LineOrder).ToList();
+
+        var payload = AiJson.Serialize(new ScriptDraft(
+            AiProtocol.SchemaVersion, s.RunId, s.SceneId, 0,
+            lines.Select(l => new ScriptDraftLine(l.Id, l.LineOrder, null, l.DialogueText, l.StageDirection)).ToList(),
+            AiRunHelpers.ReadGuidList(s.BibleRevisionIdsJson), $"Copilot {CopilotTasks.WriterNextLine}: thêm 1 dòng {sug.Kind}."));
+        var revision = ContentRevision.Create(
+            s.ChapterId, s.SceneId, ContentRevisionKind.Script, nextVersion,
+            $"Copilot {CopilotTasks.WriterNextLine} từ đề xuất AI {s.Id}", payload, AiContentValidator.Sha256(payload), previousId, s.Id,
+            AiJson.Serialize(new
+            {
+                source = "Copilot",
+                task = CopilotTasks.WriterNextLine,
+                lineIds = lines.Select(l => l.Id),
+                inserted = new { lineId = line.Id, sug.AfterLineId, sug.Kind, sug.Speaker, sug.Text }
             }));
         _db.ContentRevisions.Add(revision);
         return Applied.Ok(revision.Id);

@@ -142,7 +142,7 @@ internal sealed record AiWorkflowFacts(
         var stages = await db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id)).ToListAsync(ct);
         // Stage không đọc được (không xảy ra khi FK còn nguyên) thì không đủ căn cứ để chặn; stage có AllowedRole khác vai trò → chặn
         var stageOk = working.Any(a => stages.FirstOrDefault(s => s.Id == a.PipelineStageId) is not { } s
-                                       || s.AllowedRole is null || s.AllowedRole == role);
+                                       || s.CanBeHeldBy(role));
         return stageOk
             ? new AssignmentGate(true, null)
             : new AssignmentGate(true, $"Stage hiện tại của assignment không dành cho vai trò {role}.");
@@ -176,7 +176,7 @@ internal sealed record AiWorkflowFacts(
     }
 
     /// <summary>Danh sách điều kiện còn thiếu cho một loại workflow; rỗng = chạy được. Thứ tự: quyền → cấu hình → trạng thái → context.</summary>
-    public IReadOnlyList<AiMissingConditionDto> Evaluate(AiWorkflowType type)
+    public IReadOnlyList<AiMissingConditionDto> Evaluate(AiWorkflowType type, bool appendScript = false)
     {
         var missing = new List<AiMissingConditionDto>();
         void Add(string code, string kind, string message) => missing.Add(new AiMissingConditionDto(code, kind, message));
@@ -207,7 +207,8 @@ internal sealed record AiWorkflowFacts(
         switch (type)
         {
             case AiWorkflowType.Script or AiWorkflowType.FullScene:
-                if (LinkedLineCount > 0)
+                // Viết nối chỉ thêm dòng mới nên không đụng liên kết Panel của dòng cũ
+                if (LinkedLineCount > 0 && !(appendScript && type == AiWorkflowType.Script))
                     Add("SCENE_LINES_LINKED", "State", "Scene có dòng đã gắn Panel; thay cả script bằng AI sẽ làm mất liên kết này.");
                 break;
             case AiWorkflowType.Storyboard:

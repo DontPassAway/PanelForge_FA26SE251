@@ -29,12 +29,11 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
                .HasColumnName("version_number")
                .HasColumnType("integer")
                .IsRequired();
-        // Chỉ duy nhất trong các bản còn sống: xoá mềm bản cuối rồi thêm bản mới (Max(VersionNumber)+1 không thấy dòng đã xoá)
-        // không còn đụng số version của dòng đã xoá (BR-01, BR-15)
-        builder.HasIndex(r => new { r.BibleEntryId, r.VersionNumber })
+        // BIB-01: Ràng buộc duy nhất theo từng biến thể (bible_entry_id, stage_name, version_number)
+        builder.HasIndex(r => new { r.BibleEntryId, r.StageName, r.VersionNumber })
                .IsUnique()
                .HasFilter("is_deleted = false")
-               .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_version");
+               .HasDatabaseName("ix_bible_entry_revisions_bible_entry_id_stage_version");
 
         builder.Property(r => r.Summary)
                .HasColumnName("summary")
@@ -63,7 +62,9 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
 
         builder.Property(r => r.StageName)
                .HasColumnName("stage_name")
-               .HasColumnType("varchar(100)");
+               .HasColumnType("varchar(100)")
+               .HasDefaultValue("Mặc định")
+               .IsRequired();
 
         builder.Property(r => r.IsInitialVersion)
                .HasColumnName("is_initial_version")
@@ -89,6 +90,18 @@ internal sealed class BibleEntryRevisionConfiguration : IEntityTypeConfiguration
         builder.Property(r => r.CurrentConceptEventId)
                .HasColumnName("current_concept_event_id")
                .HasColumnType("uuid");
+
+        builder.Property(r => r.WriterEndorsedByUserId)
+               .HasColumnName("writer_endorsed_by_user_id")
+               .HasColumnType("uuid");
+
+        builder.Property(r => r.WriterEndorsedAt)
+               .HasColumnName("writer_endorsed_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(r => r.WriterEndorsedConceptVersion)
+               .HasColumnName("writer_endorsed_concept_version")
+               .HasColumnType("integer");
 
         builder.HasOne(r => r.CurrentConceptEvent)
                .WithMany()

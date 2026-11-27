@@ -24,22 +24,22 @@ public class SeriesBible : BaseEntity
 
     // Helper queries cho 6 nhóm thực thể cốt lõi
     public IEnumerable<BibleEntry> Characters =>
-        Entries.Where(e => e.Category == BibleEntryCategory.Character && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.Character);
 
     public IEnumerable<BibleEntry> Locations =>
-        Entries.Where(e => e.Category == BibleEntryCategory.Location && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.Location);
 
     public IEnumerable<BibleEntry> Props =>
-        Entries.Where(e => e.Category == BibleEntryCategory.Prop && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.Prop);
 
     public IEnumerable<BibleEntry> Terminology =>
-        Entries.Where(e => e.Category == BibleEntryCategory.Terminology && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.Terminology);
 
     public IEnumerable<BibleEntry> StyleRules =>
-        Entries.Where(e => e.Category == BibleEntryCategory.StyleRule && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.StyleRule);
 
     public IEnumerable<BibleEntry> PlotFacts =>
-        Entries.Where(e => e.Category == BibleEntryCategory.PlotFact && e.IsActive);
+        Entries.Where(e => e.Category == BibleEntryCategory.PlotFact);
 
     private SeriesBible() { }
 
@@ -77,9 +77,9 @@ public class SeriesBible : BaseEntity
         string code,
         string name,
         string description,
-        string? subtitle = null,
         string? detailsJson = null,
         string? referenceImageUrl = null,
+        string? subtitle = null,
         BiblePriority priority = BiblePriority.Standard,
         bool strictCheck = true)
     {
@@ -89,14 +89,19 @@ public class SeriesBible : BaseEntity
             code,
             name,
             description,
-            subtitle,
             detailsJson,
-            referenceImageUrl,
-            priority,
-            strictCheck);
+            referenceImageUrl);
 
         Entries.Add(entry);
         UpdatedAt = DateTime.UtcNow;
         return entry;
+    }
+
+    public BibleEntry AddEntry(
+        BibleEntryCategory category,
+        string name,
+        string description)
+    {
+        return AddEntry(category, string.Empty, name, description);
     }
 }

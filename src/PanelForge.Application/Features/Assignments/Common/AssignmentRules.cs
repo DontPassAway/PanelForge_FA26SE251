@@ -103,7 +103,8 @@ internal static class AssignmentRules
         IPanelForgeDbContext db, Guid workspaceId, Guid excludeUserId, CancellationToken ct)
     {
         async Task<List<Guid>> WithRole(WorkspaceRole role) => await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Role == role && m.UserId != excludeUserId)
+            .Where(m => m.WorkspaceId == workspaceId && m.Role == role && m.UserId != excludeUserId
+                        && m.Status == WorkspaceMemberStatus.Active)
             .Select(m => m.UserId).ToListAsync(ct);
 
         var editors = await WithRole(WorkspaceRole.Editor);
@@ -132,9 +133,9 @@ internal static class AssignmentRules
             return Result<WorkspaceRole>.Failure(
                 "Người nhận chưa chấp nhận lời mời vào Workspace nên chưa thể nhận việc.", ResultErrorCodes.Validation);
 
-        if (stage.AllowedRole is { } allowed && allowed != member.Role)
+        if (!stage.CanBeHeldBy(member.Role))
             return Result<WorkspaceRole>.Failure(
-                $"Stage '{stage.Name}' dành cho vai trò {allowed}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
+                $"Stage '{stage.Name}' dành cho vai trò {stage.AllowedRole}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
 
         return Result<WorkspaceRole>.Success(member.Role);
     }

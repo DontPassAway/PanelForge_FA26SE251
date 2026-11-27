@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Domain.Common;
+using PanelForge.Domain.Entities.Ai;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workspaces;
@@ -55,10 +56,15 @@ public static class AiDemoSeeder
         if (await db.Users.AnyAsync(u => u.Id == LettererUser, ct))
             db.WorkspaceMembers.Add(WorkspaceMember.Create(WorkspaceId, LettererUser, WorkspaceRole.Letterer));
 
-        // Mock không cần API key; Gemini: Admin nhập key qua PUT /api/Admin/workspaces/{id}/ai-config
-        db.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(
+        // TASK-350: Studio chỉ dùng API dùng chung; key giả được IAiKeyProtector mock giải mã
+        var cred = AiProviderCredential.Create("Gemini demo", AiProviderCredential.Gemini, null, "enc:demo",
+            "gemini-3.8-flash", null);
+        db.AiProviderCredentials.Add(cred);
+        var aiConfig = WorkspaceAiConfig.Create(
             WorkspaceId, "Google Gemini", apiKey: null, monthlyTokenQuota: 1_000_000,
-            allowedModelsJson: WorkspaceAiConfig.DefaultAllowedModelsJson));
+            allowedModelsJson: WorkspaceAiConfig.DefaultAllowedModelsJson);
+        aiConfig.UseProviderCredential(cred.Id);
+        db.WorkspaceAiConfigs.Add(aiConfig);
 
         var series = Series.Create(WorkspaceId, "Thành phố mưa", ReadingDirection.RightToLeft,
             "Thợ học việc An lần theo chiếc chìa khóa bạc bí ẩn giữa thành phố luôn có mưa.", "Mystery", "Manga");
@@ -95,7 +101,7 @@ public static class AiDemoSeeder
         if (db != null)
         {
         }
-        var snapshot = JsonSerializer.Serialize(new { Name = name, Description = description });
+        var snapshot = JsonSerializer.Serialize(new { Code = code, Name = name, Description = description });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
         var revision = entry.AddRevision("Khởi tạo (dữ liệu mẫu demo AI)", snapshot, hash, isInitialVersion: true);
         // AI chỉ dùng bản thiết kế đã khoá: khoá sẵn để demo có nhân vật, địa điểm, đạo cụ trong context

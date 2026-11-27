@@ -85,7 +85,8 @@ app.MapPost("/copilot/{task}", async (string task, CopilotRequest req, HttpConte
     if (!KeyOk(http)) return Results.Json(new AiRunAck(false, "UNAUTHORIZED", "Khoá dịch vụ không hợp lệ."), statusCode: 401);
     if (task != req.Task || !PanelForge.AI.Agents.CopilotAgent.Supports(task) || req.SchemaVersion != AiProtocol.SchemaVersion
         || !AiProtocol.CredentialsOk(req.Provider, req.ApiKey, req.AccountId) || string.IsNullOrWhiteSpace(req.Model)
-        || (task == CopilotTasks.ImpactRipple ? req.Ripple is not { Changes.Count: > 0 }
+        || (task == CopilotTasks.WriterNextLine ? NextLineRules.NormalizeKind(req.NextLine?.Kind) is null
+            : task == CopilotTasks.ImpactRipple ? req.Ripple is not { Changes.Count: > 0 }
             : task == CopilotTasks.BibleStubDraft ? req.Stub is not { Evidence.Count: > 0 }
             : CopilotTasks.IsLineTask(task) ? string.IsNullOrWhiteSpace(req.Line?.Dialogue) : req.Series is null)
         || (task == CopilotTasks.LettererShorten && req.MaxChars is not (> 0 and <= CopilotRules.MaxCharsLimit)))

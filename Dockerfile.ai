@@ -1,0 +1,18 @@
+# TASK-354: image cho service PanelForge.AI (chỉ Backend gọi, không public port).
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /app
+COPY ["src/PanelForge.AI/PanelForge.AI.csproj", "src/PanelForge.AI/"]
+COPY ["src/PanelForge.AI.Contracts/PanelForge.AI.Contracts.csproj", "src/PanelForge.AI.Contracts/"]
+RUN dotnet restore "src/PanelForge.AI/PanelForge.AI.csproj"
+COPY src/PanelForge.AI src/PanelForge.AI
+COPY src/PanelForge.AI.Contracts src/PanelForge.AI.Contracts
+RUN dotnet publish "src/PanelForge.AI/PanelForge.AI.csproj" -c Release -o /out /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+WORKDIR /app
+COPY --from=build /out .
+# appsettings.json bind 127.0.0.1 + AllowedHosts=localhost cho dev; trong container phải mở cho mạng Docker.
+ENV Kestrel__Endpoints__Http__Url=http://0.0.0.0:5055 \
+    AllowedHosts=*
+EXPOSE 5055
+ENTRYPOINT ["dotnet", "PanelForge.AI.dll"]

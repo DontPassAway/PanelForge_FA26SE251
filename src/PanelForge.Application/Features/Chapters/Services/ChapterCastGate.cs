@@ -209,7 +209,8 @@ public sealed class ChapterCastGate : IChapterCastGate
                 ? "bản do Writer chọn"
                 : (inheritedChapterNumber.HasValue ? $"kế thừa từ chương {inheritedChapterNumber}" : "bản mặc định");
 
-            if (boundRev is null || !boundRev.IsLocked)
+            // Non-visual categories (Term, Rule, Event) do not have concept art and cannot be CanonLocked.
+            if (entry.IsVisualDesign && (boundRev is null || !boundRev.IsLocked))
             {
                 var stageName = boundRev?.StageName ?? "Mặc định";
                 var versionNumber = boundRev?.VersionNumber ?? 1;
@@ -231,11 +232,11 @@ public sealed class ChapterCastGate : IChapterCastGate
                     $"chờ {entry.Name} {stageName} v{versionNumber}, {sourceText}"));
             }
 
-            // Start condition: all panel variants for this entity must be CanonLocked
+            // Start condition: all panel variants for visual entities must be CanonLocked
             var entityVariants = panelVariants.Where(v => v.BibleEntryId == entry.Id);
             foreach (var pv in entityVariants)
             {
-                if (!pv.Revision.IsLocked)
+                if (entry.IsVisualDesign && !pv.Revision.IsLocked)
                 {
                     var pan = pv.PanelId.HasValue ? panelMap.GetValueOrDefault(pv.PanelId.Value) : null;
                     var pageNum = pan != null && pageMap.TryGetValue(pan.PageId, out var p) ? p : 0;

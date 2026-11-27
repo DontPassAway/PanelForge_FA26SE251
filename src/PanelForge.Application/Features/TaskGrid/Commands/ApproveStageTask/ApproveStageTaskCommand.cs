@@ -57,8 +57,10 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
         if (lot is not null) _db.Notifications.Add(TaskGridNotifications.Approved(lot.AssigneeUserId, chapter.Id, stageName));
         await TaskGridNotifications.AddReadyAsync(_db, [task], stages, chapterTasks, chapter.Id, ct);
+        await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, [task], stages, chapterTasks, ct);
         await TaskGridRules.RefreshLotsAsync(_db, [task.LotId], [task], ct);
         await _db.SaveChangesAsync(ct);
+        await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
         return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false)], ct))[0]);
     }
 }

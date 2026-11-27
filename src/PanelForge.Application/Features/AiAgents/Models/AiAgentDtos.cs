@@ -8,6 +8,14 @@ public sealed record RunCopilotRequest(
     string Task, Guid? LineId = null, string? Instruction = null, int? MaxChars = null,
     Guid? PageId = null, Guid? ElementId = null, Guid? RevisionOfSuggestionId = null);
 
+/// <summary>
+/// TASK-358: body POST /ai/copilot/next-line. Kind: Dialogue | Sfx | Action; AfterLineId null = cuối Scene;
+/// Speaker (chỉ Dialogue, tuỳ chọn) phải là tên nhân vật trong Series Bible, bỏ trống để AI chọn.
+/// </summary>
+public sealed record RunNextLineRequest(
+    Guid SceneId, string Kind, Guid? AfterLineId = null, string? Speaker = null, string? Instruction = null,
+    Guid? RevisionOfSuggestionId = null);
+
 /// <summary>Body POST /ai/copilot/publisher-metadata: chapter đang phát hành + chỉ dẫn tuỳ chọn (≤500 ký tự).</summary>
 public sealed record RunPublisherMetadataRequest(Guid ChapterId, string? Instruction = null);
 public sealed record RunBibleStubDraftRequest(string? Instruction = null);
@@ -28,7 +36,9 @@ public sealed record RunWorkflowRequest(
     /// <summary>Chỉ với Artist: chỉ soạn mô tả vẽ cho các panel này (null/rỗng = mọi panel của layout đã duyệt).</summary>
     IReadOnlyList<Guid>? PanelIds = null,
     /// <summary>Chạy lại từ đề xuất đang ChangesRequested: lý do của người duyệt được đưa vào brief.</summary>
-    Guid? RevisionOfSuggestionId = null);
+    Guid? RevisionOfSuggestionId = null,
+    /// <summary>Chỉ với Script: viết nối thêm dòng sau script có sẵn, giữ nguyên dòng cũ (kể cả dòng đã gắn Panel).</summary>
+    bool AppendScript = false);
 
 public sealed record RunWorkflowResponse(Guid RunId, AiRunStatus Status, string Provider, string Model);
 

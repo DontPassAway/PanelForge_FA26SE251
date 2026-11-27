@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
 
 namespace PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
@@ -55,13 +56,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
         if (entry.IsStub || string.IsNullOrWhiteSpace(entry.Description))
             return Result<BibleEntryRevisionDto>.Failure("Thực thể chưa được Writer viết định nghĩa.", ResultErrorCodes.Conflict);
 
-        var latestVersion = entry.Revisions.Count > 0 ? entry.Revisions.Max(r => r.VersionNumber) : 0;
-        if (body.ExpectedVersionNumber is { } expected && expected != latestVersion)
-            return Result<BibleEntryRevisionDto>.Failure(
-                $"Xung đột phiên bản: bạn đang sửa từ version {expected} nhưng mục này đã có version {latestVersion}. " +
-                "Vui lòng tải lại nội dung mới nhất rồi gửi lại.",
-                ResultErrorCodes.Conflict);
-
         // Nhắm đúng giai đoạn: RevisionId tường minh; mặc định là giai đoạn hiện hành.
         BibleEntryRevision? target;
         if (body.RevisionId is { } revisionId)
@@ -69,8 +63,9 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
             target = entry.Revisions.FirstOrDefault(r => r.Id == revisionId);
             if (target is null)
                 return Result<BibleEntryRevisionDto>.Failure($"Revision {revisionId} không tồn tại.", ResultErrorCodes.NotFound);
+            var normStage = BibleNameNormalizer.Normalize(target.StageName);
             var latestOfStage = entry.Revisions
-                .Where(r => string.Equals(r.StageName, target.StageName, StringComparison.OrdinalIgnoreCase))
+                .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), normStage, StringComparison.OrdinalIgnoreCase))
                 .MaxBy(r => r.VersionNumber);
             if (latestOfStage != null && latestOfStage != target)
                 return Result<BibleEntryRevisionDto>.Failure(
@@ -81,6 +76,21 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
             target = entry.GetDisplayRevision();
         }
 
+        var targetStageNorm = target != null ? BibleNameNormalizer.Normalize(target.StageName) : "";
+        var latestVersion = target != null
+            ? entry.Revisions
+                .Where(r => string.Equals(BibleNameNormalizer.Normalize(r.StageName), targetStageNorm, StringComparison.OrdinalIgnoreCase))
+                .Select(r => r.VersionNumber)
+                .DefaultIfEmpty(0)
+                .Max()
+            : 0;
+
+        if (body.ExpectedVersionNumber is { } expected && expected != latestVersion)
+            return Result<BibleEntryRevisionDto>.Failure(
+                $"Xung đột phiên bản: bạn đang sửa từ version {expected} nhưng biến thể '{target?.StageName}' đã có version {latestVersion}. " +
+                "Vui lòng tải lại nội dung mới nhất rồi gửi lại.",
+                ResultErrorCodes.Conflict);
+
         if (target is null || ChangesContent(entry, target, body))
             return await _sender.Send(new AddBibleEntryRevisionCommand(
                 SeriesId: cmd.SeriesId,
@@ -89,13 +99,14 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 Summary: body.EffectiveSummary,
                 Name: body.Name,
                 Description: body.Description,
-                Subtitle: body.Subtitle,
-                DetailsJson: body.DetailsJson,
+                DetailsJson: body.EffectiveDetailsJson,
                 ReferenceImageUrl: body.EffectiveImageUrl,
                 StageName: body.EffectiveStageName,
                 ExpectedVersionNumber: body.ExpectedVersionNumber,
                 ArtistUserId: cmd.ArtistUserId,
-                TargetRevisionId: target?.Id), ct);
+                TargetRevisionId: target?.Id,
+                Age: body.Age,
+                ArtistNotes: body.ArtistNotes), ct);
 
         if (target.IsLocked)
             return Result<BibleEntryRevisionDto>.Failure(
@@ -121,7 +132,6 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
 
         return Differs(b.Name, entry.Name)
             || Differs(b.Description, snapshot.Description)
-            || Differs(b.Subtitle, snapshot.Subtitle)
             || Differs(b.DetailsJson, snapshot.DetailsJson)
             || Differs(b.EffectiveStageName, target.StageName);
     }

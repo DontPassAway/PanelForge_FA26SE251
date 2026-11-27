@@ -117,7 +117,7 @@ public class NewWorkflowsEndToEndTests
     public async Task Storyboard_ScriptWithBlockingContinuityFinding_StopsForHuman_NoWriterNoStoryboardNoSuggestion()
     {
         var h = await AiHarness.CreateAsync();
-        var an = (await h.Db.BibleEntries.SingleAsync(e => e.Code == "AN")).Id;
+        var an = (await h.Db.BibleEntries.SingleAsync(e => e.Name == "An")).Id;
         h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, speakerLabel: "An"));
         await h.Db.SaveChangesAsync();
 
@@ -213,8 +213,8 @@ public class NewWorkflowsEndToEndTests
         steps.Select(s => s.Agent).Should().NotContain([AiAgentType.Writer, AiAgentType.Continuity, AiAgentType.Storyboard, AiAgentType.Editor],
             "không ép cả 7 agent chạy trong mọi run");
         var artistStep = steps[1];
-        artistStep.PromptVersion.Should().Be("artist@1");
-        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v1#sha256:");
+        artistStep.PromptVersion.Should().Be("artist@2");
+        artistStep.PromptRef.Should().StartWith("Prompts/artist.md@v2#sha256:");
         artistStep.ParametersJson.Should().Contain("temperature");
         artistStep.PromptTokens.Should().BeNull("Mock không khai token");
 

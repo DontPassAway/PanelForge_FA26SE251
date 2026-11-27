@@ -108,17 +108,35 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
-    public async Task ImageQuotaAndConcurrentJobLimit_ReturnQuotaExceeded()
+    public async Task ImageQuotaAndConcurrentJobLimit_ReturnQuotaExceeded_BeforeDecryptingKey()
     {
         var c = await SetupAsync();
+        c.H.KeyProtector.Invocations.Clear();
         c.H.Settings.ImageJobsPerSeries = 0;
         (await RunAsync(c)).ErrorCode.Should().Be(ResultErrorCodes.AiQuotaExceeded);
+        c.H.KeyProtector.Verify(k => k.Unprotect(It.IsAny<string>()), Times.Never, "vượt số job đồng thời thì không giải mã key");
 
         c.H.Settings.ImageJobsPerSeries = 2;
-        (await c.H.Db.WorkspaceAiConfigs.SingleAsync()).SetMonthlyImageQuota(1);
+        var cfg = await c.H.Db.WorkspaceAiConfigs.SingleAsync();
+        cfg.SetMonthlyImageQuota(1);
         await c.H.Db.SaveChangesAsync();
         (await RunAsync(c)).IsSuccess.Should().BeTrue();
+
+        c.H.KeyProtector.Invocations.Clear();
         (await RunAsync(c)).ErrorCode.Should().Be(ResultErrorCodes.AiQuotaExceeded);
+        c.H.KeyProtector.Verify(k => k.Unprotect(It.IsAny<string>()), Times.Never, "hết quota ảnh thì không giải mã key");
+
+        // Sang tháng mới với AiUsageService thật: CheckAvailabilityAsync chạy trước nên tự reset UsedImagesCurrentMonth về 0
+        typeof(PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig)
+            .GetProperty(nameof(PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig.LastResetAt))!
+            .SetValue(cfg, DateTime.UtcNow.AddMonths(-1));
+        await c.H.Db.SaveChangesAsync();
+        var realUsage = new PanelForge.Infrastructure.Services.AiUsageService(
+            c.H.Db, new PanelForge.UnitTests.Common.FakeCurrentUser(AiHarness.Artist, "artist@panelforge.com"));
+        var handlerWithRealUsage = new RunThumbnailCommandHandler(
+            c.H.Db, c.H.Auth, realUsage, c.H.KeyProtector.Object, c.H.AiClient.Object, c.Storage.Object, c.H.Settings);
+        (await handlerWithRealUsage.Handle(new RunThumbnailCommand(AiDemoSeeder.SeriesId, c.Panel.Id, AiHarness.Artist, null), default))
+            .IsSuccess.Should().BeTrue("sang tháng mới phải tự mở khoá quota ảnh ngay từ lần sinh ảnh đầu tiên");
     }
 
     [Fact]
@@ -136,4 +154,15 @@ public sealed class ThumbnailTests
 
         accept.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
     }
+
+    [Theory]
+    [InlineData("A young man searching for herbs", "Manga style. A young man searching for herbs")]
+    [InlineData("Manga comic panel, a young man", "Manga comic panel, a young man")]
+    [InlineData("Full-color webtoon, a young man", "Full-color webtoon, a young man")]
+    public void WithStyle_AddsComicStyleOnlyWhenPromptHasNone(string prompt, string expected) =>
+        ThumbnailRules.WithStyle(prompt, "Manga style.").Should().Be(expected);
+
+    [Fact]
+    public void WithStyle_EmptyPrefix_LeavesPromptUnchanged() =>
+        ThumbnailRules.WithStyle("A young man", "  ").Should().Be("A young man");
 }

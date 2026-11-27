@@ -25,8 +25,10 @@ public sealed class AiUsageService : IAiUsageService
         var config = await _dbContext.WorkspaceAiConfigs
             .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
 
-        if (config is null || (config.ProviderCredentialId is null && string.IsNullOrWhiteSpace(config.ApiKeyEncrypted)))
-            return AiAvailability.Blocked(AiUsageStatus.Disabled, "Workspace chưa được Administrator cấu hình AI Provider.");
+        // TASK-355: Studio chưa tự chọn API vẫn dùng được nếu Admin đã đặt API mặc định (đang bật)
+        if (config is null || (config.ProviderCredentialId is null && config.ImageProviderCredentialId is null
+            && !await _dbContext.AiProviderCredentials.AnyAsync(c => c.IsEnabled && (c.IsDefaultText || c.IsDefaultImage), cancellationToken)))
+            return AiAvailability.Blocked(AiUsageStatus.Disabled, "Studio chưa chọn API AI. Administrator cần chọn API trong Cấu hình AI.");
 
         if (!config.IsEnabled)
             return AiAvailability.Blocked(AiUsageStatus.Disabled, "Tính năng AI đang bị tắt cho Workspace này.");
@@ -49,7 +51,7 @@ public sealed class AiUsageService : IAiUsageService
         var record = AiUsageRecord.Create(
             workspaceId: entry.WorkspaceId,
             feature: entry.Feature,
-            provider: config?.Provider ?? UnconfiguredProvider,
+            provider: !string.IsNullOrWhiteSpace(entry.Provider) ? entry.Provider.Trim() : (config?.Provider ?? UnconfiguredProvider),
             status: entry.Status,
             userId: entry.UserId ?? _currentUser.UserId,
             model: entry.Model,

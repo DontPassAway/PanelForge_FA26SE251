@@ -92,7 +92,7 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
 
         // Tải các BibleEntry cùng Revisions và Events
         var entries = await _dbContext.BibleEntries
-            .Where(e => mentionedEntryIds.Contains(e.Id) && e.IsActive)
+            .Where(e => mentionedEntryIds.Contains(e.Id))
             .Include(e => e.Revisions).ThenInclude(r => r.Events)
             .ToListAsync(cancellationToken);
 
@@ -128,7 +128,6 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
             // Trích xuất snapshot để có dữ liệu chính xác
             string name = entry.Name;
             string description = entry.Description;
-            string? subtitle = entry.Subtitle;
             string detailsJson = entry.DetailsJson;
             string? refImg = entry.ReferenceImageUrl;
 
@@ -138,7 +137,6 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
                 var root = doc.RootElement;
                 if (root.TryGetProperty("Name", out var n) || root.TryGetProperty("name", out n)) name = n.GetString() ?? name;
                 if (root.TryGetProperty("Description", out var d) || root.TryGetProperty("description", out d)) description = d.GetString() ?? description;
-                if (root.TryGetProperty("Subtitle", out var s) || root.TryGetProperty("subtitle", out s)) subtitle = s.GetString();
                 if (root.TryGetProperty("DetailsJson", out var dj) || root.TryGetProperty("detailsJson", out dj)) detailsJson = dj.GetString() ?? detailsJson;
                 if (root.TryGetProperty("ReferenceImageUrl", out var ri) || root.TryGetProperty("referenceImageUrl", out ri)) refImg = ri.GetString();
             }
@@ -154,25 +152,23 @@ public sealed class GetPanelBibleQueryHandler : IRequestHandler<GetPanelBibleQue
             }
 
             var revDto = BibleEntryRevisionDto.From(revision);
+            var parsed = PanelForge.Application.Features.Bible.Common.BibleDetailsParser.Parse(detailsJson);
 
             results.Add(new BibleEntryDto(
                 Id: entry.Id,
                 SeriesBibleId: entry.SeriesBibleId,
                 Category: entry.Category,
-                Code: entry.Code,
                 Name: name,
-                Subtitle: subtitle,
                 Description: description,
                 DetailsJson: detailsJson,
                 ReferenceImageUrl: refImg,
-                Priority: entry.Priority,
-                StrictCheck: entry.StrictCheck,
-                IsActive: entry.IsActive,
                 EffectiveRevision: revDto,
                 CreatedAt: entry.CreatedAt,
                 UpdatedAt: entry.UpdatedAt,
                 IsStub: entry.IsStub,
-                IsCrowd: binding?.IsCrowdAtBind ?? entry.IsCrowd
+                IsCrowd: binding?.IsCrowdAtBind ?? entry.IsCrowd,
+                Age: parsed.Age,
+                ArtistNotes: parsed.ArtistNotes
             ));
         }
 

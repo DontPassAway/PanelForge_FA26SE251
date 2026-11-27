@@ -20,8 +20,8 @@ public class BibleEntryRevision : BaseEntity
     public string ContentHash { get; private set; } = default!;
     public Guid? AssociatedChapterId { get; private set; }
 
-    /// <summary>Tên giai đoạn do người dùng đặt, vd. "Lúc nhỏ", "Trưởng thành". Không phải số phiên bản.</summary>
-    public string? StageName { get; private set; }
+    /// <summary>Tên biến thể tạo hình do người dùng đặt, vd. "Mặc định", "Lúc nhỏ", "Trưởng thành". Không phải số phiên bản.</summary>
+    public string StageName { get; private set; } = "Mặc định";
 
     public bool IsInitialVersion { get; private set; } = false;
 
@@ -44,6 +44,22 @@ public class BibleEntryRevision : BaseEntity
     public Guid? CurrentConceptEventId { get; private set; }
     public BibleRevisionEvent? CurrentConceptEvent { get; private set; }
 
+    /// <summary>Soft endorsement (non-blocking) của Writer cho phiên bản Concept hiện hành.</summary>
+    public Guid? WriterEndorsedByUserId { get; private set; }
+    public DateTime? WriterEndorsedAt { get; private set; }
+    public int? WriterEndorsedConceptVersion { get; private set; }
+
+    public int? CurrentConceptVersionNumber =>
+        CurrentConceptEventId.HasValue
+            ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value)?.ConceptVersionNumber
+            : null;
+
+    public bool IsWriterEndorsedForCurrentConcept =>
+        WriterEndorsedAt.HasValue
+        && WriterEndorsedConceptVersion.HasValue
+        && CurrentConceptVersionNumber.HasValue
+        && WriterEndorsedConceptVersion.Value == CurrentConceptVersionNumber.Value;
+
     /// <summary>Dòng thời gian duyệt append-only của phiên bản này.</summary>
     public ICollection<BibleRevisionEvent> Events { get; private set; } = [];
 
@@ -53,7 +69,7 @@ public class BibleEntryRevision : BaseEntity
     /// <summary>Editor đã xác nhận và khoá revision này làm Canon tham chiếu. Chỉ thêm metadata, nội dung vẫn bất biến; không có thao tác mở khoá.</summary>
     public DateTime? LockedAt { get; private set; }
     public Guid? LockedById { get; private set; }
-    public bool IsLocked => LockedAt.HasValue || ReviewStatus == BibleRevisionStatus.CanonLocked;
+    public bool IsLocked => ReviewStatus == BibleRevisionStatus.CanonLocked;
     public bool IsSuperseded => Events.Any(e => e.Type == BibleRevisionEventType.Superseded);
 
     /// <summary>
@@ -85,9 +101,9 @@ public class BibleEntryRevision : BaseEntity
 
     /// <summary>
     /// V2.6 (Q20): Editor xác nhận = khoá Canon. Chỉ từ ConceptSubmitted, conceptEventId phải là phiên bản đang nộp.
-    /// Editor phải khác Artist đã nộp phiên bản đó (BR-06).
+    /// Editor phải khác Artist đã nộp phiên bản đó (BR-06), trừ khi Series bật AllowSoloCreatorReview.
     /// </summary>
-    public void ConfirmCanon(Guid editorId, Guid conceptEventId)
+    public void ConfirmCanon(Guid editorId, Guid conceptEventId, bool allowSoloCreatorReview = false)
     {
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá.");
         if (ReviewStatus != BibleRevisionStatus.ConceptSubmitted)
@@ -101,8 +117,9 @@ public class BibleEntryRevision : BaseEntity
             throw new InvalidOperationException("Phiên bản concept xác nhận không phải phiên bản đang nộp.");
 
         var currentEvt = Events.FirstOrDefault(e => e.Id == conceptEventId);
-        if ((currentEvt?.ActorId.HasValue == true && currentEvt.ActorId.Value == editorId)
-            || (ArtistUserId.HasValue && ArtistUserId.Value == editorId))
+        var isSelfApproval = (currentEvt?.ActorId.HasValue == true && currentEvt.ActorId.Value == editorId)
+            || (ArtistUserId.HasValue && ArtistUserId.Value == editorId);
+        if (isSelfApproval && !allowSoloCreatorReview)
         {
             throw new UnauthorizedAccessException("Editor không thể tự xác nhận bản vẽ do chính mình nộp (BR-06).");
         }
@@ -119,9 +136,60 @@ public class BibleEntryRevision : BaseEntity
             assetSha256: currentEvt?.AssetSha256));
     }
 
+    public void ClearWriterEndorsement()
+    {
+        WriterEndorsedByUserId = null;
+        WriterEndorsedAt = null;
+        WriterEndorsedConceptVersion = null;
+    }
+
+    /// <summary>
+    /// Soft endorsement (non-blocking) của Writer cho phiên bản ConceptSubmitted hiện tại.
+    /// </summary>
+    public void SetWriterEndorsement(Guid writerId, bool? endorse = null)
+    {
+        if (IsLocked)
+            throw new InvalidOperationException("Revision đã được khoá Canon.");
+        if (ReviewStatus != BibleRevisionStatus.ConceptSubmitted)
+            throw new InvalidOperationException("Chỉ xác nhận tạo hình được khi phiên bản đang ở trạng thái ConceptSubmitted.");
+
+        var currentEvt = CurrentConceptEventId.HasValue
+            ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value)
+            : null;
+        if (currentEvt is null || !currentEvt.ConceptVersionNumber.HasValue)
+            throw new InvalidOperationException("Revision chưa có bản vẽ Concept đang nộp.");
+
+        var currentVersion = currentEvt.ConceptVersionNumber.Value;
+        var shouldEndorse = endorse ?? !IsWriterEndorsedForCurrentConcept;
+
+        if (!shouldEndorse)
+        {
+            ClearWriterEndorsement();
+            return;
+        }
+
+        if (IsWriterEndorsedForCurrentConcept && WriterEndorsedByUserId == writerId)
+        {
+            return;
+        }
+
+        WriterEndorsedByUserId = writerId;
+        WriterEndorsedAt = DateTime.UtcNow;
+        WriterEndorsedConceptVersion = currentVersion;
+        Events.Add(BibleRevisionEvent.Create(
+            Id,
+            BibleRevisionEventType.Endorsed,
+            writerId,
+            comment: $"Writer xác nhận tạo hình v{currentVersion}",
+            imageUrl: ConceptImageUrl,
+            conceptVersionNumber: currentVersion,
+            assetSha256: currentEvt.AssetSha256));
+    }
+
     /// <summary>
     /// Artist nộp bản vẽ Concept (v1, v2, ...). Trạng thái chuyển thành ConceptSubmitted, tăng ConceptVersionNumber.
     /// Cho phép nộp từ Draft, ReworkRequired hoặc ConceptSubmitted (nộp đè phiên bản mới khi chưa duyệt).
+    /// Luôn xoá soft endorsement cũ để không áp dụng nhầm sang bản vẽ mới.
     /// </summary>
     public void SubmitConcept(Guid artistId, string imageUrl, string? note, string? assetSha256 = null)
     {
@@ -131,6 +199,7 @@ public class BibleEntryRevision : BaseEntity
         ConceptImageUrl = imageUrl.Trim();
         ReviewStatus = BibleRevisionStatus.ConceptSubmitted;
         ReworkFeedback = null;
+        ClearWriterEndorsement();
 
         var nextVersion = (Events
             .Where(e => e.Type == BibleRevisionEventType.ConceptSubmitted && e.ConceptVersionNumber.HasValue)
@@ -165,6 +234,7 @@ public class BibleEntryRevision : BaseEntity
                 : "Chưa có Concept để yêu cầu vẽ lại; muốn sửa nội dung hãy tạo bản sửa mới.");
         ReviewStatus = BibleRevisionStatus.ReworkRequired;
         ReworkFeedback = feedback.Trim();
+        ClearWriterEndorsement();
         var currentEvt = CurrentConceptEventId.HasValue ? Events.FirstOrDefault(e => e.Id == CurrentConceptEventId.Value) : null;
         Events.Add(BibleRevisionEvent.Create(
             Id,
@@ -203,6 +273,21 @@ public class BibleEntryRevision : BaseEntity
         Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.DraftOverwritten, authorId, summary));
     }
 
+    /// <summary>
+    /// Sửa nội dung nháp Draft: cập nhật nội dung văn bản đặc tả, giữ nguyên VersionNumber và RevisionId.
+    /// Không áp dụng cho bản đã khóa Canon (phải dùng /supersede).
+    /// </summary>
+    public void UpdateDraft(string summary, string snapshotJson, string contentHash, Guid authorId, string? stageName = null)
+    {
+        if (IsLocked) throw new InvalidOperationException("Revision đã được khoá; muốn đổi thiết kế phải dùng /supersede.");
+        Summary = summary.Trim();
+        SnapshotJson = string.IsNullOrWhiteSpace(snapshotJson) ? "{}" : snapshotJson.Trim();
+        ContentHash = contentHash.Trim();
+        AuthorId = authorId;
+        if (!string.IsNullOrWhiteSpace(stageName)) StageName = stageName.Trim();
+        Events.Add(BibleRevisionEvent.Create(Id, BibleRevisionEventType.DraftOverwritten, authorId, Summary));
+    }
+
     public static BibleEntryRevision Create(
         Guid bibleEntryId,
         int versionNumber,
@@ -221,7 +306,8 @@ public class BibleEntryRevision : BaseEntity
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentHash);
-        if (stageName?.Trim().Length > 100)
+        var effectiveStage = string.IsNullOrWhiteSpace(stageName) ? "Mặc định" : stageName.Trim();
+        if (effectiveStage.Length > 100)
             throw new ArgumentException("Tên giai đoạn tối đa 100 ký tự.");
 
         var revision = new BibleEntryRevision
@@ -233,7 +319,7 @@ public class BibleEntryRevision : BaseEntity
             ContentHash = contentHash.Trim(),
             AuthorId = authorId,
             AssociatedChapterId = associatedChapterId,
-            StageName = string.IsNullOrWhiteSpace(stageName) ? null : stageName.Trim(),
+            StageName = effectiveStage,
             IsInitialVersion = isInitialVersion,
             ArtistUserId = artistUserId,
             ReviewStatus = reviewStatus,

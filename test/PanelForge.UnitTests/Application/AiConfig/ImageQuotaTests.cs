@@ -75,10 +75,11 @@ public class ImageQuotaTests
         var db = new Mock<IPanelForgeDbContext>();
         db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         db.Setup(d => d.WorkspaceAiConfigs).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceAiConfig> { config }));
+        db.Setup(d => d.AiProviderCredentials).Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Ai.AiProviderCredential>()));
         db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        var handler = new UpdateWorkspaceAiConfigCommandHandler(db.Object, Mock.Of<IAiKeyProtector>(), Mock.Of<IAiProviderValidator>());
+        var handler = new UpdateWorkspaceAiConfigCommandHandler(db.Object);
         UpdateWorkspaceAiConfigCommand Cmd(long? images) =>
-            new(workspace.Id, "Google Gemini", null, true, 1_000_000, ["gemini-2.5-flash"], images);
+            new(workspace.Id, true, 1_000_000, ["gemini-2.5-flash"], images);
 
         var set = await handler.Handle(Cmd(200), CancellationToken.None);
         var kept = await handler.Handle(Cmd(null), CancellationToken.None);

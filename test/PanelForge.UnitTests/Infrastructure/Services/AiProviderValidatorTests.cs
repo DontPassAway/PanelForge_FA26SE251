@@ -27,11 +27,67 @@ public class AiProviderValidatorTests
     [InlineData(HttpStatusCode.TooManyRequests, true)]
     [InlineData(HttpStatusCode.BadRequest, false)]
     [InlineData(HttpStatusCode.Forbidden, false)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, false)]
     public async Task Gemini_UsesGoogleAnswer(HttpStatusCode status, bool ok)
     {
         var handler = new Handler(status);
         (await Create(handler).ValidateCredentialsAsync("Google Gemini", " key-123 ")).IsSuccess.Should().Be(ok);
         handler.Key.Should().Be("key-123");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, true)]
+    [InlineData(HttpStatusCode.TooManyRequests, false)]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    public async Task ProbeAsync_Reports429And5xxHonestlyForTestButton(HttpStatusCode status, bool ok)
+    {
+        var handler = new Handler(status);
+        (await Create(handler).ProbeAsync("Gemini", null, "key-123")).IsSuccess.Should().Be(ok);
+    }
+
+    [Theory]
+    [InlineData("••••abcd")]
+    [InlineData("key with spaces")]
+    public async Task MaskedOrInvalidToken_IsRejectedWithoutFormatException(string badToken)
+    {
+        var validator = new AiProviderValidator(Mock.Of<IHttpClientFactory>());
+        (await validator.ValidateCredentialsAsync("Gemini", badToken)).IsSuccess.Should().BeFalse();
+        (await validator.ValidateCloudflareAsync("acc-1", badToken)).IsSuccess.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CloudflareModels_KeepsTextAndImageOnly_AndMarksCfModelsFree()
+    {
+        const string body = """
+            {"success":true,"result":[
+              {"name":"@cf/meta/llama-3.1-8b-instruct","task":{"name":"Text Generation"},"description":"small"},
+              {"name":"pruna/z-image-turbo","task":{"name":"Text-to-Image"}},
+              {"name":"@cf/black-forest-labs/flux-1-schnell","task":{"name":"Text-to-Image"}},
+              {"name":"@cf/openai/whisper","task":{"name":"Automatic Speech Recognition"}}
+            ]}
+            """;
+        HttpRequestMessage? sent = null;
+        var http = new HttpClient(new StubHandler(r =>
+        {
+            sent = r;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        }));
+        var validator = new AiProviderValidator(Mock.Of<IHttpClientFactory>(f => f.CreateClient(It.IsAny<string>()) == http));
+
+        var result = await validator.ListCloudflareModelsAsync("acc-1", "cf-token");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Select(m => (m.Id, m.Kind, m.Free)).Should().Equal(
+            ("@cf/black-forest-labs/flux-1-schnell", "image", true),
+            ("pruna/z-image-turbo", "image", false),
+            ("@cf/meta/llama-3.1-8b-instruct", "text", true));
+        sent!.RequestUri!.AbsolutePath.Should().Be("/client/v4/accounts/acc-1/ai/models/search");
+        sent.Headers.Authorization!.Parameter.Should().Be("cf-token");
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> f) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) => Task.FromResult(f(r));
     }
 
     [Fact]

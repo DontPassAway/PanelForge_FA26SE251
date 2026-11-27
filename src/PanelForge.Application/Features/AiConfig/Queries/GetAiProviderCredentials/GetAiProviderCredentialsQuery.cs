@@ -17,11 +17,16 @@ public sealed class GetAiProviderCredentialsQueryHandler(IPanelForgeDbContext db
     public async Task<Result<IReadOnlyList<AiProviderCredentialDto>>> Handle(GetAiProviderCredentialsQuery request, CancellationToken ct)
     {
         var credentials = await db.AiProviderCredentials.AsNoTracking().OrderBy(c => c.Name).ToListAsync(ct);
-        var usage = await db.WorkspaceAiConfigs.AsNoTracking()
-            .Where(w => w.ProviderCredentialId != null)
-            .GroupBy(w => w.ProviderCredentialId!.Value)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        // Một Studio dùng API cho cả chữ lẫn ảnh chỉ tính một lần
+        var links = await db.WorkspaceAiConfigs.AsNoTracking()
+            .Where(w => w.ProviderCredentialId != null || w.ImageProviderCredentialId != null)
+            .Select(w => new { w.WorkspaceId, w.ProviderCredentialId, w.ImageProviderCredentialId })
+            .ToListAsync(ct);
+        var usage = links
+            .SelectMany(w => new[] { w.ProviderCredentialId, w.ImageProviderCredentialId }.OfType<Guid>().Distinct()
+                .Select(id => (id, w.WorkspaceId)))
+            .GroupBy(x => x.id)
+            .ToDictionary(g => g.Key, g => g.Count());
 
         return Result<IReadOnlyList<AiProviderCredentialDto>>.Success(
             credentials.Select(c => AiCredentials.ToDto(c, protector, usage.GetValueOrDefault(c.Id))).ToList());

@@ -42,13 +42,18 @@ internal static class ScriptLineRules
 
         var pageIds = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapterId).Select(p => p.Id).ToListAsync(ct);
         var panelIds = new HashSet<Guid>();
+        var reopened = new List<Domain.Entities.Workflow.StageTask>();
         foreach (var pageId in pageIds)
         {
             var page = await pages.GetAsync(pageId, ct);
             var bound = page?.Elements.Values.Where(e => !e.IsRemoved && e.ScriptLineId == line.Id).ToList() ?? [];
             if (bound.Count == 0) continue;
 
-            foreach (var cell in gridLettering.Where(t => t.PageId == pageId)) cell.Reopen("Thoại trên trang đã thay đổi, cần dàn chữ lại.");
+            foreach (var cell in gridLettering.Where(t => t.PageId == pageId))
+            {
+                cell.Reopen("Thoại trên trang đã thay đổi, cần dàn chữ lại.");
+                reopened.Add(cell);
+            }
 
             var pagePanels = await db.Panels.AsNoTracking().Where(p => p.PageId == pageId).Select(p => p.Id).ToListAsync(ct);
             foreach (var element in bound)
@@ -57,6 +62,16 @@ internal static class ScriptLineRules
                 else if (line.PanelId is { } anchor && pagePanels.Contains(anchor)) panelIds.Add(anchor);
                 else panelIds.UnionWith(pagePanels);
             }
+        }
+
+        if (reopened.Count > 0)
+        {
+            // N4: ô hạ nguồn của ô Lettering vừa mở lại không còn đủ tiền đề
+            var stages = await TaskGrid.Common.TaskGridRules.LoadStagesAsync(db, reopened[0].SeriesId, ct);
+            var chapterTasks = await db.StageTasks.Where(t => t.ChapterId == chapterId).ToListAsync(ct);
+            foreach (var cell in reopened)
+                foreach (var downstream in TaskGrid.Common.TaskGridRules.Downstream(cell, stages, chapterTasks))
+                    downstream.ClearReady();
         }
 
         if (!v2Approved) return null;

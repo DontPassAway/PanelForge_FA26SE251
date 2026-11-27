@@ -8,6 +8,7 @@ using DomainPanel = PanelForge.Domain.Entities.Content.Panel;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.ScriptLines.Common;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Panels.Commands.CreatePanel;
 
@@ -34,19 +35,38 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
     public async Task<Result<PanelDto>> Handle(CreatePanelCommand command, CancellationToken cancellationToken)
     {
         // 1. Kiểm tra Page có tồn tại không
-        var chapterId = await _dbContext.Pages
+        var chapterInfo = await _dbContext.Pages
             .Where(p => p.Id == command.PageId)
-            .Select(p => (Guid?)p.ChapterId)
+            .Select(p => new { ChapterId = (Guid?)p.ChapterId, p.Chapter.Status, p.Chapter.SeriesId })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (chapterId is null)
+        if (chapterInfo?.ChapterId is null)
             return Result<PanelDto>.Failure($"Page {command.PageId} không tồn tại.");
+
+        // Ở giai đoạn PreProduction, kịch bản là SSOT duy nhất do Writer quản lý.
+        // Họa sĩ không thể tự tạo khung trước khi kịch bản được chốt (Gate 1).
+        if (chapterInfo.Status == ChapterStatus.PreProduction)
+        {
+            var workspaceId = await _dbContext.Series
+                .Where(s => s.Id == chapterInfo.SeriesId)
+                .Select(s => s.WorkspaceId)
+                .FirstOrDefaultAsync(cancellationToken);
+            var role = await _auth.GetMemberRoleAsync(command.UserId, workspaceId, cancellationToken);
+            if (role != WorkspaceRole.Writer && role != WorkspaceRole.Producer)
+            {
+                return Result<PanelDto>.Failure(
+                    "Không thể tạo khung tranh trong giai đoạn Tiền sản xuất (PreProduction). Kịch bản cần được chốt trước khi phân khung.",
+                    ResultErrorCodes.Forbidden);
+            }
+        }
+
+        var chapterId = chapterInfo.ChapterId.Value;
         if (await ChapterEditGuard.ReadOnlyReasonForPageAsync(_dbContext, command.PageId, cancellationToken) is { } readOnly)
             return Result<PanelDto>.Failure(readOnly, ResultErrorCodes.ChapterReadOnly);
         // Chỉ người giữ việc đang làm của phần này mới ghi (không đè phần đã chuyển giao cho người khác)
         if (await WorkScopeGuard.DenyReasonAsync(_dbContext, command.UserId, command.PageId, null, cancellationToken, layout: true) is { } outOfScope)
             return Result<PanelDto>.Failure(outOfScope, ResultErrorCodes.Forbidden);
-        if (await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, command.UserId, chapterId.Value, cancellationToken) is { } writerBlock)
+        if (await ScriptLineRules.WriterStructureBlockedReasonAsync(_dbContext, _auth, command.UserId, chapterId, cancellationToken) is { } writerBlock)
             return Result<PanelDto>.Failure(writerBlock.Error, writerBlock.Code);
 
         // 2. Tính số Panel và ReadingOrder tự động nếu chưa truyền vào
