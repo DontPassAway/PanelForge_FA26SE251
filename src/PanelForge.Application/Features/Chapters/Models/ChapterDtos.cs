@@ -35,7 +35,9 @@ public sealed record ChapterDto(
     Guid? PreviousSubmittedVersionId = null,
     bool IsHandedOff = false,
     DateTime? HandedOffAt = null,
-    Guid? HandedOffById = null
+    Guid? HandedOffById = null,
+    Guid? FrozenScriptVersionId = null,
+    Guid? PreviousFrozenScriptVersionId = null
 );
 
 public sealed record ChapterSceneSummaryDto(

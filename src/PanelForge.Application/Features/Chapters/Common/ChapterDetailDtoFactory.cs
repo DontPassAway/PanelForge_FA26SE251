@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Domain.Entities.Content;
 
@@ -34,6 +35,7 @@ internal static class ChapterDetailDtoFactory
             ScriptReopenReason: chapter.ScriptReopenReason,
             ScriptReopenRequestedById: chapter.ScriptReopenRequestedById,
             ScriptReopenRequestedAt: chapter.ScriptReopenRequestedAt,
+            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
             ScriptContentHash: chapter.ScriptContentHash,
             ScriptStatus: chapter.ScriptStatus,
             ScriptSubmittedAt: chapter.ScriptSubmittedAt,
