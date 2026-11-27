@@ -72,7 +72,11 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
             var rejectedAt = await _db.StageTaskSubmissions.AsNoTracking()
                 .Where(s => s.StageTaskId == task.Id && s.Status == SubmissionStatus.Rejected)
                 .OrderByDescending(s => s.AttemptNumber).Select(s => s.DecidedAt).FirstOrDefaultAsync(ct);
-            var reason = roleByLot.GetValueOrDefault(task.LotId!.Value) switch
+            var role = roleByLot.GetValueOrDefault(task.LotId!.Value);
+            // BR-31: Artist giữ ô Lettering → kiểm bóng thoại như Letterer, không bắt ảnh
+            if (role == WorkspaceRole.Artist && await StageProgressRules.IsLetteringStageAsync(_db, task.PipelineStageId, ct))
+                role = WorkspaceRole.Letterer;
+            var reason = role switch
             {
                 WorkspaceRole.Artist => await StageProgressRules.ArtworkBlockReasonAsync(
                     _db, task.PipelineStageId, chapterPanels.Where(p => p.PageId == task.PageId).ToList(), rejectedAt, ct),

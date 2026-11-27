@@ -160,6 +160,8 @@ internal static class StageProgressRules
         }
         else if (a.AssignedRole == WorkspaceRole.Artist)
         {
+            // BR-31: Artist tự đặt chữ → cổng nộp là đủ bóng thoại (LetteringBlockReasonAsync), không phải ảnh.
+            if (await IsLetteringStageAsync(db, a.PipelineStageId, ct)) return null;
             var rejectedAt = await db.Submissions.AsNoTracking()
                 .Where(s => s.AssignmentId == a.Id && s.Status == SubmissionStatus.Rejected)
                 .OrderByDescending(s => s.AttemptNumber)
@@ -169,6 +171,14 @@ internal static class StageProgressRules
 
         return null;
     }
+
+    /// <summary>
+    /// Công đoạn đặt chữ (lớp chữ vector, BR-19/BR-31): stage dành cho Letterer, hoặc slug mặc định "letter"/"lettering".
+    /// </summary>
+    public static Task<bool> IsLetteringStageAsync(IPanelForgeDbContext db, Guid stageId, CancellationToken ct) =>
+        db.PipelineStages.AsNoTracking().AnyAsync(
+            s => s.Id == stageId &&
+                 (s.AllowedRole == WorkspaceRole.Letterer || s.Slug == "letter" || s.Slug == "lettering"), ct);
 
     /// <summary>
     /// Điều kiện nộp của Artist (CF2): có Panel, thứ tự đọc hợp lệ, và mỗi trang có ảnh cả trang hoặc ảnh cho mọi Panel ở
@@ -205,7 +215,9 @@ internal static class StageProgressRules
     public static async Task<string?> LetteringBlockReasonAsync(
         IPanelForgeDbContext db, IPageRepository pages, Assignment a, IReadOnlyList<Panel> panels, CancellationToken ct)
     {
-        if (a.AssignedRole != WorkspaceRole.Letterer) return null;
+        if (a.AssignedRole != WorkspaceRole.Letterer &&
+            !(a.AssignedRole == WorkspaceRole.Artist && await IsLetteringStageAsync(db, a.PipelineStageId, ct)))
+            return null;
 
         var pageIds = a.EntityType switch
         {

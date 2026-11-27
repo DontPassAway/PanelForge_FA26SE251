@@ -663,6 +663,22 @@ public class TaskGridHandlerTests
         pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
+    /// <summary>BR-31: Artist tự đặt chữ thì công đoạn Lettering là lớp chữ vector, không bắt tải ảnh như Pencil/Ink.</summary>
+    [Fact]
+    public async Task Submit_ArtistLetteringCell_DoesNotRequireArtwork_BR31()
+    {
+        var f = new Fixture();
+        (await f.Generate()).IsSuccess.Should().BeTrue();
+        var letter = f.Cell(f.Lettering, 0);
+        (await f.Assign(false, f.Lot(f.Lettering, f.ArtistId, letter))).IsSuccess.Should().BeTrue();
+        letter.Start(prerequisitesApproved: true);
+        f.Artwork.RemoveAll(r => r.PipelineStageId == f.Lettering.Id);
+
+        var result = await f.Submit(f.ArtistId, letter);
+
+        (result.ErrorMessage ?? string.Empty).Should().NotContain("artwork");
+    }
+
     /// <summary>BR-06: người làm không tự duyệt; Editor duyệt được và lô hoàn tất.</summary>
     [Fact]
     public async Task Approve_GatedStage_SelfApprovalForbidden_EditorApproves_LotCompletes()
