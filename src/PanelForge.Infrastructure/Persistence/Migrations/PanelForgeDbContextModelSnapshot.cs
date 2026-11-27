@@ -3796,6 +3796,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("two_factor_last_used_step");
 
+                    b.Property<string>("TwoFactorRecoveryCodes")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("two_factor_recovery_codes");
+
                     b.Property<string>("TwoFactorSecret")
                         .HasColumnType("varchar(255)")
                         .HasColumnName("two_factor_secret");

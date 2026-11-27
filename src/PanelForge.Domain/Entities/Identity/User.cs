@@ -36,6 +36,11 @@ public class User : BaseEntity
     public string? TwoFactorSecret { get; private set; }
     /// <summary>Bước thời gian (30 giây) của mã TOTP được chấp nhận gần nhất; chặn dùng lại mã.</summary>
     public long? TwoFactorLastUsedStep { get; private set; }
+    /// <summary>Hash SHA-256 của các mã khôi phục 2FA chưa dùng, nối bằng ';'. Mã thô chỉ trả cho người dùng một lần.</summary>
+    public string? TwoFactorRecoveryCodes { get; private set; }
+
+    public int TwoFactorRecoveryCodesLeft =>
+        string.IsNullOrEmpty(TwoFactorRecoveryCodes) ? 0 : TwoFactorRecoveryCodes.Split(';').Length;
 
     /// <summary>
     /// BR-22: Cờ cấp phép tạo Studio. Chỉ Administrator mới được grant/revoke.
@@ -149,6 +154,26 @@ public class User : BaseEntity
         ArgumentException.ThrowIfNullOrWhiteSpace(secret);
         TwoFactorSecret = secret.Trim();
         TwoFactorLastUsedStep = null;
+        TwoFactorRecoveryCodes = null;
+    }
+
+    /// <summary>Thay toàn bộ mã khôi phục (mã cũ hết hiệu lực).</summary>
+    public void ReplaceRecoveryCodes(IEnumerable<string> codeHashes)
+    {
+        var hashes = codeHashes.Where(h => !string.IsNullOrWhiteSpace(h)).ToList();
+        if (hashes.Count == 0)
+            throw new ArgumentException("Cần ít nhất một mã khôi phục.", nameof(codeHashes));
+        TwoFactorRecoveryCodes = string.Join(';', hashes);
+    }
+
+    /// <summary>Dùng một mã khôi phục: đúng thì xoá khỏi danh sách (mỗi mã chỉ dùng một lần).</summary>
+    public bool TryConsumeRecoveryCode(string codeHash)
+    {
+        if (string.IsNullOrEmpty(TwoFactorRecoveryCodes)) return false;
+        var hashes = TwoFactorRecoveryCodes.Split(';').ToList();
+        if (!hashes.Remove(codeHash)) return false;
+        TwoFactorRecoveryCodes = hashes.Count == 0 ? null : string.Join(';', hashes);
+        return true;
     }
 
     /// <summary>
@@ -177,6 +202,7 @@ public class User : BaseEntity
         TwoFactorEnabled = false;
         TwoFactorSecret = null;
         TwoFactorLastUsedStep = null;
+        TwoFactorRecoveryCodes = null;
     }
 
     public void LinkFirebase(string firebaseUid)

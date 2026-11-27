@@ -118,6 +118,13 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.TwoFactorLastUsedStep)
                .HasColumnName("two_factor_last_used_step");
 
+        // 10 hash hex 64 ký tự + dấu ';' (~650 ký tự)
+        builder.Property(u => u.TwoFactorRecoveryCodes)
+               .HasColumnName("two_factor_recovery_codes")
+               .HasColumnType("varchar(1000)");
+
+        builder.Ignore(u => u.TwoFactorRecoveryCodesLeft);
+
         // BR-22: Studio creation permission flag (Admin-granted)
         builder.Property(u => u.CanCreateStudio)
                .HasColumnName("can_create_studio")
