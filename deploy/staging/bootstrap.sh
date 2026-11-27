@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Cài staging BE PanelForge lần đầu trên VM Ubuntu 24.04 (Azure x64 hoặc Oracle Ampere A1 ARM). Chạy bằng root, chạy lại được.
-# Dùng: bash bootstrap.sh [ref chứa deploy/staging, mặc định stg]
+# Dùng: bash bootstrap.sh [ref chứa deploy/staging, mặc định main] [nhánh được deploy, mặc định main]
 set -euxo pipefail
 APP=/opt/panelforge
 REPO=https://github.com/DontPassAway/PanelForge_FA26SE251.git
-DEPLOY_REF="${1:-stg}"
+DEPLOY_REF="${1:-main}"
+BRANCH="${2:-main}"
 
 # 1) Chỉ Ubuntu image của Oracle chặn mọi cổng vào trừ 22 (có netfilter-persistent); Azure mở cổng bằng NSG ngoài VM.
 #    Mở 80/443 và lưu lại TRƯỚC khi cài Docker (lưu sau khi có Docker sẽ ghi cả rule của Docker, khởi động lại bị trùng rule).
@@ -31,9 +32,9 @@ apt-get install -y -q docker.io docker-compose-v2 docker-buildx git curl openssl
 systemctl enable --now docker
 for u in ubuntu azureuser; do usermod -aG docker "$u" 2>/dev/null || true; done # user SSH mặc định của Oracle / Azure
 
-# 4) Mã nguồn nhánh stg + file deploy lấy từ DEPLOY_REF.
+# 4) Mã nguồn nhánh $BRANCH + file deploy lấy từ DEPLOY_REF.
 mkdir -p "$APP"
-[ -d "$APP/src/.git" ] || git clone --branch stg "$REPO" "$APP/src"
+[ -d "$APP/src/.git" ] || git clone --branch "$BRANCH" "$REPO" "$APP/src"
 git -C "$APP/src" fetch --quiet origin "$DEPLOY_REF"
 for f in docker-compose.yml Caddyfile Dockerfile.ai deploy.sh; do
   git -C "$APP/src" show "FETCH_HEAD:deploy/staging/$f" > "$APP/$f.new"
@@ -56,21 +57,22 @@ EOF
   )
 fi
 
-# 6) Tự deploy: timer kiểm tra nhánh stg mỗi 2 phút.
+# 6) Tự deploy: timer kiểm tra nhánh $BRANCH mỗi 2 phút.
 cat > /etc/systemd/system/panelforge-deploy.service <<EOF
 [Unit]
-Description=PanelForge staging deploy (nhanh stg)
+Description=PanelForge deploy (nhanh $BRANCH)
 After=docker.service network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
+Environment=BRANCH=$BRANCH
 ExecStart=$APP/deploy.sh
 TimeoutStartSec=45min
 EOF
 cat > /etc/systemd/system/panelforge-deploy.timer <<EOF
 [Unit]
-Description=Kiem tra nhanh stg moi 2 phut
+Description=Kiem tra nhanh $BRANCH moi 2 phut
 
 [Timer]
 OnBootSec=2min

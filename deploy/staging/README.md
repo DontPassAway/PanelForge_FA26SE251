@@ -1,11 +1,11 @@
 # Staging BE trên Oracle Cloud
 
-Nhánh `stg` được deploy lên một VM Oracle Always Free (Ampere A1, ARM, Ubuntu 24.04). VM tự build từ mã nguồn, không dùng image GHCR: image do `ci.yml` build chỉ có bản x64.
+Nhánh `main` (đổi được, xem tham số `bootstrap.sh`) được deploy lên một VM Ubuntu 24.04: Azure for Students (x64) hoặc Oracle Always Free (Ampere A1, ARM). VM tự build từ mã nguồn, không dùng image GHCR: image do `ci.yml` build chỉ có bản x64 và có thể private.
 
 ## Luồng CI/CD
 
-1. Push lên `stg` → GitHub Actions (`.github/workflows/ci.yml`) chạy build + test như cũ.
-2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút: có commit mới trên `stg` thì `git reset` về commit đó, `docker compose build`, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200.
+1. Push lên `main` → GitHub Actions (`.github/workflows/ci.yml`) chạy build + test như cũ.
+2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút: có commit mới trên `main` thì `git reset` về commit đó, `docker compose build`, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200.
 3. Build lỗi thì giữ bản cũ đang chạy, ghi log, không build lại cho tới commit sau.
 
 VM không giữ secret nào của GitHub và GitHub không cần SSH key vào VM: VM tự kéo code từ repo public.
@@ -30,13 +30,15 @@ Tạo instance Ubuntu 24.04 aarch64, dán vào ô cloud-init (Advanced options �
 #!/bin/bash
 exec > /var/log/panelforge-bootstrap.log 2>&1
 set -eux
-git clone --branch stg https://github.com/DontPassAway/PanelForge_FA26SE251.git /opt/panelforge/src
-git -C /opt/panelforge/src fetch origin stg
+git clone --branch main https://github.com/DontPassAway/PanelForge_FA26SE251.git /opt/panelforge/src
+git -C /opt/panelforge/src fetch origin main
 git -C /opt/panelforge/src show FETCH_HEAD:deploy/staging/bootstrap.sh > /root/panelforge-bootstrap.sh
-bash /root/panelforge-bootstrap.sh stg
+bash /root/panelforge-bootstrap.sh main main
 ```
 
-(Trước khi `deploy/staging` vào `stg`, thay `stg` ở hai dòng cuối bằng nhánh đang chứa thư mục này.)
+`bootstrap.sh <ref lấy file deploy> <nhánh được deploy>`: ref đầu là nơi lấy `deploy/staging` (dùng nhánh có bản mới nhất của thư mục này), nhánh sau là code được build và theo dõi.
+
+**Azure** (ô *Custom data* ở tab Advanced khi tạo VM): mở cổng 80/443 bằng *inbound ports* của VM (NSG), user SSH mặc định là `azureuser`, đặt *DNS name label* cho Public IP để có tên `<label>.<region>.cloudapp.azure.com`.
 
 Trên Oracle, thêm Ingress Rule TCP 80 và 443 từ `0.0.0.0/0` vào Security List của subnet. `bootstrap.sh` mở hai cổng này trong iptables của VM, cài Docker, sinh secret vào `/opt/panelforge/.env` (chmod 600) và bật timer.
 
@@ -46,13 +48,13 @@ Máy Windows có Docker Desktop chạy được cùng stack này, đưa API ra i
 
 ```powershell
 mkdir D:\PanelForge\staging; cd D:\PanelForge\staging
-git -c core.autocrlf=false clone --branch stg https://github.com/DontPassAway/PanelForge_FA26SE251.git src
+git -c core.autocrlf=false clone --branch main https://github.com/DontPassAway/PanelForge_FA26SE251.git src
 copy src\deploy\staging\docker-compose.yml, src\deploy\staging\selfhost.yml, src\deploy\staging\Dockerfile.ai, src\deploy\staging\Caddyfile, src\deploy\staging\watch-stg.ps1 .
 # tạo .env cùng các biến như bảng dưới (POSTGRES_PASSWORD, JWT_SECRET, AI_SERVICE_KEY sinh ngẫu nhiên)
 powershell -ExecutionPolicy Bypass -File .\watch-stg.ps1
 ```
 
-`watch-stg.ps1` làm việc của `deploy.sh` + timer: mỗi 2 phút kiểm tra `stg`, có commit mới thì build lại, in URL `https://*.trycloudflare.com`. Giới hạn: máy phải bật, URL đổi khi container `tunnel` khởi động lại (`docker compose -f docker-compose.yml -f selfhost.yml logs tunnel` để xem URL hiện tại).
+`watch-stg.ps1` (tham số `-Branch`, mặc định `main`) làm việc của `deploy.sh` + timer: mỗi 2 phút kiểm tra nhánh, có commit mới thì build lại, in URL `https://*.trycloudflare.com`. Giới hạn: máy phải bật, URL đổi khi container `tunnel` khởi động lại (`docker compose -f docker-compose.yml -f selfhost.yml logs tunnel` để xem URL hiện tại).
 
 ## Vận hành
 

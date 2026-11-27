@@ -1,6 +1,6 @@
-# Self-host staging tren Windows (Docker Desktop): kiem tra nhanh stg moi 2 phut, co commit moi thi build lai va chay.
-# Chay trong thu muc chua docker-compose.yml, selfhost.yml, Dockerfile.ai, .env va src\ (ban clone nhanh stg). Ctrl+C de dung.
-param([int]$IntervalSec = 120)
+# Self-host tren Windows (Docker Desktop): kiem tra nhanh $Branch moi 2 phut, co commit moi thi build lai va chay.
+# Chay trong thu muc chua docker-compose.yml, selfhost.yml, Dockerfile.ai, .env va src\ (ban clone nhanh do). Ctrl+C de dung.
+param([string]$Branch = 'main', [int]$IntervalSec = 120)
 Set-Location $PSScriptRoot
 $compose = @('-f', 'docker-compose.yml', '-f', 'selfhost.yml')
 
@@ -11,12 +11,12 @@ function Show-TunnelUrl {
 }
 
 while ($true) {
-    git -C src fetch --quiet origin stg
-    $new = (git -C src rev-parse origin/stg | Out-String).Trim()
+    git -C src fetch --quiet origin $Branch
+    $new = (git -C src rev-parse "origin/$Branch" | Out-String).Trim()
     $old = if (Test-Path .deployed) { (Get-Content .deployed -Raw).Trim() } else { '' }
 
     if ($new -and $new -ne $old) {
-        Write-Host "$(Get-Date -Format s) Deploy stg @ $($new.Substring(0, 7))" -ForegroundColor Cyan
+        Write-Host "$(Get-Date -Format s) Deploy $Branch @ $($new.Substring(0, 7))" -ForegroundColor Cyan
         git -C src reset --quiet --hard $new
         # Ghi truoc khi build: build loi thi doi commit sau, khong build lai lien tuc.
         Set-Content .deployed $new

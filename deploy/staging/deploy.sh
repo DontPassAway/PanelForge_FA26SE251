@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Deploy staging: lấy commit mới nhất của nhánh stg, có thay đổi (hoặc --force) thì build lại và chạy.
+# Deploy: lấy commit mới nhất của nhánh $BRANCH (mặc định main), có thay đổi (hoặc --force) thì build lại và chạy.
 # systemd timer panelforge-deploy.timer gọi script này mỗi 2 phút. Log: journalctl -u panelforge-deploy
 set -euo pipefail
 cd /opt/panelforge
-BRANCH="${BRANCH:-stg}"
+BRANCH="${BRANCH:-main}"
 
 exec 9>/run/panelforge-deploy.lock
 flock -n 9 || exit 0 # lượt trước chưa xong
