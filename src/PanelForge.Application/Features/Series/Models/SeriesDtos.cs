@@ -59,7 +59,9 @@ public sealed record SeriesDetailDto(
     string? Logline = null,
     string? Teaser = null,
     string? AgeRating = null,
-    bool AllowSoloCreatorReview = false
+    bool AllowSoloCreatorReview = false,
+    /// <summary>Spec D10: vai trò của người gọi trong Series (Producer của Studio = Producer; chưa gán = null).</summary>
+    WorkspaceRole? CurrentUserRole = null
 );
 
 public sealed record UpdateSeriesLanguagesRequest(
