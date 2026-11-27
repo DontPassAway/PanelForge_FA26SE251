@@ -12,6 +12,7 @@ using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterLockGate;
 using PanelForge.Application.Features.Chapters.Commands.CreateChapter;
 using PanelForge.Application.Features.Chapters.Commands.DeleteChapter;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
 using PanelForge.Application.Features.Chapters.Commands.ReopenChapter;
 using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
@@ -524,25 +525,25 @@ public sealed class ChaptersController : ControllerBase
 
     /// <summary>
     /// POST /api/editions/{editionId}/publish
-    /// Publisher phát hành ấn bản.
+    /// Publisher phát hành ấn bản theo editionId.
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/publish")]
-    [Authorize(Roles = "Publisher,Admin")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> PublishEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishChapterCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt, IsSchedule: false), cancellationToken));
 
     /// <summary>
     /// POST /api/editions/{editionId}/schedule
-    /// Publisher lên lịch phát hành ấn bản.
+    /// Publisher lên lịch phát hành ấn bản theo editionId.
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/schedule")]
-    [Authorize(Roles = "Publisher,Admin")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ScheduleEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishChapterCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt, IsSchedule: true), cancellationToken));
 
     /// <summary>GET /api/chapters/{chapterId}/reviews — lịch sử phê duyệt cấp Chapter (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/reviews")]

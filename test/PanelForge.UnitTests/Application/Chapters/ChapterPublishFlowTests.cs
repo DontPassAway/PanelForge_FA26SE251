@@ -502,4 +502,110 @@ public class ChapterPublishFlowTests
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
     }
+
+    [Fact]
+    public async Task PublishEditionById_OriginalEdition_ShouldPublishSuccessfully()
+    {
+        await Approve();
+        await HandOff();
+        var origEdition = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == "vi");
+        origEdition.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _publisherId);
+        await _db.SaveChangesAsync();
+
+        var result = await new PanelForge.Application.Features.Chapters.Commands.Editions.PublishEditionByIdCommandHandler(_db)
+            .Handle(new(origEdition.Id, _publisherId, PublishAt: null, IsSchedule: false), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Action.Should().Be(ChapterReviewAction.PublisherPublished);
+        _chapter.Status.Should().Be(ChapterStatus.HandedOffAndPublished);
+        origEdition.Status.Should().Be(EditionStatus.Published);
+    }
+
+    [Fact]
+    public async Task ScheduleEditionById_OriginalEdition_ShouldScheduleSuccessfully()
+    {
+        await Approve();
+        await HandOff();
+        var origEdition = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == "vi");
+        origEdition.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _publisherId);
+        await _db.SaveChangesAsync();
+        var due = DateTime.UtcNow.AddDays(2);
+
+        var result = await new PanelForge.Application.Features.Chapters.Commands.Editions.PublishEditionByIdCommandHandler(_db)
+            .Handle(new(origEdition.Id, _publisherId, PublishAt: due, IsSchedule: true), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.ScheduledAt.Should().BeCloseTo(due, TimeSpan.FromSeconds(1));
+        _chapter.Status.Should().Be(ChapterStatus.HandedOffAndPublished);
+        origEdition.Status.Should().Be(EditionStatus.Published);
+    }
+
+    [Fact]
+    public async Task PublishEditionById_WithoutMonetizationConfigured_ShouldConflict_D4()
+    {
+        await Approve();
+        await HandOff();
+        var origEdition = _db.ChapterEditions.Single(e => e.ChapterId == _chapter.Id && e.LanguageCode == "vi");
+
+        var result = await new PanelForge.Application.Features.Chapters.Commands.Editions.PublishEditionByIdCommandHandler(_db)
+            .Handle(new(origEdition.Id, _publisherId, PublishAt: null, IsSchedule: false), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        _chapter.Status.Should().Be(ChapterStatus.ChapterApproved);
+    }
+
+    [Fact]
+    public async Task PublishEditionById_TranslatedEdition_ShouldPublishNow_AndRejectScheduleWithConflict()
+    {
+        await Approve();
+        await HandOff();
+        await Publish();
+
+        var snapshot = _db.ChapterSnapshots.Single();
+        var enEdition = ChapterEdition.Create(_chapter.Id, "en");
+        enEdition.Approve(snapshot.Id, _producerId);
+        enEdition.SetMonetization(isPaid: false, priceVnd: 0m, freePreviewPages: 0, configuredById: _publisherId);
+        _db.ChapterEditions.Add(enEdition);
+        await _db.SaveChangesAsync();
+
+        var handler = new PanelForge.Application.Features.Chapters.Commands.Editions.PublishEditionByIdCommandHandler(_db);
+
+        var scheduleResult = await handler.Handle(
+            new(enEdition.Id, _publisherId, PublishAt: DateTime.UtcNow.AddDays(1), IsSchedule: true), default);
+        scheduleResult.IsSuccess.Should().BeFalse();
+        scheduleResult.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        enEdition.Status.Should().Be(EditionStatus.Approved);
+
+        var publishResult = await handler.Handle(
+            new(enEdition.Id, _publisherId, PublishAt: null, IsSchedule: false), default);
+        publishResult.IsSuccess.Should().BeTrue();
+        enEdition.Status.Should().Be(EditionStatus.Published);
+    }
+
+    [Fact]
+    public async Task PublishEditionById_UnknownId_ShouldReturnNotFound()
+    {
+        var result = await new PanelForge.Application.Features.Chapters.Commands.Editions.PublishEditionByIdCommandHandler(_db)
+            .Handle(new(Guid.NewGuid(), _publisherId, PublishAt: null, IsSchedule: false), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public void EditionPublishAndScheduleEndpoints_MustBePublisherOnly()
+    {
+        var publishAttr = typeof(ChaptersController)
+            .GetMethod(nameof(ChaptersController.PublishEdition))!
+            .GetCustomAttribute<AuthorizeAttribute>();
+        publishAttr.Should().NotBeNull();
+        publishAttr!.Roles.Should().Be("Publisher");
+
+        var scheduleAttr = typeof(ChaptersController)
+            .GetMethod(nameof(ChaptersController.ScheduleEdition))!
+            .GetCustomAttribute<AuthorizeAttribute>();
+        scheduleAttr.Should().NotBeNull();
+        scheduleAttr!.Roles.Should().Be("Publisher");
+    }
 }
