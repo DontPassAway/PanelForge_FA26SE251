@@ -79,7 +79,7 @@ internal sealed record AiWorkflowFacts(
         IPanelForgeDbContext db, IWorkspaceAuthorizationService auth, Guid userId, Guid workspaceId,
         Chapter chapter, Scene? scene, CancellationToken ct)
     {
-        var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
+        var role = await auth.GetSeriesMemberRoleAsync(userId, chapter.SeriesId, ct); // spec D10: vai trò theo Series
         var aiEnabled = await db.WorkspaceAiConfigs.AsNoTracking().AnyAsync(c => c.WorkspaceId == workspaceId && c.IsEnabled, ct);
         var hasBible = await db.SeriesBibles.AsNoTracking().AnyAsync(b => b.SeriesId == chapter.SeriesId, ct);
 

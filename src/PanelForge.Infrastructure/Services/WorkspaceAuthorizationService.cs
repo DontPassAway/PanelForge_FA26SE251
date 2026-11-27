@@ -56,7 +56,13 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
 
         if (member == null || member.Status != WorkspaceMemberStatus.Active) return false;
 
-        return allowedRoles.Contains(member.Role);
+        if (allowedRoles.Contains(member.Role)) return true;
+
+        // Spec D10: vai trò chuyên môn nằm ở Series; API cấp Studio (vd hàng chờ duyệt, mẫu khung) chấp nhận người
+        // giữ vai trò đó ở ít nhất một Series của Studio.
+        return await _dbContext.SeriesMembers.AnyAsync(sm =>
+            sm.UserId == userId && !sm.IsDeleted && allowedRoles.Contains(sm.Role) &&
+            _dbContext.Series.Any(s => s.Id == sm.SeriesId && s.WorkspaceId == workspaceId), cancellationToken);
     }
 
     public async Task<bool> IsMemberAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken = default)
@@ -179,13 +185,17 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Quyền chuyên môn chỉ lấy theo role Active trong Workspace; dòng SeriesMember cũ không được cấp quyền
-        var wsMemberRole = await _dbContext.WorkspaceMembers
-            .Where(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)
-            .Select(m => (WorkspaceRole?)m.Role)
+        // Spec D10: quyền chuyên môn lấy theo vai trò trong Series, yêu cầu còn là thành viên Active của Workspace
+        var isActiveMember = await _dbContext.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
+        if (!isActiveMember) return false;
+
+        var seriesRole = await _dbContext.SeriesMembers
+            .Where(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted)
+            .Select(sm => (WorkspaceRole?)sm.Role)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return wsMemberRole is { } r && allowedRoles.Contains(r);
+        return seriesRole is { } r && allowedRoles.Contains(r);
     }
 
     public async Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
@@ -212,12 +222,8 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var wsMember = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
 
-        if (wsMember != null)
-        {
-            return wsMember.Role;
-        }
-
-        return null;
+        // Spec D10: ngoài Series chỉ Producer của Studio có vai trò; thành viên chưa được gán vào Series thì không có
+        return wsMember?.Role == WorkspaceRole.Producer ? WorkspaceRole.Producer : null;
     }
 
     // BR-07: Administrator không bao giờ có quyền cấp Workspace.

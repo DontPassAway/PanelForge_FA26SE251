@@ -180,7 +180,7 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
                         w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct))
                     || (_db.WorkspaceMembers != null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
                         m.WorkspaceId == workspaceId && m.UserId == cmd.UserId && m.Status == WorkspaceMemberStatus.Active &&
-                        (m.Role == WorkspaceRole.Artist || m.Role == WorkspaceRole.Producer), ct))
+                        m.Role == WorkspaceRole.Producer, ct)) // D10: Artist chỉ tính theo vai trò Series bên dưới
                     || (_db.SeriesMembers != null && await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
                         sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId &&
                         (sm.Role == WorkspaceRole.Artist || sm.Role == WorkspaceRole.Producer), ct));

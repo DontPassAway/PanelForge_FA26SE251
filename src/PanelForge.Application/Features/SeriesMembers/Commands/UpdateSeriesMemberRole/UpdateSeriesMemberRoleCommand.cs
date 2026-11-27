@@ -50,6 +50,11 @@ public sealed class UpdateSeriesMemberRoleCommandHandler
         if (!Enum.IsDefined(command.NewRole))
             return Result<SeriesMemberDto>.Failure(
                 $"Vai trò không hợp lệ. Các vai trò hợp lệ: {string.Join(", ", Enum.GetNames<WorkspaceRole>())}.");
+#pragma warning disable CS0618
+        if (command.NewRole is WorkspaceRole.Member or WorkspaceRole.Publisher)
+#pragma warning restore CS0618
+            return Result<SeriesMemberDto>.Failure(
+                "Vai trò trong Series phải là Producer, Writer, Artist, Letterer hoặc Editor.", ResultErrorCodes.Validation);
 
         var member = await _dbContext.SeriesMembers
             .Include(sm => sm.User)

@@ -63,7 +63,7 @@ public sealed class CreateAssignmentCommandHandler : IRequestHandler<CreateAssig
         if (target is null)
             return Fail("Đối tượng được giao không thuộc Chapter.");
 
-        var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, cmd.AssigneeUserId, stage, ct);
+        var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, chapter.SeriesId, cmd.AssigneeUserId, stage, ct);
         if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode);
 
         var depIds = cmd.DependsOnAssignmentIds ?? (cmd.DependsOnAssignmentId.HasValue ? [cmd.DependsOnAssignmentId.Value] : null);

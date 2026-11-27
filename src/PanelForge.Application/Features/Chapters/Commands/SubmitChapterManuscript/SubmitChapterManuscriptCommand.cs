@@ -161,7 +161,7 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
         if (!isAutoApproveStage)
         {
             // Báo người duyệt (Editor / Producer) khi stage có ApprovalGate (Gate 2: Quality & Composite Gate)
-            foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, series.WorkspaceId, cmd.UserId, ct))
+            foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, series.WorkspaceId, series.Id, cmd.UserId, ct))
             {
                 var stageSlug = targetStage?.Slug?.ToLowerInvariant() ?? "";
                 var isGate2 = stageSlug.Contains("letter") || stageSlug.Contains("review") || targetStage?.IsApprovalGate == true;
@@ -325,13 +325,6 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
                         lettererUserId = await db.SeriesMembers.AsNoTracking()
                             .Where(sm => sm.SeriesId == series.Id && sm.Role == WorkspaceRole.Letterer)
                             .Select(sm => (Guid?)sm.UserId).FirstOrDefaultAsync(ct);
-
-                        if (!lettererUserId.HasValue)
-                        {
-                            lettererUserId = await db.WorkspaceMembers.AsNoTracking()
-                                .Where(wm => wm.WorkspaceId == series.WorkspaceId && wm.Role == WorkspaceRole.Letterer && wm.Status == WorkspaceMemberStatus.Active)
-                                .Select(wm => (Guid?)wm.UserId).FirstOrDefaultAsync(ct);
-                        }
                     }
 
                     if (lettererUserId.HasValue)
@@ -399,13 +392,6 @@ public sealed class SubmitChapterManuscriptCommandHandler : IRequestHandler<Subm
                         editorUserId = await db.SeriesMembers.AsNoTracking()
                             .Where(sm => sm.SeriesId == series.Id && sm.Role == WorkspaceRole.Editor)
                             .Select(sm => (Guid?)sm.UserId).FirstOrDefaultAsync(ct);
-
-                        if (!editorUserId.HasValue)
-                        {
-                            editorUserId = await db.WorkspaceMembers.AsNoTracking()
-                                .Where(wm => wm.WorkspaceId == series.WorkspaceId && wm.Role == WorkspaceRole.Editor && wm.Status == WorkspaceMemberStatus.Active)
-                                .Select(wm => (Guid?)wm.UserId).FirstOrDefaultAsync(ct);
-                        }
                     }
 
                     if (editorUserId.HasValue)

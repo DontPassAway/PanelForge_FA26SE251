@@ -31,7 +31,7 @@ public sealed class MarkPageContentReadyCommandHandler : IRequestHandler<MarkPag
             return Result<PageDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, chapter.SeriesId, ct);
         if (role != WorkspaceRole.Producer && role != WorkspaceRole.Writer)
             return Result<PageDto>.Failure("Chỉ Writer hoặc Producer mới có quyền đánh dấu Content-Ready cho trang.", ResultErrorCodes.Forbidden);
 
@@ -81,7 +81,7 @@ public sealed class UnmarkPageContentReadyCommandHandler : IRequestHandler<Unmar
             return Result<PageDto>.Failure($"Chương {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, chapter.SeriesId, ct);
         if (role != WorkspaceRole.Producer && role != WorkspaceRole.Writer)
             return Result<PageDto>.Failure("Chỉ Writer hoặc Producer mới có quyền thay đổi cờ Content-Ready.", ResultErrorCodes.Forbidden);
 

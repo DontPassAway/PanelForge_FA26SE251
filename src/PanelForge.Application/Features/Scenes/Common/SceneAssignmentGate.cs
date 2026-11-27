@@ -19,7 +19,7 @@ internal static class SceneAssignmentGate
         if (chapter is null) return null; // handler đã báo NotFound
 
         var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-        var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
+        var role = await auth.GetSeriesMemberRoleAsync(userId, chapter.SeriesId, ct);
         if (role is null or WorkspaceRole.Producer) return null;
 
         if (chapter.ScriptLockReason is { } scriptLocked)

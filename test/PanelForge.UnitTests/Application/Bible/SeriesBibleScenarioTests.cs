@@ -84,11 +84,19 @@ public class SeriesBibleScenarioTests
         // RBAC setup for roles
         _auth.Setup(a => a.GetMemberRoleAsync(_writerId, _studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writerId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Writer);
         _auth.Setup(a => a.GetMemberRoleAsync(_artistId, _studio.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Artist);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_artistId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Artist);
         _auth.Setup(a => a.GetMemberRoleAsync(_editorId, _studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Editor);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_editorId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Editor);
         _auth.Setup(a => a.GetMemberRoleAsync(_producerId, _studio.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Producer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_producerId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Producer);
     }
 

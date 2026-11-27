@@ -702,7 +702,9 @@ public class ArtworkUploadTests
         (await f.Upload(Png(1), userId: f.OtherId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         (await f.Upload(Png(2), userId: writerId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
 
-        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Artist)]);
+        // Spec D10: Artist là vai trò Series; ở Studio chỉ là Member
+        Members(f, [WorkspaceMember.Create(f.Workspace.Id, f.OtherId, WorkspaceRole.Member)],
+            [SeriesMember.Create(f.Chapter.SeriesId, f.OtherId, WorkspaceRole.Artist)]);
         (await f.Upload(Png(3), userId: f.OtherId)).IsSuccess.Should().BeTrue();
     }
 

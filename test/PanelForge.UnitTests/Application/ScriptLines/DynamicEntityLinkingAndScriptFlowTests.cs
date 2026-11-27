@@ -73,7 +73,11 @@ public class DynamicEntityLinkingAndScriptFlowTests
 
         _auth.Setup(a => a.GetMemberRoleAsync(_writer, _studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writer, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Writer);
         _auth.Setup(a => a.GetMemberRoleAsync(_producer, _studio.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Producer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_producer, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Producer);
     }
 

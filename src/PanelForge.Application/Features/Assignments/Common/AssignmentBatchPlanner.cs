@@ -37,7 +37,7 @@ internal static class AssignmentBatchPlanner
         if (!stage.IsEnabled)
             return Result<StageBatch>.Failure($"Stage {stage.Name} đang tắt cho Series.", ResultErrorCodes.Validation);
 
-        var role = await AssignmentRules.ResolveAssigneeRoleAsync(db, workspaceId, assigneeId, stage, ct);
+        var role = await AssignmentRules.ResolveAssigneeRoleAsync(db, workspaceId, chapter.SeriesId, assigneeId, stage, ct);
         if (!role.IsSuccess) return Result<StageBatch>.Failure(role.ErrorMessage!, role.ErrorCode);
 
         if (stage.AssignmentGranularity == WorkflowEntityType.Chapter)

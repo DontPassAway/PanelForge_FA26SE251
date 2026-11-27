@@ -205,9 +205,15 @@ public sealed class RefreezeScriptPostgresIntegrationTests
         var authMock = new Mock<IWorkspaceAuthorizationService>();
         authMock.Setup(a => a.GetMemberRoleAsync(producer.Id, studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Producer);
+        authMock.Setup(a => a.GetSeriesMemberRoleAsync(producer.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Producer);
         authMock.Setup(a => a.GetMemberRoleAsync(writer.Id, studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Writer);
+        authMock.Setup(a => a.GetSeriesMemberRoleAsync(writer.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Writer);
         authMock.Setup(a => a.GetMemberRoleAsync(artist.Id, studio.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Artist);
+        authMock.Setup(a => a.GetSeriesMemberRoleAsync(artist.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Artist);
 
         await castService.RecomputeAsync(chapter.Id, writer.Id, default);

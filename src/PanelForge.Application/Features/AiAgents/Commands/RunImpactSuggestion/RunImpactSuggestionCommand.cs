@@ -51,7 +51,7 @@ public sealed class RunImpactSuggestionCommandHandler : IRequestHandler<RunImpac
         var chapter = await _db.Chapters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cmd.ChapterId, ct);
         if (chapter is null) return Fail($"Chapter {cmd.ChapterId} không tồn tại.", ResultErrorCodes.NotFound);
         var series = await _db.Series.AsNoTracking().FirstAsync(s => s.Id == chapter.SeriesId, ct);
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, series.WorkspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, series.Id, ct);
         if (role != WorkspaceRole.Producer) return Fail("Chỉ Producer mới được xin gợi ý xử lý ảnh hưởng.", ResultErrorCodes.Forbidden);
         if (!chapter.IsContentEditable) return Fail($"Chapter đang ở trạng thái {chapter.Status} (chỉ đọc).", ResultErrorCodes.Conflict);
 

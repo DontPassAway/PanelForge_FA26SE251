@@ -102,4 +102,34 @@ public class ConfirmBibleEntryRevisionHookTests
         var b4 = await _db.ChapterBibleBindings.FirstAsync(b => b.ChapterId == _ch4Frozen.Id && b.BibleEntryId == _hero.Id);
         b4.BoundRevisionId.Should().Be(_v1Old.Id);
     }
+
+    [Fact]
+    public async Task ConfirmCanon_NewContentRevision_NotReplacement_RebindsUnfrozenChapterStillOnDraft()
+    {
+        // Artist nộp lại concept kèm sửa nội dung → revision mới (không phải supersede); chương chưa chốt vẫn gắn bản nháp cũ
+        var bible = await _db.SeriesBibles.FirstAsync(b => b.SeriesId == _seriesId);
+        var ryu = bible.AddEntry(BibleEntryCategory.Character, "CHR-02", "Ryu", "Trưởng làng");
+        var draftV1 = ryu.AddRevision("v1", "{}", "hash-r1", authorId: _writerId, isInitialVersion: true);
+        var contentV2 = ryu.AddRevision("v2", "{\"d\":1}", "hash-r2", authorId: _artistId);
+        contentV2.SubmitConcept(_artistId, "https://r2/ryu.png", "Concept");
+        _db.BibleEntries.Add(ryu);
+        _db.BibleEntryRevisions.AddRange(draftV1, contentV2);
+        var ch5 = Chapter.Create(_seriesId, 5, "Ch5");
+        _db.Chapters.Add(ch5);
+        _db.ChapterBibleBindings.Add(ChapterBibleBinding.Create(
+            ch5.Id, ryu.Id, draftV1.Id, ChapterBibleBindingSource.Speaker, chosenByWriter: false));
+        await _db.SaveChangesAsync();
+
+        var handler = new ConfirmBibleEntryRevisionCommandHandler(_db, _resolver);
+        var result = await handler.Handle(new ConfirmBibleEntryRevisionCommand(
+            SeriesId: _seriesId,
+            BibleEntryId: ryu.Id,
+            RevisionId: contentV2.Id,
+            UserId: _editorId,
+            ConceptEventId: contentV2.CurrentConceptEventId), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var binding = await _db.ChapterBibleBindings.FirstAsync(b => b.ChapterId == ch5.Id && b.BibleEntryId == ryu.Id);
+        binding.BoundRevisionId.Should().Be(contentV2.Id);
+    }
 }

@@ -79,7 +79,7 @@ public sealed class UpdateAssignmentCommandHandler : IRequestHandler<UpdateAssig
                 .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
             var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == assignment.PipelineStageId, ct);
 
-            var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, cmd.AssigneeUserId, stage, ct);
+            var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, chapter.SeriesId, cmd.AssigneeUserId, stage, ct);
             if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode);
 
             assignment.Reassign(cmd.AssigneeUserId, role.Value);

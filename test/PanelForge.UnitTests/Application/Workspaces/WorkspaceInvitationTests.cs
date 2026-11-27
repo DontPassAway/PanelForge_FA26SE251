@@ -85,7 +85,7 @@ public class WorkspaceInvitationTests
         var (workspace, actorId) = Arrange(new List<User> { user }, ws => new List<WorkspaceMember> { MemberOf(ws, user) });
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Writer), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.ErrorMessage.Should().Contain("đã là thành viên");
     }
@@ -98,7 +98,7 @@ public class WorkspaceInvitationTests
         var (workspace, actorId) = Arrange(new List<User> { user });
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Writer), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.ErrorMessage.Should().Contain("vô hiệu hóa");
         VerifyNoInvitationEmail();
@@ -135,7 +135,7 @@ public class WorkspaceInvitationTests
         });
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, user.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         old!.IsDeleted.Should().BeFalse();
@@ -149,7 +149,7 @@ public class WorkspaceInvitationTests
         EmailFails();
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, "new@test.com", WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, "new@test.com", WorkspaceRole.Member), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.InvitationEmailSent.Should().BeFalse();
@@ -164,11 +164,11 @@ public class WorkspaceInvitationTests
         var (workspace, actorId) = Arrange(new List<User> { pending });
 
         await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, pending.Email, WorkspaceRole.Letterer), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, pending.Email, WorkspaceRole.Member), CancellationToken.None);
 
         pending.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
         _emailServiceMock.Verify(e => e.SendWorkspaceInvitationAsync(
-            pending.Email, It.IsAny<string>(), "Test Studio", "Letterer",
+            pending.Email, It.IsAny<string>(), "Test Studio", "Member",
             pending.PasswordResetToken, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -180,7 +180,7 @@ public class WorkspaceInvitationTests
             .ThrowsAsync(new DbUpdateException("duplicate key"));
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, "race@test.com", WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, "race@test.com", WorkspaceRole.Member), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().Contain("vừa được thêm");

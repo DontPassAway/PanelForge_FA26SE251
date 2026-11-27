@@ -25,6 +25,7 @@ using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
+using PanelForge.Application.Features.TaskGrid.Queries.GetMyWork;
 using PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
 using PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsToGrid;
 using PanelForge.Domain.Entities.Assets;
@@ -67,8 +68,19 @@ public class TaskGridHandlerTests
         private readonly Guid _workspaceId;
         private readonly List<WorkspaceMember> _members;
 
-        public void AddMember(Guid userId, WorkspaceRole role) => _members.Add(WorkspaceMember.Create(_workspaceId, userId, role));
-        public void RemoveMember(Guid userId) => _members.RemoveAll(m => m.UserId == userId);
+        // Spec D10: Producer ở Studio; vai trò chuyên môn ở Series, thành viên Studio là Member
+        public void AddMember(Guid userId, WorkspaceRole role, WorkspaceMemberStatus status = WorkspaceMemberStatus.Active)
+        {
+            _members.Add(WorkspaceMember.Create(_workspaceId, userId,
+                role == WorkspaceRole.Producer ? WorkspaceRole.Producer : WorkspaceRole.Member, status));
+            if (role != WorkspaceRole.Producer) SeriesMembers.Add(SeriesMember.Create(_seriesId, userId, role));
+        }
+        public void RemoveMember(Guid userId)
+        {
+            _members.RemoveAll(m => m.UserId == userId);
+            SeriesMembers.RemoveAll(m => m.UserId == userId);
+        }
+        private readonly Guid _seriesId;
         public Task<Result<AutoAssignPlanDto>> Plan() =>
             new GetAutoAssignPlanQueryHandler(Db.Object).Handle(new GetAutoAssignPlanQuery(Chapter.Id), default);
 
@@ -94,13 +106,12 @@ public class TaskGridHandlerTests
             Pages.Add(Page.CreateNew(Chapter.Id, 2, default, 1200, 1800, 300));
 
             _workspaceId = workspaceId;
-            _members = new List<WorkspaceMember>
-            {
-                WorkspaceMember.Create(workspaceId, ArtistId, WorkspaceRole.Artist),
-                WorkspaceMember.Create(workspaceId, LettererId, WorkspaceRole.Letterer),
-                WorkspaceMember.Create(workspaceId, EditorId, WorkspaceRole.Editor),
-                WorkspaceMember.Create(workspaceId, PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending)
-            };
+            _seriesId = series.Id;
+            _members = new List<WorkspaceMember>();
+            AddMember(ArtistId, WorkspaceRole.Artist);
+            AddMember(LettererId, WorkspaceRole.Letterer);
+            AddMember(EditorId, WorkspaceRole.Editor);
+            AddMember(PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending);
 
             Db.Setup(d => d.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { Chapter }));
             Db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));
@@ -663,6 +674,22 @@ public class TaskGridHandlerTests
         pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
+    /// <summary>BR-31: Artist tự đặt chữ thì công đoạn Lettering là lớp chữ vector, không bắt tải ảnh như Pencil/Ink.</summary>
+    [Fact]
+    public async Task Submit_ArtistLetteringCell_DoesNotRequireArtwork_BR31()
+    {
+        var f = new Fixture();
+        (await f.Generate()).IsSuccess.Should().BeTrue();
+        var letter = f.Cell(f.Lettering, 0);
+        (await f.Assign(false, f.Lot(f.Lettering, f.ArtistId, letter))).IsSuccess.Should().BeTrue();
+        letter.Start(prerequisitesApproved: true);
+        f.Artwork.RemoveAll(r => r.PipelineStageId == f.Lettering.Id);
+
+        var result = await f.Submit(f.ArtistId, letter);
+
+        (result.ErrorMessage ?? string.Empty).Should().NotContain("artwork");
+    }
+
     /// <summary>BR-06: người làm không tự duyệt; Editor duyệt được và lô hoàn tất.</summary>
     [Fact]
     public async Task Approve_GatedStage_SelfApprovalForbidden_EditorApproves_LotCompletes()
@@ -1118,6 +1145,35 @@ public class TaskGridHandlerTests
         artist.Value![0].Tasks.Should().ContainSingle().Which.IsStartable.Should().BeTrue();
         artist.Value![1].Tasks.Single().IsStartable.Should().BeFalse("Ink chờ Pencil");
         letterer.Value!.Should().ContainSingle().Which.Tasks.Single().PageNumber.Should().Be(1);
+    }
+
+    /// <summary>UIQ-11q: việc xuyên Studio — Artist thấy lô của mình, Editor của Series thấy hàng chờ duyệt.</summary>
+    [Fact]
+    public async Task MyWork_GroupsAssignedLotsAndEditorReviewQueueByStudio()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink, f.Color }) // Color là công đoạn có cổng duyệt
+        {
+            (await f.Start(f.Cell(stage, 0), f.ArtistId)).IsSuccess.Should().BeTrue();
+            (await f.Submit(f.ArtistId, f.Cell(stage, 0))).IsSuccess.Should().BeTrue();
+        }
+        var studio = StudioWorkspace.Create("Studio A", f.ProducerId);
+        var idProp = typeof(StudioWorkspace).GetProperty(nameof(StudioWorkspace.Id))!;
+        (idProp.DeclaringType!.GetProperty(nameof(StudioWorkspace.Id))!.SetMethod
+            ?? throw new InvalidOperationException("Id setter")).Invoke(studio, [f.WorkspaceId]);
+        f.Db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { studio }));
+        var handler = new GetMyWorkQueryHandler(f.Db.Object);
+
+        var artist = (await handler.Handle(new GetMyWorkQuery(f.ArtistId), default)).Value!;
+        var editor = (await handler.Handle(new GetMyWorkQuery(f.EditorId), default)).Value!;
+        var stranger = (await handler.Handle(new GetMyWorkQuery(Guid.NewGuid()), default)).Value!;
+
+        artist.Should().ContainSingle().Which.Lots.Should().NotBeEmpty();
+        artist[0].WorkspaceName.Should().Be("Studio A");
+        artist[0].ReviewQueue.Should().BeEmpty("Artist không giữ vai trò Editor ở Series");
+        editor.Should().ContainSingle().Which.ReviewQueue.Should().ContainSingle(i => i.StageName == "Color");
+        stranger.Should().BeEmpty();
     }
 
     [Fact]

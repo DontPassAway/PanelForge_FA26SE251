@@ -74,7 +74,10 @@ public sealed class GetSeriesByIdQueryHandler : IRequestHandler<GetSeriesByIdQue
             Logline: series.Logline,
             Teaser: series.Teaser,
             AgeRating: series.AgeRating,
-            AllowSoloCreatorReview: series.AllowSoloCreatorReview
+            AllowSoloCreatorReview: series.AllowSoloCreatorReview,
+            CurrentUserRole: query.UserId is { } uid
+                ? await _authorizationService.GetSeriesMemberRoleAsync(uid, series.Id, cancellationToken)
+                : null
         );
 
         return Result<SeriesDetailDto>.Success(detail);

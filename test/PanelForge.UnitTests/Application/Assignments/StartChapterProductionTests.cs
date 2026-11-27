@@ -47,6 +47,11 @@ public sealed class StartChapterProductionTests
                 WorkspaceMember.Create(studio.Id, WriterId, WorkspaceRole.Writer),
                 WorkspaceMember.Create(studio.Id, Artist1Id, WorkspaceRole.Artist),
                 WorkspaceMember.Create(studio.Id, Artist2Id, WorkspaceRole.Artist));
+            // Spec D10: vai trò chuyên môn theo Series
+            Db.SeriesMembers.AddRange(
+                SeriesMember.Create(series.Id, WriterId, WorkspaceRole.Writer),
+                SeriesMember.Create(series.Id, Artist1Id, WorkspaceRole.Artist),
+                SeriesMember.Create(series.Id, Artist2Id, WorkspaceRole.Artist));
             for (var pageNumber = 1; pageNumber <= 4; pageNumber++)
                 Db.Pages.Add(Page.CreateNew(Chapter.Id, pageNumber, LayoutFormat.StandardPage, 1200, 1800, 300));
             Db.ScriptLines.Add(ScriptLine.Create(Scene.Id, 1, stageDirection: "Opening action"));
@@ -108,6 +113,7 @@ public sealed class StartChapterProductionTests
         f.Db.Add(PipelineStage.Create(pipelineId, "Ink", "ink", 3, allowedRole: WorkspaceRole.Artist));
         var lettererId = Guid.NewGuid();
         f.Db.Add(WorkspaceMember.Create(f.Db.WorkspaceMembers.First().WorkspaceId, lettererId, WorkspaceRole.Letterer));
+        f.Db.Add(SeriesMember.Create(f.Chapter.SeriesId, lettererId, WorkspaceRole.Letterer));
         f.Db.SaveChanges();
         var stageNames = f.Db.PipelineStages.ToDictionary(s => s.Id, s => s.Name);
 
@@ -118,6 +124,7 @@ public sealed class StartChapterProductionTests
 
         var g = new Fixture();
         g.Db.Add(WorkspaceMember.Create(g.Db.WorkspaceMembers.First().WorkspaceId, lettererId, WorkspaceRole.Letterer));
+        g.Db.Add(SeriesMember.Create(g.Chapter.SeriesId, lettererId, WorkspaceRole.Letterer));
         g.Db.SaveChanges();
         var names = g.Db.PipelineStages.ToDictionary(s => s.Id, s => s.Name);
         var withLetterer = await g.Handler.Handle(
@@ -151,7 +158,8 @@ public sealed class StartChapterProductionTests
         var ink = PipelineStage.Create(pipelineId, "Ink", "ink", 3, allowedRole: WorkspaceRole.Artist);
         var lettererId = Guid.NewGuid();
         var workspaceId = f.Db.WorkspaceMembers.First().WorkspaceId;
-        f.Db.AddRange(ink, WorkspaceMember.Create(workspaceId, lettererId, WorkspaceRole.Letterer));
+        f.Db.AddRange(ink, WorkspaceMember.Create(workspaceId, lettererId, WorkspaceRole.Letterer),
+            SeriesMember.Create(f.Chapter.SeriesId, lettererId, WorkspaceRole.Letterer));
         f.Db.SaveChanges();
 
         var result = await f.Handler.Handle(

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
@@ -112,10 +113,13 @@ internal static class TaskGridRules
         await RefreshLotsAsync(db, lotIds, cells, ct);
         if (cells.Count == 0) return;
 
-        var recipients = (await db.WorkspaceMembers.AsNoTracking()
-                .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active
-                            && (m.Role == WorkspaceRole.Producer || m.Role == WorkspaceRole.Editor))
-                .Select(m => m.UserId).ToListAsync(ct))
+        // D10: Producer của Studio + Editor của các Series liên quan
+        var seriesEditors = await db.SeriesMembers.AsNoTracking()
+            .Where(sm => seriesIds.Contains(sm.SeriesId) && !sm.IsDeleted && sm.Role == WorkspaceRole.Editor
+                         && db.WorkspaceMembers.Any(m => m.WorkspaceId == workspaceId && m.UserId == sm.UserId
+                                                         && m.Status == WorkspaceMemberStatus.Active))
+            .Select(sm => sm.UserId).ToListAsync(ct);
+        var recipients = (await SeriesRoles.StudioProducerIdsAsync(db, workspaceId, ct)).Concat(seriesEditors)
             .Append(ownerId).Where(id => id != userId).Distinct().ToList();
         var chapterIds = cells.Select(c => c.ChapterId).Distinct().ToList();
         var chapters = await db.Chapters.AsNoTracking().Where(c => chapterIds.Contains(c.Id)).ToListAsync(ct);
@@ -152,13 +156,14 @@ internal static class TaskGridRules
         IPanelForgeDbContext db, Guid workspaceId, Guid ownerId, Guid submitterId, IReadOnlyList<StageTask> cells, CancellationToken ct)
     {
         if (cells.Count == 0) return false;
-        async Task<List<Guid>> Active(WorkspaceRole role) => await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Role == role && m.Status == WorkspaceMemberStatus.Active && m.UserId != submitterId)
-            .Select(m => m.UserId).ToListAsync(ct);
-
-        var candidates = await Active(WorkspaceRole.Editor);
+        // D10: Editor của Series chứa các ô; chưa có thì Producer của Studio
+        var chapterId = cells[0].ChapterId;
+        var seriesId = await db.Chapters.AsNoTracking().Where(c => c.Id == chapterId).Select(c => c.SeriesId).FirstAsync(ct);
+        var candidates = (await SeriesRoles.UserIdsWithRoleAsync(db, workspaceId, seriesId, WorkspaceRole.Editor, ct))
+            .Where(id => id != submitterId).ToList();
         if (candidates.Count == 0)
-            candidates = (await Active(WorkspaceRole.Producer)).Append(ownerId).Where(id => id != submitterId && id != Guid.Empty).Distinct().ToList();
+            candidates = (await SeriesRoles.StudioProducerIdsAsync(db, workspaceId, ct)).Append(ownerId)
+                .Where(id => id != submitterId && id != Guid.Empty).Distinct().ToList();
         if (candidates.Count == 0) return false;
 
         var cellIds = cells.Select(c => c.Id).ToList();

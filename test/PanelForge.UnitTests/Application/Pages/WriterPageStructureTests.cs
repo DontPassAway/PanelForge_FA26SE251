@@ -38,6 +38,8 @@ public class WriterPageStructureTests
 
         _auth.Setup(a => a.GetMemberRoleAsync(_writerId, studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writerId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Writer);
     }
 
     private CreatePageCommandHandler PageHandler() =>

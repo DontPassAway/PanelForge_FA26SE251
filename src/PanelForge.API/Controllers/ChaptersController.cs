@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 using PanelForge.Application.Features.Chapters.Commands.HandOffChapter;
@@ -20,6 +21,7 @@ using PanelForge.Application.Features.Chapters.Queries.GetChapterCover;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterReadiness;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshot;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshots;
@@ -258,6 +260,20 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId,
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterCastQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/readiness
+    /// Đánh giá tập trung Pre-production Readiness, phiên bản kịch bản (Latest/Approved/Production),
+    /// Series Bible phạm vi chương và tiến độ sản xuất (Task/Page/Panel tách biệt).
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/readiness")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ChapterReadinessDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChapterReadiness(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterReadinessQuery(chapterId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
     /// PUT /api/chapters/{chapterId}/script — SCR-14: lưu cả cây Trang → Panel → dòng của chương trong một request, một transaction.
@@ -513,10 +529,10 @@ public sealed class ChaptersController : ControllerBase
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/publish")]
     [Authorize(Roles = "Publisher,Admin")]
-    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status200OK)] // ChapterReviewDto (ấn bản gốc) hoặc ChapterEditionDto (ấn bản dịch)
     public async Task<IActionResult> PublishEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishChapterCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
 
     /// <summary>
     /// POST /api/editions/{editionId}/schedule
@@ -524,10 +540,10 @@ public sealed class ChaptersController : ControllerBase
     /// </summary>
     [HttpPost("api/editions/{editionId:guid}/schedule")]
     [Authorize(Roles = "Publisher,Admin")]
-    [ProducesResponseType(typeof(ChapterReviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status200OK)] // ChapterReviewDto (ấn bản gốc) hoặc ChapterEditionDto (ấn bản dịch)
     public async Task<IActionResult> ScheduleEdition(
         [FromRoute] Guid editionId, [FromBody] PublishChapterRequest? body, CancellationToken cancellationToken) =>
-        ToActionResult(await _mediator.Send(new PublishChapterCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
+        ToActionResult(await _mediator.Send(new PublishEditionByIdCommand(editionId, GetCurrentUserId(), body?.PublishAt), cancellationToken));
 
     /// <summary>GET /api/chapters/{chapterId}/reviews — lịch sử phê duyệt cấp Chapter (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/reviews")]

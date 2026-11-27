@@ -28,7 +28,7 @@ public sealed class GetSuggestionsQueryHandler : IRequestHandler<GetSuggestionsQ
         var workspaceId = await AiRunHelpers.WorkspaceOfSeriesAsync(_db, q.SeriesId, ct);
         if (workspaceId is null)
             return AiRunHelpers.Fail<IReadOnlyList<AiSuggestionDto>>("Series không tồn tại.", ResultErrorCodes.NotFound);
-        var viewerRole = await _auth.GetMemberRoleAsync(q.UserId, workspaceId.Value, ct);
+        var viewerRole = await _auth.GetSeriesMemberRoleAsync(q.UserId, q.SeriesId, ct);
         if (viewerRole is null)
             return AiRunHelpers.Fail<IReadOnlyList<AiSuggestionDto>>("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
 

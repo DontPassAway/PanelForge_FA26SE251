@@ -88,7 +88,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
 
         // Người làm chỉ từ chối hoặc yêu cầu sửa trong phạm vi việc được giao; Producer, Editor duyệt toàn chương (BR-07)
         if (cmd.Decision != AiSuggestionStatus.Accepted
-            && await _auth.GetMemberRoleAsync(cmd.UserId, suggestion.WorkspaceId, ct) is { } role
+            && await _auth.GetSeriesMemberRoleAsync(cmd.UserId, cmd.SeriesId, ct) is { } role
             && role is WorkspaceRole.Writer or WorkspaceRole.Artist or WorkspaceRole.Letterer
             && (await AiWorkflowFacts.EvaluateAssignmentAsync(_db, cmd.UserId, chapter, role, ct)).BlockedReason is { } outOfScope)
             return AiRunHelpers.Fail<ReviewSuggestionResponse>(outOfScope, ResultErrorCodes.Forbidden);
@@ -222,7 +222,7 @@ public sealed class ReviewSuggestionCommandHandler : IRequestHandler<ReviewSugge
     /// </summary>
     private async Task<Applied?> AcceptBlockedAsync(ReviewSuggestionCommand cmd, AiSuggestion s, Chapter chapter, CancellationToken ct)
     {
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, s.WorkspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, s.SeriesId, ct);
         var acceptRoles = AiWorkflowPolicy.AcceptRoles(s.Kind);
         if (role is null || !acceptRoles.Contains(role.Value))
             return Applied.Fail(

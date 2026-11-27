@@ -66,6 +66,7 @@ public interface IPanelForgeDbContext
     DbSet<ExportJob> ExportJobs { get; }
     DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs { get; }
     DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback { get; }
+    DbSet<PanelForge.Domain.Entities.Preview.PageComment> PageComments { get; }
     DbSet<Asset> Assets { get; }
     DbSet<AssetReference> AssetReferences { get; }
     DbSet<AssetAccessLog> AssetAccessLogs { get; }

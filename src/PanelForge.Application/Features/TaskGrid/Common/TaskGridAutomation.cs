@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
@@ -64,9 +65,8 @@ public static class TaskGridAutomation
         if (cells.Count == 0) return;
 
         var ownerId = await db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == workspaceId).Select(w => w.OwnerId).FirstOrDefaultAsync(ct);
-        var members = await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active)
-            .ToDictionaryAsync(m => m.UserId, m => m.Role, ct);
+        // D10: ứng viên giao tự động theo vai trò Series
+        var members = await SeriesRoles.AssignableRoleMapAsync(db, workspaceId, chapter.SeriesId, ct);
         var names = await db.Users.AsNoTracking().Where(u => members.Keys.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
         var pageNumbers = await db.Pages.AsNoTracking().Where(p => p.ChapterId == chapter.Id).ToDictionaryAsync(p => p.Id, p => p.PageNumber, ct);
         var chapterLots = await db.StageTaskLots.AsNoTracking().Where(l => l.ChapterId == chapter.Id)
