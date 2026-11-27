@@ -131,6 +131,23 @@ public class BibleWorkflowPostgresIntegrationTests
 
             gateResult.CanStart.Should().BeTrue();
             gateResult.Blockers.Should().BeEmpty();
+
+            // Q12 / AUD-BE-08: Verify DB partial unique index blocks a second active Publisher even bypassing app guards
+            var pub1 = User.Create("pub1.pg@panelforge.local", "Publisher 1", role: SystemRole.Publisher);
+            db.Users.Add(pub1);
+            await db.SaveChangesAsync();
+
+            var pub2 = User.Create("pub2.pg@panelforge.local", "Publisher 2", role: SystemRole.Publisher);
+            db.Users.Add(pub2);
+            var dupAct = async () => await db.SaveChangesAsync();
+            await dupAct.Should().ThrowAsync<DbUpdateException>();
+            db.Entry(pub2).State = EntityState.Detached;
+
+            // Deactivating first Publisher allows creating a new active Publisher
+            pub1.Deactivate();
+            await db.SaveChangesAsync();
+            db.Users.Add(pub2);
+            await db.SaveChangesAsync();
         }
         finally
         {

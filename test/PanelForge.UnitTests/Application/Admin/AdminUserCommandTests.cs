@@ -124,4 +124,78 @@ public class AdminUserCommandTests
         result.Value.PageSize.Should().Be(20);
         result.Value.Items.Should().HaveCount(2);
     }
+
+    // ─── Q12 / AUD-BE-08: chỉ một tài khoản Publisher đang hoạt động ─────────
+
+    [Fact]
+    public async Task SingleActivePublisher_SecondActiveCreateAssignUpdateOrReactivate_ReturnsConflict()
+    {
+        await using var db = InMemoryDb.Create();
+        var pub1 = User.Create("pub1@test.com", "Publisher 1", role: SystemRole.Publisher);
+        var other = User.Create("other@test.com", "Other User", role: SystemRole.User);
+        var inactivePub = User.Create("oldpub@test.com", "Old Publisher", role: SystemRole.Publisher);
+        inactivePub.Deactivate();
+        db.Users.AddRange(pub1, other, inactivePub);
+        await db.SaveChangesAsync();
+
+        var hasher = new Mock<IPasswordHasher>();
+        hasher.Setup(h => h.HashPassword(It.IsAny<string>())).Returns("hash");
+
+        // 1. Create second active Publisher -> 409 Conflict
+        var createRes = await new CreateUserByAdminCommandHandler(db, hasher.Object).Handle(
+            new CreateUserByAdminCommand("pub2@test.com", "Pub 2", "secret1", null, SystemRole.Publisher, true),
+            CancellationToken.None);
+        createRes.IsSuccess.Should().BeFalse();
+        createRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        // 2. Assign Publisher role to another active user -> 409 Conflict
+        var assignRes = await new AssignUserRoleCommandHandler(db)
+            .Handle(new AssignUserRoleCommand(other.Id, "Publisher"), CancellationToken.None);
+        assignRes.IsSuccess.Should().BeFalse();
+        assignRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        // 3. Update another user to active Publisher -> 409 Conflict
+        var updateRes = await new PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin.UpdateUserByAdminCommandHandler(db)
+            .Handle(new(other.Id, "Other User", null, SystemRole.Publisher, true), CancellationToken.None);
+        updateRes.IsSuccess.Should().BeFalse();
+        updateRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+
+        // 4. Re-activate an inactive Publisher while another is active -> 409 Conflict
+        var toggleRes = await new ToggleUserStatusCommandHandler(db)
+            .Handle(new ToggleUserStatusCommand(inactivePub.Id), CancellationToken.None);
+        toggleRes.IsSuccess.Should().BeFalse();
+        toggleRes.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task SingleActivePublisher_AfterDeactivatingOldPublisher_CanAssignNewPublisher()
+    {
+        await using var db = InMemoryDb.Create();
+        var pub1 = User.Create("pub1@test.com", "Publisher 1", role: SystemRole.Publisher);
+        var next = User.Create("pub2@test.com", "Publisher 2", role: SystemRole.User);
+        db.Users.AddRange(pub1, next);
+        await db.SaveChangesAsync();
+
+        // Deactivate old Publisher
+        var deactivated = await new ToggleUserStatusCommandHandler(db)
+            .Handle(new ToggleUserStatusCommand(pub1.Id), CancellationToken.None);
+        deactivated.IsSuccess.Should().BeTrue();
+        deactivated.Value!.IsActive.Should().BeFalse();
+
+        // Now assigning new active Publisher succeeds
+        var assigned = await new AssignUserRoleCommandHandler(db)
+            .Handle(new AssignUserRoleCommand(next.Id, "Publisher"), CancellationToken.None);
+        assigned.IsSuccess.Should().BeTrue();
+        assigned.Value!.NewRole.Should().Be("Publisher");
+    }
+
+    [Fact]
+    public void UserModel_HasUniqueFilteredIndexForSingleActivePublisher()
+    {
+        using var db = InMemoryDb.Create();
+        var entityType = db.Model.FindEntityType(typeof(User))!;
+        var index = entityType.GetIndexes().FirstOrDefault(i =>
+            i.IsUnique && i.Properties.Any(p => p.Name == nameof(User.Role)));
+        index.Should().NotBeNull("Q12 requires a unique partial index on users(role) for active Publisher");
+    }
 }

@@ -196,11 +196,14 @@ public class AdminController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
-    // NOT_FOUND → 404, lỗi nghiệp vụ khác → 400; body { message } như trước
-    private IActionResult ToError<T>(Result<T> result)
-        => result.ErrorCode == ResultErrorCodes.NotFound
-            ? NotFound(new { message = result.ErrorMessage })
-            : BadRequest(new { message = result.ErrorMessage });
+    // NOT_FOUND → 404, CONFLICT → 409, lỗi nghiệp vụ khác → 400; body { message } như trước
+    private IActionResult ToError<T>(Result<T> result) =>
+        result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound => NotFound(new { message = result.ErrorMessage }),
+            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { message = result.ErrorMessage })
+        };
 
     /// <summary>
     /// GET /api/admin/audit-logs

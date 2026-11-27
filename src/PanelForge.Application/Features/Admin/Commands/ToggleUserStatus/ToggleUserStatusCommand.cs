@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Admin.Common;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 
@@ -25,9 +27,18 @@ public sealed class ToggleUserStatusCommandHandler
             return Result<AdminUserStatusDto>.Failure("Không tìm thấy người dùng.", ResultErrorCodes.NotFound);
 
         if (user.IsActive)
+        {
             user.Deactivate();
+        }
         else
+        {
+            if (user.Role == SystemRole.Publisher
+                && await SinglePublisherGuard.HasAnotherActivePublisherAsync(_dbContext, user.Id, cancellationToken))
+            {
+                return Result<AdminUserStatusDto>.Failure(SinglePublisherGuard.ConflictMessage, ResultErrorCodes.Conflict);
+            }
             user.Activate();
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

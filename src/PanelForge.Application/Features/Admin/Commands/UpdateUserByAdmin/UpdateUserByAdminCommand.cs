@@ -32,7 +32,14 @@ public sealed class UpdateUserByAdminCommandHandler
             return Result<AdminUserDto>.Failure("Không tìm thấy người dùng.", ResultErrorCodes.NotFound);
 
         if (!Enum.IsDefined(command.Role))
-            return Result<AdminUserDto>.Failure("Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User.");
+            return Result<AdminUserDto>.Failure("Vai trò hệ thống không hợp lệ. Hợp lệ: Admin, User, Publisher.");
+
+        if (command.Role == SystemRole.Publisher
+            && command.IsActive
+            && await SinglePublisherGuard.HasAnotherActivePublisherAsync(_dbContext, user.Id, cancellationToken))
+        {
+            return Result<AdminUserDto>.Failure(SinglePublisherGuard.ConflictMessage, ResultErrorCodes.Conflict);
+        }
 
         if (command.Role == SystemRole.Admin && user.Role != SystemRole.Admin)
         {
