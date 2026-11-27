@@ -112,15 +112,19 @@ public class WalletController : ControllerBase
 
     /// <summary>
     /// GET /api/wallet/transactions/{orderCode}/status
-    /// Mobile polling kiểm tra trạng thái giao dịch VietQR đã được Producer duyệt hay chưa.
+    /// Mobile polling kiểm tra trạng thái giao dịch VietQR đã được duyệt hay chưa (yêu cầu đăng nhập; chỉ chủ đơn hoặc Publisher/Admin).
     /// </summary>
     [HttpGet("transactions/{orderCode}/status")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(TransactionStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTransactionStatus([FromRoute] string orderCode, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetTransactionStatusQuery(orderCode), cancellationToken);
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var isPrivileged = User.IsInRole("Publisher") || User.IsInRole("Admin");
+        var result = await _mediator.Send(new GetTransactionStatusQuery(orderCode, userId, isPrivileged), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.ErrorMessage });
     }
 
