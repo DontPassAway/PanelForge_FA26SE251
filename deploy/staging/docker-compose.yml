@@ -77,6 +77,8 @@ services:
       AiService__ServiceUrl: http://ai-main:5055
       AiService__ServiceKey: ${MAIN_AI_SERVICE_KEY}
       SePay__WebhookApiKey: ${MAIN_SEPAY_WEBHOOK_API_KEY:-}
+      # FE (Cloudflare Pages) nhánh main gọi sang domain này, cần CORS + cookie SameSite=None.
+      Cors__AllowedOrigins__0: ${MAIN_FE_ORIGIN:-https://panelforge-dx3.pages.dev}
     volumes:
       - assets_main:/data/assets
       # Khoá Data Protection (mã hoá AI key của Studio): mất khoá = không giải mã được key đã lưu.
@@ -116,6 +118,9 @@ services:
       JwtSettings__Secret: ${DEV_JWT_SECRET}
       AiService__ServiceUrl: http://ai-dev:5055
       AiService__ServiceKey: ${DEV_AI_SERVICE_KEY}
+      # FE nhánh dev (preview Cloudflare Pages) và FE chạy local trỏ vào bản test.
+      Cors__AllowedOrigins__0: ${DEV_FE_ORIGIN:-https://dev.panelforge-dx3.pages.dev}
+      Cors__AllowedOrigins__1: http://localhost:3000
     volumes:
       - assets_dev:/data/assets
       - dp_dev:/root/.aspnet/DataProtection-Keys
