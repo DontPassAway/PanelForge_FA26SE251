@@ -12,4 +12,5 @@ public sealed record LandingContextDto(
     string SystemRole,
     bool CanCreateStudio,
     IReadOnlyCollection<WorkspaceSummaryDto> Workspaces,
-    string SuggestedLanding);
+    string SuggestedLanding,
+    bool TwoFactorEnabled = false);

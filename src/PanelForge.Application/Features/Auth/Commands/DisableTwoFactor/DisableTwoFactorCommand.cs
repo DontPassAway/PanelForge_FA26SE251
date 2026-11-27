@@ -40,8 +40,9 @@ public sealed class DisableTwoFactorCommandHandler : IRequestHandler<DisableTwoF
                 || !_passwordHasher.VerifyPassword(command.CurrentPassword, user.PasswordHash)))
             return Unauthorized("Mật khẩu hiện tại không chính xác.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, command.Code))
-            return Unauthorized("Mã xác thực 2FA không chính xác hoặc đã hết hạn.");
+        if (_totpService.MatchTimeStep(user.TwoFactorSecret, command.Code) is not { } step
+            || !user.TryConsumeTwoFactorStep(step))
+            return Unauthorized("Mã xác thực 2FA không chính xác, đã hết hạn hoặc đã được dùng.");
 
         user.DisableTwoFactor();
 

@@ -34,6 +34,8 @@ public class User : BaseEntity
 
     public bool TwoFactorEnabled { get; private set; } = false;
     public string? TwoFactorSecret { get; private set; }
+    /// <summary>Bước thời gian (30 giây) của mã TOTP được chấp nhận gần nhất; chặn dùng lại mã.</summary>
+    public long? TwoFactorLastUsedStep { get; private set; }
 
     /// <summary>
     /// BR-22: Cờ cấp phép tạo Studio. Chỉ Administrator mới được grant/revoke.
@@ -146,6 +148,20 @@ public class User : BaseEntity
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(secret);
         TwoFactorSecret = secret.Trim();
+        TwoFactorLastUsedStep = null;
+    }
+
+    /// <summary>
+    /// RFC 6238 §5.2: mỗi mã TOTP chỉ được chấp nhận một lần. Nhận bước thời gian của mã vừa khớp;
+    /// từ chối nếu bước đó không mới hơn bước đã dùng gần nhất (mã bị nghe lén / gửi lại trong cửa sổ ±30 giây).
+    /// </summary>
+    public bool TryConsumeTwoFactorStep(long timeStep)
+    {
+        if (TwoFactorLastUsedStep is { } last && timeStep <= last)
+            return false;
+
+        TwoFactorLastUsedStep = timeStep;
+        return true;
     }
 
     public void EnableTwoFactor()
@@ -160,6 +176,7 @@ public class User : BaseEntity
     {
         TwoFactorEnabled = false;
         TwoFactorSecret = null;
+        TwoFactorLastUsedStep = null;
     }
 
     public void LinkFirebase(string firebaseUid)

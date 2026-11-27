@@ -138,11 +138,14 @@ public class AuthController : ControllerBase
 
         // BR-22: CanCreateStudio đọc từ DB (có thể đã được Admin cấp/thu hồi sau khi token phát hành)
         var canCreateStudio = false;
+        // FE cần biết 2FA đang bật để mở màn quản lý thay vì gọi enable-2fa (bị từ chối khi 2FA đã bật)
+        var twoFactorEnabled = false;
         string? avatarUrl = null;
         if (Guid.TryParse(userId, out var parsedUserId))
         {
             var context = await _mediator.Send(new GetLandingContextQuery(parsedUserId), cancellationToken);
             canCreateStudio = context.IsSuccess && context.Value!.CanCreateStudio;
+            twoFactorEnabled = context.IsSuccess && context.Value!.TwoFactorEnabled;
 
             var profile = await _mediator.Send(new PanelForge.Application.Features.Users.Queries.GetUserProfile.GetUserProfileQuery(parsedUserId, null), cancellationToken);
             if (profile is not null)
@@ -162,6 +165,7 @@ public class AuthController : ControllerBase
             FullName = name,
             Role = role,
             CanCreateStudio = canCreateStudio,
+            TwoFactorEnabled = twoFactorEnabled,
             Avatar = avatarUrl,
             AvatarUrl = avatarUrl
         });

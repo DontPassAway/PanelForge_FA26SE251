@@ -61,8 +61,10 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
         if (string.IsNullOrEmpty(user.TwoFactorSecret))
             return Result<AuthResponse>.Failure("Chưa khởi tạo khóa bảo mật 2FA. Vui lòng gọi enable-2fa trước.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, code))
+        if (_totpService.MatchTimeStep(user.TwoFactorSecret, code) is not { } step)
             return Unauthorized("Mã xác thực 2FA không chính xác.");
+        if (!user.TryConsumeTwoFactorStep(step))
+            return Unauthorized(CodeAlreadyUsed);
 
         user.EnableTwoFactor();
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -84,8 +86,10 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
         if (user is null || !user.IsActive || !user.TwoFactorEnabled || string.IsNullOrEmpty(user.TwoFactorSecret))
             return Unauthorized("Thông tin tài khoản hoặc cấu hình 2FA không hợp lệ.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, command.Code))
+        if (_totpService.MatchTimeStep(user.TwoFactorSecret, command.Code) is not { } step)
             return Unauthorized("Mã xác thực 2FA không chính xác.");
+        if (!user.TryConsumeTwoFactorStep(step))
+            return Unauthorized(CodeAlreadyUsed);
 
         string? rememberToken = null;
         if (command.RememberDevice)
@@ -96,8 +100,9 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
                 tokenHash: AuthSecrets.HashToken(rememberToken),
                 expiresAt: DateTime.UtcNow.Add(AuthSecrets.RememberDeviceLifetime),
                 deviceName: command.DeviceName));
-            await _dbContext.SaveChangesAsync(cancellationToken);
         }
+        // Lưu bước TOTP đã dùng (và thiết bị ghi nhớ nếu có) trước khi phát phiên
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         var message = command.RememberDevice
             ? "Xác thực 2FA thành công. Thiết bị này đã được ghi nhớ trong 30 ngày."
@@ -107,6 +112,9 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
             await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, message, rememberToken,
                 deviceName: DeviceDetector.DetectDevice(command.UserAgent), ipAddress: command.IpAddress, userAgent: command.UserAgent));
     }
+
+    private const string CodeAlreadyUsed =
+        "Mã xác thực 2FA này đã được dùng. Vui lòng chờ mã mới trong ứng dụng Authenticator.";
 
     private static Result<AuthResponse> Unauthorized(string message)
         => Result<AuthResponse>.Failure(message, ResultErrorCodes.Unauthorized);

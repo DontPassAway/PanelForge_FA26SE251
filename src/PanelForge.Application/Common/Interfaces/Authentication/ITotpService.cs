@@ -9,6 +9,9 @@ public interface ITotpService
     /// <summary>URI otpauth:// để app Authenticator quét QR.</summary>
     string BuildAuthenticatorUri(string accountEmail, string secret);
 
-    /// <summary>Kiểm tra mã 6 số, cho phép lệch ±1 bước thời gian.</summary>
-    bool VerifyCode(string secret, string code);
+    /// <summary>
+    /// Kiểm tra mã 6 số (cho phép lệch ±1 bước thời gian 30 giây). Trả về bước thời gian khớp, null nếu sai.
+    /// Bước trả về dùng cho <c>User.TryConsumeTwoFactorStep</c> để chặn dùng lại mã (RFC 6238 §5.2).
+    /// </summary>
+    long? MatchTimeStep(string secret, string code);
 }

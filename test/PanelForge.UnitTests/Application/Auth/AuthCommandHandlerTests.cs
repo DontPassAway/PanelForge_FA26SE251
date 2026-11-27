@@ -624,6 +624,54 @@ public class AuthCommandHandlerTests
     }
 
     [Fact]
+    public async Task VerifyTwoFactor_WhenSameCodeReplayed_ShouldRejectSecondUse()
+    {
+        // RFC 6238 §5.2: mã đã chấp nhận một lần không được dùng lại (dù vẫn còn trong cửa sổ ±30 giây)
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+        var command = new VerifyTwoFactorCommand(null, code, user.Email, false, null, ChallengeEmail: user.Email);
+
+        var first = await VerifyTwoFactor().Handle(command, CancellationToken.None);
+        var replay = await VerifyTwoFactor().Handle(command, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        user.TwoFactorLastUsedStep.Should().NotBeNull();
+        replay.IsSuccess.Should().BeFalse();
+        replay.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        replay.ErrorMessage.Should().Contain("đã được dùng");
+    }
+
+    [Fact]
+    public async Task ConfirmTwoFactorSetup_ThenLoginWithSameCode_ShouldRejectLogin()
+    {
+        // Mã vừa dùng để bật 2FA không được dùng tiếp để hoàn tất đăng nhập
+        var user = User.Create("setup@example.com", "Setup User", "hashed_pwd");
+        user.ConfirmEmail();
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        user.SetTwoFactorSecret(Base32Encoding.ToString(secretBytes));
+        var code = new Totp(secretBytes).ComputeTotp();
+        SetupUsers(new List<User> { user });
+
+        var setup = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(user.Id, code, null, false, null), CancellationToken.None);
+        var login = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, user.Email, false, null, ChallengeEmail: user.Email), CancellationToken.None);
+
+        setup.IsSuccess.Should().BeTrue();
+        user.TwoFactorEnabled.Should().BeTrue();
+        login.IsSuccess.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("12345")]
+    [InlineData("abcdef")]
+    [InlineData("1234567")]
+    public void MatchTimeStep_WhenCodeIsNotSixDigits_ShouldReturnNull(string code)
+        => _totpService.MatchTimeStep("JBSWY3DPEHPK3PXP", code).Should().BeNull();
+
+    [Fact]
     public async Task ForgetDevice_WhenTokenProvided_ShouldRemoveDevice()
     {
         var userId = Guid.NewGuid();

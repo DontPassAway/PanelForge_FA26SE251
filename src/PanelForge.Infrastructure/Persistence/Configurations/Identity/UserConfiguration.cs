@@ -115,6 +115,9 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasColumnName("two_factor_secret")
                .HasColumnType("varchar(255)");
 
+        builder.Property(u => u.TwoFactorLastUsedStep)
+               .HasColumnName("two_factor_last_used_step");
+
         // BR-22: Studio creation permission flag (Admin-granted)
         builder.Property(u => u.CanCreateStudio)
                .HasColumnName("can_create_studio")
