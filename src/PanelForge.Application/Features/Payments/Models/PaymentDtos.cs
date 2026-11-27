@@ -115,7 +115,9 @@ public sealed record WorkspacePaymentsSummaryDto(
     decimal TotalRevenueVnd,
     int PendingCount,
     int TotalUnlockedChapters,
-    int PaidTransactionsCount
+    int PaidTransactionsCount,
+    decimal TotalTopupsVnd = 0m,
+    decimal TotalUnlockRevenueVnd = 0m
 );
 
 public sealed record WorkspacePaymentItemDto(

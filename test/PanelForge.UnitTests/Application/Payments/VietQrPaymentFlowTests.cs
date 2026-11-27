@@ -206,4 +206,35 @@ public class VietQrPaymentFlowTests
         result.Value!.IsVip.Should().BeTrue();
         (await _db.ReaderWallets.SingleAsync()).BalanceVnd.Should().Be(50000m - VipPricing.MonthlyVnd);
     }
+
+    [Fact]
+    public async Task WorkspacePaymentsSummary_SeparatesTopupsFromUnlockRevenue_NoDoubleCounting()
+    {
+        var reader = PanelForge.Domain.Entities.Identity.User.Create("reader@test.local", "Reader");
+        _db.Users.Add(reader);
+        await _db.SaveChangesAsync();
+
+        var topupOrder = await new CreateTopupCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new CreateTopupCommand(reader.Id, new TopupRequest(AmountVnd: 100000, SeriesId: _series.Id)), default);
+        var topupTx = await _db.PaymentTransactions.SingleAsync(t => t.OrderCode == topupOrder.Value!.OrderId);
+        await new ApprovePaymentCommandHandler(_db)
+            .Handle(new ApprovePaymentCommand(_studio.Id, topupTx.Id, _producerId), default);
+
+        var queryHandler = new PanelForge.Application.Features.Payments.Queries.GetWorkspacePayments.GetWorkspacePaymentsQueryHandler(_db);
+        var afterTopup = (await queryHandler.Handle(new(_studio.Id), default)).Value!;
+
+        afterTopup.Summary.TotalTopupsVnd.Should().Be(100000m);
+        afterTopup.Summary.TotalUnlockRevenueVnd.Should().Be(0m);
+        afterTopup.Summary.TotalRevenueVnd.Should().Be(0m, "nạp ví không phải doanh thu mở khóa (AUD-BE-07)");
+
+        // Độc giả dùng ví mở khóa chương 15.000đ → doanh thu mở khóa tăng 15.000đ, tổng nạp ví giữ nguyên 100.000đ
+        var unlock = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(reader.Id, new UnlockChapterRequest(_paidChapter.Id)), default);
+        unlock.IsSuccess.Should().BeTrue();
+
+        var afterUnlock = (await queryHandler.Handle(new(_studio.Id), default)).Value!;
+        afterUnlock.Summary.TotalTopupsVnd.Should().Be(100000m);
+        afterUnlock.Summary.TotalUnlockRevenueVnd.Should().Be(15000m);
+        afterUnlock.Summary.TotalRevenueVnd.Should().Be(15000m);
+    }
 }
