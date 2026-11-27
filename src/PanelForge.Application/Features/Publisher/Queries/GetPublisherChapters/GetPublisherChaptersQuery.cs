@@ -40,23 +40,18 @@ public sealed class GetPublisherChaptersQueryHandler
             .AsNoTracking()
             .Include(c => c.Series)
             .ThenInclude(s => s.Workspace)
-            .AsQueryable();
+            .Where(c =>
+                c.IsHandedOff &&
+                (c.Status == ChapterStatus.ChapterApproved ||
+                 c.Status == ChapterStatus.HandedOffAndPublished));
 
-        // Filter status
+        // Filter status (chỉ lọc trong tập chương đã bàn giao cho Publisher — AUD-BE-09)
         if (!string.IsNullOrWhiteSpace(query.Status) && !query.Status.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             if (Enum.TryParse<ChapterStatus>(query.Status, true, out var parsedStatus))
             {
                 baseQuery = baseQuery.Where(c => c.Status == parsedStatus);
             }
-        }
-        else
-        {
-            // Default "all" for Publisher Portal: Approved, Published, or InProduction
-            baseQuery = baseQuery.Where(c =>
-                c.Status == ChapterStatus.ChapterApproved ||
-                c.Status == ChapterStatus.HandedOffAndPublished ||
-                c.Status == ChapterStatus.InProduction);
         }
 
         // Filter workspace
