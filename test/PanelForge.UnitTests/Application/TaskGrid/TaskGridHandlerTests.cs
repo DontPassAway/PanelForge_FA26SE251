@@ -67,8 +67,19 @@ public class TaskGridHandlerTests
         private readonly Guid _workspaceId;
         private readonly List<WorkspaceMember> _members;
 
-        public void AddMember(Guid userId, WorkspaceRole role) => _members.Add(WorkspaceMember.Create(_workspaceId, userId, role));
-        public void RemoveMember(Guid userId) => _members.RemoveAll(m => m.UserId == userId);
+        // Spec D10: Producer ở Studio; vai trò chuyên môn ở Series, thành viên Studio là Member
+        public void AddMember(Guid userId, WorkspaceRole role, WorkspaceMemberStatus status = WorkspaceMemberStatus.Active)
+        {
+            _members.Add(WorkspaceMember.Create(_workspaceId, userId,
+                role == WorkspaceRole.Producer ? WorkspaceRole.Producer : WorkspaceRole.Member, status));
+            if (role != WorkspaceRole.Producer) SeriesMembers.Add(SeriesMember.Create(_seriesId, userId, role));
+        }
+        public void RemoveMember(Guid userId)
+        {
+            _members.RemoveAll(m => m.UserId == userId);
+            SeriesMembers.RemoveAll(m => m.UserId == userId);
+        }
+        private readonly Guid _seriesId;
         public Task<Result<AutoAssignPlanDto>> Plan() =>
             new GetAutoAssignPlanQueryHandler(Db.Object).Handle(new GetAutoAssignPlanQuery(Chapter.Id), default);
 
@@ -94,13 +105,12 @@ public class TaskGridHandlerTests
             Pages.Add(Page.CreateNew(Chapter.Id, 2, default, 1200, 1800, 300));
 
             _workspaceId = workspaceId;
-            _members = new List<WorkspaceMember>
-            {
-                WorkspaceMember.Create(workspaceId, ArtistId, WorkspaceRole.Artist),
-                WorkspaceMember.Create(workspaceId, LettererId, WorkspaceRole.Letterer),
-                WorkspaceMember.Create(workspaceId, EditorId, WorkspaceRole.Editor),
-                WorkspaceMember.Create(workspaceId, PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending)
-            };
+            _seriesId = series.Id;
+            _members = new List<WorkspaceMember>();
+            AddMember(ArtistId, WorkspaceRole.Artist);
+            AddMember(LettererId, WorkspaceRole.Letterer);
+            AddMember(EditorId, WorkspaceRole.Editor);
+            AddMember(PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending);
 
             Db.Setup(d => d.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { Chapter }));
             Db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { series }));

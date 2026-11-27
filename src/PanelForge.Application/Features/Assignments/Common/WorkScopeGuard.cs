@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Enums;
 
@@ -34,8 +35,7 @@ internal static class WorkScopeGuard
         var seriesId = await db.Chapters.AsNoTracking().Where(c => c.Id == chapterId).Select(c => (Guid?)c.SeriesId).FirstOrDefaultAsync(ct);
         if (seriesId is null) return null;
         var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == seriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-        var role = await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.UserId == userId).Select(m => (WorkspaceRole?)m.Role).FirstOrDefaultAsync(ct);
+        var role = await SeriesRoles.RoleOfAsync(db, workspaceId, seriesId.Value, userId, ct); // D10
         if (role is not { } r || !StageProgressRules.IsProductionRole(r)) return null;
 
         // Lưới V3: trang có ô đang mở (đã giao, chưa duyệt) của vai trò này thì chỉ người giữ ô, ở trạng thái làm việc và đầu vào

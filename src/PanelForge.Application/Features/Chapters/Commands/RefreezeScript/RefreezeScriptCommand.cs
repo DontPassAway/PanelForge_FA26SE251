@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -239,9 +240,8 @@ public sealed class RefreezeScriptCommandHandler
                         .SelectMany(a => a.LettererId.HasValue ? new[] { a.ArtistId, a.LettererId.Value } : new[] { a.ArtistId })
                         .Distinct()
                         .ToList();
-                    var memberRoles = await _db.WorkspaceMembers.AsNoTracking()
-                        .Where(m => m.WorkspaceId == workspaceId && requestedMembers.Contains(m.UserId) && m.Status == WorkspaceMemberStatus.Active)
-                        .ToDictionaryAsync(m => m.UserId, m => m.Role, tct);
+                    // D10: vai trò người nhận lấy theo Series
+                    var memberRoles = await SeriesRoles.AssignableRoleMapAsync(_db, workspaceId, chapter.SeriesId, tct);
 
                     foreach (var ap in diff.AddedPages)
                     {

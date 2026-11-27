@@ -49,7 +49,7 @@ public sealed class AddSeriesMemberCommandHandler
                 ResultErrorCodes.Forbidden);
 
         // Xác thực người được thêm bắt buộc phải là thành viên Active hoặc Owner của Studio Workspace.
-        // Role trong Series luôn = role Workspace (command.Role chỉ giữ cho tương thích request cũ, bị bỏ qua).
+        // Spec D10: vai trò trong Series do Producer chọn khi thêm; người được thêm chỉ cần là thành viên Active của Studio.
         var workspaceRole = await _dbContext.WorkspaceMembers
             .Where(wm => wm.WorkspaceId == series.WorkspaceId &&
                          wm.UserId == command.TargetUserId &&
@@ -59,7 +59,12 @@ public sealed class AddSeriesMemberCommandHandler
 
         var isWorkspaceOwner = await _dbContext.StudioWorkspaces
             .AnyAsync(w => w.Id == series.WorkspaceId && w.OwnerId == command.TargetUserId, cancellationToken);
-        var role = workspaceRole ?? WorkspaceRole.Producer; // Owner không có dòng member → coi như Producer
+#pragma warning disable CS0618 // Publisher là giá trị cũ, không gán qua Series
+        if (!Enum.IsDefined(command.Role) || command.Role is WorkspaceRole.Member or WorkspaceRole.Publisher)
+#pragma warning restore CS0618
+            return Result<SeriesMemberDto>.Failure(
+                "Vai trò trong Series phải là Producer, Writer, Artist, Letterer hoặc Editor.", ResultErrorCodes.Validation);
+        var role = command.Role;
 
         if (workspaceRole is null && !isWorkspaceOwner)
         {

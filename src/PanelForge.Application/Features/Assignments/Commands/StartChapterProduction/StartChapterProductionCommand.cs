@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
@@ -132,10 +133,8 @@ public sealed class StartChapterProductionCommandHandler
                     .Select(s => s.WorkspaceId)
                     .SingleAsync(tct);
                 var assigneeIds = ranges.Select(x => x.Range.ArtistId).Distinct().ToList();
-                var roles = await _db.WorkspaceMembers.AsNoTracking()
-                    .Where(m => m.WorkspaceId == workspaceId && assigneeIds.Contains(m.UserId) &&
-                                m.Status == WorkspaceMemberStatus.Active)
-                    .ToDictionaryAsync(m => m.UserId, m => m.Role, tct);
+                // D10: vai trò người nhận lấy theo Series
+                var roles = await SeriesRoles.AssignableRoleMapAsync(_db, workspaceId, chapter.SeriesId, tct);
                 foreach (var (stage, range, _) in ranges)
                 {
                     if (!roles.TryGetValue(range.ArtistId, out var role))

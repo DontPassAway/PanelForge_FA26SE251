@@ -74,7 +74,7 @@ public sealed class TransferAssignmentScopeCommandHandler
         var stage = await _db.PipelineStages.AsNoTracking().FirstAsync(s => s.Id == source.PipelineStageId, ct);
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-        var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, cmd.NewAssigneeUserId, stage, ct);
+        var role = await AssignmentRules.ResolveAssigneeRoleAsync(_db, workspaceId, chapter.SeriesId, cmd.NewAssigneeUserId, stage, ct);
         if (!role.IsSuccess) return Fail(role.ErrorMessage!, role.ErrorCode!);
 
         // Phần được chuyển phải đang nằm trong phạm vi thực tế của việc cả chương

@@ -136,7 +136,7 @@ public class WorkspaceHandlerTests
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, adminUser.Email, WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, adminUser.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().BeNull(); // → 400
@@ -147,7 +147,7 @@ public class WorkspaceHandlerTests
     public async Task AddMember_WhenActorNotProducer_ShouldReturnForbidden()
     {
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(Guid.NewGuid(), Guid.NewGuid(), "x@test.com", WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(Guid.NewGuid(), Guid.NewGuid(), "x@test.com", WorkspaceRole.Member), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
     }
@@ -165,7 +165,7 @@ public class WorkspaceHandlerTests
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, "New.Artist@Test.com", WorkspaceRole.Artist), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, "New.Artist@Test.com", WorkspaceRole.Member), CancellationToken.None);
 
         var invited = users.Should().ContainSingle().Subject;
         invited.Email.Should().Be("new.artist@test.com");
@@ -173,11 +173,11 @@ public class WorkspaceHandlerTests
         invited.IsEmailConfirmed.Should().BeFalse();
         invited.PasswordResetToken.Should().MatchRegex("^[0-9]{6}$");
         invited.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
-        result.Value!.Role.Should().Be(WorkspaceRole.Artist);
+        result.Value!.Role.Should().Be(WorkspaceRole.Member);
 
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _emailServiceMock.Verify(e => e.SendWorkspaceInvitationAsync(
-            "new.artist@test.com", It.IsAny<string>(), "Test Studio", "Artist",
+            "new.artist@test.com", It.IsAny<string>(), "Test Studio", "Member",
             invited.PasswordResetToken, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -198,7 +198,7 @@ public class WorkspaceHandlerTests
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
 
         var result = await AddMember().Handle(
-            new AddWorkspaceMemberCommand(actorId, workspace.Id, existingUser.Email, WorkspaceRole.Writer), CancellationToken.None);
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, existingUser.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.Value!.UserId.Should().Be(existingUser.Id);
         existingUser.PasswordResetToken.Should().BeNull("user đã có tài khoản không cần OTP kích hoạt");

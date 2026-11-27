@@ -179,13 +179,17 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         // Workspace Owner hoặc Producer luôn có toàn quyền trên các Series của Workspace
         if (await IsOwnerOrProducerAsync(userId, workspaceId.Value, cancellationToken)) return true;
 
-        // Quyền chuyên môn chỉ lấy theo role Active trong Workspace; dòng SeriesMember cũ không được cấp quyền
-        var wsMemberRole = await _dbContext.WorkspaceMembers
-            .Where(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active)
-            .Select(m => (WorkspaceRole?)m.Role)
+        // Spec D10: quyền chuyên môn lấy theo vai trò trong Series, yêu cầu còn là thành viên Active của Workspace
+        var isActiveMember = await _dbContext.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
+        if (!isActiveMember) return false;
+
+        var seriesRole = await _dbContext.SeriesMembers
+            .Where(sm => sm.SeriesId == seriesId && sm.UserId == userId && !sm.IsDeleted)
+            .Select(sm => (WorkspaceRole?)sm.Role)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return wsMemberRole is { } r && allowedRoles.Contains(r);
+        return seriesRole is { } r && allowedRoles.Contains(r);
     }
 
     public async Task<WorkspaceRole?> GetSeriesMemberRoleAsync(Guid userId, Guid seriesId, CancellationToken cancellationToken = default)
@@ -212,12 +216,8 @@ public class WorkspaceAuthorizationService : IWorkspaceAuthorizationService
         var wsMember = await _dbContext.WorkspaceMembers
             .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId && m.Status == WorkspaceMemberStatus.Active, cancellationToken);
 
-        if (wsMember != null)
-        {
-            return wsMember.Role;
-        }
-
-        return null;
+        // Spec D10: ngoài Series chỉ Producer của Studio có vai trò; thành viên chưa được gán vào Series thì không có
+        return wsMember?.Role == WorkspaceRole.Producer ? WorkspaceRole.Producer : null;
     }
 
     // BR-07: Administrator không bao giờ có quyền cấp Workspace.

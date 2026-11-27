@@ -141,7 +141,7 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
                 foreach (var group in waitingCells.GroupBy(t => t.ReviewerUserId!.Value))
                     _db.Notifications.Add(TaskGridNotifications.Submitted(group.Key, chapter.Id, chapter.ChapterNumber, group.Count()));
             else
-                foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, cmd.UserId, ct))
+                foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, chapter.SeriesId, cmd.UserId, ct))
                     _db.Notifications.Add(TaskGridNotifications.Submitted(reviewerId, chapter.Id, chapter.ChapterNumber, waitingCells.Count));
         }
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);

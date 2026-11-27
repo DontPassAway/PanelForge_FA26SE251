@@ -53,6 +53,12 @@ public sealed class AddWorkspaceMemberCommandHandler
             return Result<WorkspaceMemberDto>.Failure(
                 $"Vai trò không hợp lệ. Các vai trò hợp lệ: {string.Join(", ", Enum.GetNames<WorkspaceRole>())}.");
 
+        // Spec D10: ở cấp Studio chỉ có Producer hoặc Member; vai trò chuyên môn gán khi thêm vào Series
+        if (command.Role is not (WorkspaceRole.Producer or WorkspaceRole.Member))
+            return Result<WorkspaceMemberDto>.Failure(
+                "Vai trò trong Studio chỉ là Producer hoặc Member. Vai trò Writer/Artist/Letterer/Editor gán khi thêm vào từng Series.",
+                ResultErrorCodes.Validation);
+
         var workspace = await _dbContext.StudioWorkspaces
             .FirstOrDefaultAsync(w => w.Id == command.WorkspaceId, cancellationToken);
         if (workspace is null)

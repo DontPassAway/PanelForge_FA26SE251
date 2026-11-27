@@ -219,7 +219,8 @@ public sealed class UpdateElementTranslationCommandHandler
             .Select(m => (WorkspaceRole?)m.Role)
             .FirstOrDefaultAsync(ct);
 
-        var effectiveRole = seriesRole ?? workspaceRole;
+        // D10: vai trò chuyên môn chỉ tính theo Series; ở cấp Studio chỉ Producer có quyền
+        var effectiveRole = workspaceRole is null ? null : seriesRole ?? (workspaceRole == WorkspaceRole.Producer ? workspaceRole : null);
         return effectiveRole is WorkspaceRole.Letterer or WorkspaceRole.Artist or WorkspaceRole.Producer;
     }
 }

@@ -17,7 +17,7 @@ using Xunit;
 
 namespace PanelForge.UnitTests.Application.SeriesMembers;
 
-/// <summary>Workspace role = nguồn role duy nhất; Series Membership = ranh giới truy cập Series.</summary>
+/// <summary>Spec D10: Studio chỉ có Producer / Member; vai trò chuyên môn nằm ở Series Membership.</summary>
 public class SeriesMembershipRulesTests
 {
     private readonly Guid _ownerId = Guid.NewGuid();
@@ -51,17 +51,17 @@ public class SeriesMembershipRulesTests
             userId, WorkspaceRole.Artist, "Pencil trang 1");
 
     [Fact]
-    public async Task WorkspaceRoleChange_WithOpenWork_IsBlocked()
+    public async Task ProducerDemotion_WithOpenWork_IsBlocked()
     {
-        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Producer));
         _assignments.Add(OpenAssignmentFor(_artist.Id));
 
         var result = await new UpdateMemberRoleCommandHandler(_db.Object, ProducerActor().Object)
-            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Writer), CancellationToken.None);
+            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Member), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        _wsMembers.Single().Role.Should().Be(WorkspaceRole.Artist);
+        _wsMembers.Single().Role.Should().Be(WorkspaceRole.Producer);
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -90,12 +90,12 @@ public class SeriesMembershipRulesTests
     }
 
     [Fact]
-    public async Task SeriesAccess_AllowsActiveWorkspaceMember_WithoutSeriesMembership()
+    public async Task SeriesAccess_ActiveStudioMemberCanRead_ButHasNoRoleUntilAddedToSeries()
     {
-        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
 
         (await Auth.IsSeriesMemberAsync(_artist.Id, _series.Id)).Should().BeTrue();
-        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Artist])).Should().BeTrue();
+        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Artist])).Should().BeFalse();
     }
 
     [Theory]
@@ -119,26 +119,38 @@ public class SeriesMembershipRulesTests
     }
 
     [Fact]
-    public async Task HasSeriesRole_UsesWorkspaceRole_NotLegacySeriesRole()
+    public async Task HasSeriesRole_UsesSeriesRole()
     {
-        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
-        _seriesMembers.Add(SeriesMember.Create(_series.Id, _artist.Id, WorkspaceRole.Writer)); // dòng cũ lệch role
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
+        _seriesMembers.Add(SeriesMember.Create(_series.Id, _artist.Id, WorkspaceRole.Writer));
 
-        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Artist])).Should().BeTrue();
-        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Writer])).Should().BeFalse();
+        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Writer])).Should().BeTrue();
+        (await Auth.HasSeriesRoleAsync(_artist.Id, _series.Id, [WorkspaceRole.Artist])).Should().BeFalse();
     }
 
     [Fact]
-    public async Task ManualAddToSeries_InheritsWorkspaceRole_IgnoringRequestedRole()
+    public async Task ManualAddToSeries_UsesRequestedRole()
     {
-        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist));
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
 
         var result = await new AddSeriesMemberCommandHandler(_db.Object, ProducerActor().Object)
             .Handle(new AddSeriesMemberCommand(_ownerId, _series.Id, _artist.Id, WorkspaceRole.Editor), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Role.Should().Be(WorkspaceRole.Artist);
-        _seriesMembers.Should().ContainSingle(m => m.UserId == _artist.Id && m.Role == WorkspaceRole.Artist);
+        result.Value!.Role.Should().Be(WorkspaceRole.Editor);
+        _seriesMembers.Should().ContainSingle(m => m.UserId == _artist.Id && m.Role == WorkspaceRole.Editor);
+    }
+
+    [Fact]
+    public async Task ManualAddToSeries_WithMemberRole_IsRejected()
+    {
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
+
+        var result = await new AddSeriesMemberCommandHandler(_db.Object, ProducerActor().Object)
+            .Handle(new AddSeriesMemberCommand(_ownerId, _series.Id, _artist.Id, WorkspaceRole.Member), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        _seriesMembers.Should().BeEmpty();
     }
 
     [Fact]
@@ -154,9 +166,21 @@ public class SeriesMembershipRulesTests
     }
 
     [Fact]
-    public async Task WorkspaceRoleChange_SyncsSeriesMembershipRoles()
+    public async Task StudioRole_SpecialistRole_IsRejected()
     {
-        var wsMember = WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Artist);
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
+
+        var result = await new UpdateMemberRoleCommandHandler(_db.Object, ProducerActor().Object)
+            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Artist), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+    }
+
+    [Fact]
+    public async Task StudioRoleChange_DoesNotTouchSeriesRoles()
+    {
+        var wsMember = WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member);
         typeof(WorkspaceMember).GetProperty(nameof(WorkspaceMember.User))!.SetValue(wsMember, _artist); // mock không chạy Include
         _wsMembers.Add(wsMember);
         _seriesMembers.Add(SeriesMember.Create(_series.Id, _artist.Id, WorkspaceRole.Artist));
@@ -164,10 +188,10 @@ public class SeriesMembershipRulesTests
         _seriesMembers.Add(otherSeriesMember);
 
         var result = await new UpdateMemberRoleCommandHandler(_db.Object, ProducerActor().Object)
-            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Letterer), CancellationToken.None);
+            .Handle(new UpdateMemberRoleCommand(_ownerId, _workspace.Id, _artist.Id, WorkspaceRole.Producer), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _seriesMembers.Single(m => m.SeriesId == _series.Id).Role.Should().Be(WorkspaceRole.Letterer);
+        _seriesMembers.Single(m => m.SeriesId == _series.Id).Role.Should().Be(WorkspaceRole.Artist);
         otherSeriesMember.Role.Should().Be(WorkspaceRole.Artist);
         _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
