@@ -133,13 +133,16 @@ public sealed class ConfirmBibleEntryRevisionCommandHandler
                 snapshot.ReferenceImageUrl);
 
             // BIB-13 (Q23, Q24): Nếu đây là bản thay thế, đánh dấu bản cũ là Superseded
-            // và tính lại kế thừa cho các chương chưa Frozen đang kế thừa
             if (revision.SupersedesRevisionId.HasValue)
             {
                 var oldRevision = entry.Revisions.FirstOrDefault(r => r.Id == revision.SupersedesRevisionId.Value);
                 oldRevision?.MarkSuperseded(cmd.UserId, revision.VersionNumber, $"Bị thay bởi v{revision.VersionNumber}");
-                await _inheritanceResolver.ResolveInheritedAsync(cmd.SeriesId, 1, ct);
             }
+
+            // Tính lại kế thừa cho các chương chưa Frozen (binding không do Writer chọn): cả bản thay thế lẫn
+            // revision nội dung mới (Artist nộp lại kèm sửa nội dung) — nếu không, chương vẫn trỏ bản nháp cũ
+            // và Danh sách thực thể báo "chưa khoá" tới khi Gate 1 tự tính lại.
+            await _inheritanceResolver.ResolveInheritedAsync(cmd.SeriesId, 1, ct);
         }
         catch (UnauthorizedAccessException ex)
         {

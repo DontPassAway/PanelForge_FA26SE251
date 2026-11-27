@@ -20,6 +20,7 @@ using PanelForge.Application.Features.Chapters.Queries.GetChapterCover;
 using PanelForge.Application.Features.Chapters.Commands.UpdateChapter;
 using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterById;
+using PanelForge.Application.Features.Chapters.Queries.GetChapterReadiness;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterReviews;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshot;
 using PanelForge.Application.Features.Chapters.Queries.GetChapterSnapshots;
@@ -258,6 +259,20 @@ public sealed class ChaptersController : ControllerBase
         [FromRoute] Guid chapterId,
         CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterCastQuery(chapterId, GetCurrentUserId()), cancellationToken));
+
+    /// <summary>
+    /// GET /api/chapters/{chapterId}/readiness
+    /// Đánh giá tập trung Pre-production Readiness, phiên bản kịch bản (Latest/Approved/Production),
+    /// Series Bible phạm vi chương và tiến độ sản xuất (Task/Page/Panel tách biệt).
+    /// </summary>
+    [HttpGet("api/chapters/{chapterId:guid}/readiness")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(ChapterReadinessDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChapterReadiness(
+        [FromRoute] Guid chapterId,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(new GetChapterReadinessQuery(chapterId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
     /// PUT /api/chapters/{chapterId}/script — SCR-14: lưu cả cây Trang → Panel → dòng của chương trong một request, một transaction.

@@ -1,9 +1,9 @@
 using MediatR;
-using PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Chapters.Common;
+using PanelForge.Application.Features.Chapters.Models;
 
 namespace PanelForge.Application.Features.Chapters.Queries.GetChapterById;
 
@@ -29,54 +29,6 @@ public sealed class GetChapterByIdQueryHandler : IRequestHandler<GetChapterByIdQ
         if (chapter == null)
             return Result<ChapterDetailDto>.Failure($"Chapter {query.ChapterId} không tồn tại.");
 
-        var scenes = chapter.Scenes
-            .OrderBy(s => s.SceneNumber)
-            .Select(s => new ChapterSceneSummaryDto(
-                s.Id,
-                s.SceneNumber,
-                s.Heading,
-                s.Summary
-            ))
-            .ToList();
-
-        var pages = chapter.Pages
-            .OrderBy(p => p.PageNumber)
-            .Select(p => new ChapterPageSummaryDto(
-                p.Id,
-                p.PageNumber,
-                p.LayoutFormat.ToString(),
-                p.WidthPx,
-                p.HeightPx,
-                p.Dpi
-            ))
-            .ToList();
-
-        var detail = new ChapterDetailDto(
-            Id: chapter.Id,
-            SeriesId: chapter.SeriesId,
-            ChapterNumber: chapter.ChapterNumber,
-            Title: chapter.Title,
-            TargetReleaseDate: chapter.TargetReleaseDate,
-            VersionVector: chapter.VersionVector,
-            CreatedAt: chapter.CreatedAt,
-            UpdatedAt: chapter.UpdatedAt,
-            CreatedBy: chapter.CreatedBy,
-            Scenes: scenes,
-            Pages: pages,
-            Status: chapter.Status,
-            PublishedAt: chapter.PublishedAt,
-            Outline: chapter.Outline,
-            IsScriptFrozen: chapter.IsScriptFrozen,
-            ScriptFrozenAt: chapter.ScriptFrozenAt,
-            ScriptFrozenById: chapter.ScriptFrozenById,
-            CoverUrl: SetChapterCoverCommandHandler.CoverUrl(chapter.Id, chapter.CoverImageSha256),
-            ScriptContentHash: chapter.ScriptContentHash,
-            ScriptStatus: chapter.ScriptStatus,
-            ScriptSubmittedAt: chapter.ScriptSubmittedAt,
-            LastSubmittedVersionId: chapter.LastSubmittedVersionId,
-            PreviousSubmittedVersionId: chapter.PreviousSubmittedVersionId
-        );
-
-        return Result<ChapterDetailDto>.Success(detail);
+        return Result<ChapterDetailDto>.Success(ChapterDetailDtoFactory.Create(chapter));
     }
 }
