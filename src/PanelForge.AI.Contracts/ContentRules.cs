@@ -52,6 +52,9 @@ public static class ContentRules
             errors.Add($"Dòng {line.Order} loại {kind} thiếu nội dung.");
         if (kind == "Action" && !string.IsNullOrWhiteSpace(line.SpeakerLabel))
             errors.Add($"Dòng {line.Order} loại Action không được có người nói.");
+        // SCR-04 (như ScriptLine.Create): Thought bắt buộc có người nói, kiểm ở đây để AI tự sửa và Accept trả 400 thay vì 500
+        if (kind == "Thought" && string.IsNullOrWhiteSpace(line.SpeakerLabel))
+            errors.Add($"Dòng {line.Order} loại Thought phải có người nói (speaker).");
         if (line.Refs is not { Count: > 0 }) return;
         if (spoken) errors.Add($"Dòng {line.Order}: chỉ Action, Narration, Sfx được gắn tham chiếu Bible.");
         var text = line.StageDirection ?? line.Dialogue ?? "";

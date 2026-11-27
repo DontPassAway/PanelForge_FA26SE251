@@ -10,7 +10,8 @@ public sealed record ProductionPageAssignmentRequest(Guid ArtistId, int PageFrom
 
 public sealed record StartChapterProductionRequest(
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
-    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null);
+    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
+    bool FirstStageOnly = false);
 
 /// <param name="Assignments">Luôn rỗng từ Gate 1 trên Lưới V3; giữ field để client cũ không vỡ.</param>
 /// <param name="Lots">Các lô lưới Gate 1 vừa giao (Pencil + Letterer theo dải trang).</param>

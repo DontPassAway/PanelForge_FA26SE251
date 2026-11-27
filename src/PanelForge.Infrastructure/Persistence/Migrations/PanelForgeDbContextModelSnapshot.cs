@@ -1042,10 +1042,22 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Aliases")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("aliases")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
                         .HasColumnName("category");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -1075,6 +1087,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("details_json")
                         .HasDefaultValueSql("'{}'::jsonb");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
                     b.Property<bool>("IsCrowd")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1101,6 +1119,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("normalized_name");
 
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("priority");
+
                     b.Property<string>("ReferenceImageUrl")
                         .HasColumnType("text")
                         .HasColumnName("reference_image_url");
@@ -1114,6 +1137,16 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SeriesBibleId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_bible_id");
+
+                    b.Property<bool>("StrictCheck")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("strict_check");
+
+                    b.Property<string>("Subtitle")
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("subtitle");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -1130,6 +1163,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SeriesBibleId")
                         .HasDatabaseName("ix_bible_entries_series_bible_id");
+
+                    b.HasIndex("SeriesBibleId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bible_entries_series_bible_id_code");
 
                     b.HasIndex("SeriesBibleId", "NormalizedName")
                         .IsUnique()

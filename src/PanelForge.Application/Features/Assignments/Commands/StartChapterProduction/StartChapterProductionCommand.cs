@@ -23,7 +23,8 @@ public sealed record StartChapterProductionCommand(
     Guid ChapterId,
     Guid UserId,
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
-    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null)
+    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
+    bool FirstStageOnly = false)
     : IRequest<Result<StartChapterProductionResultDto>>;
 
 /// <summary>
@@ -110,13 +111,17 @@ public sealed class StartChapterProductionCommandHandler
                 if (hasLetterers && lettererStage is null)
                     return Fail("Pipeline của Series chưa có stage Letterer đang bật.");
 
+                // N2 (Assign Automation): chỉ giao công đoạn Artist đầu tiên, các công đoạn sau để R1 tự giao khi đến lượt.
+                // Bỏ nhánh Artist kiêm Letterer, nhưng Letterer Producer đã chỉ định trên form thì vẫn giao (không mất dữ liệu nhập).
+                if (cmd.FirstStageOnly) artistStages = [firstArtistStage];
+
                 // Strict = ô đã giao người khác thì báo xung đột (Pencil, Letterer được chỉ định); công đoạn còn lại
                 // chỉ nhận ô còn trống để không đè lựa chọn Producer đã làm trên lưới.
                 var ranges = cmd.PageAssignments
                     .SelectMany(r => artistStages.Select(s => (Stage: s, Range: r, Strict: s.Id == firstArtistStage.Id)))
                     .Concat(hasLetterers
                         ? cmd.LettererAssignments!.Select(r => (Stage: lettererStage!, Range: r, Strict: true))
-                        : lettererStage is null
+                        : lettererStage is null || cmd.FirstStageOnly
                             ? []
                             : cmd.PageAssignments.Select(r => (Stage: lettererStage, Range: r, Strict: false)))
                     .ToList();

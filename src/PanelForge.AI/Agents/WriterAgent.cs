@@ -26,6 +26,10 @@ public sealed class WriterAgent
             sb.AppendLine($"## Outline chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(ctx.ChapterOutline).AppendLine();
         sb.AppendLine($"## Bible hiệu lực tại chương {ctx.ChapterNumber} (dữ liệu)").AppendLine(PromptText.BibleBlock(ctx, keys)).AppendLine();
         sb.AppendLine("## Script có sẵn trong scene (dữ liệu)").AppendLine(PromptText.BaselineBlock(ctx, keys)).AppendLine();
+        if (ctx.AppendScript)
+            sb.AppendLine("## Chế độ viết nối")
+                .AppendLine("Chỉ viết các dòng MỚI nối tiếp ngay sau dòng cuối của script có sẵn. Không lặp lại, không viết lại, không sửa dòng cũ; mảng lines chỉ chứa dòng mới, order bắt đầu từ 1.")
+                .AppendLine();
 
         object? findingsInput = null;
         if (previous is not null && previousFindings is not null)
@@ -109,6 +113,8 @@ public sealed class WriterAgent
                 var entry = code is null ? null : ctx.Bible.FirstOrDefault(b => b.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
                 if (entry is not null)
                 {
+                    // Script chỉ gắn thẻ Nhân vật/Địa điểm/Đạo cụ; mục khác (Thuật ngữ, Luật...) thì bỏ thẻ, giữ nội dung dòng
+                    if (entry.Category is not ("Character" or "Location" or "Prop")) continue;
                     refs.Add(new ScriptDraftRef(surface, entry.EntryId));
                     continue;
                 }

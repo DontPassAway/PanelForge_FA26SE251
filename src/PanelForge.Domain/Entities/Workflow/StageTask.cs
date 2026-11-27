@@ -26,6 +26,11 @@ public class StageTask : BaseEntity
     public Guid? ReviewerUserId { get; private set; }
     public Guid? CurrentSubmissionId { get; private set; }
     public DateTime? StartedAt { get; private set; }
+    /// <summary>
+    /// Lúc ô vừa có người vừa đủ tiền đề mà chưa bắt đầu (Assign Automation N4). Mốc cho R3 tính 'bị ngâm'.
+    /// Null khi chưa sẵn sàng, đã bắt đầu, bỏ gán, huỷ hoặc đầu vào lỗi thời.
+    /// </summary>
+    public DateTime? ReadyAt { get; private set; }
 
     /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL.</summary>
     public uint RowVersion { get; private set; }
@@ -45,7 +50,8 @@ public class StageTask : BaseEntity
         or StageTaskStatus.UnderReview or StageTaskStatus.Approved or StageTaskStatus.ReworkRequired;
 
     /// <summary>Giao vào lô (lần đầu hoặc Transfer sang lô của người khác). Người mới chưa bắt đầu nên ô về Assigned.</summary>
-    public void AssignTo(Guid lotId)
+    /// <param name="prerequisitesApproved">Mọi tiền đề trực tiếp đã duyệt: ô sẵn sàng ngay nên ghi <see cref="ReadyAt"/>.</param>
+    public void AssignTo(Guid lotId, bool prerequisitesApproved = false)
     {
         if (lotId == Guid.Empty) throw new ArgumentException("Thiếu lô giao việc.", nameof(lotId));
         if (Status is not (StageTaskStatus.Unassigned or StageTaskStatus.Assigned
@@ -55,6 +61,7 @@ public class StageTask : BaseEntity
         LotId = lotId;
         Status = StageTaskStatus.Assigned;
         ClearOutdated();
+        ReadyAt = prerequisitesApproved ? DateTime.UtcNow : null;
         Touch();
     }
 
@@ -83,6 +90,8 @@ public class StageTask : BaseEntity
 
         LotId = null;
         Status = StageTaskStatus.Unassigned;
+        ReviewerUserId = null;
+        ReadyAt = null;
         ClearOutdated();
         Touch();
     }
@@ -96,6 +105,7 @@ public class StageTask : BaseEntity
 
         Status = StageTaskStatus.InProgress;
         StartedAt ??= DateTime.UtcNow;
+        ReadyAt = null;
         Touch();
     }
 
@@ -108,6 +118,7 @@ public class StageTask : BaseEntity
 
         CurrentSubmissionId = submissionId;
         ReopenReason = null;
+        ReviewerUserId = null; // N5: gợi ý người duyệt của lần nộp trước không còn đúng
         Status = isApprovalGate ? StageTaskStatus.Submitted : StageTaskStatus.Approved;
         Touch();
     }
@@ -115,7 +126,20 @@ public class StageTask : BaseEntity
     public void Withdraw()
     {
         if (Status != StageTaskStatus.Submitted) throw Invalid("rút bài");
+        ReviewerUserId = null;
         Status = StageTaskStatus.InProgress;
+        Touch();
+    }
+
+    /// <summary>
+    /// R2 (Assign Automation): gợi ý người duyệt cho ô vừa nộp. Gán mềm: ô vẫn Submitted, người khác vẫn mở duyệt được
+    /// (OpenReview ghi đè), người làm vẫn rút bài được.
+    /// </summary>
+    public void SuggestReviewer(Guid reviewerUserId)
+    {
+        if (reviewerUserId == Guid.Empty) throw new ArgumentException("Thiếu người duyệt.", nameof(reviewerUserId));
+        if (Status != StageTaskStatus.Submitted) throw Invalid("gợi ý người duyệt");
+        ReviewerUserId = reviewerUserId;
         Touch();
     }
 
@@ -151,7 +175,11 @@ public class StageTask : BaseEntity
     {
         if (Status != StageTaskStatus.UnderReview) throw Invalid("yêu cầu sửa");
         Status = StageTaskStatus.ReworkRequired;
-        if (prerequisitesApproved) ClearOutdated();
+        if (prerequisitesApproved)
+        {
+            ClearOutdated();
+            ReadyAt = DateTime.UtcNow;
+        }
         Touch();
     }
 
@@ -163,6 +191,7 @@ public class StageTask : BaseEntity
         var trimmed = reason?.Trim();
         ReopenReason = string.IsNullOrEmpty(trimmed) ? null : trimmed.Length <= MaxOutdatedReasonLength ? trimmed : trimmed[..MaxOutdatedReasonLength];
         Status = StageTaskStatus.ReworkRequired;
+        ReadyAt = DateTime.UtcNow; // ô đã duyệt nên tiền đề đã đủ (đầu vào lỗi thời bị chặn ở trên)
         Touch();
     }
 
@@ -174,6 +203,7 @@ public class StageTask : BaseEntity
         var trimmed = reason.Trim();
         IsInputOutdated = true;
         OutdatedReason = trimmed.Length <= MaxOutdatedReasonLength ? trimmed : trimmed[..MaxOutdatedReasonLength];
+        ReadyAt = null;
         Touch();
     }
 
@@ -189,7 +219,11 @@ public class StageTask : BaseEntity
         if (!prerequisitesApproved)
             throw new InvalidOperationException("Công đoạn trước chưa được duyệt lại, chưa xử lý Impact Review được.");
 
-        if (!keep) Status = StageTaskStatus.ReworkRequired;
+        if (!keep)
+        {
+            Status = StageTaskStatus.ReworkRequired;
+            ReadyAt = DateTime.UtcNow;
+        }
         ClearOutdated();
         Touch();
     }
@@ -199,7 +233,34 @@ public class StageTask : BaseEntity
     {
         if (Status == StageTaskStatus.Cancelled) return;
         Status = StageTaskStatus.Cancelled;
+        ReadyAt = null;
         ClearOutdated();
+        Touch();
+    }
+
+    /// <summary>Tiền đề cuối cùng vừa được duyệt: ô đã có người và chưa bắt đầu thì ghi mốc sẵn sàng (chỉ khi đang trống).</summary>
+    public void MarkReady()
+    {
+        if (ReadyAt is not null || LotId is null || IsInputOutdated) return;
+        if (Status is not (StageTaskStatus.Assigned or StageTaskStatus.ReworkRequired)) return;
+        ReadyAt = DateTime.UtcNow;
+        Touch();
+    }
+
+    /// <summary>Tiền đề bị mở lại: ô hạ nguồn không còn sẵn sàng. Cần riêng vì <see cref="MarkInputOutdated"/> bỏ qua ô chưa bắt đầu.</summary>
+    public void ClearReady()
+    {
+        if (ReadyAt is null) return;
+        ReadyAt = null;
+        Touch();
+    }
+
+    /// <summary>N5: bỏ gợi ý người duyệt (Editor rời Studio hoặc đổi vai trò). Ô đang UnderReview dùng <see cref="ReleaseReview"/>.</summary>
+    public void ClearSuggestedReviewer()
+    {
+        if (Status == StageTaskStatus.UnderReview) throw Invalid("bỏ gợi ý người duyệt");
+        if (ReviewerUserId is null) return;
+        ReviewerUserId = null;
         Touch();
     }
 

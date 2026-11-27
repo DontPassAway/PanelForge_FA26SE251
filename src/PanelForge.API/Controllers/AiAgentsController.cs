@@ -54,7 +54,7 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new RunWorkflowCommand(
             seriesId, CurrentUserId, body.ChapterId, body.SceneId, body.Brief, body.ReadingDirection,
-            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId), ct);
+            body.ChapterVersion, body.BaseScriptRevisionId, body.WorkflowType, body.PanelIds, body.RevisionOfSuggestionId, body.AppendScript), ct);
         return result.IsSuccess
             ? Accepted($"/api/series/{seriesId}/ai/runs/{result.Value!.RunId}", result.Value)
             : ToError(result);
@@ -161,9 +161,10 @@ public sealed class AiAgentsController : ControllerBase
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(AiWorkflowAvailabilityResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAvailability(
-        [FromRoute] Guid seriesId, [FromQuery] Guid chapterId, [FromQuery] Guid? sceneId, CancellationToken ct)
+        [FromRoute] Guid seriesId, [FromQuery] Guid chapterId, [FromQuery] Guid? sceneId,
+        [FromQuery] bool appendScript, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GetWorkflowAvailabilityQuery(seriesId, CurrentUserId, chapterId, sceneId), ct);
+        var result = await _mediator.Send(new GetWorkflowAvailabilityQuery(seriesId, CurrentUserId, chapterId, sceneId, appendScript), ct);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -280,6 +281,9 @@ public sealed class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new ReviewSuggestionCommand(
             seriesId, suggestionId, CurrentUserId, decision, body?.Reason, body?.ChapterVersion), ct);
+        if (!result.IsSuccess)
+            HttpContext.RequestServices.GetRequiredService<ILogger<AiAgentsController>>().LogWarning(
+                "Review {Decision} suggestion {SuggestionId} failed: {Code} {Error}", decision, suggestionId, result.ErrorCode, result.ErrorMessage);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
