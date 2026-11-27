@@ -35,10 +35,26 @@ public sealed class GetSeriesBibleQueryHandler : IRequestHandler<GetSeriesBibleQ
                 : Result<SeriesBibleDto>.Success(new SeriesBibleDto(Guid.Empty, request.SeriesId, workspaceId.Value, "Series Bible", null, 0, []));
         }
 
+        var endorserIds = bible.Entries
+            .SelectMany(e => e.Revisions)
+            .Where(r => r.WriterEndorsedByUserId.HasValue)
+            .Select(r => r.WriterEndorsedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, string>? userNames = null;
+        if (endorserIds.Count > 0 && _dbContext.Users is not null)
+        {
+            userNames = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => endorserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.FullName, cancellationToken);
+        }
+
         var entryDtos = bible.Entries
             .OrderBy(e => e.Category)
             .ThenBy(e => e.Name)
-            .Select(e => BibleEntryDto.From(e) with { IsCrowd = false })
+            .Select(e => BibleEntryDto.From(e, userNames))
             .ToList();
 
         return Result<SeriesBibleDto>.Success(new SeriesBibleDto(

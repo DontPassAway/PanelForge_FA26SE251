@@ -15,7 +15,9 @@ public sealed record StageProgressDto(
     StageProgressStatus Status,
     DateTime? SubmittedAt,
     Guid? SubmittedByUserId,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool HasScriptImpact = false,
+    Guid? ImpactedScriptLineId = null);
 
 /// <summary>Tiến độ theo Panel của cả Chapter (nguồn cho dashboard UC-16). Lọc tuỳ chọn theo Page.</summary>
 public sealed record GetStageProgressByChapterQuery(Guid ChapterId, Guid? PageId = null)
@@ -48,7 +50,7 @@ public sealed class GetStageProgressByChapterQueryHandler
 
         var items = rows
             .Select(s => new StageProgressDto(s.Id, panelPage[s.PanelId!.Value], s.PanelId.Value, s.PipelineStageId,
-                s.Status, s.SubmittedAt, s.SubmittedByUserId, s.UpdatedAt))
+                s.Status, s.SubmittedAt, s.SubmittedByUserId, s.UpdatedAt, s.HasScriptImpact, s.ImpactedScriptLineId))
             .OrderBy(s => s.PageId).ThenBy(s => s.PanelId)
             .ToList();
 

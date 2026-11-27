@@ -22,11 +22,11 @@ public sealed class CreateBibleEntryTests
 
         var handler = new CreateBibleEntryCommandHandler(db);
         var first = await handler.Handle(new CreateBibleEntryCommand(
-            series.Id, Guid.NewGuid(), BibleEntryCategory.Character,
-            "CHR_1", "Hắc Long", "Nhân vật"), default);
+            SeriesId: series.Id, UserId: Guid.NewGuid(), Category: BibleEntryCategory.Character,
+            Name: "Hắc Long", Description: "Nhân vật"), default);
         var duplicate = await handler.Handle(new CreateBibleEntryCommand(
-            series.Id, Guid.NewGuid(), BibleEntryCategory.Character,
-            "CHR_2", "  HẮC   LONG  ", "Nhân vật khác"), default);
+            SeriesId: series.Id, UserId: Guid.NewGuid(), Category: BibleEntryCategory.Character,
+            Name: "  HẮC   LONG  ", Description: "Nhân vật khác"), default);
 
         first.IsSuccess.Should().BeTrue();
         duplicate.IsSuccess.Should().BeFalse();

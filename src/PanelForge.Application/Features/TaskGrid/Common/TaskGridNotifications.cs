@@ -11,6 +11,10 @@ namespace PanelForge.Application.Features.TaskGrid.Common;
 /// </summary>
 internal static class TaskGridNotifications
 {
+    /// <summary>Đoạn tiêu đề cố định để nhật ký Automation nhận ra thông báo R1 bỏ qua / R3 báo trễ.</summary>
+    public const string SkippedTitleMarker = "có ô chưa tự giao được";
+    public const string EscalatedTitlePrefix = "Lô việc trễ hạn quá";
+
     private static string Cells(int count) => count == 1 ? "1 ô" : $"{count} ô";
 
     public static Notification Assigned(StageTaskLot lot, int taskCount, string stageName)
@@ -28,6 +32,25 @@ internal static class TaskGridNotifications
     public static Notification Unassigned(Guid userId, Guid chapterId, int taskCount) => Notification.Create(
         userId, NotificationType.AssignmentUnassigned, "Bạn đã được gỡ khỏi việc", $"Producer gỡ bạn khỏi {Cells(taskCount)}.",
         chapterId: chapterId);
+
+    /// <summary>R3 leo thang: lô trễ quá số giờ Studio đặt. Nội dung cố định theo lô + hạn để chỉ báo một lần.</summary>
+    public static Notification LotEscalated(Guid producerId, StageTaskLot lot, int hours) => Notification.Create(
+        producerId, NotificationType.AssignmentOverdue, $"{EscalatedTitlePrefix} {hours} giờ",
+        $"Hạn {lot.DueDate:yyyy-MM-dd HH:mm} UTC · lô {lot.Id}. Gia hạn, chia lại hoặc nhắc người làm.", chapterId: lot.ChapterId);
+
+    /// <summary>R3 vòng ô: ô đã có người và đủ tiền đề nhưng quá lâu chưa bắt đầu. Nội dung cố định theo chương để không báo lặp.</summary>
+    public static Notification CellsStale(Guid producerId, Guid chapterId, decimal chapterNumber, int hours) => Notification.Create(
+        producerId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: có ô bị ngâm",
+        $"Có ô đã giao và đủ điều kiện quá {hours} giờ mà chưa bắt đầu. Mở lưới giao việc để nhắc hoặc giao lại.", chapterId: chapterId);
+
+    /// <summary>G3: mọi ô đã duyệt, không còn gì chặn; Producer vẫn tự bấm chốt chương.</summary>
+    public static Notification ChapterReadyToLock(Guid producerId, Guid chapterId, decimal chapterNumber) => Notification.Create(
+        producerId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber} sẵn sàng chốt",
+        "Mọi ô đã duyệt và không còn điều kiện chặn. Mở chương để duyệt/chốt.", chapterId: chapterId);
+
+    /// <summary>R1 không tìm được người cho một số ô; báo Producer kèm lý do để giao tay.</summary>
+    public static Notification AutoAssignSkipped(Guid userId, Guid chapterId, decimal chapterNumber, string reason) => Notification.Create(
+        userId, NotificationType.AssignmentUpdated, $"Chương {chapterNumber}: {SkippedTitleMarker}", reason, chapterId: chapterId);
 
     public static Notification NeedsReassign(Guid userId, Guid chapterId, decimal chapterNumber, int taskCount) => Notification.Create(
         userId, NotificationType.AssignmentUpdated, $"Có {Cells(taskCount)} cần giao lại",
@@ -74,6 +97,7 @@ internal static class TaskGridNotifications
                 && approved.Any(a => a.PageId is null || t.PageId is null || a.PageId == t.PageId)
                 && TaskGridRules.PrerequisitesApproved(t, stages, chapterTasks))
             .ToList();
+        foreach (var t in ready) t.MarkReady(); // N4: tiền đề cuối cùng vừa duyệt
         if (ready.Count == 0) return;
 
         var assigneeByLot = await AssigneesByLotAsync(db, ready, ct);

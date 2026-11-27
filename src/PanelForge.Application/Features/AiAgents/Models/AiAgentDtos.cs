@@ -36,7 +36,9 @@ public sealed record RunWorkflowRequest(
     /// <summary>Chỉ với Artist: chỉ soạn mô tả vẽ cho các panel này (null/rỗng = mọi panel của layout đã duyệt).</summary>
     IReadOnlyList<Guid>? PanelIds = null,
     /// <summary>Chạy lại từ đề xuất đang ChangesRequested: lý do của người duyệt được đưa vào brief.</summary>
-    Guid? RevisionOfSuggestionId = null);
+    Guid? RevisionOfSuggestionId = null,
+    /// <summary>Chỉ với Script: viết nối thêm dòng sau script có sẵn, giữ nguyên dòng cũ (kể cả dòng đã gắn Panel).</summary>
+    bool AppendScript = false);
 
 public sealed record RunWorkflowResponse(Guid RunId, AiRunStatus Status, string Provider, string Model);
 

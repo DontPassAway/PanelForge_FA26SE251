@@ -10,7 +10,8 @@ public sealed record ProductionPageAssignmentRequest(Guid ArtistId, int PageFrom
 
 public sealed record StartChapterProductionRequest(
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
-    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null);
+    IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
+    bool FirstStageOnly = false);
 
 /// <param name="Assignments">Luôn rỗng từ Gate 1 trên Lưới V3; giữ field để client cũ không vỡ.</param>
 /// <param name="Lots">Các lô lưới Gate 1 vừa giao (Pencil + Letterer theo dải trang).</param>
@@ -41,13 +42,16 @@ public sealed record AssignmentDto(
     DateTime? UpdatedAt,
     IReadOnlyList<Guid>? DependsOnAssignmentIds = null,
     string? ImpactReviewReason = null,
-    Guid? PageId = null)   // Trang của việc Page/Panel; chỉ điền ở GET /api/chapters/{chapterId}/assignments
+    Guid? PageId = null,   // Trang của việc Page/Panel; chỉ điền ở GET /api/chapters/{chapterId}/assignments
+    bool HasScriptImpact = false,
+    Guid? ImpactedScriptLineId = null)
 {
     public static AssignmentDto From(Assignment a) => new(
         a.Id, a.SeriesId, a.ChapterId, a.EntityType, a.TargetEntityId, a.PipelineStageId,
         a.AssigneeUserId, a.AssignedRole, a.Brief, a.ReferenceNotes, a.DueDate, a.Priority,
         a.Status, a.DependsOnAssignmentId, a.StartedAt, a.CompletedAt, a.LastFeedbackComment,
-        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds(), a.ImpactReviewReason);
+        a.CreatedAt, a.UpdatedAt, a.GetDependsOnAssignmentIds(), a.ImpactReviewReason,
+        HasScriptImpact: a.HasScriptImpact, ImpactedScriptLineId: a.ImpactedScriptLineId);
 }
 
 /// <summary>DTO dành cho màn hình làm việc cá nhân xuyên suốt toàn bộ Studio (Cross-Chapter Worklist).</summary>

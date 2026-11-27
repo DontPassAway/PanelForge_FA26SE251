@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.ScriptLines.Common;
@@ -55,12 +56,32 @@ internal static class ScriptStructureRules
     }
 
     public static (Panel Panel, bool Created) EnsurePanel(
-        IPanelForgeDbContext db, List<Panel> panels, Guid pageId, int panelNumber, Guid userId)
+        IPanelForgeDbContext db,
+        List<Panel> panels,
+        Guid pageId,
+        Guid? panelId,
+        int panelNumber,
+        int temporaryPanelNumber,
+        IReadOnlySet<Guid> claimedPanelIds,
+        IReadOnlySet<Guid> touchedPanelIds,
+        Guid userId)
     {
-        var panel = panels.FirstOrDefault(p => p.PageId == pageId && p.PanelNumber == panelNumber);
+        var panel = panelId.HasValue
+            ? panels.FirstOrDefault(p => p.Id == panelId.Value)
+            : panels.FirstOrDefault(p =>
+                p.PageId == pageId &&
+                p.PanelNumber == panelNumber &&
+                !claimedPanelIds.Contains(p.Id) &&
+                !touchedPanelIds.Contains(p.Id));
+
+        if (panelId.HasValue && panel is null)
+            throw new InvalidOperationException($"Panel '{panelId}' không tồn tại trong chương này.");
+        if (panel is not null && panel.PageId != pageId)
+            throw new InvalidOperationException($"Panel '{panel.Id}' không thuộc trang đang lưu.");
         if (panel is not null) return (panel, false);
 
-        panel = Panel.Create(pageId, panelNumber, panelNumber, "{}");
+        // Panel mới dùng số tạm để không đụng unique index khi chèn vào giữa các panel hiện có.
+        panel = Panel.Create(pageId, temporaryPanelNumber, temporaryPanelNumber, "{}");
         panel.CreatedBy = userId.ToString();
         db.Panels.Add(panel);
         panels.Add(panel);
@@ -92,6 +113,20 @@ internal static class ScriptStructureRules
             panel.DeletedBy = userId.ToString();
             db.Panels.Remove(panel);
         }
+        var removedPageIds = removedPages.Select(p => p.Id).ToHashSet();
+        var preservedTaskPages = db is DbContext efDb && removedPageIds.Count > 0
+            ? efDb.ChangeTracker.Entries<StageTask>()
+                .Where(e => e.State != EntityState.Deleted &&
+                            e.Entity.PageId is { } pid &&
+                            removedPageIds.Contains(pid))
+                .Select(e => (
+                    Entry: e,
+                    PageId: e.Entity.PageId!.Value,
+                    OriginalState: e.State,
+                    WasPageIdModified: e.Property(t => t.PageId).IsModified))
+                .ToList()
+            : [];
+
         foreach (var page in removedPages)
         {
             var stream = await pageRepository.GetAsync(page.Id, ct);
@@ -101,6 +136,20 @@ internal static class ScriptStructureRules
                 await pageRepository.SaveAsync(stream, ct);
             }
             db.Pages.Remove(page);
+        }
+
+        // DbSet.Remove(page) khiến EF Core ChangeTracker cắt FK PageId -> null trên StageTask đang track
+        // trước khi SaveChangesAsync chuyển Delete thành soft-delete; khôi phục để RefreezeScript huỷ đúng ô việc.
+        foreach (var (entry, pageId, originalState, wasPageIdModified) in preservedTaskPages)
+        {
+            if (entry.Entity.PageId != pageId)
+            {
+                var prop = entry.Property(t => t.PageId);
+                prop.CurrentValue = pageId;
+                prop.IsModified = wasPageIdModified;
+                if (originalState == EntityState.Unchanged && !entry.Properties.Any(p => p.IsModified))
+                    entry.State = EntityState.Unchanged;
+            }
         }
 
         // FK cascade không chạy với xoá mềm

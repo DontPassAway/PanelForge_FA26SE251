@@ -41,6 +41,8 @@ public class Chapter : BaseEntity
     public Guid? ScriptFrozenById { get; private set; }
     /// <summary>V2.6 (Q26, SCR-41, BIB-14): Phiên bản kịch bản (ScriptVersion) được chốt khi Bắt đầu sản xuất.</summary>
     public Guid? FrozenScriptVersionId { get; private set; }
+    /// <summary>V2.6 Refreeze: Phiên bản kịch bản đóng băng liền trước để so sánh Snapshot-to-Snapshot diff.</summary>
+    public Guid? PreviousFrozenScriptVersionId { get; private set; }
     // SHA-256 của toàn bộ script-lines lúc đóng băng; null khi chưa đóng băng
     public string? ScriptContentHash { get; private set; }
 
@@ -143,8 +145,13 @@ public class Chapter : BaseEntity
     /// </summary>
     public void StartProduction(Guid producerUserId, string? scriptContentHash, Guid? frozenScriptVersionId = null)
     {
-        RequireEditable("bắt đầu sản xuất");
+        if (Status != ChapterStatus.PreProduction && Status != ChapterStatus.InProduction)
+            throw new InvalidOperationException($"Chỉ bắt đầu sản xuất được chương ở trạng thái PreProduction hoặc InProduction, hiện là {Status}.");
         RequireScriptStatus(ScriptStatus.InReview, "bắt đầu sản xuất");
+        if (Status == ChapterStatus.InProduction && FrozenScriptVersionId.HasValue && frozenScriptVersionId.HasValue && frozenScriptVersionId.Value != Guid.Empty)
+        {
+            PreviousFrozenScriptVersionId = FrozenScriptVersionId;
+        }
         ScriptStatus = ScriptStatus.Frozen;
         IsScriptFrozen = true;
         ScriptFrozenAt = DateTime.UtcNow;
@@ -155,7 +162,33 @@ public class Chapter : BaseEntity
         ScriptReopenReason = null;
         ScriptReopenRequestedById = null;
         ScriptReopenRequestedAt = null;
-        if (Status == ChapterStatus.PreProduction) Status = ChapterStatus.InProduction;
+        Status = ChapterStatus.InProduction;
+        IncrementVersion();
+    }
+
+    /// <summary>
+    /// V2.6: Producer chốt lại kịch bản cho chương đang InProduction (InReview → Frozen),
+    /// lưu lại <see cref="PreviousFrozenScriptVersionId"/> để truy vết snapshot diff.
+    /// </summary>
+    public void RefreezeScript(Guid producerUserId, string scriptContentHash, Guid newFrozenScriptVersionId)
+    {
+        RequireStatus(ChapterStatus.InProduction, "chốt lại kịch bản");
+        RequireScriptStatus(ScriptStatus.InReview, "chốt lại kịch bản");
+        ArgumentException.ThrowIfNullOrWhiteSpace(scriptContentHash);
+        if (newFrozenScriptVersionId == Guid.Empty)
+            throw new ArgumentException("Phiên bản kịch bản chốt mới không hợp lệ.", nameof(newFrozenScriptVersionId));
+
+        PreviousFrozenScriptVersionId = FrozenScriptVersionId;
+        FrozenScriptVersionId = newFrozenScriptVersionId;
+        ScriptStatus = ScriptStatus.Frozen;
+        IsScriptFrozen = true;
+        ScriptFrozenAt = DateTime.UtcNow;
+        ScriptFrozenById = producerUserId;
+        ScriptContentHash = scriptContentHash;
+        ScriptReopenStatus = ScriptReopenStatus.None;
+        ScriptReopenReason = null;
+        ScriptReopenRequestedById = null;
+        ScriptReopenRequestedAt = null;
         IncrementVersion();
     }
 

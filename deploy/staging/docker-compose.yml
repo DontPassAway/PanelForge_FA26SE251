@@ -1,90 +1,59 @@
-# Staging BE PanelForge trên Oracle VM (ARM). Chạy trong /opt/panelforge; mã nguồn nhánh stg nằm ở ./src.
-# Biến ${...} lấy từ /opt/panelforge/.env (bootstrap.sh sinh, chmod 600). Không commit .env.
-name: panelforge-stg
+# BE PanelForge trên 1 VM, 2 môi trường; mỗi môi trường có API, AI, Postgres riêng, dùng chung Caddy + LibreTranslate:
+#   main = bản chính thức (nhánh main), dev = bản test (nhánh dev). Code lên dev trước, test ổn thì promote dev → main.
+# Chạy trong /opt/panelforge; mã nguồn ở ./src-main và ./src-dev. Biến ${...} lấy từ .env (bootstrap.sh sinh, chmod 600).
+name: panelforge
 
 # Log json-file của Docker không tự xoay vòng: giới hạn 3 × 10 MB mỗi container để không đầy đĩa.
 x-logging: &logging
   driver: json-file
   options: { max-size: 10m, max-file: "3" }
 
+# Biến môi trường chung của API; phần riêng từng môi trường (DB, secret, AI) khai ở service.
+x-api-env: &api-env
+  ASPNETCORE_ENVIRONMENT: Staging
+  # Sau Caddy: lấy IP thật của client (rate limit) và scheme https (cookie Secure).
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+  # Image không có appsettings.json (bị .gitignore): đặt mức log ở đây, bỏ log từng câu SQL.
+  Logging__LogLevel__Default: Information
+  Logging__LogLevel__Microsoft.AspNetCore: Warning
+  Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+  JwtSettings__Issuer: PanelForge
+  JwtSettings__Audience: PanelForgeClient
+  JwtSettings__ExpiryMinutes: "60"
+  TranslationService__BaseUrl: http://translate:5000
+  AssetStorage__Provider: Local
+  AssetStorage__RootPath: /data/assets
+  EmailConfiguration__SmtpServer: smtp.gmail.com
+  EmailConfiguration__SmtpPort: "587"
+  EmailConfiguration__SenderName: PanelForge
+  EmailConfiguration__SenderEmail: ${SMTP_SENDER_EMAIL:-}
+  EmailConfiguration__Password: ${SMTP_APP_PASSWORD:-}
+  Firebase__ProjectId: ${FIREBASE_PROJECT_ID:-}
+
+x-postgres: &postgres
+  image: postgres:17-alpine
+  restart: unless-stopped
+  logging: *logging
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U panelforge -d panelforge"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+
 services:
   caddy:
     image: caddy:2.11.2-alpine
     restart: unless-stopped
     logging: *logging
-    ports: ["80:80", "443:443"]
+    ports: ["80:80", "443:443", "8443:8443"]
     environment:
-      # ":80" = chỉ HTTP theo IP; đổi thành tên miền (vd panelforge-stg.duckdns.org) để Caddy tự cấp HTTPS.
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      # Không có tên miền: main = http://IP, dev = http://IP:8443. Có tên miền: Caddy tự cấp HTTPS cho cả hai.
+      MAIN_SITE: ${MAIN_SITE:-:80}
+      DEV_SITE: ${DEV_SITE:-:8443}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on: [api]
-
-  api:
-    build: ./src
-    image: panelforge-api:stg
-    restart: unless-stopped
-    logging: *logging
-    ports: ["127.0.0.1:8080:8080"] # chỉ cho deploy.sh kiểm tra sức khoẻ; bên ngoài đi qua Caddy
-    environment:
-      ASPNETCORE_ENVIRONMENT: Staging
-      # Image không có appsettings.json (bị .gitignore): đặt mức log ở đây, bỏ log từng câu SQL.
-      Logging__LogLevel__Default: Information
-      Logging__LogLevel__Microsoft.AspNetCore: Warning
-      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
-      # Sau Caddy: lấy IP thật của client (rate limit) và scheme https (cookie Secure).
-      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=panelforge;Username=panelforge;Password=${POSTGRES_PASSWORD}
-      JwtSettings__Secret: ${JWT_SECRET}
-      JwtSettings__Issuer: PanelForgeStaging
-      JwtSettings__Audience: PanelForgeStagingClient
-      JwtSettings__ExpiryMinutes: "60"
-      AiService__ServiceUrl: http://ai:5055
-      AiService__ServiceKey: ${AI_SERVICE_KEY}
-      TranslationService__BaseUrl: http://translate:5000
-      AssetStorage__Provider: Local
-      AssetStorage__RootPath: /data/assets
-      SePay__WebhookApiKey: ${SEPAY_WEBHOOK_API_KEY:-}
-      EmailConfiguration__SmtpServer: smtp.gmail.com
-      EmailConfiguration__SmtpPort: "587"
-      EmailConfiguration__SenderName: PanelForge Staging
-      EmailConfiguration__SenderEmail: ${SMTP_SENDER_EMAIL:-}
-      EmailConfiguration__Password: ${SMTP_APP_PASSWORD:-}
-      Firebase__ProjectId: ${FIREBASE_PROJECT_ID:-}
-    volumes:
-      - assets:/data/assets
-      # Khoá Data Protection (mã hoá AI key của Studio): mất khoá = không giải mã được key đã lưu.
-      - dp_keys:/root/.aspnet/DataProtection-Keys
-    depends_on:
-      postgres: { condition: service_healthy }
-
-  ai:
-    # Context là thư mục src/ của repo: .dockerignore ở gốc repo loại *.md, mà AI cần Prompts/*.md.
-    build: { context: ./src/src, dockerfile: ../../Dockerfile.ai }
-    image: panelforge-ai:stg
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      ASPNETCORE_URLS: http://+:5055
-      AiService__ServiceKey: ${AI_SERVICE_KEY}
-      Backend__BaseUrl: http://api:8080
-
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      POSTGRES_DB: panelforge
-      POSTGRES_USER: panelforge
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes: [pg_data:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U panelforge -d panelforge"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
 
   translate:
     image: libretranslate/libretranslate:v1.9.6
@@ -94,10 +63,90 @@ services:
       LT_LOAD_ONLY: en,vi
     volumes: [lt_models:/home/libretranslate/.local]
 
+  # ── Bản chính thức: nhánh main ─────────────────────────────────────────────
+  api-main:
+    build: ./src-main
+    image: panelforge-api:main
+    restart: unless-stopped
+    logging: *logging
+    ports: ["127.0.0.1:8080:8080"] # chỉ cho deploy.sh kiểm tra sức khoẻ; bên ngoài đi qua Caddy
+    environment:
+      <<: *api-env
+      ConnectionStrings__PostgreSQL: Host=postgres-main;Port=5432;Database=panelforge;Username=panelforge;Password=${MAIN_POSTGRES_PASSWORD}
+      JwtSettings__Secret: ${MAIN_JWT_SECRET}
+      AiService__ServiceUrl: http://ai-main:5055
+      AiService__ServiceKey: ${MAIN_AI_SERVICE_KEY}
+      SePay__WebhookApiKey: ${MAIN_SEPAY_WEBHOOK_API_KEY:-}
+    volumes:
+      - assets_main:/data/assets
+      # Khoá Data Protection (mã hoá AI key của Studio): mất khoá = không giải mã được key đã lưu.
+      - dp_main:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      postgres-main: { condition: service_healthy }
+
+  ai-main:
+    # Context là thư mục src/ của repo: .dockerignore ở gốc repo loại *.md, mà AI cần Prompts/*.md.
+    build: { context: ./src-main/src, dockerfile: ../../Dockerfile.ai }
+    image: panelforge-ai:main
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      ASPNETCORE_URLS: http://+:5055
+      AiService__ServiceKey: ${MAIN_AI_SERVICE_KEY}
+      Backend__BaseUrl: http://api-main:8080
+
+  postgres-main:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: panelforge
+      POSTGRES_USER: panelforge
+      POSTGRES_PASSWORD: ${MAIN_POSTGRES_PASSWORD}
+    volumes: [pg_main:/var/lib/postgresql/data]
+
+  # ── Bản test: nhánh dev ────────────────────────────────────────────────────
+  api-dev:
+    build: ./src-dev
+    image: panelforge-api:dev
+    restart: unless-stopped
+    logging: *logging
+    ports: ["127.0.0.1:8081:8080"]
+    environment:
+      <<: *api-env
+      ConnectionStrings__PostgreSQL: Host=postgres-dev;Port=5432;Database=panelforge;Username=panelforge;Password=${DEV_POSTGRES_PASSWORD}
+      JwtSettings__Secret: ${DEV_JWT_SECRET}
+      AiService__ServiceUrl: http://ai-dev:5055
+      AiService__ServiceKey: ${DEV_AI_SERVICE_KEY}
+    volumes:
+      - assets_dev:/data/assets
+      - dp_dev:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      postgres-dev: { condition: service_healthy }
+
+  ai-dev:
+    build: { context: ./src-dev/src, dockerfile: ../../Dockerfile.ai }
+    image: panelforge-ai:dev
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      ASPNETCORE_URLS: http://+:5055
+      AiService__ServiceKey: ${DEV_AI_SERVICE_KEY}
+      Backend__BaseUrl: http://api-dev:8080
+
+  postgres-dev:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: panelforge
+      POSTGRES_USER: panelforge
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD}
+    volumes: [pg_dev:/var/lib/postgresql/data]
+
 volumes:
-  pg_data:
-  assets:
-  dp_keys:
   caddy_data:
   caddy_config:
   lt_models:
+  pg_main:
+  assets_main:
+  dp_main:
+  pg_dev:
+  assets_dev:
+  dp_dev:

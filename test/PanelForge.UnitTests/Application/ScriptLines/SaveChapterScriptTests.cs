@@ -293,6 +293,58 @@ public class SaveChapterScriptTests
     }
 
     [Fact]
+    public async Task SaveChapterScript_RemovingFirstPanel_PreservesRemainingPanelIdentity()
+    {
+        var page = Page.CreateNew(_chapter.Id, 1, LayoutFormat.StandardPage, 1200, 1800, 300);
+        var removedPanel = Panel.Create(page.Id, 1, 1, "0,0,600,900");
+        var remainingPanel = Panel.Create(page.Id, 2, 2, "600,0,600,900", direction: "Khung cần giữ");
+        var remainingLine = ScriptLine.Create(
+            _scene.Id,
+            1,
+            null,
+            null,
+            Guid.NewGuid(),
+            _scene.DefaultNarrationMode,
+            ScriptLineKind.Action,
+            null,
+            "Nội dung của panel thứ hai");
+        remainingLine.AssignToPanel(remainingPanel.Id);
+        _db.Pages.Add(page);
+        _db.Panels.AddRange(removedPanel, remainingPanel);
+        _db.ScriptLines.Add(remainingLine);
+        await _db.SaveChangesAsync();
+
+        var body = new ChapterScriptBody(
+            ExpectedRevisionId: null,
+            Pages:
+            [
+                new ScriptTreePage(
+                    page.Id,
+                    1,
+                    [
+                        new ScriptTreePanel(
+                            remainingPanel.Id,
+                            1,
+                            "Khung cần giữ",
+                            null,
+                            [new ScriptTreeLine(remainingLine.Id, ScriptLineKind.Action, null, "Nội dung của panel thứ hai")])
+                    ])
+            ]);
+
+        var result = await CreateSaveHandler().Handle(
+            new SaveChapterScriptCommand(_chapter.Id, _writerId, body),
+            default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        var panelsInDb = await _db.Panels.Where(p => p.PageId == page.Id).ToListAsync();
+        panelsInDb.Should().ContainSingle();
+        panelsInDb[0].Id.Should().Be(remainingPanel.Id);
+        panelsInDb[0].PanelNumber.Should().Be(1);
+        (await _db.ScriptLines.SingleAsync(l => l.Id == remainingLine.Id)).PanelId
+            .Should().Be(remainingPanel.Id);
+    }
+
+    [Fact]
     public async Task SubmitChapterScript_WithBlocker_SucceedsWithWarning_AllowsSubmitBeforeBibleCompleted()
     {
         var mockGate = new Mock<IChapterCastGate>();

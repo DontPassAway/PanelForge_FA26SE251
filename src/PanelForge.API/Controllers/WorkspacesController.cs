@@ -14,6 +14,9 @@ using PanelForge.Application.Features.Workspaces.Commands.DeleteWorkspace;
 using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
 using PanelForge.Application.Features.Workspaces.Commands.ResendInvitation;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateMemberRole;
+using PanelForge.Application.Features.Workspaces.Commands.UpdateAutomationSettings;
+using PanelForge.Application.Features.Workspaces.Queries.GetAutomationActivity;
+using PanelForge.Application.Features.Workspaces.Queries.GetAutomationSettings;
 using PanelForge.Application.Features.Workspaces.Commands.UpdateWorkspace;
 using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceById;
@@ -399,6 +402,47 @@ public class WorkspacesController : ControllerBase
             return BadRequest(new { message = result.ErrorMessage });
 
         return Ok(result.Value);
+    }
+
+    /// <summary>Assign Automation: xem cấu hình (Producer, Editor). Chưa lưu lần nào thì trả mặc định, rowVersion = null.</summary>
+    [HttpGet("{workspaceId:guid}/automation-settings")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(AutomationSettingsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAutomationSettings(Guid workspaceId, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetAutomationSettingsQuery(userId, workspaceId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>Assign Automation: nhật ký gần đây (lô tự giao, ô bỏ qua, lô báo trễ) + số đếm 7 ngày (Producer, Editor).</summary>
+    [HttpGet("{workspaceId:guid}/automation-activity")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [ProducesResponseType(typeof(AutomationActivityDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAutomationActivity(Guid workspaceId, [FromQuery] int take = 20, CancellationToken cancellationToken = default)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetAutomationActivityQuery(userId, workspaceId, take), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>Assign Automation: lưu cấu hình (Owner, Producer). Gửi lại rowVersion từ GET; lệch thì 409.</summary>
+    [HttpPut("{workspaceId:guid}/automation-settings")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(AutomationSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateAutomationSettings(
+        Guid workspaceId, [FromBody] UpdateAutomationSettingsRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new UpdateAutomationSettingsCommand(userId, workspaceId, request), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : this.ConflictOrNull(result) ?? ToError(result);
     }
 
     private Guid? GetCurrentUserId()

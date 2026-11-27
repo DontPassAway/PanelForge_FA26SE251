@@ -44,8 +44,9 @@ public sealed class ClaimStageTaskReviewCommandHandler : IRequestHandler<ClaimSt
         else if (task.ReviewerUserId != cmd.UserId)
         {
             var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-            var isProducer = await _db.WorkspaceMembers.AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == cmd.UserId
-                                                                        && m.Role == WorkspaceRole.Producer, ct);
+            var isProducer = await _db.StudioWorkspaces.AnyAsync(w => w.Id == workspaceId && w.OwnerId == cmd.UserId, ct)
+                || await _db.WorkspaceMembers.AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == cmd.UserId
+                    && m.Role == WorkspaceRole.Producer && m.Status == WorkspaceMemberStatus.Active, ct);
             if (!isProducer)
                 return Fail("Chỉ người đang duyệt hoặc Producer mới nhả được khoá duyệt.", ResultErrorCodes.Forbidden);
         }

@@ -44,8 +44,12 @@ public sealed class ResolveStageTaskImpactCommandHandler : IRequestHandler<Resol
         var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
         if (lot is not null) _db.Notifications.Add(TaskGridNotifications.ImpactResolved(lot.AssigneeUserId, chapter.Id, stageName, cmd.Keep));
         if (cmd.Keep && task.Status == Domain.Enums.StageTaskStatus.Approved)
+        {
             await TaskGridNotifications.AddReadyAsync(_db, [task], stages, chapterTasks, chapter.Id, ct);
+            await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, [task], stages, chapterTasks, ct);
+        }
         await _db.SaveChangesAsync(ct);
+        if (cmd.Keep) await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
 
         return Result<StageTaskDto>.Success((await TaskGridRules.WithSummaryAsync(_db, [StageTaskDto.From(task, lot?.AssigneeUserId, isStartable: false)], ct))[0]);
     }

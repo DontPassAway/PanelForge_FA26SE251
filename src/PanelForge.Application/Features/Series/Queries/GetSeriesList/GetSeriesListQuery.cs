@@ -72,7 +72,8 @@ public sealed class GetSeriesListQueryHandler : IRequestHandler<GetSeriesListQue
                 SetSeriesImageCommandHandler.ImageUrl(s.Id, SeriesImageKind.Banner, s.BannerImageSha256),
                 s.IsCompleted,
                 s.OriginalLanguage,
-                s.ReleaseLanguages
+                s.ReleaseLanguages,
+                s.AllowSoloCreatorReview
             ))
             .ToListAsync(cancellationToken);
 

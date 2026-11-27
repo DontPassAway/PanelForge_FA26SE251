@@ -17,7 +17,9 @@ public sealed record RunSnapshot(
     Guid? LayoutRevisionId = null,
     ArtistContext? Artist = null,
     string? SeriesStoryArc = null,
-    string? ChapterOutline = null)
+    string? ChapterOutline = null,
+    /// <summary>Workflow Script chế độ viết nối: AI chỉ viết dòng mới sau script có sẵn, Accept thêm dòng thay vì thay cả script.</summary>
+    bool AppendScript = false)
 {
     public WorkflowInputs Inputs => new(
         BaselineScript.Count > 0, ExistingLayout is not null, Artist?.Panels.Count > 0);

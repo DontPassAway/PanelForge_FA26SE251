@@ -33,6 +33,9 @@ public class Series : BaseEntity
     /// <summary>Producer đánh dấu bộ truyện đã hoàn thành (Reader thấy "Hoàn thành" thay vì "Đang ra").</summary>
     public bool IsCompleted { get; private set; }
 
+    /// <summary>Cho phép một người vừa vẽ Concept vừa khoá Canon (nới lỏng BR-06 cho solo-creator, mặc định false).</summary>
+    public bool AllowSoloCreatorReview { get; private set; }
+
     /// <summary>Ngôn ngữ kịch bản gốc (BR-34, mặc định 'vi').</summary>
     public string OriginalLanguage { get; private set; } = ContentLanguages.Original;
 
@@ -81,6 +84,13 @@ public class Series : BaseEntity
     {
         if (IsCompleted == isCompleted) return;
         IsCompleted = isCompleted;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetAllowSoloCreatorReview(bool allowSoloCreatorReview)
+    {
+        if (AllowSoloCreatorReview == allowSoloCreatorReview) return;
+        AllowSoloCreatorReview = allowSoloCreatorReview;
         UpdatedAt = DateTime.UtcNow;
     }
 

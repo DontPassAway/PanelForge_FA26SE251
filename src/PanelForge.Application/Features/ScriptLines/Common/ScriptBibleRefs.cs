@@ -67,8 +67,8 @@ internal static class ScriptBibleRefs
                 {
                     var entry = await db.BibleEntries.AsNoTracking()
                         .FirstOrDefaultAsync(e => e.Id == r.BibleEntryId.Value && e.SeriesBibleId == seriesBible.Id, ct);
-                    if (entry is null || !entry.IsActive)
-                        return $"{lineLabel}: Mục Bible '{r.BibleEntryId}' không tồn tại hoặc đã bị vô hiệu hóa.";
+                    if (entry is null)
+                        return $"{lineLabel}: Mục Bible '{r.BibleEntryId}' không tồn tại.";
                     if (entry.Category is not (BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop))
                         return $"{lineLabel}: Chỉ cho phép tham chiếu mục Nhân vật, Địa điểm hoặc Đạo cụ.";
                     targetEntryId = entry.Id;

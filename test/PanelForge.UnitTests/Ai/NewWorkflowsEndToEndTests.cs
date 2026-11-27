@@ -117,7 +117,7 @@ public class NewWorkflowsEndToEndTests
     public async Task Storyboard_ScriptWithBlockingContinuityFinding_StopsForHuman_NoWriterNoStoryboardNoSuggestion()
     {
         var h = await AiHarness.CreateAsync();
-        var an = (await h.Db.BibleEntries.SingleAsync(e => e.Code == "AN")).Id;
+        var an = (await h.Db.BibleEntries.SingleAsync(e => e.Name == "An")).Id;
         h.Db.ScriptLines.Add(ScriptLine.Create(AiDemoSeeder.SceneId, 1, "Cháu có chìa khóa bạc đây, bà thử xem.", null, speakerLabel: "An"));
         await h.Db.SaveChangesAsync();
 
