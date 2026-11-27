@@ -1,4 +1,18 @@
-{$SITE_ADDRESS} {
+# FE ghép URL SignalR thành <VITE_API_URL>/hubs/... = /api/hubs/..., còn hub của API nằm ở /hubs/...
+(hubs) {
+	uri replace /api/hubs/ /hubs/ 1
+}
+
+# Bản chính thức (nhánh main)
+{$MAIN_SITE} {
 	encode zstd gzip
-	reverse_proxy api:8080
+	import hubs
+	reverse_proxy api-main:8080
+}
+
+# Bản test (nhánh dev)
+{$DEV_SITE} {
+	encode zstd gzip
+	import hubs
+	reverse_proxy api-dev:8080
 }
