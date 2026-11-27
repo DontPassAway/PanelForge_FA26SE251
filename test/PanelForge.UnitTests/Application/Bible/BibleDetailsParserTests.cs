@@ -92,6 +92,29 @@ public class BibleDetailsParserTests
     }
 
     [Fact]
+    public void Parse_UnifiedBriefInAttributes_DoesNotExposeTechnicalFieldOrDuplicateText()
+    {
+        var json = """
+        {
+            "artistNotes": "Tự tin, tóc xanh buộc gọn.",
+            "attributes": {
+                "artistNotes": "Tự tin, tóc xanh buộc gọn.",
+                "height": "1m68"
+            }
+        }
+        """;
+
+        var details = BibleDetailsParser.Parse(json);
+
+        details.ArtistNotes.Should().Be(
+            "Tự tin, tóc xanh buộc gọn.\n\n- Chiều cao: 1m68");
+        details.ArtistNotes.Should().NotContain("artistNotes:");
+        details.ArtistNotes!.Split(
+            "Tự tin, tóc xanh buộc gọn.",
+            StringSplitOptions.None).Should().HaveCount(2);
+    }
+
+    [Fact]
     public void Parse_IgnoresDeliverablesFields()
     {
         var json = """

@@ -98,6 +98,12 @@ public static class BibleDetailsParser
             {
                 if (attrsElem.ValueKind == JsonValueKind.Object)
                 {
+                    if (string.IsNullOrWhiteSpace(directArtistNotes) &&
+                        (TryGetStringProperty(attrsElem, "artistNotes", out var nestedNotes) ||
+                         TryGetStringProperty(attrsElem, "ArtistNotes", out nestedNotes)))
+                    {
+                        directArtistNotes = nestedNotes;
+                    }
                     ExtractFromObject(attrsElem, ref age, bulletLines);
                 }
             }
@@ -130,12 +136,13 @@ public static class BibleDetailsParser
             }
 
             // Tổng hợp artistNotes
+            var uniqueBulletLines = bulletLines.Distinct(StringComparer.Ordinal).ToArray();
             string? finalArtistNotes;
             if (!string.IsNullOrWhiteSpace(directArtistNotes))
             {
-                if (bulletLines.Count > 0)
+                if (uniqueBulletLines.Length > 0)
                 {
-                    finalArtistNotes = $"{directArtistNotes.Trim()}\n\n{string.Join("\n", bulletLines)}";
+                    finalArtistNotes = $"{directArtistNotes.Trim()}\n\n{string.Join("\n", uniqueBulletLines)}";
                 }
                 else
                 {
@@ -144,7 +151,7 @@ public static class BibleDetailsParser
             }
             else
             {
-                finalArtistNotes = bulletLines.Count > 0 ? string.Join("\n", bulletLines) : null;
+                finalArtistNotes = uniqueBulletLines.Length > 0 ? string.Join("\n", uniqueBulletLines) : null;
             }
 
             return new BibleDetails(
@@ -172,6 +179,14 @@ public static class BibleDetailsParser
                     var a = prop.Value.GetString()?.Trim();
                     if (!string.IsNullOrWhiteSpace(a)) age = a;
                 }
+                continue;
+            }
+
+            // artistNotes is the canonical unified brief, not a legacy labelled bullet.
+            // Parse reads it before this compatibility projection runs.
+            if (key.Equals("artistNotes", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("artist_notes", StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
             }
 
