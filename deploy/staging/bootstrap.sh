@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Cài staging BE PanelForge lần đầu trên VM Ubuntu 24.04 (Oracle Ampere A1, ARM). Chạy bằng root, chạy lại được.
+# Cài staging BE PanelForge lần đầu trên VM Ubuntu 24.04 (Azure x64 hoặc Oracle Ampere A1 ARM). Chạy bằng root, chạy lại được.
 # Dùng: bash bootstrap.sh [ref chứa deploy/staging, mặc định stg]
 set -euxo pipefail
 APP=/opt/panelforge
 REPO=https://github.com/DontPassAway/PanelForge_FA26SE251.git
 DEPLOY_REF="${1:-stg}"
 
-# 1) Ubuntu image của Oracle chặn mọi cổng vào trừ 22: mở 80/443 và lưu lại TRƯỚC khi cài Docker
-#    (lưu sau khi có Docker sẽ ghi cả rule của Docker, khởi động lại máy bị trùng rule).
-for port in 80 443; do
-  if ! iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null; then
-    n=$(iptables -L INPUT --line-numbers -n | awk '$2=="REJECT" {print $1; exit}')
-    iptables -I INPUT "${n:-1}" -p tcp --dport "$port" -m state --state NEW -j ACCEPT
-  fi
-done
-netfilter-persistent save
+# 1) Chỉ Ubuntu image của Oracle chặn mọi cổng vào trừ 22 (có netfilter-persistent); Azure mở cổng bằng NSG ngoài VM.
+#    Mở 80/443 và lưu lại TRƯỚC khi cài Docker (lưu sau khi có Docker sẽ ghi cả rule của Docker, khởi động lại bị trùng rule).
+if command -v netfilter-persistent > /dev/null; then
+  for port in 80 443; do
+    if ! iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null; then
+      n=$(iptables -L INPUT --line-numbers -n | awk '$2=="REJECT" {print $1; exit}')
+      iptables -I INPUT "${n:-1}" -p tcp --dport "$port" -m state --state NEW -j ACCEPT
+    fi
+  done
+  netfilter-persistent save
+fi
 
 # 2) Swap 4 GB đỡ lúc build .NET.
 if ! swapon --show | grep -q /swapfile; then
@@ -27,7 +29,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q docker.io docker-compose-v2 docker-buildx git curl openssl
 systemctl enable --now docker
-usermod -aG docker ubuntu || true
+for u in ubuntu azureuser; do usermod -aG docker "$u" 2>/dev/null || true; done # user SSH mặc định của Oracle / Azure
 
 # 4) Mã nguồn nhánh stg + file deploy lấy từ DEPLOY_REF.
 mkdir -p "$APP"
