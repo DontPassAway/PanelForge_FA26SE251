@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
-using PanelForge.Application.Features.Chapters.Commands.Editions;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Chapters.Commands.ApproveChapter;
 using PanelForge.Application.Features.Chapters.Commands.HandOffChapter;
