@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Catalog;
+using PanelForge.Application.Features.Payments.Common;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Entities.Workspaces;
@@ -151,6 +152,7 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                         && t.Status == PaymentTransactionStatus.Pending
                         && t.Type == type
                         && t.ChapterId == chapterId
+                        && t.Language == language
                         && !t.IsDeleted)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(ct);
@@ -159,6 +161,7 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             t.CreatedAt >= reuseSince
             && t.AmountVnd == amountVnd
             && t.WorkspaceId == workspaceId
+            && t.Language == language
             && t.BankBin == bankBin
             && t.BankAccountNo == accountNo);
 
@@ -183,15 +186,8 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             ));
         }
 
-        // Mã đơn duy nhất dạng PF + 6 chữ số — cũng là nội dung chuyển khoản bắt buộc.
-        string orderCode;
-        int attempts = 0;
-        do
-        {
-            orderCode = $"PF{Random.Shared.Next(100000, 999999)}";
-            attempts++;
-        }
-        while (await _db.PaymentTransactions.AnyAsync(t => t.OrderCode == orderCode, ct) && attempts < 10);
+        // Mã đơn duy nhất dạng PF + 10 chữ số — cũng là nội dung chuyển khoản bắt buộc (AUD-BE-10).
+        string orderCode = await OrderCodeGenerator.GenerateUniqueAsync(_db, ct);
 
         string qrImageUrl =
             $"https://img.vietqr.io/image/{bankBin}-{accountNo}-compact2.png?amount={amountVnd}&addInfo={orderCode}&accountName={Uri.EscapeDataString(accountName)}";

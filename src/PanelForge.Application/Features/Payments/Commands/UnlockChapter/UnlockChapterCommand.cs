@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Catalog;
+using PanelForge.Application.Features.Payments.Common;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -79,6 +80,14 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         if (!terms.IsConfigured)
             return Result<UnlockChapterResponse>.Failure("Ấn bản này chưa được Publisher đặt giá.", ResultErrorCodes.Validation);
 
+        int currentPriceVnd = terms.IsPaid ? (int)terms.PriceVnd : 0;
+        if (req.ExpectedPriceVnd.HasValue && req.ExpectedPriceVnd.Value != currentPriceVnd)
+        {
+            return Result<UnlockChapterResponse>.Failure(
+                $"Giá ấn bản đã thay đổi (kỳ vọng {req.ExpectedPriceVnd.Value:N0}đ, hiện tại {currentPriceVnd:N0}đ). Vui lòng tải lại.",
+                ResultErrorCodes.PriceChanged);
+        }
+
         if (!terms.IsPaid || isVip)
         {
             var freeEntitlement = ChapterEntitlement.Create(
@@ -121,7 +130,7 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
 
         wallet.DeductBalance(priceVnd);
 
-        string orderCode = $"PF{Random.Shared.Next(100000, 999999)}";
+        string orderCode = await OrderCodeGenerator.GenerateUniqueAsync(_db, ct);
         var transaction = PaymentTransaction.Create(
             userId: command.UserId,
             orderCode: orderCode,

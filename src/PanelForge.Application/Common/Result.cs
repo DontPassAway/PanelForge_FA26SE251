@@ -34,6 +34,8 @@ public static class ResultErrorCodes
     /// <summary>D9b: ấn bản ngôn ngữ chưa phát hành → HTTP 404, không fallback về ngôn ngữ gốc.</summary>
     public const string EditionNotPublished = "EDITION_NOT_PUBLISHED";
     public const string Conflict = "CONFLICT";
+    /// <summary>AUD-BE-10: giá ấn bản thay đổi so với giá kỳ vọng client gửi lên → HTTP 409.</summary>
+    public const string PriceChanged = "PRICE_CHANGED";
     public const string HashMismatch = "HASH_MISMATCH";
     public const string BibleGateBlocked = "BIBLE_GATE_BLOCKED";
     public const string ActiveArtworkOnRemovedPage = "ACTIVE_ARTWORK_ON_REMOVED_PAGE";

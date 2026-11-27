@@ -237,4 +237,76 @@ public class VietQrPaymentFlowTests
         afterUnlock.Summary.TotalUnlockRevenueVnd.Should().Be(15000m);
         afterUnlock.Summary.TotalRevenueVnd.Should().Be(15000m);
     }
+
+    // ─── AUD-BE-10: mã đơn, ngôn ngữ, giá kỳ vọng, phạm vi duyệt ────────────
+
+    [Fact]
+    public async Task OrderCodeGenerator_GeneratesUniqueTenDigitCodes()
+    {
+        var codes = new HashSet<string>();
+        for (var i = 0; i < 20; i++)
+        {
+            var code = await PanelForge.Application.Features.Payments.Common.OrderCodeGenerator.GenerateUniqueAsync(_db, default);
+            code.Should().MatchRegex(@"^PF\d{10}$");
+            codes.Add(code).Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task SwitchingEditionLanguage_CreatesSeparatePendingOrder_DoesNotReuseOtherLanguage()
+    {
+        TestEditions.Monetize(_db, _paidChapter.Id, isPaid: true, priceVnd: 15000m, language: "en");
+        await _db.SaveChangesAsync();
+
+        var viOrder = await CreateOrder(new TopupRequest(ChapterId: _paidChapter.Id, Purpose: "ChapterUnlock", Language: "vi"));
+        var enOrder = await CreateOrder(new TopupRequest(ChapterId: _paidChapter.Id, Purpose: "ChapterUnlock", Language: "en"));
+
+        viOrder.IsSuccess.Should().BeTrue();
+        enOrder.IsSuccess.Should().BeTrue();
+        enOrder.Value!.OrderId.Should().NotBe(viOrder.Value!.OrderId);
+
+        var txs = await _db.PaymentTransactions.ToListAsync();
+        txs.Should().HaveCount(2);
+        txs.Select(t => t.Language).Should().BeEquivalentTo(["vi", "en"]);
+    }
+
+    [Fact]
+    public async Task UnlockChapter_WithMismatchedExpectedPriceVnd_ReturnsPriceChanged_AndDoesNotDeduct()
+    {
+        _db.ReaderWallets.Add(ReaderWallet.Create(_readerId, 50000m));
+        await _db.SaveChangesAsync();
+
+        var result = await new UnlockChapterCommandHandler(_db, new DefaultBankSettings())
+            .Handle(new UnlockChapterCommand(_readerId, new UnlockChapterRequest(_paidChapter.Id, ExpectedPriceVnd: 10000)), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.PriceChanged);
+        (await _db.ReaderWallets.SingleAsync(w => w.UserId == _readerId)).BalanceVnd.Should().Be(50000m);
+        (await _db.ChapterEntitlements.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ApproveAndRejectPayment_RejectsTransactionsWithNullOrDifferentWorkspaceId()
+    {
+        var nullWsTx = PaymentTransaction.Create(
+            _readerId, "PF9999990001", PaymentTransactionType.Topup, 20000m, "", "970422", "0123", "TEST",
+            workspaceId: null);
+        var otherWsTx = PaymentTransaction.Create(
+            _readerId, "PF9999990002", PaymentTransactionType.Topup, 20000m, "", "970422", "0123", "TEST",
+            workspaceId: Guid.NewGuid());
+        _db.PaymentTransactions.AddRange(nullWsTx, otherWsTx);
+        await _db.SaveChangesAsync();
+
+        var approveHandler = new ApprovePaymentCommandHandler(_db);
+        var rejectHandler = new PanelForge.Application.Features.Payments.Commands.RejectPayment.RejectPaymentCommandHandler(_db);
+
+        (await approveHandler.Handle(new ApprovePaymentCommand(_studio.Id, nullWsTx.Id, _producerId), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        (await approveHandler.Handle(new ApprovePaymentCommand(_studio.Id, otherWsTx.Id, _producerId), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        (await rejectHandler.Handle(new(_studio.Id, nullWsTx.Id, _producerId, "nope"), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        (await rejectHandler.Handle(new(_studio.Id, otherWsTx.Id, _producerId, "nope"), default))
+            .ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+    }
 }

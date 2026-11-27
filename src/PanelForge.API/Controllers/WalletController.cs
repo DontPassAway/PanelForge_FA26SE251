@@ -68,7 +68,7 @@ public class WalletController : ControllerBase
         {
             ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
                 NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
-            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(new { message = result.ErrorMessage }),
         };
     }
@@ -90,7 +90,7 @@ public class WalletController : ControllerBase
         {
             ResultErrorCodes.NotFound or ResultErrorCodes.EditionNotPublished =>
                 NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
-            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(new { message = result.ErrorMessage }),
         };
     }

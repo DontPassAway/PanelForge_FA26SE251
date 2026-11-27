@@ -74,7 +74,8 @@ public sealed record UnlockChapterRequest(
     Guid? SeriesId = null,
     bool IsPermanent = true,
     int? RentalViews = null,
-    string? Language = null
+    string? Language = null,
+    int? ExpectedPriceVnd = null
 );
 
 public sealed record UnlockChapterResponse(
