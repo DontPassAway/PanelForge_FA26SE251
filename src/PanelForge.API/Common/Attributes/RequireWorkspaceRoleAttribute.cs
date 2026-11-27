@@ -140,14 +140,8 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
         bool isPublisher = user.IsInRole("Publisher") ||
             user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && c.Value == "Publisher");
-        bool isAdmin = user.IsInRole("Admin") ||
-            user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && (c.Value == "Admin" || c.Value == "Administrator"));
-
-        if (isAdmin)
-        {
-            await next();
-            return;
-        }
+        // BR-07: Admin nền tảng không có quyền nội dung trong Studio. Không đi tắt ở đây;
+        // IWorkspaceAuthorizationService trả false cho Admin nên Admin nhận 403.
 
         if (isPublisher && (_allowedRoles.Length == 0 || _allowedRoles.Contains(WorkspaceRole.Publisher)))
         {
