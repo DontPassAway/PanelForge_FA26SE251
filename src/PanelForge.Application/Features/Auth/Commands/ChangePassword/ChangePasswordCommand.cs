@@ -66,8 +66,9 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
             if (string.IsNullOrEmpty(user.TwoFactorSecret))
                 return Result<bool>.Failure("Chưa cấu hình khóa bí mật 2FA cho tài khoản này.");
 
-            if (!_totpService.VerifyCode(user.TwoFactorSecret, command.TwoFactorCode))
-                return Unauthorized("Mã xác thực 2FA không chính xác hoặc đã hết hạn.");
+            if (_totpService.MatchTimeStep(user.TwoFactorSecret, command.TwoFactorCode) is not { } step
+                || !user.TryConsumeTwoFactorStep(step))
+                return Unauthorized("Mã xác thực 2FA không chính xác, đã hết hạn hoặc đã được dùng.");
         }
 
         user.ResetPassword(_passwordHasher.HashPassword(command.NewPassword));

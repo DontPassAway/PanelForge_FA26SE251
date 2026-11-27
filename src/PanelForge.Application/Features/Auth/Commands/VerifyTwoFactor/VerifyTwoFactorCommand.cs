@@ -61,14 +61,21 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
         if (string.IsNullOrEmpty(user.TwoFactorSecret))
             return Result<AuthResponse>.Failure("Chưa khởi tạo khóa bảo mật 2FA. Vui lòng gọi enable-2fa trước.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, code))
+        if (_totpService.MatchTimeStep(user.TwoFactorSecret, code) is not { } step)
             return Unauthorized("Mã xác thực 2FA không chính xác.");
+        if (!user.TryConsumeTwoFactorStep(step))
+            return Unauthorized(CodeAlreadyUsed);
 
         user.EnableTwoFactor();
+        // Cấp bộ mã khôi phục ngay khi bật: mất điện thoại vẫn đăng nhập được. Mã thô chỉ trả lần này.
+        var recoveryCodes = SecondFactor.IssueRecoveryCodes(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(AuthResponseFactory.WithoutToken(
-            user, "Bảo mật 2FA đã được kích hoạt thành công cho tài khoản của bạn."));
+            user, "Bảo mật 2FA đã được kích hoạt thành công cho tài khoản của bạn.") with
+        {
+            RecoveryCodes = recoveryCodes
+        });
     }
 
     private async Task<Result<AuthResponse>> CompleteLoginChallengeAsync(
@@ -84,8 +91,12 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
         if (user is null || !user.IsActive || !user.TwoFactorEnabled || string.IsNullOrEmpty(user.TwoFactorSecret))
             return Unauthorized("Thông tin tài khoản hoặc cấu hình 2FA không hợp lệ.");
 
-        if (!_totpService.VerifyCode(user.TwoFactorSecret, command.Code))
-            return Unauthorized("Mã xác thực 2FA không chính xác.");
+        // Mã 6 số từ Authenticator hoặc mã khôi phục (mất điện thoại); cả hai chỉ dùng một lần
+        var outcome = SecondFactor.Verify(user, _totpService, command.Code);
+        if (outcome == SecondFactor.Outcome.AlreadyUsed)
+            return Unauthorized(CodeAlreadyUsed);
+        if (outcome == SecondFactor.Outcome.Invalid)
+            return Unauthorized("Mã xác thực 2FA hoặc mã khôi phục không chính xác.");
 
         string? rememberToken = null;
         if (command.RememberDevice)
@@ -96,17 +107,23 @@ public sealed class VerifyTwoFactorCommandHandler : IRequestHandler<VerifyTwoFac
                 tokenHash: AuthSecrets.HashToken(rememberToken),
                 expiresAt: DateTime.UtcNow.Add(AuthSecrets.RememberDeviceLifetime),
                 deviceName: command.DeviceName));
-            await _dbContext.SaveChangesAsync(cancellationToken);
         }
+        // Lưu bước TOTP đã dùng (và thiết bị ghi nhớ nếu có) trước khi phát phiên
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var message = command.RememberDevice
-            ? "Xác thực 2FA thành công. Thiết bị này đã được ghi nhớ trong 30 ngày."
-            : "Xác thực 2FA và đăng nhập thành công.";
+        var message = outcome == SecondFactor.Outcome.RecoveryCode
+            ? $"Đăng nhập bằng mã khôi phục. Còn {user.TwoFactorRecoveryCodesLeft} mã; hãy tạo bộ mã mới hoặc thiết lập lại 2FA nếu đã mất điện thoại."
+            : command.RememberDevice
+                ? "Xác thực 2FA thành công. Thiết bị này đã được ghi nhớ trong 30 ngày."
+                : "Xác thực 2FA và đăng nhập thành công.";
 
         return Result<AuthResponse>.Success(
             await AuthResponseFactory.SignedInAsync(_dbContext, cancellationToken, user, _jwtTokenGenerator, message, rememberToken,
                 deviceName: DeviceDetector.DetectDevice(command.UserAgent), ipAddress: command.IpAddress, userAgent: command.UserAgent));
     }
+
+    private const string CodeAlreadyUsed =
+        "Mã xác thực 2FA này đã được dùng. Vui lòng chờ mã mới trong ứng dụng Authenticator.";
 
     private static Result<AuthResponse> Unauthorized(string message)
         => Result<AuthResponse>.Failure(message, ResultErrorCodes.Unauthorized);

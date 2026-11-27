@@ -24,6 +24,7 @@ using PanelForge.Application.Features.Auth.Commands.RevokeSession;
 using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Features.Auth.Commands.RegenerateRecoveryCodes;
 using PanelForge.Application.Features.Auth.Queries.CheckEmail;
 using PanelForge.Application.Features.Auth.Queries.GetActiveSessions;
 using PanelForge.Application.Features.Auth.Queries.GetLandingContext;
@@ -138,11 +139,16 @@ public class AuthController : ControllerBase
 
         // BR-22: CanCreateStudio đọc từ DB (có thể đã được Admin cấp/thu hồi sau khi token phát hành)
         var canCreateStudio = false;
+        // FE cần biết 2FA đang bật để mở màn quản lý thay vì gọi enable-2fa (bị từ chối khi 2FA đã bật)
+        var twoFactorEnabled = false;
+        var twoFactorRecoveryCodesLeft = 0;
         string? avatarUrl = null;
         if (Guid.TryParse(userId, out var parsedUserId))
         {
             var context = await _mediator.Send(new GetLandingContextQuery(parsedUserId), cancellationToken);
             canCreateStudio = context.IsSuccess && context.Value!.CanCreateStudio;
+            twoFactorEnabled = context.IsSuccess && context.Value!.TwoFactorEnabled;
+            twoFactorRecoveryCodesLeft = context.IsSuccess ? context.Value!.TwoFactorRecoveryCodesLeft : 0;
 
             var profile = await _mediator.Send(new PanelForge.Application.Features.Users.Queries.GetUserProfile.GetUserProfileQuery(parsedUserId, null), cancellationToken);
             if (profile is not null)
@@ -162,6 +168,8 @@ public class AuthController : ControllerBase
             FullName = name,
             Role = role,
             CanCreateStudio = canCreateStudio,
+            TwoFactorEnabled = twoFactorEnabled,
+            TwoFactorRecoveryCodesLeft = twoFactorRecoveryCodesLeft,
             Avatar = avatarUrl,
             AvatarUrl = avatarUrl
         });
@@ -279,6 +287,19 @@ public class AuthController : ControllerBase
 
         Response.Cookies.Delete(RememberDeviceCookie);
         return Ok(new { message = "Đã tắt bảo mật 2FA cho tài khoản của bạn." });
+    }
+
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("2fa/recovery-codes")]
+    [ProducesResponseType(typeof(RecoveryCodesResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RegenerateRecoveryCodes([FromBody] RegenerateRecoveryCodesRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new RegenerateRecoveryCodesCommand(userId, request.Code), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [EnableRateLimiting("auth")]

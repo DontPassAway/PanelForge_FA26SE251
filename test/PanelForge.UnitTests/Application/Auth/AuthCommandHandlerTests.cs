@@ -18,6 +18,7 @@ using PanelForge.Application.Features.Auth.Commands.ResetPassword;
 using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
+using PanelForge.Application.Features.Auth.Commands.RegenerateRecoveryCodes;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -622,6 +623,157 @@ public class AuthCommandHandlerTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
     }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WhenSameCodeReplayed_ShouldRejectSecondUse()
+    {
+        // RFC 6238 §5.2: mã đã chấp nhận một lần không được dùng lại (dù vẫn còn trong cửa sổ ±30 giây)
+        var (user, code) = CreateTwoFactorUser();
+        SetupUsers(new List<User> { user });
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-2fa-token", DateTime.UtcNow.AddDays(7)));
+        var command = new VerifyTwoFactorCommand(null, code, user.Email, false, null, ChallengeEmail: user.Email);
+
+        var first = await VerifyTwoFactor().Handle(command, CancellationToken.None);
+        var replay = await VerifyTwoFactor().Handle(command, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        user.TwoFactorLastUsedStep.Should().NotBeNull();
+        replay.IsSuccess.Should().BeFalse();
+        replay.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        replay.ErrorMessage.Should().Contain("đã được dùng");
+    }
+
+    [Fact]
+    public async Task ConfirmTwoFactorSetup_ThenLoginWithSameCode_ShouldRejectLogin()
+    {
+        // Mã vừa dùng để bật 2FA không được dùng tiếp để hoàn tất đăng nhập
+        var user = User.Create("setup@example.com", "Setup User", "hashed_pwd");
+        user.ConfirmEmail();
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        user.SetTwoFactorSecret(Base32Encoding.ToString(secretBytes));
+        var code = new Totp(secretBytes).ComputeTotp();
+        SetupUsers(new List<User> { user });
+
+        var setup = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(user.Id, code, null, false, null), CancellationToken.None);
+        var login = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(null, code, user.Email, false, null, ChallengeEmail: user.Email), CancellationToken.None);
+
+        setup.IsSuccess.Should().BeTrue();
+        user.TwoFactorEnabled.Should().BeTrue();
+        login.IsSuccess.Should().BeFalse();
+    }
+
+    // ---- Mã khôi phục 2FA ----
+
+    private async Task<(User user, IReadOnlyList<string> codes)> EnableWithRecoveryCodes()
+    {
+        var user = User.Create("rc@example.com", "Recovery User", "hashed_pwd");
+        user.ConfirmEmail();
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        user.SetTwoFactorSecret(Base32Encoding.ToString(secretBytes));
+        SetupUsers(new List<User> { user });
+        _jwtTokenGeneratorMock.Setup(j => j.GenerateToken(user, It.IsAny<Guid>())).Returns(("jwt-rc", DateTime.UtcNow.AddDays(7)));
+
+        var setup = await VerifyTwoFactor().Handle(
+            new VerifyTwoFactorCommand(user.Id, new Totp(secretBytes).ComputeTotp(), null, false, null), CancellationToken.None);
+        return (user, setup.Value!.RecoveryCodes!);
+    }
+
+    private VerifyTwoFactorCommand LoginChallenge(User user, string code)
+        => new(null, code, user.Email, false, null, ChallengeEmail: user.Email);
+
+    [Fact]
+    public async Task ConfirmTwoFactorSetup_ShouldIssueTenUniqueRecoveryCodes_StoredOnlyAsHashes()
+    {
+        var (user, codes) = await EnableWithRecoveryCodes();
+
+        codes.Should().HaveCount(10).And.OnlyHaveUniqueItems();
+        codes.Should().AllSatisfy(c => c.Should().MatchRegex("^[2-9A-HJKMNP-Z]{5}-[2-9A-HJKMNP-Z]{5}$"));
+        user.TwoFactorRecoveryCodesLeft.Should().Be(10);
+        codes.Should().AllSatisfy(c => user.TwoFactorRecoveryCodes.Should().NotContain(c));
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WithRecoveryCode_ShouldSignIn_ConsumeCode_AndRejectReuse()
+    {
+        var (user, codes) = await EnableWithRecoveryCodes();
+
+        // Nhập thường + bỏ gạch nối vẫn khớp
+        var first = await VerifyTwoFactor().Handle(
+            LoginChallenge(user, codes[0].Replace("-", "").ToLowerInvariant()), CancellationToken.None);
+        var reuse = await VerifyTwoFactor().Handle(LoginChallenge(user, codes[0]), CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value!.Message.Should().Contain("mã khôi phục").And.Contain("Còn 9 mã");
+        user.TwoFactorRecoveryCodesLeft.Should().Be(9);
+        reuse.IsSuccess.Should().BeFalse();
+        reuse.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+    }
+
+    [Fact]
+    public async Task VerifyTwoFactor_WithUnknownRecoveryCode_ShouldBeUnauthorized_AndKeepCodes()
+    {
+        var (user, _) = await EnableWithRecoveryCodes();
+
+        var result = await VerifyTwoFactor().Handle(LoginChallenge(user, "AAAAA-AAAAA"), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        user.TwoFactorRecoveryCodesLeft.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task DisableTwoFactor_WithPasswordAndRecoveryCode_ShouldDisable_AndClearCodes()
+    {
+        // Mất điện thoại: mật khẩu + mã khôi phục vẫn tắt được 2FA
+        var (user, codes) = await EnableWithRecoveryCodes();
+        _passwordHasherMock.Setup(h => h.VerifyPassword("Password123!", "hashed_pwd")).Returns(true);
+
+        var result = await DisableTwoFactor().Handle(
+            new DisableTwoFactorCommand(user.Id, codes[3], "Password123!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.TwoFactorEnabled.Should().BeFalse();
+        user.TwoFactorRecoveryCodes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_ShouldReplaceAllOldCodes()
+    {
+        var (user, oldCodes) = await EnableWithRecoveryCodes();
+        var handler = new RegenerateRecoveryCodesCommandHandler(_dbContextMock.Object, _totpService);
+
+        var regenerated = await handler.Handle(
+            new RegenerateRecoveryCodesCommand(user.Id, oldCodes[0]), CancellationToken.None);
+        var oldStillWorks = await VerifyTwoFactor().Handle(LoginChallenge(user, oldCodes[1]), CancellationToken.None);
+        var newWorks = await VerifyTwoFactor().Handle(
+            LoginChallenge(user, regenerated.Value!.RecoveryCodes[0]), CancellationToken.None);
+
+        regenerated.Value!.RecoveryCodes.Should().HaveCount(10).And.NotIntersectWith(oldCodes);
+        oldStillWorks.IsSuccess.Should().BeFalse();
+        newWorks.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_WithWrongCode_ShouldBeUnauthorized_AndKeepOldCodes()
+    {
+        var (user, oldCodes) = await EnableWithRecoveryCodes();
+        var handler = new RegenerateRecoveryCodesCommandHandler(_dbContextMock.Object, _totpService);
+
+        var result = await handler.Handle(new RegenerateRecoveryCodesCommand(user.Id, "000000"), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
+        (await VerifyTwoFactor().Handle(LoginChallenge(user, oldCodes[0]), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("12345")]
+    [InlineData("abcdef")]
+    [InlineData("1234567")]
+    public void MatchTimeStep_WhenCodeIsNotSixDigits_ShouldReturnNull(string code)
+        => _totpService.MatchTimeStep("JBSWY3DPEHPK3PXP", code).Should().BeNull();
 
     [Fact]
     public async Task ForgetDevice_WhenTokenProvided_ShouldRemoveDevice()

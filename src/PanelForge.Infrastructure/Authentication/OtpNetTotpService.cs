@@ -13,9 +13,15 @@ public sealed class OtpNetTotpService : ITotpService
     public string BuildAuthenticatorUri(string accountEmail, string secret)
         => $"otpauth://totp/{Issuer}:{Uri.EscapeDataString(accountEmail)}?secret={secret}&issuer={Issuer}&digits=6&period=30";
 
-    public bool VerifyCode(string secret, string code)
+    public long? MatchTimeStep(string secret, string code)
     {
+        var trimmed = code?.Trim() ?? string.Empty;
+        if (trimmed.Length != 6 || !trimmed.All(char.IsAsciiDigit))
+            return null;
+
         var totp = new Totp(Base32Encoding.ToBytes(secret));
-        return totp.VerifyTotp(code.Trim(), out _, new VerificationWindow(previous: 1, future: 1));
+        return totp.VerifyTotp(trimmed, out var timeStep, new VerificationWindow(previous: 1, future: 1))
+            ? timeStep
+            : null;
     }
 }

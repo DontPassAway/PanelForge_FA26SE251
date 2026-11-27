@@ -166,6 +166,11 @@ public sealed class RefreezeScriptPostgresIntegrationTests
             WorkspaceMember.Create(studio.Id, writer.Id, WorkspaceRole.Writer),
             WorkspaceMember.Create(studio.Id, artist.Id, WorkspaceRole.Artist),
             WorkspaceMember.Create(studio.Id, letterer.Id, WorkspaceRole.Letterer));
+        // D10: vai trò người nhận việc lấy theo Series (Producer của Studio được tính tự động)
+        db.SeriesMembers.AddRange(
+            SeriesMember.Create(series.Id, writer.Id, WorkspaceRole.Writer),
+            SeriesMember.Create(series.Id, artist.Id, WorkspaceRole.Artist),
+            SeriesMember.Create(series.Id, letterer.Id, WorkspaceRole.Letterer));
 
         var pageRepo = new InMemoryPageRepository();
         var pages = new List<Page>();
