@@ -58,6 +58,6 @@ public class MissingSeriesBibleTests
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
         _bibles.Should().ContainSingle(b => b.SeriesId == _series.Id && b.WorkspaceId == _series.WorkspaceId);
-        _bibles[0].Entries.Should().ContainSingle(e => e.Code == "HERO");
+        _bibles[0].Entries.Should().ContainSingle(e => e.Name == "Hero");
     }
 }

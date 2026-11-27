@@ -18,6 +18,7 @@ public interface IPanelForgeDbContext
     DbSet<User> Users { get; }
     DbSet<StudioWorkspace> StudioWorkspaces { get; }
     DbSet<WorkspaceMember> WorkspaceMembers { get; }
+    DbSet<WorkspaceAutomationSettings> WorkspaceAutomationSettings { get; }
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
@@ -75,6 +76,7 @@ public interface IPanelForgeDbContext
     DbSet<ScriptLine> ScriptLines { get; }
     DbSet<ScriptComment> ScriptComments { get; }
     DbSet<ScriptVersion> ScriptVersions { get; }
+    DbSet<ChapterScriptWorkingCopy> ChapterScriptWorkingCopies { get; }
     DbSet<Page> Pages { get; }
     DbSet<Panel> Panels { get; }
     DbSet<FrameTemplate> FrameTemplates { get; }

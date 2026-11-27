@@ -39,7 +39,22 @@ public sealed class GetBibleEntryHistoryQueryHandler : IRequestHandler<GetBibleE
             .OrderByDescending(r => r.VersionNumber)
             .ToListAsync(cancellationToken);
 
-        var dtos = revisions.Select(BibleEntryRevisionDto.From).ToList();
+        var endorserIds = revisions
+            .Where(r => r.WriterEndorsedByUserId.HasValue)
+            .Select(r => r.WriterEndorsedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, string>? userNames = null;
+        if (endorserIds.Count > 0 && _dbContext.Users is not null)
+        {
+            userNames = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => endorserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.FullName, cancellationToken);
+        }
+
+        var dtos = revisions.Select(r => BibleEntryRevisionDto.From(r, userNames)).ToList();
         return Result<IReadOnlyList<BibleEntryRevisionDto>>.Success(dtos);
     }
 }

@@ -182,7 +182,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         }
 
         var request = new CopilotRequest(cmd.Task, p.Provider, p.Model, apiKey,
-            new CopilotLine(line?.Id ?? element!.ElementId, speakerId, original, line?.StageDirection, neighbors), bible, maxChars, instruction?.Trim(), AccountId: p.AccountId);
+            new CopilotLine(line?.Id ?? element!.ElementId, speakerId, original, line?.StageDirection, neighbors, line?.SpeakerLabel), bible, maxChars, instruction?.Trim(), AccountId: p.AccountId);
         var response = await _aiClient.RunCopilotAsync(request, ct);
 
         // Backend kiểm lại output bằng cùng luật tất định (không tin AI service tuyệt đối)

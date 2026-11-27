@@ -117,18 +117,32 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
         }
 
         if (autoApproved.Count > 0)
+        {
             await TaskGridNotifications.AddReadyAsync(_db, autoApproved, stages, chapterTasks, chapter.Id, ct);
+            await TaskGridAutomation.AssignNextStagesAsync(_db, chapter, autoApproved, stages, chapterTasks, ct);
+        }
 
         // Có ô cần duyệt: báo Editor (không có Editor thì Producer), trừ chính người nộp; một thông báo cho cả lần nộp
-        var waiting = tasks.Count - autoApproved.Count;
-        if (waiting > 0)
+        var waitingCells = tasks.Where(t => t.Status == StageTaskStatus.Submitted).ToList();
+        if (waitingCells.Count > 0)
         {
             var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
-            foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, cmd.UserId, ct))
-                _db.Notifications.Add(TaskGridNotifications.Submitted(reviewerId, chapter.Id, chapter.ChapterNumber, waiting));
+            var routeReview = await _db.WorkspaceAutomationSettings.AsNoTracking()
+                .AnyAsync(s => s.WorkspaceId == workspaceId && s.AutoRouteReview, ct);
+            var ownerId = routeReview
+                ? await _db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == workspaceId).Select(w => w.OwnerId).FirstOrDefaultAsync(ct)
+                : Guid.Empty;
+            // R2 bật: mỗi ô một người được gợi ý, chỉ báo người đó (gom theo người nhận). Không có ai thì báo như cũ.
+            if (routeReview && await TaskGridRules.SuggestReviewersAsync(_db, workspaceId, ownerId, cmd.UserId, waitingCells, ct))
+                foreach (var group in waitingCells.GroupBy(t => t.ReviewerUserId!.Value))
+                    _db.Notifications.Add(TaskGridNotifications.Submitted(group.Key, chapter.Id, chapter.ChapterNumber, group.Count()));
+            else
+                foreach (var reviewerId in await AssignmentRules.ReviewerUserIdsAsync(_db, workspaceId, cmd.UserId, ct))
+                    _db.Notifications.Add(TaskGridNotifications.Submitted(reviewerId, chapter.Id, chapter.ChapterNumber, waitingCells.Count));
         }
         await TaskGridRules.RefreshLotsAsync(_db, tasks.Select(t => t.LotId), tasks, ct);
         await _db.SaveChangesAsync(ct);
+        if (autoApproved.Count > 0) await TaskGridAutomation.NudgeChapterLockAsync(_db, chapter, ct);
         return Result<IReadOnlyList<StageTaskDto>>.Success(
             await TaskGridRules.WithSummaryAsync(_db, tasks.Select(t => StageTaskDto.From(t, cmd.UserId, isStartable: false)), ct));
     }

@@ -73,7 +73,8 @@ public sealed class GetSeriesByIdQueryHandler : IRequestHandler<GetSeriesByIdQue
             ReleaseLanguages: series.ReleaseLanguages,
             Logline: series.Logline,
             Teaser: series.Teaser,
-            AgeRating: series.AgeRating
+            AgeRating: series.AgeRating,
+            AllowSoloCreatorReview: series.AllowSoloCreatorReview
         );
 
         return Result<SeriesDetailDto>.Success(detail);

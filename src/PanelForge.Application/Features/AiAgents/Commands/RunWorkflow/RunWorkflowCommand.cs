@@ -28,7 +28,8 @@ public sealed record RunWorkflowCommand(
     Guid? BaseScriptRevisionId,
     AiWorkflowType WorkflowType = AiWorkflowType.FullScene,
     IReadOnlyList<Guid>? PanelIds = null,
-    Guid? RevisionOfSuggestionId = null) : IRequest<Result<RunWorkflowResponse>>;
+    Guid? RevisionOfSuggestionId = null,
+    bool AppendScript = false) : IRequest<Result<RunWorkflowResponse>>;
 
 public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowCommand, Result<RunWorkflowResponse>>
 {
@@ -66,6 +67,8 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         var panelFilter = cmd.PanelIds is { Count: > 0 } ? cmd.PanelIds.ToHashSet() : null;
         if (panelFilter is not null && cmd.WorkflowType != AiWorkflowType.Artist)
             return AiRunHelpers.Fail<RunWorkflowResponse>("panelIds chỉ dùng cho workflow Artist.", ResultErrorCodes.Validation);
+        if (cmd.AppendScript && cmd.WorkflowType != AiWorkflowType.Script)
+            return AiRunHelpers.Fail<RunWorkflowResponse>("appendScript chỉ dùng cho workflow Script.", ResultErrorCodes.Validation);
         if (!Enum.IsDefined(cmd.ReadingDirection))
             return AiRunHelpers.Fail<RunWorkflowResponse>("readingDirection không hợp lệ.", ResultErrorCodes.Validation);
         var type = cmd.WorkflowType;
@@ -110,7 +113,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         // Assignment, stage/khoá chương, và context cần có — cùng bộ luật với API availability
         var facts = await AiWorkflowFacts.LoadAsync(_db, _auth, cmd.UserId, workspaceId.Value, chapter, scene, ct);
         // AI tắt xử lý ở nhánh provider bên dưới (Mock/Gemini có thông điệp + ghi usage riêng)
-        var missing = facts.Evaluate(type).Where(m => m.Code != "AI_DISABLED").ToList();
+        var missing = facts.Evaluate(type, cmd.AppendScript).Where(m => m.Code != "AI_DISABLED").ToList();
         if (missing.Count > 0)
             return AiRunHelpers.Fail<RunWorkflowResponse>(
                 string.Join(" ", missing.Select(m => m.Message)),
@@ -155,6 +158,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
                 ResultErrorCodes.Validation);
 
         var snapshot = await AiSnapshotBuilder.BuildAsync(_db, _pages, chapter, scene, type, DateTime.UtcNow, ct, panelFilter);
+        if (snapshot is not null && cmd.AppendScript) snapshot = snapshot with { AppendScript = true };
         if (snapshot is null)
             return AiRunHelpers.Fail<RunWorkflowResponse>("Series chưa có Series Bible.", ResultErrorCodes.NotFound);
         if (panelFilter is not null && snapshot.Artist?.Panels.Count != panelFilter.Count)

@@ -101,6 +101,34 @@ public sealed class StartChapterProductionTests
     }
 
     [Fact]
+    public async Task FirstStageOnly_AssignsOnlyFirstArtistStage_KeepsExplicitLetterer()
+    {
+        var f = new Fixture();
+        var pipelineId = f.Db.PipelineStages.First().PipelineDefinitionId;
+        f.Db.Add(PipelineStage.Create(pipelineId, "Ink", "ink", 3, allowedRole: WorkspaceRole.Artist));
+        var lettererId = Guid.NewGuid();
+        f.Db.Add(WorkspaceMember.Create(f.Db.WorkspaceMembers.First().WorkspaceId, lettererId, WorkspaceRole.Letterer));
+        f.Db.SaveChanges();
+        var stageNames = f.Db.PipelineStages.ToDictionary(s => s.Id, s => s.Name);
+
+        // N2: không Letterer → chỉ Pencil, bỏ nhánh Artist kiêm Lettering và các công đoạn Artist sau
+        var onlyPencil = await f.Handler.Handle(f.Command() with { FirstStageOnly = true }, default);
+        onlyPencil.IsSuccess.Should().BeTrue(onlyPencil.ErrorMessage);
+        onlyPencil.Value!.Lots.Select(l => stageNames[l.PipelineStageId]).Should().OnlyContain(n => n == "Pencil").And.HaveCount(2);
+
+        var g = new Fixture();
+        g.Db.Add(WorkspaceMember.Create(g.Db.WorkspaceMembers.First().WorkspaceId, lettererId, WorkspaceRole.Letterer));
+        g.Db.SaveChanges();
+        var names = g.Db.PipelineStages.ToDictionary(s => s.Id, s => s.Name);
+        var withLetterer = await g.Handler.Handle(
+            new StartChapterProductionCommand(g.Chapter.Id, g.ProducerId, [new(g.Artist1Id, 1, 4)], [new(lettererId, 1, 4)], FirstStageOnly: true),
+            default);
+        withLetterer.IsSuccess.Should().BeTrue(withLetterer.ErrorMessage);
+        withLetterer.Value!.Lots.Select(l => (names[l.PipelineStageId], l.AssigneeUserId))
+            .Should().BeEquivalentTo([("Pencil", g.Artist1Id), ("Lettering", lettererId)]);
+    }
+
+    [Fact]
     public async Task ChapterWithGridGeneratedBeforeGate1_StillStartsProduction()
     {
         var f = new Fixture();

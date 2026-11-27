@@ -104,9 +104,12 @@ public sealed class ScriptLinesController : ControllerBase
 
     private IActionResult Error<T>(Result<T> result) => result.ErrorCode switch
     {
-        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
-        ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+        ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage, code = result.ErrorCode }),
+        ResultErrorCodes.Conflict
+            or ResultErrorCodes.ChapterReadOnly
+            or ResultErrorCodes.CannotDeleteActiveProductionPage
+            => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails }),
         ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage, code = result.ErrorCode }),
-        _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+        _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails })
     };
 }

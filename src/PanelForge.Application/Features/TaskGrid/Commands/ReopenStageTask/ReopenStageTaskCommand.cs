@@ -46,6 +46,7 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         var outdated = new List<Guid>();
         foreach (var downstream in TaskGridRules.Downstream(task, stages, chapterTasks))
         {
+            downstream.ClearReady(); // N4: MarkInputOutdated bỏ qua ô chưa bắt đầu
             var wasOutdated = downstream.IsInputOutdated;
             downstream.MarkInputOutdated($"{stageName} được mở lại: {cmd.Reason.Trim()}");
             if (!downstream.IsInputOutdated || wasOutdated) continue;

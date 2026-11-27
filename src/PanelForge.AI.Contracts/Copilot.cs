@@ -48,7 +48,9 @@ public sealed record CopilotLine(
     Guid? SpeakerId,
     string Dialogue,
     string? StageDirection,
-    IReadOnlyList<string> Neighbors);
+    IReadOnlyList<string> Neighbors,
+    /// <summary>Tên người nói ghi trên dòng; dùng khi nhân vật chưa có trong Bible gửi kèm.</summary>
+    string? SpeakerLabel = null);
 
 /// <summary>Context cấp Series cho publisher.metadata: thông tin hiện tại + dàn ý các chương (không gửi toàn bộ script).</summary>
 public sealed record CopilotSeriesContext(

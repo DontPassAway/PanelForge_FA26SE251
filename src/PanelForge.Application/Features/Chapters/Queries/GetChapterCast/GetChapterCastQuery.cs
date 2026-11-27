@@ -311,7 +311,7 @@ public sealed class GetChapterCastQueryHandler
 
             entities.Add(new ChapterCastItemDto(
                 entry.Id,
-                entry.Code,
+                entry.Id.ToString("N")[..8].ToUpperInvariant(),
                 entry.Name,
                 entry.Category,
                 entry.IsStub,

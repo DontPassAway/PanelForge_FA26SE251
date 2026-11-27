@@ -134,14 +134,14 @@ public sealed class RunConsistencyCheckCommandHandler
             {
                 // Fallback tương thích cho các unit test cũ chưa nạp ChapterBibleBindings
                 // Nếu mục Bible có detailsJson chỉ định availableFromChapter/firstEffective thì tôn trọng
-                var checkEntryTemp = new CheckEntry(e.Id, e.Name, e.Category, e.IsActive, 1, null, detailsJson: e.DetailsJson);
+                var checkEntryTemp = new CheckEntry(e.Id, e.Name, e.Category, true, 1, null, detailsJson: e.DetailsJson, isCrowd: e.IsCrowd);
                 firstEffective = checkEntryTemp.AvailableFromChapter ?? 1;
                 firstLocked = e.Revisions.Any(r => r.LockedAt != null) ? 1 : null;
             }
 
             entries[e.Id] = new CheckEntry(
-                e.Id, e.Name, e.Category, e.IsActive, firstEffective, firstLocked,
-                detailsJson: e.DetailsJson, code: e.Code);
+                e.Id, e.Name, e.Category, true, firstEffective, firstLocked,
+                detailsJson: e.DetailsJson, code: e.Id.ToString("N")[..8].ToUpperInvariant(), isCrowd: e.IsCrowd);
         }
 
         var rules = await _db.ConsistencyRules.AsNoTracking().Where(r => r.SeriesId == chapter.SeriesId && r.IsEnabled)

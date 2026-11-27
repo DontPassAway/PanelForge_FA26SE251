@@ -36,14 +36,6 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
         builder.HasIndex(e => e.Category)
                .HasDatabaseName("ix_bible_entries_category");
 
-        builder.Property(e => e.Code)
-               .HasColumnName("code")
-               .HasColumnType("varchar(50)")
-               .IsRequired();
-        builder.HasIndex(e => new { e.SeriesBibleId, e.Code })
-               .IsUnique()
-               .HasDatabaseName("ix_bible_entries_series_bible_id_code");
-
         builder.Property(e => e.Name)
                .HasColumnName("name")
                .HasColumnType("varchar(255)")
@@ -56,10 +48,6 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
         builder.HasIndex(e => new { e.SeriesBibleId, e.NormalizedName })
                .IsUnique()
                .HasDatabaseName("ix_bible_entries_series_bible_id_normalized_name");
-
-        builder.Property(e => e.Subtitle)
-               .HasColumnName("subtitle")
-               .HasColumnType("varchar(255)");
 
         builder.Property(e => e.Description)
                .HasColumnName("description")
@@ -75,26 +63,6 @@ internal sealed class BibleEntryConfiguration : IEntityTypeConfiguration<BibleEn
         builder.Property(e => e.ReferenceImageUrl)
                .HasColumnName("reference_image_url")
                .HasColumnType("text");
-
-        builder.Property(e => e.Priority)
-               .HasColumnName("priority")
-               .HasColumnType("varchar(20)")
-               .HasConversion(
-                   v => v.ToString(),
-                   v => Enum.Parse<BiblePriority>(v))
-               .IsRequired();
-
-        builder.Property(e => e.StrictCheck)
-               .HasColumnName("strict_check")
-               .HasColumnType("boolean")
-               .HasDefaultValue(true)
-               .IsRequired();
-
-        builder.Property(e => e.IsActive)
-               .HasColumnName("is_active")
-               .HasColumnType("boolean")
-               .HasDefaultValue(true)
-               .IsRequired();
 
         builder.Property(e => e.IsStub)
                .HasColumnName("is_stub")

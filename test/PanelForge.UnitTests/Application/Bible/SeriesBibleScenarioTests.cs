@@ -256,8 +256,7 @@ public class SeriesBibleScenarioTests
             BibleEntryId: sasukeStub.Id,
             UserId: _writerId,
             Name: "Sasuke",
-            Description: "Hậu duệ cuối cùng của gia tộc Uchiha",
-            Subtitle: "Thiên tài Làng Lá"
+            Description: "Hậu duệ cuối cùng của gia tộc Uchiha"
         );
 
         var defineResult = await defineHandler.Handle(defineCmd, CancellationToken.None);
@@ -266,7 +265,6 @@ public class SeriesBibleScenarioTests
         // Stub is promoted, v1 overwritten with Draft
         var reloadedSasuke = await _db.BibleEntries.Include(e => e.Revisions).FirstAsync(e => e.Id == sasukeStub.Id);
         reloadedSasuke.IsStub.Should().BeFalse();
-        reloadedSasuke.Code.Should().NotStartWith("STUB_");
         reloadedSasuke.Description.Should().Be("Hậu duệ cuối cùng của gia tộc Uchiha");
         reloadedSasuke.Revisions.Should().HaveCount(1);
         reloadedSasuke.Revisions.First().ReviewStatus.Should().Be(BibleRevisionStatus.Draft);

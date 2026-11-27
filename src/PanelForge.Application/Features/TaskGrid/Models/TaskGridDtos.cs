@@ -25,20 +25,24 @@ public sealed record TaskGridPageDto(Guid Id, int PageNumber);
 public sealed record StageTaskDto(
     Guid Id, Guid PipelineStageId, Guid? PageId, StageTaskStatus Status, Guid? LotId, Guid? AssigneeUserId,
     bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion,
-    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null)
+    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null,
+    bool HasScriptImpact = false)
 {
     public static StageTaskDto From(StageTask t, Guid? assigneeUserId, bool isStartable) => new(
         t.Id, t.PipelineStageId, t.PageId, t.Status, t.LotId, assigneeUserId,
-        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion, ReopenReason: t.ReopenReason);
+        t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion,
+        ReopenReason: t.ReopenReason,
+        HasScriptImpact: t.IsInputOutdated && t.OutdatedReason == StageTask.ScriptChangedReason);
 }
 
 public sealed record StageTaskLotDto(
     Guid Id, Guid PipelineStageId, Guid AssigneeUserId, WorkspaceRole AssignedRole, string? Brief, DateTime? DueDate,
-    StageTaskLotStatus Status, bool IsOverdue, int TaskCount, int ApprovedCount, uint RowVersion)
+    StageTaskLotStatus Status, bool IsOverdue, int TaskCount, int ApprovedCount, uint RowVersion,
+    bool IsAutoAssigned = false, string? AutoAssignReason = null)
 {
     public static StageTaskLotDto From(StageTaskLot l, IReadOnlyCollection<StageTask> tasks, DateTime nowUtc) => new(
         l.Id, l.PipelineStageId, l.AssigneeUserId, l.AssignedRole, l.Brief, l.DueDate, l.Status, l.IsOverdue(nowUtc),
-        tasks.Count, tasks.Count(t => t.Status == StageTaskStatus.Approved), l.RowVersion);
+        tasks.Count, tasks.Count(t => t.Status == StageTaskStatus.Approved), l.RowVersion, l.IsAutoAssigned, l.AutoAssignReason);
 }
 
 // ─── Requests ─────────────────────────────────────────────────────────────────
@@ -58,6 +62,9 @@ public sealed record AssignStageTaskLotsRequest(IReadOnlyList<StageTaskLotReques
 public sealed record UpdateStageTaskLotRequest(string? Brief, DateTime? DueDate, bool ClearDueDate = false, uint? ExpectedRowVersion = null);
 
 public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
+
+/// <summary>Duyệt nhiều ô một lần (N3), tất cả hoặc không.</summary>
+public sealed record ApproveStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
 /// <summary>Nhận xét bắt buộc (BR-06), lưu vào lần nộp bị từ chối và gửi người làm.</summary>
 public sealed record RequestStageTaskChangesRequest(string Comment);

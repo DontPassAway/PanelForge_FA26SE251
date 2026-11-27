@@ -34,6 +34,6 @@ public sealed class GetAgentContextQueryHandler : IRequestHandler<GetAgentContex
             run.Provider, run.Model, run.MaxRevisionRounds, snapshot.Bible,
             AiRunHelpers.ReadGuidList(run.BibleRevisionIdsJson), snapshot.BaselineScript,
             run.WorkflowType.ToString(), snapshot.ExistingLayout, snapshot.Artist,
-            snapshot.SeriesStoryArc, snapshot.ChapterOutline));
+            snapshot.SeriesStoryArc, snapshot.ChapterOutline, snapshot.AppendScript));
     }
 }

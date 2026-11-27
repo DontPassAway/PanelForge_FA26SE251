@@ -39,7 +39,7 @@ public class RecordAgentStepTests
         var runId = await h.StartRunAsync();
         var ctx = (await new PanelForge.Application.Features.AiAgents.Queries.GetAgentContext.GetAgentContextQueryHandler(h.Db)
             .Handle(new(runId), default)).Value!;
-        var an = ctx.Bible.Single(b => b.Code == "AN");
+        var an = ctx.Bible.Single(b => b.Name == "An");
         var draft = AiJson.Serialize(new ScriptDraft(1, runId, ctx.SceneId, 0,
             [new ScriptDraftLine(Guid.NewGuid(), 1, an.EntryId, "Xin chào", null)], ctx.BibleRevisionIds, null));
         return (h, runId, ctx, draft);

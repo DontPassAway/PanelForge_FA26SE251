@@ -30,6 +30,8 @@ public sealed class StructuredScriptDraftTests
         Validate(new(L, 1, null, null, "Mưa rơi", "Action", null, [new("nắng", Guid.NewGuid())])).Should().NotBeEmpty();
         Validate(new(L, 1, null, null, "Mưa rơi", "Action", null, [new("Mưa", null, "Mưa", "Weather")])).Should().NotBeEmpty();
         Validate(new(L, 1, null, null, "Mưa rơi", "Sfx", null, [new("Mưa", null, "Mưa", "Prop")])).Should().BeEmpty();
+        Validate(new(L, 1, null, "Phải đi thôi", null, "Thought")).Should().NotBeEmpty("Thought bắt buộc có người nói (SCR-04)");
+        Validate(new(L, 1, null, "Phải đi thôi", null, "Thought", "An")).Should().BeEmpty();
     }
 
     [Fact]

@@ -9,6 +9,7 @@ using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.CancelReplacementRevision;
 using PanelForge.Application.Features.Bible.Commands.ConfirmBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.DefineBibleEntry;
+using PanelForge.Application.Features.Bible.Commands.EndorseBibleRevision;
 using PanelForge.Application.Features.Bible.Commands.SetBibleEntryCrowd;
 using PanelForge.Application.Features.Bible.Commands.SetChapterCastRevision;
 using PanelForge.Application.Features.Bible.Commands.ConceptComments;
@@ -109,16 +110,19 @@ public sealed class BibleController : ControllerBase
             SeriesId: seriesId,
             UserId: GetCurrentUserId(),
             Category: body.Category,
-            Code: body.Code,
             Name: body.Name,
             Description: body.Description,
-            Subtitle: body.Subtitle,
-            DetailsJson: body.DetailsJson,
+            DetailsJson: body.EffectiveDetailsJson,
             ReferenceImageUrl: body.EffectiveImageUrl,
+            StageName: body.EffectiveStageName,
+            IsCrowd: body.IsCrowd,
+            Age: body.Age,
+            ArtistNotes: body.ArtistNotes,
+            Code: body.Code,
+            Subtitle: body.Subtitle,
             Priority: body.Priority,
             StrictCheck: body.StrictCheck,
-            StageName: body.EffectiveStageName,
-            IsCrowd: body.IsCrowd
+            Aliases: body.Aliases
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -160,16 +164,14 @@ public sealed class BibleController : ControllerBase
             Summary: body.EffectiveSummary,
             Name: body.Name,
             Description: body.Description,
-            Subtitle: body.Subtitle,
-            DetailsJson: body.DetailsJson,
+            DetailsJson: body.EffectiveDetailsJson,
             ReferenceImageUrl: body.EffectiveImageUrl,
-            Priority: body.Priority,
-            StrictCheck: body.StrictCheck,
-            StageName: body.StageName,
+            StageName: body.EffectiveStageName,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
             IsNewVariant: body.IsNewVariant,
             TargetRevisionId: body.TargetRevisionId,
-            VariantLabel: body.VariantLabel
+            Age: body.Age,
+            ArtistNotes: body.ArtistNotes
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -209,13 +211,12 @@ public sealed class BibleController : ControllerBase
             Summary: body.Summary,
             Name: body.Name,
             Description: body.Description,
-            Subtitle: body.Subtitle,
             DetailsJson: body.DetailsJson,
             ReferenceImageUrl: body.ReferenceImageUrl,
-            Priority: body.Priority,
-            StrictCheck: body.StrictCheck,
-            StageName: body.VariantLabel,
-            IsNewVariant: true
+            StageName: body.EffectiveStageName,
+            IsNewVariant: true,
+            Age: body.Age,
+            ArtistNotes: body.ArtistNotes
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -378,17 +379,15 @@ public sealed class BibleController : ControllerBase
             Summary: body.Reason,
             Name: body.Name,
             Description: body.Description,
-            Subtitle: body.Subtitle,
-            DetailsJson: body.DetailsJson,
+            DetailsJson: body.EffectiveDetailsJson,
             ReferenceImageUrl: body.EffectiveImageUrl,
-            Priority: body.Priority,
-            StrictCheck: body.StrictCheck,
             ExpectedVersionNumber: body.ExpectedVersionNumber,
             SupersedesRevisionId: revisionId,
             SupersedeReason: body.Reason,
-            StageName: body.StageName,
+            StageName: body.EffectiveStageName,
             ChapterId: body.ChapterId,
-            VariantLabel: body.VariantLabel
+            Age: body.Age,
+            ArtistNotes: body.ArtistNotes
         );
         var result = await _mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -422,6 +421,70 @@ public sealed class BibleController : ControllerBase
     {
         var result = await _mediator.Send(
             new CancelReplacementRevisionCommand(seriesId, entryId, revisionId, GetCurrentUserId()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// POST /api/series/{seriesId}/bible/revisions/{revisionId}/endorse
+    /// Soft Writer endorsement (non-blocking) khi bản vẽ đang ở ConceptSubmitted.
+    /// </summary>
+    [HttpPost("api/series/{seriesId:guid}/bible/revisions/{revisionId:guid}/endorse")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(BibleEntryRevisionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> EndorseBibleRevision(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid revisionId,
+        [FromBody] EndorseBibleRevisionRequest? body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new EndorseBibleRevisionCommand(seriesId, revisionId, GetCurrentUserId(), body?.Endorse),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// DELETE /api/series/{seriesId}/bible/revisions/{revisionId}/cancel-replacement
+    /// Writer huỷ bản thay thế chưa khoá và chưa có lịch sử kiểm duyệt.
+    /// </summary>
+    [HttpDelete("api/series/{seriesId:guid}/bible/revisions/{revisionId:guid}/cancel-replacement")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelReplacementRevisionById(
+        [FromRoute] Guid seriesId,
+        [FromRoute] Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new CancelReplacementRevisionCommand(seriesId, null, revisionId, GetCurrentUserId()),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -494,12 +557,11 @@ public sealed class BibleController : ControllerBase
                 UserId: GetCurrentUserId(),
                 Name: request.Name,
                 Description: request.Description,
-                Subtitle: request.Subtitle,
-                DetailsJson: request.DetailsJson,
+                DetailsJson: request.EffectiveDetailsJson,
                 ReferenceImageUrl: request.ReferenceImageUrl,
-                Priority: request.Priority,
-                StrictCheck: request.StrictCheck,
-                Code: request.Code),
+                Age: request.Age,
+                ArtistNotes: request.ArtistNotes,
+                Subtitle: request.Subtitle),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -809,11 +871,19 @@ public sealed record SetChapterCastRevisionRequest(Guid? RevisionId = null);
 public sealed record DefineBibleEntryRequest(
     string Name,
     string Description,
-    string? Subtitle = null,
     string? DetailsJson = null,
     string? ReferenceImageUrl = null,
+    string? Age = null,
+    string? ArtistNotes = null,
+    string? Subtitle = null,
+    string? Code = null,
     BiblePriority Priority = BiblePriority.Standard,
     bool StrictCheck = true,
-    string? Code = null
-);
+    IReadOnlyList<string>? Aliases = null
+)
+{
+    public string EffectiveDetailsJson => (!string.IsNullOrWhiteSpace(Age) || !string.IsNullOrWhiteSpace(ArtistNotes))
+        ? PanelForge.Application.Features.Bible.Common.BibleDetailsParser.Serialize(Age, ArtistNotes)
+        : (string.IsNullOrWhiteSpace(DetailsJson) ? "{}" : PanelForge.Application.Features.Bible.Common.BibleDetailsParser.NormalizeJson(DetailsJson));
+}
 

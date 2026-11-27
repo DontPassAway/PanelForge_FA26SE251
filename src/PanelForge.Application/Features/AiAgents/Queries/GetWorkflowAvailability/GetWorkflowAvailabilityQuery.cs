@@ -15,7 +15,7 @@ namespace PanelForge.Application.Features.AiAgents.Queries.GetWorkflowAvailabili
 /// Dùng đúng <see cref="AiWorkflowFacts"/> như RunWorkflow nên "chạy được" ở đây khớp với việc Backend sẽ chặn hay không.
 /// Chỉ để hiển thị: quyền thật vẫn do RunWorkflow kiểm lại ở thời điểm chạy.
 /// </summary>
-public sealed record GetWorkflowAvailabilityQuery(Guid SeriesId, Guid UserId, Guid ChapterId, Guid? SceneId)
+public sealed record GetWorkflowAvailabilityQuery(Guid SeriesId, Guid UserId, Guid ChapterId, Guid? SceneId, bool AppendScript = false)
     : IRequest<Result<AiWorkflowAvailabilityResponse>>;
 
 public sealed class GetWorkflowAvailabilityQueryHandler
@@ -56,7 +56,7 @@ public sealed class GetWorkflowAvailabilityQueryHandler
         foreach (var type in Enum.GetValues<AiWorkflowType>())
         {
             if (!AiWorkflowPolicy.IsListed(type, _settings.ShowFullSceneWorkflow)) continue;
-            var missing = facts.Evaluate(type).ToList();
+            var missing = facts.Evaluate(type, q.AppendScript).ToList();
             if (AiWorkflowPolicy.NeedsScene(type) && scene is null)
                 missing.Add(new AiMissingConditionDto("SCENE_REQUIRED", "Context", "Chọn một Scene để chạy nhiệm vụ này."));
             workflows.Add(new AiWorkflowAvailabilityDto(

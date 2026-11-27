@@ -46,6 +46,7 @@ public sealed class KeyMaps
         Bible = ctx.Bible.Select((b, i) => (Key: $"B{i + 1}", Entry: b)).ToDictionary(x => x.Key, x => x.Entry);
         CharactersByCode = ctx.Bible
             .Where(b => b.Category == "Character")
+            .DistinctBy(b => b.Code.ToUpperInvariant())
             .ToDictionary(b => b.Code.ToUpperInvariant(), b => b);
     }
 

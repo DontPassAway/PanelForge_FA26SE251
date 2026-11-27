@@ -32,6 +32,10 @@ public static class ResultErrorCodes
 {
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
+    public const string HashMismatch = "HASH_MISMATCH";
+    public const string BibleGateBlocked = "BIBLE_GATE_BLOCKED";
+    public const string ActiveArtworkOnRemovedPage = "ACTIVE_ARTWORK_ON_REMOVED_PAGE";
+    public const string CannotDeleteActiveProductionPage = "CANNOT_DELETE_ACTIVE_PRODUCTION_PAGE";
     /// <summary>BR-12: chương Approved/Published, nội dung chỉ đọc → HTTP 409. Mã riêng để FE không nhầm với xung đột phiên bản.</summary>
     public const string ChapterReadOnly = "CHAPTER_READ_ONLY";
     /// <summary>Sai thông tin đăng nhập / OTP / token → HTTP 401.</summary>

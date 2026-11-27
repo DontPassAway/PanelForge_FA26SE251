@@ -20,6 +20,11 @@ public class StageTaskLot : BaseEntity
     public DateTime? DueDate { get; private set; }
     public StageTaskLotStatus Status { get; private set; } = StageTaskLotStatus.Active;
     public Guid AssignedByUserId { get; private set; }
+    /// <summary>Assign Automation R1 tạo lô này (không phải người bấm giao).</summary>
+    public bool IsAutoAssigned { get; private set; }
+    /// <summary>Lý do hệ thống chọn người, ví dụ "Cân tải: Bình đang ít panel nhất".</summary>
+    public string? AutoAssignReason { get; private set; }
+    public const int MaxAutoAssignReasonLength = 300;
 
     /// <summary>Concurrency token ánh xạ cột hệ thống <c>xmin</c> của PostgreSQL.</summary>
     public uint RowVersion { get; private set; }
@@ -81,5 +86,14 @@ public class StageTaskLot : BaseEntity
     }
 
     /// <summary>Quá hạn chỉ khi còn ô chưa xong; lô Completed/Closed không bao giờ quá hạn.</summary>
+    /// <summary>Đánh dấu lô do Assign Automation tạo, kèm lý do chọn người (cắt còn tối đa 300 ký tự).</summary>
+    public void MarkAutoAssigned(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        var trimmed = reason.Trim();
+        IsAutoAssigned = true;
+        AutoAssignReason = trimmed.Length <= MaxAutoAssignReasonLength ? trimmed : trimmed[..MaxAutoAssignReasonLength];
+    }
+
     public bool IsOverdue(DateTime nowUtc) => Status == StageTaskLotStatus.Active && DueDate is { } due && due < nowUtc;
 }

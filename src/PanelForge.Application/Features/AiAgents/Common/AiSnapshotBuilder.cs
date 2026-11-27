@@ -87,7 +87,7 @@ internal static class AiSnapshotBuilder
 
         var chapterInt = (int)Math.Floor(chapter.ChapterNumber);
         var entries = new List<BibleEntryContext>();
-        foreach (var entry in bible.Entries.Where(e => e.IsActive).OrderBy(e => e.Category).ThenBy(e => e.Code))
+        foreach (var entry in bible.Entries.OrderBy(e => e.Category).ThenBy(e => e.Name))
         {
             // BIB-15, Q16, Q23: Context AI đọc theo binding của chương; chương chưa qua Gate 1 dùng bản tự gắn.
             // Ẩn thực thể quần chúng (is_crowd_at_bind).
@@ -115,10 +115,12 @@ internal static class AiSnapshotBuilder
             if (rev is null) continue;
 
             var (name, description, details) = (entry.Name, entry.Description, entry.DetailsJson);
+            string? code = null;
             try
             {
                 using var doc = JsonDocument.Parse(rev.SnapshotJson);
                 var root = doc.RootElement;
+                if (root.TryGetProperty("Code", out var c) || root.TryGetProperty("code", out c)) code = c.GetString();
                 if (root.TryGetProperty("Name", out var n) || root.TryGetProperty("name", out n)) name = n.GetString() ?? name;
                 if (root.TryGetProperty("Description", out var d) || root.TryGetProperty("description", out d)) description = d.GetString() ?? description;
                 if ((root.TryGetProperty("DetailsJson", out var dj) || root.TryGetProperty("detailsJson", out dj)) && dj.ValueKind == JsonValueKind.String)
@@ -126,12 +128,31 @@ internal static class AiSnapshotBuilder
             }
             catch (JsonException) { /* snapshot hỏng → dùng trạng thái hiện tại của entry, giống GetBibleEntriesAtChapter */ }
 
+            // Nếu details có code cũ
+            if (string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(details))
+            {
+                try
+                {
+                    using var detailsDoc = JsonDocument.Parse(details);
+                    if (detailsDoc.RootElement.TryGetProperty("code", out var dc) || detailsDoc.RootElement.TryGetProperty("Code", out dc))
+                        code = dc.GetString();
+                }
+                catch { }
+            }
+
+            code ??= entry.Id.ToString("N")[..8].ToUpperInvariant();
+
             // Sự thật có cấu trúc (diesAtChapter, availableFromChapter, knownBy...) cho Continuity Agent; "{}" coi như không có
             if (details is { Length: <= 2 }) details = null;
 
+            var parsed = PanelForge.Application.Features.Bible.Common.BibleDetailsParser.Parse(details);
+            var continuityDetails = !parsed.IsEmpty
+                ? (parsed.Age != null ? $"[Tuổi: {parsed.Age}]\n{parsed.ArtistNotes}".Trim() : parsed.ArtistNotes)
+                : details;
+
             entries.Add(new BibleEntryContext(
-                entry.Id, entry.Code, entry.Category.ToString(), name, description,
-                rev.Id, rev.VersionNumber, 1, details));
+                entry.Id, code, entry.Category.ToString(), name, description,
+                rev.Id, rev.VersionNumber, 1, continuityDetails));
         }
         return entries;
     }

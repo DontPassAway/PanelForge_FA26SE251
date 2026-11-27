@@ -22,6 +22,7 @@ public sealed record CheckEntry
     public string Name { get; init; }
     public BibleEntryCategory Category { get; init; }
     public bool IsActive { get; init; }
+    public bool IsCrowd { get; init; }
     public int? FirstEffectiveChapter { get; init; }
     public int? FirstLockedChapter { get; init; }
     public string? DetailsJson { get; init; }
@@ -37,12 +38,13 @@ public sealed record CheckEntry
         int? firstEffectiveChapter, int? firstLockedChapter = null,
         string? detailsJson = null, int? diesAtChapter = null, int? revivesAtChapter = null,
         int? availableFromChapter = null, IReadOnlyList<CheckKnownBy>? knownBy = null,
-        string? code = null, int? revealedFromChapter = null)
+        string? code = null, int? revealedFromChapter = null, bool isCrowd = false)
     {
         Id = id;
         Name = name;
         Category = category;
         IsActive = isActive;
+        IsCrowd = isCrowd;
         FirstEffectiveChapter = firstEffectiveChapter;
         FirstLockedChapter = firstLockedChapter;
         DetailsJson = detailsJson;
@@ -230,9 +232,10 @@ public static class ConsistencyChecker
                     found.Add(new(EntryNotYetEffective, ConsistencyFindingSeverity.Blocking,
                         $"{where}: \"{entry.Name}\" chỉ có hiệu lực từ chương {first}, chưa xuất hiện ở chương {chapterNumber}.",
                         text, line.SceneId, line.Id, entryId, null));
-                // Mục có thiết kế hình đã có hiệu lực nhưng chưa có bản khoá: AI không dùng làm tham chiếu. Báo một lần mỗi mục/chương.
+                // Mục có thiết kế hình đã có hiệu lực nhưng chưa có bản khoá: AI không dùng làm tham chiếu. Báo một lần mỗi mục/chương (quần chúng được miễn).
                 if (entry.Category is BibleEntryCategory.Character or BibleEntryCategory.Location or BibleEntryCategory.Prop
                     && entry.FirstEffectiveChapter <= chapterNumber
+                    && !entry.IsCrowd
                     && !(entry.FirstLockedChapter <= chapterNumber) && notLockedReported.Add(entryId))
                     found.Add(new(CharacterNotLocked, ConsistencyFindingSeverity.Warning,
                         $"\"{entry.Name}\" chưa có bản thiết kế được Producer khoá ở chương {chapterNumber}: AI sẽ không dùng mục này làm tham chiếu.",
