@@ -1,99 +1,93 @@
-# Staging BE trên Oracle Cloud
+# Deploy BE lên VM (bản test + bản chính thức)
 
-Nhánh `main` (đổi được, xem tham số `bootstrap.sh`) được deploy lên một VM Ubuntu 24.04: Azure for Students (x64) hoặc Oracle Always Free (Ampere A1, ARM). VM tự build từ mã nguồn, không dùng image GHCR: image do `ci.yml` build chỉ có bản x64 và có thể private.
+Một VM Ubuntu 24.04 chạy **2 môi trường**, mỗi môi trường có API, AI service và **Postgres riêng**:
+
+| Môi trường | Nhánh | Địa chỉ (Azure hiện tại) | DB |
+|---|---|---|---|
+| **Bản chính thức** | `main` | `https://panelforge.koreacentral.cloudapp.azure.com` | volume `pg_main` |
+| **Bản test** | `dev` | `https://panelforge.koreacentral.cloudapp.azure.com:8443` | volume `pg_dev` |
+
+Quy trình: code mới vào `dev` → tự lên bản test → test ổn thì promote `dev` vào `main` (như nhóm đang làm) → tự lên bản chính thức. Hai DB tách hẳn: dữ liệu thử trên bản test không lẫn vào bản chính thức.
+
+VM tự build từ mã nguồn, không dùng image GHCR (image do `ci.yml` build chỉ có x64 và có thể private).
 
 ## Luồng CI/CD
 
-1. Push lên `main` → GitHub Actions (`.github/workflows/ci.yml`) chạy build + test như cũ.
-2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút: có commit mới trên `main` thì `git reset` về commit đó, `docker compose build`, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200.
-3. Build lỗi thì giữ bản cũ đang chạy, ghi log, không build lại cho tới commit sau.
+1. Push lên `dev`/`main` → GitHub Actions (`.github/workflows/ci.yml`) chạy build + test như cũ.
+2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút. Với từng môi trường: nhánh có commit mới thì `git reset` về commit đó, build lại API + AI của môi trường đó, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200.
+3. Build lỗi thì giữ bản cũ đang chạy, ghi log, không build lại cho tới commit sau. Hai môi trường build lần lượt (chung một khoá), không chạy song song.
 
-VM không giữ secret nào của GitHub và GitHub không cần SSH key vào VM: VM tự kéo code từ repo public.
+VM không giữ secret nào của GitHub và GitHub không cần SSH key vào VM.
 
-## Thành phần (`docker-compose.yml`)
+## Thành phần (`docker-compose.yml`, project `panelforge`)
 
 | Service | Vai trò |
 |---|---|
-| `caddy` | Reverse proxy cổng 80/443, tự cấp HTTPS khi `SITE_ADDRESS` là tên miền |
-| `api` | PanelForge.API (Dockerfile ở gốc repo), `ASPNETCORE_ENVIRONMENT=Staging`, không chạy seeder |
-| `ai` | PanelForge.AI (`Dockerfile.ai`) |
-| `postgres` | PostgreSQL 17, volume `pg_data` |
-| `translate` | LibreTranslate, chỉ tải model en/vi |
+| `caddy` | Reverse proxy: `MAIN_SITE` → `api-main`, `DEV_SITE` → `api-dev`; tự cấp HTTPS khi dùng tên miền |
+| `translate` | LibreTranslate (model en/vi), dùng chung |
+| `api-main`, `ai-main`, `postgres-main` | Bản chính thức, mã nguồn `./src-main` |
+| `api-dev`, `ai-dev`, `postgres-dev` | Bản test, mã nguồn `./src-dev` |
 
-Volume quan trọng: `pg_data` (DB), `assets` (ảnh upload), `dp_keys` (khoá mã hoá AI key của Studio; mất là phải nhập lại key).
+Volume quan trọng của mỗi môi trường: `pg_*` (DB), `assets_*` (ảnh upload), `dp_*` (khoá mã hoá AI key của Studio; mất là phải nhập lại key).
 
 ## Cài VM mới
 
-Tạo instance Ubuntu 24.04 aarch64, dán vào ô cloud-init (Advanced options → Management → Initialization script):
+**Azure for Students** (đang dùng): Ubuntu Server 24.04 x64, cỡ `Standard_B2ls_v2` (2 vCPU, 4 GB) ở region được phép, ổ OS 64 GB Premium SSD (P6, miễn phí 12 tháng), user `azureuser` + SSH key, inbound ports 22/80/443 và thêm rule **8443** trong Networking. Dán vào ô *Custom data* (tab Advanced):
 
 ```bash
 #!/bin/bash
 exec > /var/log/panelforge-bootstrap.log 2>&1
 set -eux
-git clone --branch main https://github.com/DontPassAway/PanelForge_FA26SE251.git /opt/panelforge/src
-git -C /opt/panelforge/src fetch origin main
-git -C /opt/panelforge/src show FETCH_HEAD:deploy/staging/bootstrap.sh > /root/panelforge-bootstrap.sh
-bash /root/panelforge-bootstrap.sh main main
+git clone --branch main https://github.com/DontPassAway/PanelForge_FA26SE251.git /opt/panelforge/src-main
+git -C /opt/panelforge/src-main fetch origin main
+git -C /opt/panelforge/src-main show FETCH_HEAD:deploy/staging/bootstrap.sh > /root/panelforge-bootstrap.sh
+bash /root/panelforge-bootstrap.sh main
 ```
 
-`bootstrap.sh <ref lấy file deploy> <nhánh được deploy>`: ref đầu là nơi lấy `deploy/staging` (dùng nhánh có bản mới nhất của thư mục này), nhánh sau là code được build và theo dõi.
+Tham số của `bootstrap.sh` là ref lấy thư mục `deploy/staging` (dùng nhánh có bản mới nhất của thư mục này). Sau khi tạo VM, đặt *DNS name label* cho Public IP để có tên `<label>.<region>.cloudapp.azure.com`, rồi ghi tên đó vào `.env` (xem dưới).
 
-**Azure** (ô *Custom data* ở tab Advanced khi tạo VM): mở cổng 80/443 bằng *inbound ports* của VM (NSG), user SSH mặc định là `azureuser`, đặt *DNS name label* cho Public IP để có tên `<label>.<region>.cloudapp.azure.com`.
-
-Trên Oracle, thêm Ingress Rule TCP 80 và 443 từ `0.0.0.0/0` vào Security List của subnet. `bootstrap.sh` mở hai cổng này trong iptables của VM, cài Docker, sinh secret vào `/opt/panelforge/.env` (chmod 600) và bật timer.
-
-## Chạy tạm trên máy cá nhân (khi chưa có VM)
-
-Máy Windows có Docker Desktop chạy được cùng stack này, đưa API ra internet qua Cloudflare quick tunnel (không cần tài khoản, không mở cổng nào trên máy):
-
-```powershell
-mkdir D:\PanelForge\staging; cd D:\PanelForge\staging
-git -c core.autocrlf=false clone --branch main https://github.com/DontPassAway/PanelForge_FA26SE251.git src
-copy src\deploy\staging\docker-compose.yml, src\deploy\staging\selfhost.yml, src\deploy\staging\Dockerfile.ai, src\deploy\staging\Caddyfile, src\deploy\staging\watch-stg.ps1 .
-# tạo .env cùng các biến như bảng dưới (POSTGRES_PASSWORD, JWT_SECRET, AI_SERVICE_KEY sinh ngẫu nhiên)
-powershell -ExecutionPolicy Bypass -File .\watch-stg.ps1
-```
-
-`watch-stg.ps1` (tham số `-Branch`, mặc định `main`) làm việc của `deploy.sh` + timer: mỗi 2 phút kiểm tra nhánh, có commit mới thì build lại, in URL `https://*.trycloudflare.com`. Giới hạn: máy phải bật, URL đổi khi container `tunnel` khởi động lại (`docker compose -f docker-compose.yml -f selfhost.yml logs tunnel` để xem URL hiện tại).
+**Oracle Always Free** (ARM): như trên, user `ubuntu`; `bootstrap.sh` tự mở 80/443/8443 trong iptables của image Oracle, còn Security List của subnet phải thêm Ingress TCP 80, 443, 8443.
 
 ## Vận hành
 
 ```bash
-ssh -i ~/.ssh/panelforge_oracle ubuntu@<IP>
-sudo tail -f /var/log/panelforge-bootstrap.log     # lần cài đầu
-journalctl -fu panelforge-deploy                    # các lần deploy
+ssh -i ~/.ssh/panelforge_oracle azureuser@<IP>
+sudo tail -f /var/log/panelforge-bootstrap.log      # lần cài đầu
+journalctl -fu panelforge-deploy                     # các lần deploy
 cd /opt/panelforge && sudo docker compose ps
-sudo docker compose logs -f --tail 100 api
-sudo ./deploy.sh --force                            # deploy lại ngay
+sudo docker compose logs -f --tail 100 api-dev       # hoặc api-main
+sudo ./deploy.sh --force                             # deploy lại ngay cả 2 môi trường
+sudo ENVS=dev ./deploy.sh --force                    # chỉ bản test
 ```
+
+Cập nhật cấu hình server khi file trong `deploy/staging` đổi: chạy lại `bootstrap.sh <ref>` (giữ nguyên `.env`, DB và volume).
 
 ### Biến trong `/opt/panelforge/.env`
 
 | Biến | Ghi chú |
 |---|---|
-| `SITE_ADDRESS` | `:80` = HTTP theo IP. Đặt tên miền (vd `panelforge-stg.duckdns.org`) để có HTTPS |
-| `POSTGRES_PASSWORD`, `JWT_SECRET`, `AI_SERVICE_KEY` | Sinh tự động, không đổi `POSTGRES_PASSWORD` sau khi DB đã tạo |
-| `SEPAY_WEBHOOK_API_KEY` | Xem `docs/setup/SEPAY_SETUP.md` |
-| `SMTP_SENDER_EMAIL`, `SMTP_APP_PASSWORD` | Gmail App Password, cần để gửi OTP xác thực email |
+| `MAIN_SITE`, `DEV_SITE` | Không có tên miền: `:80` và `:8443` (HTTP). Có tên miền: `ten.mien` và `ten.mien:8443` (HTTPS) |
+| `MAIN_*`, `DEV_*` (`POSTGRES_PASSWORD`, `JWT_SECRET`, `AI_SERVICE_KEY`) | Sinh tự động, riêng từng môi trường. Không đổi `*_POSTGRES_PASSWORD` sau khi DB đã tạo |
+| `MAIN_SEPAY_WEBHOOK_API_KEY` | Webhook SePay trỏ về bản chính thức, xem `docs/setup/SEPAY_SETUP.md` |
+| `SMTP_SENDER_EMAIL`, `SMTP_APP_PASSWORD` | Gmail App Password, cần để gửi OTP xác thực email (dùng chung 2 môi trường) |
 | `FIREBASE_PROJECT_ID` | Đăng nhập Google; file key chưa được mount |
 
 Sửa xong: `sudo docker compose up -d` (chỉ đổi biến) hoặc `sudo ./deploy.sh --force`.
 
-### Tạo tài khoản Admin đầu tiên
+### Tạo tài khoản Admin đầu tiên (mỗi môi trường làm riêng)
 
-Staging không chạy `DevUserSeeder` (mật khẩu mặc định nằm trong repo public). Khi chưa có SMTP:
+Server không chạy `DevUserSeeder` (mật khẩu mặc định nằm trong repo public). Khi chưa có SMTP:
 
 ```bash
-curl -X POST http://<IP>/api/auth/register -H 'Content-Type: application/json' \
+curl -X POST https://<MAIN_SITE hoặc DEV_SITE>/api/auth/register -H 'Content-Type: application/json' \
   -d '{"email":"<email>","password":"<mật khẩu>","fullName":"<tên>"}'   # có thể báo lỗi gửi mail, tài khoản vẫn được tạo
-cd /opt/panelforge && sudo docker compose exec postgres psql -U panelforge -d panelforge \
-  -c "UPDATE users SET is_email_confirmed = true, role = 'Admin' WHERE email = '<email>';"
+cd /opt/panelforge && sudo docker compose exec postgres-main psql -U panelforge -d panelforge \
+  -c "UPDATE users SET is_email_confirmed = true, role = 'Admin' WHERE email = '<email>';"   # postgres-dev cho bản test
 ```
-
-Kiểm tra tên bảng/cột bằng `\d users` nếu câu lệnh báo lỗi.
 
 ## Giới hạn đã biết
 
-- OpenCV chỉ có native x64 (`OpenCvSharp4.official.runtime.linux-x64.slim`): tách khung tranh (`SplitArtwork`) lỗi trên VM ARM tới khi thêm `OpenCvSharp4.runtime.linux-arm64`.
+- VM 4 GB chạy cả 2 môi trường khá sát RAM; thiếu thì nâng cỡ VM (Azure: Size → `B2s_v2` 8 GB) hoặc tạm dừng bản test (`sudo docker compose stop api-dev ai-dev postgres-dev`).
+- OpenCV chỉ có native x64 (`OpenCvSharp4.official.runtime.linux-x64.slim`): tách khung tranh (`SplitArtwork`) lỗi nếu chạy trên VM ARM (Oracle).
 - CORS của API đang cố định `localhost`: FE deploy ở domain khác cần sửa `Program.cs`.
 - Oracle thu hồi VM Always Free nhàn rỗi (CPU < 20% suốt 7 ngày) với tài khoản Free Tier.
