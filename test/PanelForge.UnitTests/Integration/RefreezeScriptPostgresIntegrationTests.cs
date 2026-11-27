@@ -31,7 +31,7 @@ namespace PanelForge.UnitTests.Integration;
 
 public sealed class RefreezeScriptPostgresIntegrationTests
 {
-    private const string AdminConn = "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=123456";
+    private static readonly string AdminConn = PostgresTestConnection.Admin;
 
     private static async Task ExecuteAdminSqlAsync(string sql)
     {
@@ -93,7 +93,7 @@ public sealed class RefreezeScriptPostgresIntegrationTests
     private static async Task RunWithTempPostgresAsync(Func<PanelForgeDbContext, Task> testBody)
     {
         var tempDbName = $"panelforge_refreeze_{Guid.NewGuid():N}";
-        var tempConn = $"Host=localhost;Port=5432;Database={tempDbName};Username=postgres;Password=123456";
+        var tempConn = PostgresTestConnection.ForDatabase(tempDbName);
         await ExecuteAdminSqlAsync($"CREATE DATABASE \"{tempDbName}\";");
 
         try

@@ -22,7 +22,7 @@ namespace PanelForge.UnitTests.Integration;
 
 public class BibleWorkflowPostgresIntegrationTests
 {
-    private const string AdminConn = "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=123456";
+    private static readonly string AdminConn = PostgresTestConnection.Admin;
 
     private static async Task ExecuteAdminSqlAsync(string sql)
     {
@@ -36,7 +36,7 @@ public class BibleWorkflowPostgresIntegrationTests
     public async Task EndToEnd_MigrationsClean_And_StubToDraftToSubmitToEndorseToCanonToGate1PassesOnPostgres()
     {
         var tempDbName = $"panelforge_it_{Guid.NewGuid():N}";
-        var tempConn = $"Host=localhost;Port=5432;Database={tempDbName};Username=postgres;Password=123456";
+        var tempConn = PostgresTestConnection.ForDatabase(tempDbName);
 
         // 1. Create isolated database
         await ExecuteAdminSqlAsync($"CREATE DATABASE \"{tempDbName}\";");
