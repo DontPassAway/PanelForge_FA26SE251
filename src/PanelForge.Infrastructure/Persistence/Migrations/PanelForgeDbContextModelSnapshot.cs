@@ -1042,22 +1042,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Aliases")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("aliases")
-                        .HasDefaultValueSql("'[]'::jsonb");
-
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
                         .HasColumnName("category");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("code");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -1087,12 +1075,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnName("details_json")
                         .HasDefaultValueSql("'{}'::jsonb");
 
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
                     b.Property<bool>("IsCrowd")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1119,11 +1101,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("normalized_name");
 
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("priority");
-
                     b.Property<string>("ReferenceImageUrl")
                         .HasColumnType("text")
                         .HasColumnName("reference_image_url");
@@ -1137,16 +1114,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SeriesBibleId")
                         .HasColumnType("uuid")
                         .HasColumnName("series_bible_id");
-
-                    b.Property<bool>("StrictCheck")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("strict_check");
-
-                    b.Property<string>("Subtitle")
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("subtitle");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -1163,10 +1130,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SeriesBibleId")
                         .HasDatabaseName("ix_bible_entries_series_bible_id");
-
-                    b.HasIndex("SeriesBibleId", "Code")
-                        .IsUnique()
-                        .HasDatabaseName("ix_bible_entries_series_bible_id_code");
 
                     b.HasIndex("SeriesBibleId", "NormalizedName")
                         .IsUnique()
@@ -5527,6 +5490,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pipeline_stage_id");
 
+                    b.Property<DateTime?>("ReadyAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("ready_at");
+
                     b.Property<string>("ReopenReason")
                         .HasColumnType("varchar(500)")
                         .HasColumnName("reopen_reason");
@@ -5604,6 +5571,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("assignee_user_id");
 
+                    b.Property<string>("AutoAssignReason")
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("auto_assign_reason");
+
                     b.Property<string>("Brief")
                         .HasColumnType("varchar(2000)")
                         .HasColumnName("brief");
@@ -5631,6 +5602,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamptz")
                         .HasColumnName("due_date");
+
+                    b.Property<bool>("IsAutoAssigned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_auto_assigned");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -6189,6 +6164,81 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_workspace_ai_configs_workspace_id");
 
                     b.ToTable("workspace_ai_configs", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAutomationSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AssignMode")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("assign_mode");
+
+                    b.Property<bool>("AutoNextStage")
+                        .HasColumnType("boolean")
+                        .HasColumnName("auto_next_stage");
+
+                    b.Property<bool>("AutoRouteReview")
+                        .HasColumnType("boolean")
+                        .HasColumnName("auto_route_review");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<int?>("EscalationHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("escalation_hours");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("LeadHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("lead_hours");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_workspace_automation_settings_workspace_id")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("workspace_automation_settings", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceMember", b =>
@@ -7233,6 +7283,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAutomationSettings", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceMember", b =>
