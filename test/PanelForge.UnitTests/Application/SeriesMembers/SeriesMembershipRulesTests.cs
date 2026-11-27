@@ -119,6 +119,16 @@ public class SeriesMembershipRulesTests
     }
 
     [Fact]
+    public async Task HasWorkspaceRole_AcceptsSpecialistRoleHeldInAnySeriesOfStudio()
+    {
+        _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
+        _seriesMembers.Add(SeriesMember.Create(_series.Id, _artist.Id, WorkspaceRole.Editor));
+
+        (await Auth.HasWorkspaceRoleAsync(_artist.Id, _workspace.Id, [WorkspaceRole.Editor])).Should().BeTrue();
+        (await Auth.HasWorkspaceRoleAsync(_artist.Id, _workspace.Id, [WorkspaceRole.Artist])).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task HasSeriesRole_UsesSeriesRole()
     {
         _wsMembers.Add(WorkspaceMember.Create(_workspace.Id, _artist.Id, WorkspaceRole.Member));
