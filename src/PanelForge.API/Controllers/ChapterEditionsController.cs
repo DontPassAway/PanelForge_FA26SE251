@@ -44,6 +44,7 @@ public sealed class ChapterEditionsController : ControllerBase
     /// </summary>
     [HttpGet("api/chapters/{chapterId:guid}/editions")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     public async Task<IActionResult> GetEditions(Guid chapterId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetChapterEditionsQuery(chapterId), ct);
@@ -95,10 +96,10 @@ public sealed class ChapterEditionsController : ControllerBase
 
     /// <summary>
     /// POST /api/chapters/{chapterId}/editions/{lang}/publish
-    /// Producer / Publisher phát hành ấn bản dịch đã nghiệm thu (Approved).
+    /// Publisher phát hành ấn bản dịch đã nghiệm thu (Approved) (BR-33, D1).
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/editions/{lang}/publish")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Publisher)]
+    [RequireWorkspaceRole(WorkspaceRole.Publisher)]
     public async Task<IActionResult> PublishEdition(
         Guid chapterId, string lang, CancellationToken ct)
     {

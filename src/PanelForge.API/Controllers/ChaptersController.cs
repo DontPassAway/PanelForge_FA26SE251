@@ -547,6 +547,7 @@ public sealed class ChaptersController : ControllerBase
     /// <summary>GET /api/chapters/{chapterId}/reviews — lịch sử phê duyệt cấp Chapter (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/reviews")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(IReadOnlyList<ChapterReviewDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterReviews([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterReviewsQuery(chapterId), cancellationToken));
@@ -554,6 +555,7 @@ public sealed class ChaptersController : ControllerBase
     /// <summary>GET /api/chapters/{chapterId}/snapshots — CF4 / 4.1: các bản chụp bất biến lúc Producer duyệt, mới nhất trước (thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/snapshots")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(IReadOnlyList<ChapterSnapshotDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterSnapshots([FromRoute] Guid chapterId, CancellationToken cancellationToken) =>
         ToActionResult(await _mediator.Send(new GetChapterSnapshotsQuery(chapterId), cancellationToken));
@@ -561,6 +563,7 @@ public sealed class ChaptersController : ControllerBase
     /// <summary>GET /api/chapters/{chapterId}/snapshots/{snapshotId} — manifest của một snapshot kèm kết quả kiểm hash.</summary>
     [HttpGet("api/chapters/{chapterId:guid}/snapshots/{snapshotId:guid}")]
     [RequireWorkspaceRole]
+    [AllowPublisherRead]
     [ProducesResponseType(typeof(ChapterSnapshotDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChapterSnapshot(
         [FromRoute] Guid chapterId, [FromRoute] Guid snapshotId, CancellationToken cancellationToken) =>

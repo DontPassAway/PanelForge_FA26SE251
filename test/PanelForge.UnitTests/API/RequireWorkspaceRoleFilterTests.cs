@@ -36,7 +36,7 @@ public class RequireWorkspaceRoleFilterTests
         var user = new ClaimsPrincipal(identity);
 
         var httpContext = new DefaultHttpContext { User = user };
-        var actionContext = new ActionContext(httpContext, routeData, new ActionDescriptor());
+        var actionContext = new ActionContext(httpContext, routeData, new ActionDescriptor { EndpointMetadata = new List<object>() });
         var context = new ActionExecutingContext(
             actionContext,
             new List<IFilterMetadata>(),
@@ -303,5 +303,86 @@ public class RequireWorkspaceRoleFilterTests
         // Assert
         executed.Should().BeTrue();
         context.Result.Should().BeNull();
+    }
+
+    // BR-32: Publisher là vai trò hệ thống; chỉ vào endpoint khai báo rõ Publisher hoặc GET có [AllowPublisherRead].
+    private (ActionExecutingContext context, Func<bool> executed, ActionExecutionDelegate next) CreatePublisherContext(
+        string method, bool markedReadable)
+    {
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        _authServiceMock
+            .Setup(a => a.IsMemberAsync(userId, workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _authServiceMock
+            .Setup(a => a.HasWorkspaceRoleAsync(userId, workspaceId, It.IsAny<WorkspaceRole[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var routeData = new RouteData();
+        routeData.Values.Add("workspaceId", workspaceId.ToString());
+        var (context, _) = CreateContext(userId, routeData, new Claim(ClaimTypes.Role, "Publisher"));
+        context.HttpContext.Request.Method = method;
+        if (markedReadable)
+            context.ActionDescriptor.EndpointMetadata.Add(new AllowPublisherReadAttribute());
+
+        var ran = false;
+        ActionExecutionDelegate next = () =>
+        {
+            ran = true;
+            return Task.FromResult<ActionExecutedContext>(null!);
+        };
+        return (context, () => ran, next);
+    }
+
+    [Theory]
+    [InlineData("POST", false)]
+    [InlineData("PUT", true)]
+    [InlineData("DELETE", true)]
+    [InlineData("GET", false)]
+    public async Task OnActionExecutionAsync_WhenPublisherOnBareEndpointWithoutReadMarker_ShouldReturnForbidden(
+        string method, bool markedReadable)
+    {
+        var (context, executed, next) = CreatePublisherContext(method, markedReadable);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeFalse();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherReadsMarkedBareEndpoint_ShouldProceed()
+    {
+        var (context, executed, next) = CreatePublisherContext("GET", markedReadable: true);
+        var filter = new RequireWorkspaceRoleFilter([], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeTrue();
+        context.Result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherOnEndpointDeclaringPublisher_ShouldProceed()
+    {
+        var (context, executed, next) = CreatePublisherContext("POST", markedReadable: false);
+        var filter = new RequireWorkspaceRoleFilter([WorkspaceRole.Publisher], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OnActionExecutionAsync_WhenPublisherOnProducerOnlyEndpoint_ShouldReturnForbidden()
+    {
+        var (context, executed, next) = CreatePublisherContext("POST", markedReadable: false);
+        var filter = new RequireWorkspaceRoleFilter([WorkspaceRole.Producer], _authServiceMock.Object);
+
+        await filter.OnActionExecutionAsync(context, next);
+
+        executed().Should().BeFalse();
+        (context.Result as ObjectResult)!.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 }
