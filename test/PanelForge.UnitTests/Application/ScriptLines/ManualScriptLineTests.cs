@@ -45,6 +45,7 @@ public class ManualScriptLineTests
         _db.Scenes.Add(_scene);
         _db.SaveChanges();
         _auth.Setup(a => a.GetMemberRoleAsync(_writer, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writer, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
     }
 
     private Task<Result<PanelForge.Application.Features.ScriptLines.Models.ScriptLineDto>> Create(

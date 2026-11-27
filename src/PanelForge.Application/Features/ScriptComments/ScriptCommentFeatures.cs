@@ -111,14 +111,15 @@ public sealed class ScriptCommentHandlers :
 
     private async Task<Result<WorkspaceRole>> RoleAsync(Guid chapterId, Guid userId, CancellationToken ct)
     {
-        var workspaceId = await _db.Chapters.AsNoTracking()
+        var seriesId = await _db.Chapters.AsNoTracking()
             .Where(c => c.Id == chapterId)
-            .Join(_db.Series, c => c.SeriesId, s => s.Id, (c, s) => (Guid?)s.WorkspaceId)
+            .Select(c => (Guid?)c.SeriesId)
             .FirstOrDefaultAsync(ct);
-        if (workspaceId is null)
+        if (seriesId is null)
             return Result<WorkspaceRole>.Failure($"Chương {chapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        var role = await _auth.GetMemberRoleAsync(userId, workspaceId.Value, ct);
+        // Spec D10: vai trò chuyên môn theo Series
+        var role = await _auth.GetSeriesMemberRoleAsync(userId, seriesId.Value, ct);
         return role is null
             ? Result<WorkspaceRole>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden)
             : Result<WorkspaceRole>.Success(role.Value);

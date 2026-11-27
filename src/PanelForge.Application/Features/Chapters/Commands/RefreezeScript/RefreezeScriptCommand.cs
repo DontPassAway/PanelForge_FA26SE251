@@ -77,7 +77,7 @@ public sealed class RefreezeScriptCommandHandler
 
                 var isOwner = await _db.StudioWorkspaces.AsNoTracking()
                     .AnyAsync(w => w.Id == workspaceId && w.OwnerId == cmd.UserId, tct);
-                var actorRole = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId, tct);
+                var actorRole = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, chapter.SeriesId, tct);
                 if (!isOwner && actorRole != WorkspaceRole.Producer)
                     return Fail("Chỉ Producer mới có quyền chốt lại kịch bản.", ResultErrorCodes.Forbidden);
 

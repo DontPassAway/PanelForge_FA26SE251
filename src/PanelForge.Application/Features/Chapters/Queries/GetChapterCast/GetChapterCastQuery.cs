@@ -126,7 +126,7 @@ public sealed class GetChapterCastQueryHandler
             .Select(s => s.WorkspaceId)
             .FirstOrDefaultAsync(ct);
 
-        var role = await _auth.GetMemberRoleAsync(q.UserId, workspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(q.UserId, chapter.SeriesId, ct);
         if (role is null)
             return Result<ChapterCastDto>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
 

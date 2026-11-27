@@ -72,7 +72,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         if (workspaceId is null) return Fail($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
 
         // BR-07: vai trò theo task do Backend tra từ membership
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId.Value, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, cmd.SeriesId, ct);
         var allowed = AiWorkflowPolicy.CopilotRoles(cmd.Task);
         if (role is null || !allowed.Contains(role.Value))
             return Fail($"Chỉ {string.Join("/", allowed)} của Workspace mới được dùng {cmd.Task}.", ResultErrorCodes.Forbidden);

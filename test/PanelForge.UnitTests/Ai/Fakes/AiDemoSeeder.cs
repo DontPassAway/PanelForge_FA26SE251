@@ -55,6 +55,13 @@ public static class AiDemoSeeder
         // Letterer (tài khoản dev letterer@) là tuỳ chọn: có thì thêm để demo đủ nhiệm vụ Letterer; không có thì bỏ qua
         if (await db.Users.AnyAsync(u => u.Id == LettererUser, ct))
             db.WorkspaceMembers.Add(WorkspaceMember.Create(WorkspaceId, LettererUser, WorkspaceRole.Letterer));
+        // Spec D10: vai trò chuyên môn nằm ở Series
+        db.SeriesMembers.AddRange(
+            SeriesMember.Create(SeriesId, WriterUser, WorkspaceRole.Writer),
+            SeriesMember.Create(SeriesId, EditorUser, WorkspaceRole.Editor),
+            SeriesMember.Create(SeriesId, ArtistUser, WorkspaceRole.Artist));
+        if (await db.Users.AnyAsync(u => u.Id == LettererUser, ct))
+            db.SeriesMembers.Add(SeriesMember.Create(SeriesId, LettererUser, WorkspaceRole.Letterer));
 
         // TASK-350: Studio chỉ dùng API dùng chung; key giả được IAiKeyProtector mock giải mã
         var cred = AiProviderCredential.Create("Gemini demo", AiProviderCredential.Gemini, null, "enc:demo",

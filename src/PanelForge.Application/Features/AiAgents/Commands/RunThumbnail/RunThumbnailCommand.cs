@@ -61,7 +61,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == cmd.SeriesId, ct);
         if (series is null) return Fail($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, series.WorkspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, series.Id, ct);
         if (role != WorkspaceRole.Artist)
             return Fail("Chỉ Artist của Workspace mới được sinh thumbnail.", ResultErrorCodes.Forbidden);
 

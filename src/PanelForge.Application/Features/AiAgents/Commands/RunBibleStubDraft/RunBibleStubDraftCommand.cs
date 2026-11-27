@@ -52,7 +52,7 @@ public sealed class RunBibleStubDraftCommandHandler : IRequestHandler<RunBibleSt
 
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == cmd.SeriesId, ct);
         if (series is null) return Fail($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, series.WorkspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, series.Id, ct);
         if (role is null || !AiWorkflowPolicy.CopilotRoles(Task).Contains(role.Value))
             return Fail("Chỉ Writer của Workspace mới được xin hồ sơ nháp.", ResultErrorCodes.Forbidden);
 

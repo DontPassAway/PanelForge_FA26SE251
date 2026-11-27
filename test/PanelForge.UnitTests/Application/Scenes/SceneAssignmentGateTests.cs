@@ -48,8 +48,11 @@ public class SceneAssignmentGateTests
         _db.SaveChanges();
 
         _auth.Setup(a => a.GetMemberRoleAsync(_producer, studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Producer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_producer, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Producer);
         _auth.Setup(a => a.GetMemberRoleAsync(_assignedWriter, studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_assignedWriter, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
         _auth.Setup(a => a.GetMemberRoleAsync(_otherWriter, studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_otherWriter, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
     }
 
     private void AssignWriter()
