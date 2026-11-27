@@ -81,6 +81,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ExportJob> ExportJobs => Set<ExportJob>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog> PreviewLinkAccessLogs => Set<PanelForge.Domain.Entities.Preview.PreviewLinkAccessLog>();
     public DbSet<PanelForge.Domain.Entities.Preview.PreviewFeedback> PreviewFeedback => Set<PanelForge.Domain.Entities.Preview.PreviewFeedback>();
+    public DbSet<PanelForge.Domain.Entities.Preview.PageComment> PageComments => Set<PanelForge.Domain.Entities.Preview.PageComment>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetReference> AssetReferences => Set<AssetReference>();
     public DbSet<AssetAccessLog> AssetAccessLogs => Set<AssetAccessLog>();
