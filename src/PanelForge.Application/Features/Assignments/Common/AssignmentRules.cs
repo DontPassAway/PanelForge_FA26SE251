@@ -4,6 +4,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
+using PanelForge.Application.Features.SeriesMembers.Common;
 
 namespace PanelForge.Application.Features.Assignments.Common;
 
@@ -98,22 +99,23 @@ internal static class AssignmentRules
             : $"Không thể xoá {what}: đang có {statuses.Count} việc được giao. Producer cần huỷ các việc này trước.";
     }
 
-    /// <summary>Người nhận thông báo "đã nộp": Editor của Workspace; nếu chưa có Editor thì Producer. Loại trừ người nộp.</summary>
+    /// <summary>Người nhận thông báo "đã nộp": Editor của Series (D10); nếu chưa có Editor thì Producer của Studio. Loại trừ người nộp.</summary>
     public static async Task<List<Guid>> ReviewerUserIdsAsync(
-        IPanelForgeDbContext db, Guid workspaceId, Guid excludeUserId, CancellationToken ct)
+        IPanelForgeDbContext db, Guid workspaceId, Guid seriesId, Guid excludeUserId, CancellationToken ct)
     {
-        async Task<List<Guid>> WithRole(WorkspaceRole role) => await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Role == role && m.UserId != excludeUserId
-                        && m.Status == WorkspaceMemberStatus.Active)
-            .Select(m => m.UserId).ToListAsync(ct);
-
-        var editors = await WithRole(WorkspaceRole.Editor);
-        return editors.Count > 0 ? editors : await WithRole(WorkspaceRole.Producer);
+        var editors = (await SeriesRoles.UserIdsWithRoleAsync(db, workspaceId, seriesId, WorkspaceRole.Editor, ct))
+            .Where(id => id != excludeUserId).ToList();
+        return editors.Count > 0
+            ? editors
+            : (await SeriesRoles.StudioProducerIdsAsync(db, workspaceId, ct)).Where(id => id != excludeUserId).ToList();
     }
 
-    /// <summary>BR-07: người nhận phải là thành viên Workspace đã chấp nhận lời mời (Active); vai trò lấy từ membership, phải khớp stage.</summary>
+    /// <summary>
+    /// BR-07: người nhận phải là thành viên Workspace đã chấp nhận lời mời (Active). Spec D10: vai trò lấy từ Series
+    /// (Producer của Studio được coi là Producer), phải khớp stage.
+    /// </summary>
     public static async Task<Result<WorkspaceRole>> ResolveAssigneeRoleAsync(
-        IPanelForgeDbContext db, Guid workspaceId, Guid assigneeUserId, PipelineStage stage, CancellationToken ct)
+        IPanelForgeDbContext db, Guid workspaceId, Guid seriesId, Guid assigneeUserId, PipelineStage stage, CancellationToken ct)
     {
         if (assigneeUserId == Guid.Empty)
             return Result<WorkspaceRole>.Failure("Assignment phải có người nhận.", ResultErrorCodes.Validation);
@@ -133,11 +135,18 @@ internal static class AssignmentRules
             return Result<WorkspaceRole>.Failure(
                 "Người nhận chưa chấp nhận lời mời vào Workspace nên chưa thể nhận việc.", ResultErrorCodes.Validation);
 
-        if (!stage.CanBeHeldBy(member.Role))
+        var role = await SeriesRoles.RoleOfAsync(db, workspaceId, seriesId, assigneeUserId, ct)
+                   ?? (member.Role == WorkspaceRole.Producer ? WorkspaceRole.Producer : null);
+        if (role is null)
             return Result<WorkspaceRole>.Failure(
-                $"Stage '{stage.Name}' dành cho vai trò {stage.AllowedRole}, người nhận là {member.Role}.", ResultErrorCodes.Validation);
+                "Người nhận chưa được gán vai trò trong Series này. Producer cần thêm họ vào Series kèm vai trò trước.",
+                ResultErrorCodes.Validation);
 
-        return Result<WorkspaceRole>.Success(member.Role);
+        if (!stage.CanBeHeldBy(role.Value))
+            return Result<WorkspaceRole>.Failure(
+                $"Stage '{stage.Name}' dành cho vai trò {stage.AllowedRole}, người nhận là {role.Value}.", ResultErrorCodes.Validation);
+
+        return Result<WorkspaceRole>.Success(role.Value);
     }
 
     /// <summary>

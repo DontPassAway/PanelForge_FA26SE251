@@ -107,7 +107,7 @@ internal static class ScriptLineRules
             return Result<(Chapter, Guid)>.Failure($"Chapter {chapterId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        var role = await auth.GetMemberRoleAsync(userId, workspaceId, ct);
+        var role = await auth.GetSeriesMemberRoleAsync(userId, chapter.SeriesId, ct);
         if (role is null)
             return Result<(Chapter, Guid)>.Failure("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
 
@@ -163,7 +163,7 @@ internal static class ScriptLineRules
         var seriesId = await db.Chapters.AsNoTracking().Where(c => c.Id == chapterId).Select(c => (Guid?)c.SeriesId).FirstOrDefaultAsync(ct);
         if (seriesId is null) return null; // handler tự báo không tồn tại
         var workspaceId = await db.Series.AsNoTracking().Where(s => s.Id == seriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        if (await auth.GetMemberRoleAsync(userId, workspaceId, ct) != WorkspaceRole.Writer) return null;
+        if (await auth.GetSeriesMemberRoleAsync(userId, seriesId.Value, ct) != WorkspaceRole.Writer) return null;
 
         var authorized = await AuthorizeAsync(db, auth, userId, chapterId, expectedVersion: null, ct);
         return authorized.IsSuccess ? null : (authorized.ErrorMessage!, authorized.ErrorCode);

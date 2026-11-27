@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -24,10 +25,10 @@ internal static class ScriptSubmitRules
         version.MarkSubmitted(userId);
         chapter.UpdatedBy = userId.ToString();
 
-        var recipients = await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.UserId != userId &&
-                        (m.Role == WorkspaceRole.Editor || m.Role == WorkspaceRole.Producer))
-            .Select(m => m.UserId).Distinct().ToListAsync(ct);
+        // D10: Editor của Series + Producer của Studio
+        var recipients = (await SeriesRoles.UserIdsWithRoleAsync(db, workspaceId, chapter.SeriesId, WorkspaceRole.Editor, ct))
+            .Concat(await SeriesRoles.StudioProducerIdsAsync(db, workspaceId, ct))
+            .Where(id => id != userId).Distinct().ToList();
         foreach (var recipientId in recipients)
         {
             db.Notifications.Add(Notification.Create(

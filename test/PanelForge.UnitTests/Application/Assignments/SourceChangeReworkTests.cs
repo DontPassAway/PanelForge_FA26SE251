@@ -64,6 +64,7 @@ public class SourceChangeReworkTests
         _pages.Setup(r => r.GetAsync(page1.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page1);
         _pages.Setup(r => r.GetAsync(page2.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page2);
         _auth.Setup(a => a.GetMemberRoleAsync(_writer, studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writer, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
     }
 
     private (Assignment Work, StageProgress Row) Approved(PipelineStage stage, Panel panel, WorkspaceRole role)

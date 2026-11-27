@@ -286,7 +286,7 @@ public sealed class ScriptLifecycleCommandHandler :
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
-        if (await _auth.GetMemberRoleAsync(userId, workspaceId, ct) != WorkspaceRole.Writer)
+        if (await _auth.GetSeriesMemberRoleAsync(userId, chapter.SeriesId, ct) != WorkspaceRole.Writer)
             return Result<(Chapter, Guid)>.Failure("Chỉ Writer mới gửi duyệt hoặc hủy gửi duyệt kịch bản.", ResultErrorCodes.Forbidden);
 
         return Result<(Chapter, Guid)>.Success((chapter, workspaceId));

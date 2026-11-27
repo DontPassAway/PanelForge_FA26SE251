@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
@@ -19,9 +20,8 @@ internal static class ScriptNotifications
             .Where(s => s.Id == chapter.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(ct);
         if (workspaceId is null) return;
 
-        var writers = await db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Role == WorkspaceRole.Writer)
-            .Select(m => m.UserId).ToListAsync(ct);
+        // D10: Writer của Series
+        var writers = await SeriesRoles.UserIdsWithRoleAsync(db, workspaceId.Value, chapter.SeriesId, WorkspaceRole.Writer, ct);
         if (chapter.ScriptSubmittedById is { } submitter) writers.Add(submitter);
 
         foreach (var userId in writers.Where(id => id != actorUserId).Distinct())

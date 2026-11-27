@@ -35,6 +35,12 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
             return Result<WorkspaceMemberDto>.Failure(
                 $"Vai trò không hợp lệ. Các vai trò hợp lệ: {string.Join(", ", Enum.GetNames<WorkspaceRole>())}.");
 
+        // Spec D10: ở cấp Studio chỉ có Producer hoặc Member; vai trò chuyên môn gán khi thêm vào Series
+        if (command.NewRole is not (WorkspaceRole.Producer or WorkspaceRole.Member))
+            return Result<WorkspaceMemberDto>.Failure(
+                "Vai trò trong Studio chỉ là Producer hoặc Member. Vai trò Writer/Artist/Letterer/Editor gán khi thêm vào từng Series.",
+                ResultErrorCodes.Validation);
+
         var workspace = await _dbContext.StudioWorkspaces
             .FirstOrDefaultAsync(w => w.Id == command.WorkspaceId, cancellationToken);
         if (workspace is null)
@@ -52,8 +58,8 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
         var seriesIds = await _dbContext.Series
             .Where(s => s.WorkspaceId == command.WorkspaceId).Select(s => s.Id).ToListAsync(cancellationToken);
 
-        // Việc đang mở được giao theo vai trò cũ (stage AllowedRole): đổi vai trò lúc này để lại việc sai vai trò
-        if (command.NewRole != member.Role
+        // Việc đang mở theo vai trò Producer: hạ xuống Member lúc này để lại việc sai vai trò (vai trò Series không đổi, D10)
+        if (member.Role == WorkspaceRole.Producer && command.NewRole != WorkspaceRole.Producer
             && await Assignments.Common.AssignmentRules.OpenWorkCountAsync(_dbContext, command.TargetUserId, seriesIds, cancellationToken)
                 is var open and > 0)
             return Result<WorkspaceMemberDto>.Failure(
@@ -65,11 +71,7 @@ public sealed class UpdateMemberRoleCommandHandler : IRequestHandler<UpdateMembe
 
         member.ChangeRole(command.NewRole);
 
-        // Role Workspace là nguồn duy nhất: đồng bộ role của mọi Series Membership trong Workspace, cùng một lần lưu
-        var seriesMembers = await _dbContext.SeriesMembers
-            .Where(sm => sm.UserId == command.TargetUserId && seriesIds.Contains(sm.SeriesId))
-            .ToListAsync(cancellationToken);
-        foreach (var sm in seriesMembers) sm.ChangeRole(command.NewRole);
+        // D10: vai trò Series độc lập với vai trò Studio, không đồng bộ ở đây
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

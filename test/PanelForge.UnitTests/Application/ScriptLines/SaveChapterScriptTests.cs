@@ -57,7 +57,11 @@ public class SaveChapterScriptTests
 
         _auth.Setup(a => a.GetMemberRoleAsync(_writerId, _studio.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writerId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Writer);
         _auth.Setup(a => a.GetMemberRoleAsync(_producerId, _studio.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceRole.Producer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_producerId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(WorkspaceRole.Producer);
 
         _castGate.Setup(g => g.EvaluateSubmitAsync(_chapter.Id, It.IsAny<CancellationToken>()))

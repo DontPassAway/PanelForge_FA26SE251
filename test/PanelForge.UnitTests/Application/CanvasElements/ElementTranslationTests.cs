@@ -155,7 +155,8 @@ public class ElementTranslationTests
         EditionStatus editionStatus)
     {
         var lettererId = Guid.NewGuid();
-        _db.WorkspaceMembers.Add(WorkspaceMember.Create(_studio.Id, lettererId, WorkspaceRole.Letterer));
+        _db.WorkspaceMembers.Add(WorkspaceMember.Create(_studio.Id, lettererId, WorkspaceRole.Member));
+        _db.SeriesMembers.Add(SeriesMember.Create(_series.Id, lettererId, WorkspaceRole.Letterer)); // Spec D10
 
         var (page, elementId) = SetupPageWithBalloon();
         _db.Pages.Add(page);

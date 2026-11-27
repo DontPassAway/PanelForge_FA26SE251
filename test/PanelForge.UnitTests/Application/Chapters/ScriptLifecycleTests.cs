@@ -51,8 +51,11 @@ public class ScriptLifecycleTests
         _db.SaveChanges();
 
         _auth.Setup(a => a.GetMemberRoleAsync(_writer, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_writer, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Writer);
         _auth.Setup(a => a.GetMemberRoleAsync(_editor, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Editor);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_editor, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Editor);
         _auth.Setup(a => a.GetMemberRoleAsync(_producer, _studio.Id, It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Producer);
+        _auth.Setup(a => a.GetSeriesMemberRoleAsync(_producer, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceRole.Producer);
     }
 
     private ScriptLifecycleCommandHandler Lifecycle => new(_db, _auth.Object, _castGate, _castService);

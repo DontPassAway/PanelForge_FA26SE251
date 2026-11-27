@@ -51,7 +51,7 @@ public sealed class CreatePanelCommandHandler : IRequestHandler<CreatePanelComma
                 .Where(s => s.Id == chapterInfo.SeriesId)
                 .Select(s => s.WorkspaceId)
                 .FirstOrDefaultAsync(cancellationToken);
-            var role = await _auth.GetMemberRoleAsync(command.UserId, workspaceId, cancellationToken);
+            var role = await _auth.GetSeriesMemberRoleAsync(command.UserId, chapterInfo.SeriesId, cancellationToken);
             if (role != WorkspaceRole.Writer && role != WorkspaceRole.Producer)
             {
                 return Result<PanelDto>.Failure(

@@ -26,7 +26,7 @@ public sealed class GetRunQueryHandler : IRequestHandler<GetRunQuery, Result<AiR
     {
         var run = await _db.AiWorkflowRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == q.RunId && r.SeriesId == q.SeriesId, ct);
         if (run is null) return AiRunHelpers.Fail<AiRunDto>("Run không tồn tại trong Series.", ResultErrorCodes.NotFound);
-        var viewerRole = await _auth.GetMemberRoleAsync(q.UserId, run.WorkspaceId, ct);
+        var viewerRole = await _auth.GetSeriesMemberRoleAsync(q.UserId, q.SeriesId, ct);
         if (viewerRole is null)
             return AiRunHelpers.Fail<AiRunDto>("Bạn không phải thành viên của Workspace này.", ResultErrorCodes.Forbidden);
 

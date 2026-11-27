@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -46,9 +47,9 @@ public sealed class GetAssigneeSuggestionsQueryHandler
 
         // BR-31: stage Letterer cũng gợi ý Artist (Artist mặc định tự đặt chữ trên trang của mình)
         var holderRoles = stage.AllowedRole is { } allowedRole ? PipelineStage.RolesAllowedFor(allowedRole).ToList() : null;
-        var members = await _db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active &&
-                        (holderRoles == null || holderRoles.Contains(m.Role)))
+        // D10: gợi ý theo vai trò trong Series
+        var members = await SeriesRoles.Holders(_db, workspaceId, chapter.SeriesId)
+            .Where(m => holderRoles == null || holderRoles.Contains(m.Role))
             .Select(m => new { m.UserId, m.Role })
             .ToListAsync(ct);
         if (members.Count == 0)

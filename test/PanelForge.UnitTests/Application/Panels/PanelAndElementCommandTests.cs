@@ -29,6 +29,11 @@ public class PanelAndElementCommandTests
         var pageId = Guid.NewGuid();
         var page = Page.CreateNew(Guid.NewGuid(), 1, LayoutFormat.StandardPage, 1200, 1800, 300);
         typeof(Page).GetProperty("Id")!.SetValue(page, pageId);
+        // Handler đọc page.Chapter (guard PreProduction); DbSet giả không tự nạp navigation.
+        var chapter = Chapter.Create(Guid.NewGuid(), 1);
+        typeof(Chapter).GetProperty(nameof(Chapter.Id))!.SetValue(chapter, page.ChapterId);
+        typeof(Chapter).GetProperty(nameof(Chapter.Status))!.SetValue(chapter, ChapterStatus.InProduction);
+        typeof(Page).GetProperty(nameof(Page.Chapter))!.SetValue(page, chapter);
 
         var pagesDbSet = DbSetMockHelper.CreateDbSetMock(new List<Page> { page });
         var panelsDbSet = DbSetMockHelper.CreateDbSetMock(new List<Panel>());

@@ -80,7 +80,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
             return AiRunHelpers.Fail<RunWorkflowResponse>($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
 
         // Quyền theo vai trò: Backend tự tra từ membership, không tin role/agent do client gửi
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, workspaceId.Value, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, cmd.SeriesId, ct);
         var allowedRoles = AiWorkflowPolicy.RunRoles(type);
         if (role is null || !allowedRoles.Contains(role.Value))
             return AiRunHelpers.Fail<RunWorkflowResponse>(

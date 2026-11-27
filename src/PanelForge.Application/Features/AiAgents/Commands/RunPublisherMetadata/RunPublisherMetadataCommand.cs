@@ -53,7 +53,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         var series = await _db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == cmd.SeriesId, ct);
         if (series is null) return Fail($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
 
-        var role = await _auth.GetMemberRoleAsync(cmd.UserId, series.WorkspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(cmd.UserId, series.Id, ct);
         var allowed = AiWorkflowPolicy.CopilotRoles(Task);
         if (role is null || !allowed.Contains(role.Value))
             return Fail($"Chỉ {string.Join("/", allowed)} của Workspace mới được dùng {Task}.", ResultErrorCodes.Forbidden);

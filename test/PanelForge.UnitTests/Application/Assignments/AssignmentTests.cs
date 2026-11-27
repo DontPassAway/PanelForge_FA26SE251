@@ -76,6 +76,12 @@ public partial class AssignmentTests
                 WorkspaceMember.Create(workspaceId, PendingArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Pending),
                 WorkspaceMember.Create(workspaceId, RejectedArtistId, WorkspaceRole.Artist, WorkspaceMemberStatus.Rejected),
             };
+            // Spec D10: vai trò chuyên môn nằm ở Series; ở Studio chỉ còn Producer / Member
+            foreach (var m in members.Where(m => m.Role != WorkspaceRole.Producer))
+            {
+                SeriesMembers.Add(SeriesMember.Create(Series.Id, m.UserId, m.Role));
+                m.ChangeRole(WorkspaceRole.Member);
+            }
 
             Db.Setup(d => d.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series> { Series }));
             Db.Setup(d => d.Chapters).Returns(DbSetMockHelper.CreateDbSetMock(new List<Chapter> { Chapter }));
@@ -185,7 +191,7 @@ public partial class AssignmentTests
     }
 
     [Fact]
-    public async Task Create_AddsAssigneeToSeriesTeam_WithWorkspaceRole()
+    public async Task Create_KeepsAssigneeSeriesMembership_WithSeriesRole()
     {
         var f = new Fixture();
 
@@ -201,12 +207,13 @@ public partial class AssignmentTests
     public async Task Create_ExistingSeriesMember_IsReused()
     {
         var f = new Fixture();
-        var existing = SeriesMember.Create(f.Series.Id, f.ArtistId, WorkspaceRole.Artist);
-        f.SeriesMembers.Add(existing);
+        var existing = f.SeriesMembers.Single(m => m.UserId == f.ArtistId);
+        var before = f.SeriesMembers.Count;
 
         (await Create(f, f.CreateCmd())).IsSuccess.Should().BeTrue();
 
-        f.SeriesMembers.Should().ContainSingle().Which.Should().BeSameAs(existing);
+        f.SeriesMembers.Should().HaveCount(before);
+        f.SeriesMembers.Single(m => m.UserId == f.ArtistId).Should().BeSameAs(existing);
     }
 
     [Fact]
@@ -214,10 +221,11 @@ public partial class AssignmentTests
     {
         var f = new Fixture();
 
+        var before = f.SeriesMembers.Count;
         var result = await Create(f, f.CreateCmd(assignee: f.WriterId)); // stage Pencil chỉ cho Artist
 
         result.IsSuccess.Should().BeFalse();
-        f.SeriesMembers.Should().BeEmpty();
+        f.SeriesMembers.Should().HaveCount(before);
         f.Assignments.Should().BeEmpty();
     }
 
@@ -239,9 +247,11 @@ public partial class AssignmentTests
     {
         var f = new Fixture();
 
+        var before = f.SeriesMembers.Count;
+
         (await Create(f, f.CreateCmd(assignee: f.PendingArtistId))).IsSuccess.Should().BeFalse();
 
-        f.SeriesMembers.Should().BeEmpty();
+        f.SeriesMembers.Should().HaveCount(before);
     }
 
     [Fact]

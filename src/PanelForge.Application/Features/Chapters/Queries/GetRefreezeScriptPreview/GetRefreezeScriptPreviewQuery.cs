@@ -50,7 +50,7 @@ public sealed class GetRefreezeScriptPreviewQueryHandler
 
         var isOwner = await _db.StudioWorkspaces.AsNoTracking()
             .AnyAsync(w => w.Id == workspaceId && w.OwnerId == q.UserId, ct);
-        var role = await _auth.GetMemberRoleAsync(q.UserId, workspaceId, ct);
+        var role = await _auth.GetSeriesMemberRoleAsync(q.UserId, chapter.SeriesId, ct);
         if (!isOwner && role != WorkspaceRole.Producer)
             return Fail("Chỉ Producer mới có quyền xem trước chốt lại kịch bản.", ResultErrorCodes.Forbidden);
 

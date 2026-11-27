@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -67,9 +68,8 @@ public sealed class AssignStageTaskLotsCommandHandler : IRequestHandler<AssignSt
         var stageIds = cmd.Lots.Select(l => l.PipelineStageId).Distinct().ToList();
         var stages = await _db.PipelineStages.AsNoTracking().Where(s => stageIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
         var assigneeIds = cmd.Lots.Select(l => l.AssigneeUserId).Distinct().ToList();
-        var members = await _db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && assigneeIds.Contains(m.UserId) && m.Status == WorkspaceMemberStatus.Active)
-            .ToDictionaryAsync(m => m.UserId, m => m.Role, ct);
+        // D10: vai trò người nhận lấy theo Series (Producer của Studio vẫn nhận được)
+        var members = await SeriesRoles.AssignableRoleMapAsync(_db, workspaceId, chapter.SeriesId, ct);
 
         var lots = new List<(StageTaskLot Lot, List<StageTask> Tasks)>();
         foreach (var request in cmd.Lots)

@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.SeriesMembers.Common;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -36,9 +37,9 @@ public sealed class GetAutoAssignPlanQueryHandler : IRequestHandler<GetAutoAssig
             .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var seriesIds = await _db.Series.AsNoTracking()
             .Where(s => s.WorkspaceId == workspaceId).Select(s => s.Id).ToListAsync(ct);
-        var members = await _db.WorkspaceMembers.AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId && m.Status == WorkspaceMemberStatus.Active)
-            .Select(m => new { m.UserId, m.Role }).ToListAsync(ct);
+        // D10: ứng viên theo vai trò Series (Producer của Studio vẫn tính)
+        var members = (await SeriesRoles.AssignableRoleMapAsync(_db, workspaceId, chapter.SeriesId, ct))
+            .Select(kv => new { UserId = kv.Key, Role = kv.Value }).ToList();
         var memberIds = members.Select(m => m.UserId).ToList();
         var names = await _db.Users.AsNoTracking().Where(u => memberIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);

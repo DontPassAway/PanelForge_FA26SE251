@@ -1,4 +1,5 @@
 using FluentAssertions;
+using PanelForge.Domain.Entities.Content;
 using Moq;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
@@ -124,6 +125,9 @@ public class WorkspaceAuthorizationServiceTests
         _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(users));
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(workspaces));
         _dbContextMock.Setup(db => db.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(members));
+        // Spec D10: không giữ vai trò Writer ở Series nào của Studio
+        _dbContextMock.Setup(db => db.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesMember>()));
+        _dbContextMock.Setup(db => db.Series).Returns(DbSetMockHelper.CreateDbSetMock(new List<Series>()));
 
         var result = await _service.HasWorkspaceRoleAsync(
             user.Id,

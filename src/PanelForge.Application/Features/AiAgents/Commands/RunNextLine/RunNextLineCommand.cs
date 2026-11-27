@@ -50,7 +50,7 @@ public sealed class RunNextLineCommandHandler(
         if (workspaceId is null) return Fail($"Series {cmd.SeriesId} không tồn tại.", ResultErrorCodes.NotFound);
 
         // BR-07: vai trò do Backend tra từ membership
-        var role = await auth.GetMemberRoleAsync(cmd.UserId, workspaceId.Value, ct);
+        var role = await auth.GetSeriesMemberRoleAsync(cmd.UserId, cmd.SeriesId, ct);
         var allowed = AiWorkflowPolicy.CopilotRoles(Task);
         if (role is null || !allowed.Contains(role.Value))
             return Fail($"Chỉ {string.Join("/", allowed)} của Workspace mới được dùng {Task}.", ResultErrorCodes.Forbidden);
