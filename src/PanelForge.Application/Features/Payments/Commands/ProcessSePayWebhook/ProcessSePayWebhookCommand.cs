@@ -56,8 +56,8 @@ public sealed partial class ProcessSePayWebhookCommandHandler
         _logger = logger;
     }
 
-    // Mã đơn do CreateTopup sinh: PF + 6 chữ số. Ngân hàng có thể đổi hoa/thường hoặc chèn chữ quanh mã.
-    [GeneratedRegex(@"PF\d{6}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // Mã đơn do OrderCodeGenerator sinh: PF + 6..12 chữ số (giữ tương thích mã cũ 6 chữ số).
+    [GeneratedRegex(@"PF\d{6,12}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex OrderCodeRegex();
 
     public async Task<Result<SePayWebhookOutcome>> Handle(ProcessSePayWebhookCommand command, CancellationToken ct)

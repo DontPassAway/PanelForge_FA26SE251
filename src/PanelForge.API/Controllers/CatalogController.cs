@@ -122,9 +122,14 @@ public class CatalogController : ControllerBase
         return File(result.Value!.Content, result.Value.ContentType);
     }
 
-    /// <summary>Chương khóa → 403 (code CHAPTER_LOCKED để client mở màn hình mua chương); còn lại 404.</summary>
+    /// <summary>Chương khóa → 403 (CHAPTER_LOCKED); ấn bản chưa phát hành → 404 (EDITION_NOT_PUBLISHED); còn lại 404.</summary>
     private IActionResult Failure(string? errorCode, string? message) =>
-        errorCode == ResultErrorCodes.Forbidden
-            ? StatusCode(StatusCodes.Status403Forbidden, new { error = message, code = "CHAPTER_LOCKED" })
-            : NotFound(new { error = message });
+        errorCode switch
+        {
+            ResultErrorCodes.Forbidden =>
+                StatusCode(StatusCodes.Status403Forbidden, new { error = message, code = "CHAPTER_LOCKED" }),
+            ResultErrorCodes.EditionNotPublished =>
+                NotFound(new { error = message, code = ResultErrorCodes.EditionNotPublished }),
+            _ => NotFound(new { error = message })
+        };
 }

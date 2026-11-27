@@ -3,53 +3,69 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Chapters.Commands.PublishChapter;
+using PanelForge.Application.Features.Chapters.Models;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Chapters.Commands.Editions;
 
 /// <summary>
-/// POST /api/editions/{editionId}/publish|schedule (Quyết định D1: xuất bản thuộc về ấn bản). Ấn bản ngôn ngữ gốc phát hành
-/// cùng chương (<see cref="PublishChapterCommand"/>, có hẹn giờ); ấn bản dịch đi qua <see cref="PublishEditionCommand"/>
-/// (BR-34, chưa hỗ trợ hẹn giờ). Trước đây route này truyền nhầm editionId làm chapterId nên luôn 404.
+/// AUD-BE-03 / BR-34: Phát hành hoặc hẹn giờ ấn bản theo <c>ChapterEdition.Id</c>.
+/// Ấn bản gốc đi qua <see cref="PublishChapterCommandHandler"/> (cập nhật trạng thái chương &amp; lịch phát hành);
+/// ấn bản dịch đi qua <see cref="PublishEditionCommandHandler"/> (chưa hỗ trợ hẹn giờ — GAP-01).
 /// </summary>
-public sealed record PublishEditionByIdCommand(Guid EditionId, Guid UserId, DateTime? PublishAt) : IRequest<Result<object>>;
+public sealed record PublishEditionByIdCommand(
+    Guid EditionId,
+    Guid UserId,
+    DateTime? PublishAt,
+    bool IsSchedule = false
+) : IRequest<Result<ChapterReviewDto>>;
 
-public sealed class PublishEditionByIdCommandHandler : IRequestHandler<PublishEditionByIdCommand, Result<object>>
+public sealed class PublishEditionByIdCommandHandler
+    : IRequestHandler<PublishEditionByIdCommand, Result<ChapterReviewDto>>
 {
     private readonly IPanelForgeDbContext _db;
-    private readonly ISender _sender;
 
-    public PublishEditionByIdCommandHandler(IPanelForgeDbContext db, ISender sender)
-    {
-        _db = db;
-        _sender = sender;
-    }
+    public PublishEditionByIdCommandHandler(IPanelForgeDbContext db) => _db = db;
 
-    public async Task<Result<object>> Handle(PublishEditionByIdCommand cmd, CancellationToken ct)
+    public async Task<Result<ChapterReviewDto>> Handle(PublishEditionByIdCommand cmd, CancellationToken ct)
     {
         var edition = await _db.ChapterEditions.AsNoTracking()
-            .Where(e => e.Id == cmd.EditionId)
-            .Select(e => new { e.ChapterId, e.LanguageCode })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(e => e.Id == cmd.EditionId, ct);
         if (edition is null)
-            return Result<object>.Failure($"Ấn bản {cmd.EditionId} không tồn tại.", ResultErrorCodes.NotFound);
+            return Result<ChapterReviewDto>.Failure(
+                $"Ấn bản {cmd.EditionId} không tồn tại.", ResultErrorCodes.NotFound);
 
         var originalLanguage = await _db.Chapters.AsNoTracking()
             .Where(c => c.Id == edition.ChapterId)
-            .Join(_db.Series, c => c.SeriesId, s => s.Id, (c, s) => s.OriginalLanguage)
+            .Join(_db.Series.AsNoTracking(), c => c.SeriesId, s => s.Id, (_, s) => s.OriginalLanguage)
             .FirstOrDefaultAsync(ct) ?? ContentLanguages.Original;
 
-        if (edition.LanguageCode == ContentLanguages.Normalize(originalLanguage))
-            return Wrap(await _sender.Send(new PublishChapterCommand(edition.ChapterId, cmd.UserId, cmd.PublishAt), ct));
+        var isOriginal = edition.LanguageCode == ContentLanguages.Normalize(originalLanguage);
 
-        if (cmd.PublishAt is not null)
-            return Result<object>.Failure(
-                "Hẹn giờ chỉ áp dụng cho ấn bản ngôn ngữ gốc (phát hành cùng chương). Ấn bản dịch phát hành ngay sau khi được nghiệm thu.",
-                ResultErrorCodes.Validation);
+        if (isOriginal)
+        {
+            return await new PublishChapterCommandHandler(_db)
+                .Handle(new PublishChapterCommand(edition.ChapterId, cmd.UserId, cmd.PublishAt), ct);
+        }
 
-        return Wrap(await _sender.Send(new PublishEditionCommand(edition.ChapterId, edition.LanguageCode, cmd.UserId), ct));
+        if (cmd.IsSchedule || cmd.PublishAt.HasValue)
+        {
+            return Result<ChapterReviewDto>.Failure(
+                $"Hẹn giờ phát hành cho ấn bản dịch '{edition.LanguageCode}' chưa được hỗ trợ (GAP-01).",
+                ResultErrorCodes.Conflict);
+        }
+
+        var publishResult = await new PublishEditionCommandHandler(_db)
+            .Handle(new PublishEditionCommand(edition.ChapterId, edition.LanguageCode, cmd.UserId), ct);
+
+        if (!publishResult.IsSuccess)
+            return Result<ChapterReviewDto>.Failure(publishResult.ErrorMessage!, publishResult.ErrorCode);
+
+        var review = await _db.ChapterReviews.AsNoTracking()
+            .Where(r => r.ChapterId == edition.ChapterId && r.Action == ChapterReviewAction.PublisherPublished)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstAsync(ct);
+
+        return Result<ChapterReviewDto>.Success(ChapterReviewDto.From(review));
     }
-
-    private static Result<object> Wrap<T>(Result<T> r) =>
-        r.IsSuccess ? Result<object>.Success(r.Value!) : Result<object>.Failure(r.ErrorMessage!, r.ErrorCode);
 }

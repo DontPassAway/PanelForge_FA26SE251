@@ -42,6 +42,10 @@ public sealed class RecordChapterViewCommandHandler : IRequestHandler<RecordChap
         if (language is null)
             return Result<bool>.Failure("Ngôn ngữ không được hỗ trợ.", ResultErrorCodes.Validation);
 
+        var available = await ChapterReadAccess.AvailableLanguagesAsync(_db, chapter.Id, ct, now);
+        if (!available.Contains(language))
+            return Result<bool>.Failure(ChapterReadAccess.LanguageUnavailableMessage, ResultErrorCodes.EditionNotPublished);
+
         // Chương trả phí chưa mua vẫn đọc được trang xem trước → mở chương cũng tính một lượt xem.
         var userId = _currentUser.UserId;
 

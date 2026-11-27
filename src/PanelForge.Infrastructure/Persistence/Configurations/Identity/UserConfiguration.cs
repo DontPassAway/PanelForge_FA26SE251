@@ -76,6 +76,12 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                .HasDefaultValue(SystemRole.User)
                .IsRequired();
 
+        // Q12: toàn nền tảng chỉ có đúng một tài khoản Publisher đang hoạt động
+        builder.HasIndex(u => u.Role)
+               .IsUnique()
+               .HasFilter("role = 'Publisher' AND is_active = true")
+               .HasDatabaseName("ux_users_single_active_publisher");
+
         builder.Property(u => u.IsEmailConfirmed)
                .HasColumnName("is_email_confirmed")
                .HasDefaultValue(false)

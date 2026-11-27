@@ -53,6 +53,11 @@ public sealed class ReopenEditionCommandHandler
         if (edition.Status == EditionStatus.Draft)
             return Result<ChapterEditionDto>.Failure($"Ấn bản '{normLang}' đã ở trạng thái Draft.", ResultErrorCodes.Conflict);
 
+        if (edition.Status == EditionStatus.Published)
+            return Result<ChapterEditionDto>.Failure(
+                $"Ấn bản '{normLang}' đã phát hành, không thể mở lại về Draft (D1).",
+                ResultErrorCodes.Conflict);
+
         edition.Reopen();
 
         var review = ChapterReview.Create(

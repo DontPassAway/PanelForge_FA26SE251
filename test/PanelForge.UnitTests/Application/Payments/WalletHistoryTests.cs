@@ -95,4 +95,41 @@ public class WalletHistoryTests
             ("PF200002", 10_000),
             ("PF200000", 30_000));
     }
+
+    // ─── AUD-BE-05: GET /api/wallet/transactions/{orderCode}/status ──────────
+
+    [Fact]
+    public async Task GetTransactionStatus_OwnerGetsStatus_OtherUserGetsNotFound_PrivilegedGetsStatus()
+    {
+        Tx("PF555123", PaymentTransactionType.Topup, 50_000).Approve(Guid.NewGuid(), _t0);
+        await _db.SaveChangesAsync();
+
+        var handler = new PanelForge.Application.Features.Payments.Queries.GetTransactionStatus.GetTransactionStatusQueryHandler(_db);
+
+        var ownerResult = await handler.Handle(new("PF555123", _readerId, IsPrivileged: false), default);
+        ownerResult.IsSuccess.Should().BeTrue();
+        ownerResult.Value!.Status.Should().Be("Approved");
+        ownerResult.Value.IsCompleted.Should().BeTrue();
+        ownerResult.Value.AmountVnd.Should().Be(50_000);
+
+        var otherUserResult = await handler.Handle(new("PF555123", Guid.NewGuid(), IsPrivileged: false), default);
+        otherUserResult.IsSuccess.Should().BeFalse();
+        otherUserResult.ErrorCode.Should().Be(PanelForge.Application.Common.ResultErrorCodes.NotFound);
+
+        var staffResult = await handler.Handle(new("PF555123", Guid.NewGuid(), IsPrivileged: true), default);
+        staffResult.IsSuccess.Should().BeTrue();
+        staffResult.Value!.OrderCode.Should().Be("PF555123");
+    }
+
+    [Fact]
+    public void WalletController_GetTransactionStatus_RequiresAuthentication_NotAllowAnonymous()
+    {
+        var controllerType = typeof(PanelForge.API.Controllers.WalletController);
+        controllerType.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Should().NotBeEmpty();
+
+        var method = controllerType.GetMethod(nameof(PanelForge.API.Controllers.WalletController.GetTransactionStatus))!;
+        method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true)
+            .Should().BeEmpty("endpoint must require authentication (AUD-BE-05)");
+    }
 }

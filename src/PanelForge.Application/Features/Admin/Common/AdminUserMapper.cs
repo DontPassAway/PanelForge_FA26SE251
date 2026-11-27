@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Admin.Common;
 
@@ -39,4 +40,18 @@ internal static class AdminPromotionGuard
 
         return null;
     }
+}
+
+internal static class SinglePublisherGuard
+{
+    public const string ConflictMessage =
+        "Hệ thống chỉ được phép có đúng một tài khoản Publisher đang hoạt động (Q12). Hãy vô hiệu hóa hoặc đổi vai trò tài khoản Publisher hiện tại trước.";
+
+    public static Task<bool> HasAnotherActivePublisherAsync(
+        IPanelForgeDbContext dbContext, Guid? excludeUserId, CancellationToken cancellationToken) =>
+        dbContext.Users.AsNoTracking().AnyAsync(
+            u => u.Role == SystemRole.Publisher
+                 && u.IsActive
+                 && (!excludeUserId.HasValue || u.Id != excludeUserId.Value),
+            cancellationToken);
 }

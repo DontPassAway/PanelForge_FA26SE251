@@ -259,6 +259,15 @@ public sealed class GetPublisherPageImageQueryHandler
 
     public async Task<Result<Assets.Models.AssetDownloadDto>> Handle(GetPublisherPageImageQuery q, CancellationToken ct)
     {
+        var isHandedOff = await _db.Chapters.AsNoTracking()
+            .AnyAsync(c => c.Id == q.ChapterId
+                           && c.IsHandedOff
+                           && (c.Status == ChapterStatus.ChapterApproved
+                               || c.Status == ChapterStatus.HandedOffAndPublished), ct);
+        if (!isHandedOff)
+            return Result<Assets.Models.AssetDownloadDto>.Failure(
+                "Không tìm thấy chương đã bàn giao.", ResultErrorCodes.NotFound);
+
         var language = ContentLanguages.Normalize(q.Language);
         var image = language is null
             ? null

@@ -7,7 +7,11 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Payments.Queries.GetTransactionStatus;
 
-public sealed record GetTransactionStatusQuery(string OrderCode) : IRequest<Result<TransactionStatusDto>>;
+public sealed record GetTransactionStatusQuery(
+    string OrderCode,
+    Guid RequestUserId,
+    bool IsPrivileged = false
+) : IRequest<Result<TransactionStatusDto>>;
 
 public sealed class GetTransactionStatusQueryHandler : IRequestHandler<GetTransactionStatusQuery, Result<TransactionStatusDto>>
 {
@@ -21,7 +25,7 @@ public sealed class GetTransactionStatusQueryHandler : IRequestHandler<GetTransa
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.OrderCode == q.OrderCode.Trim().ToUpperInvariant() && !t.IsDeleted, ct);
 
-        if (tx == null)
+        if (tx == null || (!q.IsPrivileged && tx.UserId != q.RequestUserId))
             return Result<TransactionStatusDto>.Failure("Không tìm thấy giao dịch.", ResultErrorCodes.NotFound);
 
         return Result<TransactionStatusDto>.Success(new TransactionStatusDto(

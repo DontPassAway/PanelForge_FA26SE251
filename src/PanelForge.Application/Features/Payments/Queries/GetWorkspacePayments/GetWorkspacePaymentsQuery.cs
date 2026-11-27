@@ -28,9 +28,19 @@ public sealed class GetWorkspacePaymentsQueryHandler : IRequestHandler<GetWorksp
         var pageIndex = Math.Max(1, q.PageIndex);
         var pageSize = Math.Clamp(q.PageSize, 1, 100);
 
-        // 1. KPI Summary của Studio
-        var totalRevenue = await _db.PaymentTransactions
-            .Where(t => t.WorkspaceId == q.WorkspaceId && t.Status == PaymentTransactionStatus.Approved && !t.IsDeleted)
+        // 1. KPI Summary của Studio (Q13 / BR-32 / AUD-BE-07): tách tiền nạp ví (Topup) khỏi doanh thu mở khóa (ChapterUnlock).
+        var totalUnlockRevenue = await _db.PaymentTransactions
+            .Where(t => t.WorkspaceId == q.WorkspaceId
+                        && t.Status == PaymentTransactionStatus.Approved
+                        && t.Type == PaymentTransactionType.ChapterUnlock
+                        && !t.IsDeleted)
+            .SumAsync(t => (decimal?)t.AmountVnd, ct) ?? 0m;
+
+        var totalTopups = await _db.PaymentTransactions
+            .Where(t => t.WorkspaceId == q.WorkspaceId
+                        && t.Status == PaymentTransactionStatus.Approved
+                        && t.Type == PaymentTransactionType.Topup
+                        && !t.IsDeleted)
             .SumAsync(t => (decimal?)t.AmountVnd, ct) ?? 0m;
 
         var pendingCount = await _db.PaymentTransactions
@@ -43,10 +53,12 @@ public sealed class GetWorkspacePaymentsQueryHandler : IRequestHandler<GetWorksp
             .CountAsync(t => t.WorkspaceId == q.WorkspaceId && t.Status == PaymentTransactionStatus.Approved && !t.IsDeleted, ct);
 
         var summary = new WorkspacePaymentsSummaryDto(
-            TotalRevenueVnd: totalRevenue,
+            TotalRevenueVnd: totalUnlockRevenue,
             PendingCount: pendingCount,
             TotalUnlockedChapters: totalUnlocked,
-            PaidTransactionsCount: paidTxCount
+            PaidTransactionsCount: paidTxCount,
+            TotalTopupsVnd: totalTopups,
+            TotalUnlockRevenueVnd: totalUnlockRevenue
         );
 
         // 2. Query danh sách giao dịch

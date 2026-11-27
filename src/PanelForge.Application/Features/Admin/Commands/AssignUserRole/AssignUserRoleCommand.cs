@@ -62,6 +62,13 @@ public sealed class AssignUserRoleCommandHandler
                 user.RevokeStudioCreation();
             }
 
+            if (parsedSystemRole == SystemRole.Publisher
+                && user.IsActive
+                && await SinglePublisherGuard.HasAnotherActivePublisherAsync(_dbContext, user.Id, cancellationToken))
+            {
+                return Result<AssignUserRoleResponse>.Failure(SinglePublisherGuard.ConflictMessage, ResultErrorCodes.Conflict);
+            }
+
             user.AssignSystemRole(parsedSystemRole);
             if (parsedSystemRole == SystemRole.User)
                 user.RevokeStudioCreation();

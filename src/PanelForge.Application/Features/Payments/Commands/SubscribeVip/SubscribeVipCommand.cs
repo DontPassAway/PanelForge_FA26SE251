@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Payments.Common;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -54,7 +55,7 @@ public sealed class SubscribeVipCommandHandler : IRequestHandler<SubscribeVipCom
 
         wallet.SetVip(true, expiresAt);
 
-        string orderCode = $"PF{Random.Shared.Next(100000, 999999)}";
+        string orderCode = await OrderCodeGenerator.GenerateUniqueAsync(_db, ct);
         var transaction = PaymentTransaction.Create(
             userId: command.UserId,
             orderCode: orderCode,

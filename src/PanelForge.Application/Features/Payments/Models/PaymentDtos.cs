@@ -74,7 +74,8 @@ public sealed record UnlockChapterRequest(
     Guid? SeriesId = null,
     bool IsPermanent = true,
     int? RentalViews = null,
-    string? Language = null
+    string? Language = null,
+    int? ExpectedPriceVnd = null
 );
 
 public sealed record UnlockChapterResponse(
@@ -115,7 +116,9 @@ public sealed record WorkspacePaymentsSummaryDto(
     decimal TotalRevenueVnd,
     int PendingCount,
     int TotalUnlockedChapters,
-    int PaidTransactionsCount
+    int PaidTransactionsCount,
+    decimal TotalTopupsVnd = 0m,
+    decimal TotalUnlockRevenueVnd = 0m
 );
 
 public sealed record WorkspacePaymentItemDto(

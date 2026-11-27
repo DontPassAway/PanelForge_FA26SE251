@@ -3812,6 +3812,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("PasswordResetToken")
                         .HasDatabaseName("ix_users_password_reset_token");
 
+                    b.HasIndex("Role")
+                        .IsUnique()
+                        .HasDatabaseName("ux_users_single_active_publisher")
+                        .HasFilter("role = 'Publisher' AND is_active = true");
+
                     b.ToTable("users", (string)null);
                 });
 

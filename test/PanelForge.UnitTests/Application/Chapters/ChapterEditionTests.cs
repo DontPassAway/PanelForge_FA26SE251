@@ -250,4 +250,57 @@ public class ChapterEditionTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(EditionStatus.Draft);
     }
+
+    [Fact]
+    public void Domain_Reopen_WhenPublished_ShouldThrow_AndPreserveSnapshot()
+    {
+        var snapshotId = Guid.NewGuid();
+        var edition = ChapterEdition.Create(_chapter.Id, "en");
+        edition.Approve(snapshotId, _producerId);
+        edition.Publish();
+
+        var act = () => edition.Reopen();
+
+        act.Should().Throw<InvalidOperationException>();
+        edition.Status.Should().Be(EditionStatus.Published);
+        edition.CurrentSnapshotId.Should().Be(snapshotId);
+    }
+
+    [Fact]
+    public async Task Reopen_WhenPublished_ReturnsConflict_AndPreservesSnapshot()
+    {
+        var snapshotId = Guid.NewGuid();
+        var edition = _db.ChapterEditions.First(e => e.ChapterId == _chapter.Id && e.LanguageCode == "en");
+        edition.Approve(snapshotId, _producerId);
+        edition.Publish();
+        await _db.SaveChangesAsync();
+
+        var handler = new ReopenEditionCommandHandler(_db);
+        var result = await handler.Handle(new ReopenEditionCommand(_chapter.Id, "en", _producerId, "Muốn sửa lại"), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        edition.Status.Should().Be(EditionStatus.Published);
+        edition.CurrentSnapshotId.Should().Be(snapshotId);
+        _db.ChapterReviews.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(EditionStatus.InReview)]
+    [InlineData(EditionStatus.EditorApproved)]
+    [InlineData(EditionStatus.Approved)]
+    public async Task Reopen_PrePublishedStatuses_StillTransitionsToDraft(EditionStatus initialStatus)
+    {
+        var edition = _db.ChapterEditions.First(e => e.ChapterId == _chapter.Id && e.LanguageCode == "en");
+        if (initialStatus >= EditionStatus.InReview) edition.SubmitTranslation(_lettererId);
+        if (initialStatus >= EditionStatus.EditorApproved) edition.ReviewApprove();
+        if (initialStatus >= EditionStatus.Approved) edition.Approve(Guid.NewGuid(), _producerId);
+        await _db.SaveChangesAsync();
+
+        var handler = new ReopenEditionCommandHandler(_db);
+        var result = await handler.Handle(new ReopenEditionCommand(_chapter.Id, "en", _producerId, "Hiệu đính"), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be(EditionStatus.Draft);
+    }
 }

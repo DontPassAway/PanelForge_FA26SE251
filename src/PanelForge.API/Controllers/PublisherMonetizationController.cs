@@ -13,7 +13,7 @@ namespace PanelForge.API.Controllers;
 /// Chỉ Publisher/Admin; Producer không còn khóa trang hay xem doanh thu.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "Publisher,Admin")]
+[Authorize]
 [Route("api/publisher")]
 public sealed class PublisherMonetizationController : ControllerBase
 {
@@ -24,14 +24,16 @@ public sealed class PublisherMonetizationController : ControllerBase
     private Guid CurrentUserId =>
         Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var id) ? id : Guid.Empty;
 
-    /// <summary>GET /api/publisher/series/{seriesId}/insights?language=vi|en|ja|all — dashboard series + số liệu từng chương.</summary>
+    /// <summary>GET /api/publisher/series/{seriesId}/insights?language=vi|en|ja|all — dashboard BR-32 (Publisher &amp; Admin chỉ đọc).</summary>
     [HttpGet("series/{seriesId:guid}/insights")]
+    [Authorize(Roles = "Publisher,Admin")]
     [ProducesResponseType(typeof(SeriesInsightsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetInsights([FromRoute] Guid seriesId, [FromQuery] string? language, CancellationToken ct)
         => ToResult(await _mediator.Send(new GetSeriesInsightsQuery(seriesId, language), ct));
 
-    /// <summary>GET /api/publisher/chapters/{chapterId}/manage — trang, ảnh dịch, quy định thương mại từng ấn bản ngôn ngữ.</summary>
+    /// <summary>GET /api/publisher/chapters/{chapterId}/manage — trang, ảnh dịch, quy định thương mại từng ấn bản (chỉ Publisher).</summary>
     [HttpGet("chapters/{chapterId:guid}/manage")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(ChapterManageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetManage([FromRoute] Guid chapterId, CancellationToken ct)
         => ToResult(await _mediator.Send(new GetChapterManageQuery(chapterId), ct));
@@ -51,8 +53,9 @@ public sealed class PublisherMonetizationController : ControllerBase
         => ToResult(await _mediator.Send(new SetEditionMonetizationCommand(
             chapterId, lang, request.IsPaid, request.PriceVnd, request.FreePreviewPages, request.Reason, CurrentUserId), ct));
 
-    /// <summary>GET /api/publisher/chapters/{chapterId}/pages/{pageId}/image?lang= — ảnh xem trước (cả chương chưa phát hành).</summary>
+    /// <summary>GET /api/publisher/chapters/{chapterId}/pages/{pageId}/image?lang= — ảnh xem trước cho Publisher.</summary>
     [HttpGet("chapters/{chapterId:guid}/pages/{pageId:guid}/image")]
+    [Authorize(Roles = "Publisher")]
     [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPageImage(
