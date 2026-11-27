@@ -22,6 +22,7 @@ using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
+using PanelForge.Application.Features.TaskGrid.Queries.GetMyWork;
 using PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
 using PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsToGrid;
 using PanelForge.Domain.Enums;
@@ -173,6 +174,11 @@ public sealed class TaskGridController : ControllerBase
         ToResult(await _mediator.Send(new GetMyTaskLotsQuery(workspaceId, CurrentUserId, seriesId, includeCompleted), ct));
 
     /// <summary>GET /api/workspaces/{workspaceId}/task-grid/review-queue — ô chờ duyệt (thay editor/review-queue V2).</summary>
+    /// <summary>UIQ-11q: việc của tôi xuyên mọi Studio (lô được giao + hàng chờ duyệt của Series tôi làm Editor).</summary>
+    [HttpGet("~/api/me/work")]
+    public async Task<IActionResult> MyWork(CancellationToken ct) =>
+        ToResult(await _mediator.Send(new GetMyWorkQuery(CurrentUserId), ct));
+
     [HttpGet("~/api/workspaces/{workspaceId:guid}/task-grid/review-queue")]
     [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(IReadOnlyList<TaskGridReviewItemDto>), StatusCodes.Status200OK)]

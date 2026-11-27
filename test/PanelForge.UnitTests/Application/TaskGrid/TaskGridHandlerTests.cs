@@ -25,6 +25,7 @@ using PanelForge.Application.Features.TaskGrid.Queries.GetAutoAssignPlan;
 using PanelForge.Application.Features.TaskGrid.Queries.GetChapterTaskGrid;
 using PanelForge.Application.Features.TaskGrid.Queries.GetStageTaskSubmissions;
 using PanelForge.Application.Features.TaskGrid.Queries.GetMyTaskLots;
+using PanelForge.Application.Features.TaskGrid.Queries.GetMyWork;
 using PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
 using PanelForge.Application.Features.TaskGrid.Commands.MigrateAssignmentsToGrid;
 using PanelForge.Domain.Entities.Assets;
@@ -1144,6 +1145,35 @@ public class TaskGridHandlerTests
         artist.Value![0].Tasks.Should().ContainSingle().Which.IsStartable.Should().BeTrue();
         artist.Value![1].Tasks.Single().IsStartable.Should().BeFalse("Ink chờ Pencil");
         letterer.Value!.Should().ContainSingle().Which.Tasks.Single().PageNumber.Should().Be(1);
+    }
+
+    /// <summary>UIQ-11q: việc xuyên Studio — Artist thấy lô của mình, Editor của Series thấy hàng chờ duyệt.</summary>
+    [Fact]
+    public async Task MyWork_GroupsAssignedLotsAndEditorReviewQueueByStudio()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink, f.Color }) // Color là công đoạn có cổng duyệt
+        {
+            (await f.Start(f.Cell(stage, 0), f.ArtistId)).IsSuccess.Should().BeTrue();
+            (await f.Submit(f.ArtistId, f.Cell(stage, 0))).IsSuccess.Should().BeTrue();
+        }
+        var studio = StudioWorkspace.Create("Studio A", f.ProducerId);
+        var idProp = typeof(StudioWorkspace).GetProperty(nameof(StudioWorkspace.Id))!;
+        (idProp.DeclaringType!.GetProperty(nameof(StudioWorkspace.Id))!.SetMethod
+            ?? throw new InvalidOperationException("Id setter")).Invoke(studio, [f.WorkspaceId]);
+        f.Db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { studio }));
+        var handler = new GetMyWorkQueryHandler(f.Db.Object);
+
+        var artist = (await handler.Handle(new GetMyWorkQuery(f.ArtistId), default)).Value!;
+        var editor = (await handler.Handle(new GetMyWorkQuery(f.EditorId), default)).Value!;
+        var stranger = (await handler.Handle(new GetMyWorkQuery(Guid.NewGuid()), default)).Value!;
+
+        artist.Should().ContainSingle().Which.Lots.Should().NotBeEmpty();
+        artist[0].WorkspaceName.Should().Be("Studio A");
+        artist[0].ReviewQueue.Should().BeEmpty("Artist không giữ vai trò Editor ở Series");
+        editor.Should().ContainSingle().Which.ReviewQueue.Should().ContainSingle(i => i.StageName == "Color");
+        stranger.Should().BeEmpty();
     }
 
     [Fact]
