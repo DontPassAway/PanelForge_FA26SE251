@@ -52,11 +52,7 @@ public sealed class UpdateWorkspaceQuotaCommandHandler
             UsedStorageBytes: workspace.UsedStorageBytes,
             MemberCount: workspace.Members.Count(m => !m.IsDeleted),
             SeriesCount: workspace.Series.Count(s => !s.IsDeleted),
-            CreatedAt: workspace.CreatedAt,
-            BankBin: workspace.BankBin,
-            BankName: workspace.BankName,
-            BankAccountNo: workspace.BankAccountNo,
-            BankAccountName: workspace.BankAccountName
+            CreatedAt: workspace.CreatedAt
         );
 
         return Result<AdminWorkspaceDto>.Success(dto);

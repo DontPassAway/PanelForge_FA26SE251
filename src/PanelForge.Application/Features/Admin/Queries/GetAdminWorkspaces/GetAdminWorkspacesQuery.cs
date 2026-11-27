@@ -38,11 +38,7 @@ public sealed class GetAdminWorkspacesQueryHandler : IRequestHandler<GetAdminWor
             UsedStorageBytes: w.UsedStorageBytes,
             MemberCount: w.Members.Count(m => !m.IsDeleted),
             SeriesCount: w.Series.Count(s => !s.IsDeleted),
-            CreatedAt: w.CreatedAt,
-            BankBin: w.BankBin,
-            BankName: w.BankName,
-            BankAccountNo: w.BankAccountNo,
-            BankAccountName: w.BankAccountName
+            CreatedAt: w.CreatedAt
         )).ToList();
 
         return Result<IReadOnlyList<AdminWorkspaceDto>>.Success(dtos);
