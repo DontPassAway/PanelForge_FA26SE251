@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Features.Payments.Commands.AdminRefundWallet;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
 using PanelForge.Application.Features.Payments.Commands.PurchaseStudioPackage;
+using PanelForge.Application.Features.StudioResources.Commands.PurchaseStudioResources;
+using PanelForge.Application.Features.StudioResources.Models;
 using PanelForge.Application.Features.Payments.Commands.ReportTransactionIssue;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
 using PanelForge.Application.Features.Payments.Commands.VerifyGooglePlayPurchase;
@@ -119,6 +121,36 @@ public class WalletController : ControllerBase
             ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
             ResultErrorCodes.NotFound => NotFound(body),
             ResultErrorCodes.AlreadyOwned or ResultErrorCodes.PriceChanged => Conflict(body),
+            _ => BadRequest(body),
+        };
+    }
+
+    /// <summary>
+    /// POST /api/wallet/studio-resources
+    /// Producer mua thêm dung lượng (GB) và token AI (triệu token) bằng Ví theo đơn giá Admin đặt (D12), cộng vào kho.
+    /// </summary>
+    [HttpPost("studio-resources")]
+    [ProducesResponseType(typeof(PurchaseStudioResourcesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> PurchaseStudioResources([FromBody] PurchaseStudioResourcesRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new PurchaseStudioResourcesCommand(userId, request.StorageGb, request.TokenMillions, request.ExpectedTotalVnd),
+            cancellationToken);
+        if (result.IsSuccess) return Ok(result.Value);
+        var body = new { message = result.ErrorMessage, code = result.ErrorCode };
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.Unauthorized => Unauthorized(body),
+            ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
+            ResultErrorCodes.NotFound => NotFound(body),
+            ResultErrorCodes.PriceChanged => Conflict(body),
             _ => BadRequest(body),
         };
     }

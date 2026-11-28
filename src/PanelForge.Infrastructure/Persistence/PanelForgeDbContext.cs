@@ -37,6 +37,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
+    public DbSet<StudioResourcePool> StudioResourcePools => Set<StudioResourcePool>();
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
     public DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests => Set<QuotaIncreaseRequest>();
     public DbSet<UploadLimitPolicy> UploadLimitPolicies => Set<UploadLimitPolicy>();
@@ -106,6 +107,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<PlatformBankAccount> PlatformBankAccounts => Set<PlatformBankAccount>();
     public DbSet<StudioPackagePrice> StudioPackagePrices => Set<StudioPackagePrice>();
+    public DbSet<StudioResourcePrice> StudioResourcePrices => Set<StudioResourcePrice>();
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
     public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();
     public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();

@@ -4532,6 +4532,69 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioResourcePrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("PricePerGbVnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("price_per_gb_vnd");
+
+                    b.Property<int>("PricePerMillionTokensVnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("price_per_million_tokens_vnd");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_studio_resource_prices_created_at");
+
+                    b.ToTable("studio_resource_prices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_studio_resource_prices_gb_positive", "price_per_gb_vnd > 0");
+
+                            t.HasCheckConstraint("ck_studio_resource_prices_tokens_positive", "price_per_million_tokens_vnd > 0");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6418,6 +6481,74 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioResourcePool", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<long>("StorageBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storage_bytes");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tokens");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_resource_pools_owner_id");
+
+                    b.ToTable("studio_resource_pools", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_studio_resource_pools_storage_non_negative", "storage_bytes >= 0");
+
+                            t.HasCheckConstraint("ck_studio_resource_pools_tokens_non_negative", "tokens >= 0");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6616,6 +6747,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_enabled");
+
+                    b.Property<bool>("IsPrepaidTokenBudget")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_prepaid_token_budget");
 
                     b.Property<DateTime?>("LastResetAt")
                         .HasColumnType("timestamptz")
@@ -7586,6 +7721,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioResourcePrice", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Content.Chapter", null)
@@ -7860,6 +8004,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioResourcePool", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
