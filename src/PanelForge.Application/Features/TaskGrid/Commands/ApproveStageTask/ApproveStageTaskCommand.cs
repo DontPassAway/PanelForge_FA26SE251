@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -43,6 +44,12 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         if (task.Status == StageTaskStatus.UnderReview && task.ReviewerUserId is { } reviewer && reviewer != cmd.UserId)
             return Fail("Ô này đang do người khác duyệt.", ResultErrorCodes.Conflict);
 
+        var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
+        if (TaskGridRules.AwaitingSiblingBranch(task, stages, chapterTasks) is { } waiting)
+            return Fail($"Gate 2 duyệt trang ghép: chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict);
+        if (task.PageId is { } pageId && await BalloonFitRules.PendingReasonAsync(_db, pageId, ct) is { } balloon)
+            return Fail(balloon, ResultErrorCodes.Conflict);
+
         try
         {
             if (task.Status == StageTaskStatus.Submitted) task.OpenReview(cmd.UserId);
@@ -53,7 +60,6 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         task.UpdatedBy = cmd.UserId.ToString();
         if (await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } submission) submission.Approve(cmd.UserId);
 
-        var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
         var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
         if (lot is not null) _db.Notifications.Add(TaskGridNotifications.Approved(lot.AssigneeUserId, chapter.Id, stageName));
         await TaskGridNotifications.AddReadyAsync(_db, [task], stages, chapterTasks, chapter.Id, ct);

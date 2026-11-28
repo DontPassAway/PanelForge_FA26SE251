@@ -40,6 +40,8 @@ public class ArtworkUploadTests
         public readonly List<StageTaskLot> Lots = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IAssetStorage> Storage = new();
+        public readonly Mock<IPageRepository> PageRepo = new();
+        public readonly List<PipelineStage> Stages = [];
         public readonly Mock<IImageThumbnailer> Thumbnailer = new();
         public readonly Mock<IAssetLinkSigner> Signer = new();
         public readonly Mock<IWorkspaceAuthorizationService> Auth = new();
@@ -62,7 +64,9 @@ public class ArtworkUploadTests
             Db.Setup(d => d.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page> { Page }));
             Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(Panels));
             Db.Setup(d => d.PipelineDefinitions).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineDefinition> { def }));
-            Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(new List<PipelineStage> { Stage }));
+            Stages.Add(Stage);
+            Db.Setup(d => d.PipelineStages).Returns(DbSetMockHelper.CreateDbSetMock(Stages));
+            PageRepo.Setup(r => r.GetAsync(Page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Page);
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(new List<Assignment> { Assignment }));
             Db.Setup(d => d.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { Workspace }));
             Db.Setup(d => d.ElementTypes).Returns(DbSetMockHelper.CreateDbSetMock(
@@ -92,7 +96,7 @@ public class ArtworkUploadTests
         public Task<Result<AssetReferenceDto>> Upload(
             byte[] content, string? clientHash = null, Guid? userId = null, Guid? stageId = null, Guid? pageId = null,
             string? layerType = null, string? fileName = "page1.png", Guid? panelId = null) =>
-            new UploadArtworkCommandHandler(Db.Object, Storage.Object).Handle(new UploadArtworkCommand(
+            new UploadArtworkCommandHandler(Db.Object, Storage.Object, PageRepo.Object).Handle(new UploadArtworkCommand(
                 Chapter.Id, pageId ?? Page.Id, stageId ?? Stage.Id, userId ?? ArtistId, content, fileName,
                 clientHash ?? Hash(content), layerType, panelId), CancellationToken.None);
     }
@@ -188,7 +192,7 @@ public class ArtworkUploadTests
         var f = new Fixture();
         var cmd = new UploadArtworkCommand(f.Chapter.Id, f.Page.Id, f.Stage.Id, f.ArtistId, Png(), "a.png", clientHash, null);
 
-        var result = await new UploadArtworkCommandHandler(f.Db.Object, f.Storage.Object).Handle(cmd, CancellationToken.None);
+        var result = await new UploadArtworkCommandHandler(f.Db.Object, f.Storage.Object, f.PageRepo.Object).Handle(cmd, CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
         f.Assets.Should().BeEmpty();
@@ -753,5 +757,25 @@ public class ArtworkUploadTests
 
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
         f.References.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_InkOverPanelWithBalloon_FlagsBalloonCheck_PencilDoesNot()
+    {
+        var f = new Fixture();
+        var ink = PipelineStage.Create(f.Stage.PipelineDefinitionId, "Ink", "ink", 2, allowedRole: WorkspaceRole.Artist);
+        f.Stages.Add(ink);
+        var withBalloon = Panel.Create(f.Page.Id, 1, 1);
+        var empty = Panel.Create(f.Page.Id, 2, 2);
+        f.Panels.AddRange([withBalloon, empty]);
+        f.Page.AddElement("SPEECH_BALLOON", 10, 10, 100, 60, 1, f.ArtistId, content: "Hi", panelId: withBalloon.Id);
+
+        (await f.Upload(Png())).IsSuccess.Should().BeTrue();   // Pencil: chưa có gì để lệch
+        withBalloon.BalloonCheckRequestedAt.Should().BeNull();
+
+        (await f.Upload(Png(), userId: f.Workspace.OwnerId, stageId: ink.Id, fileName: "ink.png")).IsSuccess.Should().BeTrue();
+
+        withBalloon.BalloonCheckRequestedAt.Should().NotBeNull();
+        empty.BalloonCheckRequestedAt.Should().BeNull();
     }
 }

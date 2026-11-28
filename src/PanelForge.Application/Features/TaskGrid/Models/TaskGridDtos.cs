@@ -130,4 +130,11 @@ public sealed record TaskGridReviewItemDto(
     Guid TaskId, Guid SeriesId, string SeriesTitle, Guid ChapterId, decimal ChapterNumber, string? ChapterTitle,
     Guid PipelineStageId, string StageName, Guid? PageId, int? PageNumber, StageTaskStatus Status,
     Guid? AssigneeUserId, Guid? ReviewerUserId, int? AttemptNumber, DateTime? SubmittedAt,
-    string? ReviewerName = null, bool IsInputOutdated = false);
+    string? ReviewerName = null, bool IsInputOutdated = false,
+    // Gate 2 ghép: tên công đoạn nhánh song song của trang chưa nộp; khác null thì chưa duyệt được
+    string? AwaitingStageName = null);
+
+/// <summary>ART-06: body xác nhận Check Balloon Fit; PanelId null = mọi khung đang bật cờ của trang.</summary>
+public sealed record AcknowledgeBalloonCheckRequest(Guid? PanelId = null);
+
+public sealed record BalloonCheckAckDto(int Cleared);

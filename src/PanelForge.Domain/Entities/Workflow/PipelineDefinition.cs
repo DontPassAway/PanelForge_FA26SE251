@@ -103,6 +103,22 @@ public class PipelineDefinition : BaseEntity
     public IReadOnlyList<PipelineStage> GetOrderedStages() => Stages.OrderBy(s => s.StageOrder).ToList();
 
     /// <summary>
+    /// Gate 2 theo trang (BR-19): <paramref name="stage"/> là bước cuối có cổng của một nhánh và đã tắt (vd. Color của Manga)
+    /// thì cổng chuyển sang bước còn bật liền trước cùng nhánh (Ink), để nhánh vẫn qua Editor duyệt. Trả true nếu đã chuyển.
+    /// Bật lại stage không tự gỡ cổng: Producer tự chỉnh nếu muốn.
+    /// </summary>
+    public bool MoveGateOffDisabledStage(PipelineStage stage)
+    {
+        if (stage.IsEnabled || !stage.IsApprovalGate || stage.Track is not { } track) return false;
+        var previous = Stages
+            .Where(s => s.IsEnabled && s.Track == track && s.StageOrder < stage.StageOrder)
+            .MaxBy(s => s.StageOrder);
+        if (previous is null || previous.IsApprovalGate) return false;
+        previous.UpdateDetails(previous.Name, previous.ColorCode, previous.AllowedRole, true, previous.EstimatedDurationDays);
+        return true;
+    }
+
+    /// <summary>
     /// Chèn stage mới tại vị trí <paramref name="position"/> (1-based, null = cuối pipeline),
     /// sau đó chuẩn hóa thứ tự 1..n và cờ Initial/Terminal.
     /// </summary>

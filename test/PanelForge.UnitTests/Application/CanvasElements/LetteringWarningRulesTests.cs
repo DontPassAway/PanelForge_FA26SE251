@@ -1,3 +1,4 @@
+using PanelForge.AI.Contracts;
 using FluentAssertions;
 using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Domain.Entities.Content;
@@ -31,6 +32,18 @@ public class LetteringWarningRulesTests
         var w = LetteringWarningRules.Evaluate([small, fits], ReadingDirection.LeftToRight, NoLines);
 
         w.Should().ContainSingle(x => x.Code == LetteringWarningRules.TextOverflow && x.ElementId == small.ElementId);
+    }
+
+    [Fact]
+    public void Overflow_CountsAutoShrinkToMinimumSize_AndBalloonShape()
+    {
+        // ~90 ký tự: tràn ở 26px nhưng vừa khi tự thu nhỏ → không cảnh báo
+        var shrinks = Text(0, 0, 300, 200, "Tôi đã nói với cậu rồi, chúng ta không thể quay lại nơi đó thêm một lần nào nữa đâu!");
+        LetteringWarningRules.Evaluate([shrinks], ReadingDirection.LeftToRight, NoLines)
+            .Should().NotContain(x => x.Code == LetteringWarningRules.TextOverflow);
+
+        // Oval chứa ít hơn hộp cùng kích thước
+        LetteringLimits.ForElement(300, 200, "oval", 14).Should().BeLessThan(LetteringLimits.ForElement(300, 200, "box", 14));
     }
 
     [Fact]

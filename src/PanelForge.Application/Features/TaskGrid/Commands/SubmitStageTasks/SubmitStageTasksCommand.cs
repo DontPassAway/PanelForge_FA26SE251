@@ -83,6 +83,10 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
                 WorkspaceRole.Letterer => await StageProgressRules.LetteringPagesBlockReasonAsync(_db, _pages, [task.PageId!.Value], ct),
                 _ => null
             };
+            var stage = stages.FirstOrDefault(s => s.Id == task.PipelineStageId);
+            if (reason is null && role == WorkspaceRole.Artist && stage is not null && !TaskGridRules.IsLaterArtStage(stage, stages))
+                reason = await StageProgressRules.ScriptCoverageBlockReasonAsync(
+                    _db, chapter.Id, chapterPanels.Where(p => p.PageId == task.PageId).ToList(), ct);
             if (reason is not null) blocked.Add((pageNumber, reason));
         }
         // Tất cả hoặc không, nhưng báo đủ mọi trang chưa đạt để người làm sửa một lượt

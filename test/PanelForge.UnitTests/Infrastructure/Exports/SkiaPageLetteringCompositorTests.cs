@@ -98,9 +98,52 @@ public class SkiaPageLetteringCompositorTests
             .Should().Equal("Mọi người", "tập trung");
         SkiaPageLetteringCompositor.WrapLines("aaaaaaaaaaaa", 50, Measure).Should().Equal("aaaaa", "aaaaa", "aa");
 
-        var l = SkiaPageLetteringCompositor.Layout(string.Join(' ', Enumerable.Repeat("chữ", 60)), style, "oval", 200, 100, Measure);
+        var l = SkiaPageLetteringCompositor.Layout(
+            string.Join(' ', Enumerable.Repeat("chữ", 60)), style, "oval", 200, 100, (s, _) => Measure(s));
         l.Overflow.Should().BeTrue();
-        l.LineHeight.Should().Be(26); // 20px × 1.3, không tự thu nhỏ
+        l.LineHeight.Should().Be(26); // Layout giữ đúng cỡ được yêu cầu: 20px × 1.3
+    }
+
+    // Đo giả: mỗi ký tự rộng 0.55em, như ước lượng của FE khi không có canvas
+    private static float Em(string s, float size) => s.EnumerateRunes().Count() * size * 0.55f;
+
+    [Fact]
+    public void LayoutBalloon_ShrinksOverflowingText_ToLargestSizeThatFits_NeverAboveChosenSize()
+    {
+        var style = new TextStyle("Mali", 26, LineHeight: 1.3);
+        const string longLine = "Tôi đã nói với cậu rồi, chúng ta không thể quay lại nơi đó thêm một lần nào nữa đâu!";
+
+        var shrunk = SkiaPageLetteringCompositor.LayoutBalloon(longLine, style, "oval", 300, 200, Em);
+        shrunk.Overflow.Should().BeFalse();
+        shrunk.FontSize.Should().BeLessThan(26).And.BeGreaterThanOrEqualTo(TextStyle.MinFontSize);
+        // Lớn nhất còn vừa: tăng 1px là tràn
+        SkiaPageLetteringCompositor.Layout(longLine, style, "oval", 300, 200, Em, shrunk.FontSize + 1).Overflow.Should().BeTrue();
+
+        // Câu ngắn vừa sẵn: giữ cỡ đã chọn dù bóng còn chỗ cho chữ to hơn
+        SkiaPageLetteringCompositor.LayoutBalloon("Ừ.", style, "oval", 300, 200, Em).FontSize.Should().Be(26);
+    }
+
+    [Fact]
+    public void LayoutBalloon_OvalUsesDiamondWrap_LinesStayInsideEllipse()
+    {
+        var style = new TextStyle("Mali", 20, LineHeight: 1.3);
+        var l = SkiaPageLetteringCompositor.LayoutBalloon(
+            "Mọi người tập trung ở cổng trường lúc bảy giờ sáng nhé", style, "oval", 320, 200, Em);
+
+        l.Overflow.Should().BeFalse();
+        l.Lines.Count.Should().BeGreaterThan(1);
+        var widths = SkiaPageLetteringCompositor.EllipseLineWidths(l.Lines.Count, l.LineHeight, l.Area.W / 2, l.Area.H / 2);
+        for (var i = 0; i < l.Lines.Count; i++)
+            Em(l.Lines[i], (float)l.FontSize).Should().BeLessThanOrEqualTo((float)widths[i]);
+    }
+
+    [Fact]
+    public void LayoutBalloon_TooLongEvenAtMinimumSize_FlagsOverflowAtMinimum()
+    {
+        var style = new TextStyle("Mali", 26, LineHeight: 1.3);
+        var l = SkiaPageLetteringCompositor.LayoutBalloon(string.Join(' ', Enumerable.Repeat("chữ", 200)), style, "box", 160, 90, Em);
+        l.Overflow.Should().BeTrue();
+        l.FontSize.Should().Be(TextStyle.MinFontSize);
     }
 
     [Theory]
