@@ -34,7 +34,7 @@ public class BibleRevisionCurrentStateTests
         _dbContextMock.Setup(db => db.BibleEntryRevisions)
             .Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntryRevision>()));
 
-        _handler = new AddBibleEntryRevisionCommandHandler(_dbContextMock.Object);
+        _handler = new AddBibleEntryRevisionCommandHandler(_dbContextMock.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
     }
 
     private static string Snapshot(string name, string description)

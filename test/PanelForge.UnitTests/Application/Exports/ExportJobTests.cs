@@ -121,11 +121,17 @@ public class ExportJobTests
                 new GetProvenanceReportQueryHandler(_db, _auth.Object, _pageRepo.Object).Handle(q, ct));
     }
 
-    /// <summary>Snapshot bản duyệt như ApproveChapter tạo (manifest + SHA-256).</summary>
-    private ChapterSnapshot AddSnapshot(string? storedManifest = null)
+    /// <summary>
+    /// Snapshot bản duyệt dựng bằng chính ChapterSnapshotBuilder mà ApproveChapter / ApproveEdition dùng.
+    /// <paramref name="storedManifest"/>: giả lập manifest bị sửa tay trong DB (giữ hash của bản gốc).
+    /// </summary>
+    private async Task<ChapterSnapshot> AddSnapshot(string? storedManifest = null, string? languageCode = null)
     {
-        var manifest = $$"""{"chapterId":"{{_chapter.Id}}","pages":[{"pageNumber":1},{"pageNumber":2}]}""";
-        var snapshot = ChapterSnapshot.Create(_chapter.Id, 1, _chapter.VersionVector, _producerId, storedManifest ?? manifest, Sha256(manifest));
+        var built = await PanelForge.Application.Features.Chapters.Common.ChapterSnapshotBuilder.CreateAsync(
+            _db, _pageRepo.Object, _chapter, _producerId, default, languageCode);
+        var snapshot = storedManifest is null
+            ? built
+            : ChapterSnapshot.Create(_chapter.Id, built.SnapshotNumber, _chapter.VersionVector, _producerId, storedManifest, built.ManifestHash);
         _db.ChapterSnapshots.Add(snapshot);
         _db.SaveChanges();
         return snapshot;
@@ -287,7 +293,7 @@ public class ExportJobTests
     [Fact]
     public async Task OpenJson_ExportsSnapshotManifestAndProvenance_VerifiableOutsidePlatform()
     {
-        var snapshot = AddSnapshot();
+        var snapshot = await AddSnapshot();
         (await Create("open_json")).IsSuccess.Should().BeTrue();
 
         (await ProcessNext()).Should().BeTrue();
@@ -315,20 +321,45 @@ public class ExportJobTests
     }
 
     [Fact]
-    public async Task OpenJson_TamperedManifest_FailsHashCheck()
+    public async Task TamperedManifest_IsRejectedWhenCreatingJob_ForEveryFormat()
     {
         // Manifest lưu trong DB không khớp hash đã lưu (giả lập sửa tay DB, tạo sẵn vì guard BR-01 chặn sửa qua EF)
-        AddSnapshot(storedManifest: """{"pages":[]}""");
-        await Create("OPEN_JSON");
+        await AddSnapshot(storedManifest: """{"pages":[]}""");
 
-        await ProcessNext();
-        _db.ExportJobs.Single().Error.Should().Contain("không khớp hash");
+        foreach (var code in new[] { "OPEN_JSON", "PDF" })
+        {
+            var r = await Create(code);
+            r.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+            r.ErrorMessage.Should().Contain("không khớp hash");
+        }
+        _db.ExportJobs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_TakesArtworkFromApprovedSnapshot_NotUploadsAfterApproval_NorTranslatedEditionSnapshot()
+    {
+        var approved = _db.AssetReferences.Where(x => x.PipelineStageId == _ink.Id).ToList();
+        await AddSnapshot();
+
+        // Sau khi duyệt: ảnh Ink mới cho trang 1, rồi ấn bản tiếng Anh được nghiệm thu (snapshot 'en' chụp cả ảnh mới)
+        AddArtwork(_page1, _ink, 2, [3]);
+        _db.SaveChanges();
+        await AddSnapshot(languageCode: ContentLanguages.English);
+
+        var r = await Create();
+
+        r.IsSuccess.Should().BeTrue(r.ErrorMessage);
+        r.Value!.PageCount.Should().Be(2);
+        _db.ExportJobs.Single().SnapshotArtworkIds.Should().Equal(
+            approved.Single(x => x.PageId == _page1.Id).Id, approved.Single(x => x.PageId == _page2.Id).Id);
+        (await ProcessNext()).Should().BeTrue();
+        _storage.Files[_db.ExportJobs.Single().ResultStorageKey!].Should().Equal(1, 2); // không có ảnh [3]
     }
 
     [Fact]
     public async Task OpenJson_RequesterLostAccess_FailsWithReason()
     {
-        AddSnapshot();
+        await AddSnapshot();
         _auth.Reset(); // người yêu cầu không còn là Producer/Editor lúc job chạy (BR-07)
         _db.ExportJobs.Add(PanelForge.Domain.Entities.Publishing.ExportJob.Create(
             _chapter.Id, Guid.NewGuid(), Guid.NewGuid(), "OPEN_JSON", _producerId, _chapter.VersionVector, [Guid.NewGuid()]));
@@ -345,7 +376,7 @@ public class ExportJobTests
         _auth.Setup(a => a.HasWorkspaceRoleAsync(editor, It.IsAny<Guid>(),
                 It.Is<WorkspaceRole[]>(r => r.Contains(WorkspaceRole.Editor)), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        AddSnapshot();
+        await AddSnapshot();
         var pdf = (await Create("PDF")).Value!;
         var json = (await Create("OPEN_JSON")).Value!;
         await ProcessNext();

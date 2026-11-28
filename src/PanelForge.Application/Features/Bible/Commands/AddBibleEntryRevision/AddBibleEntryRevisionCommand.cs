@@ -7,6 +7,8 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Features.Bible.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
@@ -46,14 +48,28 @@ public sealed record AddBibleEntryRevisionCommand(
 public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBibleEntryRevisionCommand, Result<BibleEntryRevisionDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly IAssetStorage _storage;
 
-    public AddBibleEntryRevisionCommandHandler(IPanelForgeDbContext dbContext)
+    public AddBibleEntryRevisionCommandHandler(IPanelForgeDbContext dbContext, IAssetStorage storage)
     {
         _dbContext = dbContext;
+        _storage = storage;
     }
 
     public async Task<Result<BibleEntryRevisionDto>> Handle(AddBibleEntryRevisionCommand command, CancellationToken cancellationToken)
     {
+        // Q20: Artist nộp Concept kèm sửa nội dung → SHA ảnh do server lấy từ kho Bible; kiểm trước mọi lần ghi
+        string? conceptSha = null;
+        if (command.ArtistUserId is not null && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
+        {
+            var (found, sha) = await UploadBibleReferenceImageCommandHandler.ResolveShaAsync(
+                _storage, command.SeriesId, command.ReferenceImageUrl, cancellationToken);
+            if (!found)
+                return Result<BibleEntryRevisionDto>.Failure(
+                    UploadBibleReferenceImageCommandHandler.ConceptImageNotFound, ResultErrorCodes.Validation);
+            conceptSha = sha;
+        }
+
         var bibleId = await _dbContext.SeriesBibles
             .Where(b => b.SeriesId == command.SeriesId)
             .Select(b => (Guid?)b.Id)
@@ -380,7 +396,7 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
         // Nếu lần lưu này lỗi, phiên bản vẫn ở Draft trong hàng đợi vẽ và Artist nộp lại được.
         if (command.ArtistUserId is { } artistId && !string.IsNullOrWhiteSpace(command.ReferenceImageUrl))
         {
-            revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary);
+            revision.SubmitConcept(artistId, command.ReferenceImageUrl, summary, conceptSha);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

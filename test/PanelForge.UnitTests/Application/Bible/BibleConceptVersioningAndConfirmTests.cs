@@ -57,7 +57,7 @@ public class BibleConceptVersioningAndConfirmTests
     [Fact]
     public async Task SubmitConcept_WhenEntryIsStub_ReturnsConflict()
     {
-        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object);
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var cmd = new SubmitBibleConceptCommand(_seriesId, _stubEntry.Id, _artistId,
             new SubmitConceptArtRequest(ReferenceImageUrl: "https://r2/sasuke.png"));
 
@@ -77,7 +77,7 @@ public class BibleConceptVersioningAndConfirmTests
 
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(new List<BibleEntry> { emptyDescEntry }));
 
-        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object);
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var cmd = new SubmitBibleConceptCommand(_seriesId, emptyDescEntry.Id, _artistId,
             new SubmitConceptArtRequest(ReferenceImageUrl: "https://r2/empty.png"));
 
@@ -88,14 +88,30 @@ public class BibleConceptVersioningAndConfirmTests
         result.ErrorMessage.Should().Contain("chưa được Writer viết định nghĩa");
     }
 
-    [Fact]
-    public async Task SubmitConcept_IncrementsConceptVersionNumber_AndSetsCurrentConceptEvent()
+    /// <summary>Kho Bible giả: chỉ có các file SHA được liệt kê.</summary>
+    private static IAssetStorage StorageWith(Guid seriesId, params string[] shas)
     {
-        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object);
+        var storage = new Mock<IAssetStorage>();
+        foreach (var sha in shas)
+            storage.Setup(s => s.OpenReadAsync(
+                    PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage
+                        .UploadBibleReferenceImageCommandHandler.StorageKey(seriesId, sha), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new MemoryStream([1]));
+        return storage.Object;
+    }
 
-        // Nộp concept lần đầu (v1)
+    private string BibleAssetUrl(string sha) => $"/api/series/{_seriesId}/bible/assets/{sha}";
+
+    [Fact]
+    public async Task SubmitConcept_IncrementsConceptVersionNumber_AndRecordsServerSideSha()
+    {
+        var sha1 = new string('a', 64);
+        var sha2 = new string('b', 64);
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, StorageWith(_seriesId, sha1, sha2));
+
+        // Nộp concept lần đầu (v1); SHA client gửi bị bỏ qua (Q20)
         var cmd1 = new SubmitBibleConceptCommand(_seriesId, _heroEntry.Id, _artistId,
-            new SubmitConceptArtRequest(ReferenceImageUrl: "https://r2/hero-v1.png", AssetSha256: "sha256-v1"));
+            new SubmitConceptArtRequest(ReferenceImageUrl: BibleAssetUrl(sha1), AssetSha256: "sha-gia-cua-client"));
         var res1 = await handler.Handle(cmd1, CancellationToken.None);
 
         res1.IsSuccess.Should().BeTrue();
@@ -104,19 +120,45 @@ public class BibleConceptVersioningAndConfirmTests
 
         var evt1 = _heroV1.Events.Single(e => e.Type == BibleRevisionEventType.ConceptSubmitted);
         evt1.ConceptVersionNumber.Should().Be(1);
-        evt1.AssetSha256.Should().Be("sha256-v1");
+        evt1.AssetSha256.Should().Be(sha1);
 
-        // Artist nộp đè concept mới (v2) trước khi Editor duyệt
+        // Artist nộp đè concept mới (v2) trước khi Editor duyệt; URL tuyệt đối, chữ hoa, có query vẫn ra đúng SHA
         var cmd2 = new SubmitBibleConceptCommand(_seriesId, _heroEntry.Id, _artistId,
-            new SubmitConceptArtRequest(ReferenceImageUrl: "https://r2/hero-v2.png", AssetSha256: "sha256-v2"));
+            new SubmitConceptArtRequest(ReferenceImageUrl: "http://localhost:5044" + BibleAssetUrl(sha2.ToUpperInvariant()) + "?v=2"));
         var res2 = await handler.Handle(cmd2, CancellationToken.None);
 
         res2.IsSuccess.Should().BeTrue();
         var conceptEvents = _heroV1.Events.Where(e => e.Type == BibleRevisionEventType.ConceptSubmitted).OrderBy(e => e.CreatedAt).ToList();
         conceptEvents.Should().HaveCount(2);
         conceptEvents[1].ConceptVersionNumber.Should().Be(2);
-        conceptEvents[1].AssetSha256.Should().Be("sha256-v2");
+        conceptEvents[1].AssetSha256.Should().Be(sha2);
         _heroV1.CurrentConceptEventId.Should().Be(conceptEvents[1].Id);
+    }
+
+    [Fact]
+    public async Task SubmitConcept_BibleAssetMissingFromStorage_IsRejected_WithoutEvent()
+    {
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, StorageWith(_seriesId));
+
+        var result = await handler.Handle(new SubmitBibleConceptCommand(_seriesId, _heroEntry.Id, _artistId,
+            new SubmitConceptArtRequest(ReferenceImageUrl: BibleAssetUrl(new string('c', 64)))), CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        _heroV1.Events.Should().NotContain(e => e.Type == BibleRevisionEventType.ConceptSubmitted);
+        _db.Verify(d => d.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitConcept_ExternalImageUrl_HasNoSha_EvenIfClientSendsOne()
+    {
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, StorageWith(_seriesId));
+
+        var result = await handler.Handle(new SubmitBibleConceptCommand(_seriesId, _heroEntry.Id, _artistId,
+            new SubmitConceptArtRequest(ReferenceImageUrl: "https://r2/hero.png", AssetSha256: "sha-gia-cua-client")),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _heroV1.Events.Single(e => e.Type == BibleRevisionEventType.ConceptSubmitted).AssetSha256.Should().BeNull();
     }
 
     [Fact]
