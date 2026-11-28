@@ -38,6 +38,7 @@ public class WorkspaceInvitationTests
         _authorizationServiceMock
             .Setup(a => a.IsOwnerOrProducerAsync(actorId, workspace.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
+        EmailSends(true);
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
         _dbContextMock.Setup(db => db.Users).Returns(DbSetMockHelper.CreateDbSetMock(users));
         _dbContextMock.Setup(db => db.WorkspaceMembers)
@@ -46,19 +47,29 @@ public class WorkspaceInvitationTests
         return (workspace, actorId);
     }
 
-    private void EmailFails()
+    // EmailService báo lỗi SMTP / thiếu cấu hình bằng false (không ném exception)
+    private void EmailSends(bool sent)
         => _emailServiceMock
             .Setup(e => e.SendWorkspaceInvitationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("smtp down"));
+            .ReturnsAsync(sent);
+
+    private void EmailFails() => EmailSends(false);
+
+    private void EmailThrows()
+        => _emailServiceMock
+            .Setup(e => e.SendWorkspaceInvitationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
 
     private void VerifyNoInvitationEmail()
         => _emailServiceMock.Verify(e => e.SendWorkspaceInvitationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
 
-    private static WorkspaceMember MemberOf(StudioWorkspace workspace, User user, WorkspaceRole role = WorkspaceRole.Artist)
+    private static WorkspaceMember MemberOf(StudioWorkspace workspace, User user, WorkspaceRole role = WorkspaceRole.Artist,
+        WorkspaceMemberStatus status = WorkspaceMemberStatus.Active)
     {
-        var member = WorkspaceMember.Create(workspace.Id, user.Id, role);
+        var member = WorkspaceMember.Create(workspace.Id, user.Id, role, status);
         typeof(WorkspaceMember).GetProperty(nameof(WorkspaceMember.User))!.SetValue(member, user);
         return member;
     }
@@ -157,6 +168,19 @@ public class WorkspaceInvitationTests
     }
 
     [Fact]
+    public async Task AddMember_WhenEmailServiceThrows_ShouldStillSucceedWithInvitationEmailSentFalse()
+    {
+        var (workspace, actorId) = Arrange(new List<User>());
+        EmailThrows();
+
+        var result = await AddMember().Handle(
+            new AddWorkspaceMemberCommand(actorId, workspace.Id, "new@test.com", WorkspaceRole.Member), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.InvitationEmailSent.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task AddMember_WhenExistingUserStillPendingInvitation_ShouldIssueFreshOtp()
     {
         var pending = User.Create("pending@test.com", "pending", passwordHash: null);
@@ -242,8 +266,28 @@ public class WorkspaceInvitationTests
             new ResendWorkspaceInvitationCommand(actorId, workspace.Id, active.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("đã kích hoạt");
+        result.ErrorMessage.Should().Contain("đã tham gia Studio");
         VerifyNoInvitationEmail();
+    }
+
+    [Fact]
+    public async Task ResendInvitation_WhenActivatedUserHasNotAcceptedYet_ShouldResendWithoutOtp()
+    {
+        var user = User.Create("artist@test.com", "Artist", "hash");
+        user.ConfirmEmail();
+        var (workspace, actorId) = Arrange(new List<User> { user },
+            ws => new List<WorkspaceMember> { MemberOf(ws, user, status: WorkspaceMemberStatus.Pending) });
+
+        var result = await ResendInvitation().Handle(
+            new ResendWorkspaceInvitationCommand(actorId, workspace.Id, user.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.InvitationEmailSent.Should().BeTrue();
+        user.PasswordResetToken.Should().BeNull("tài khoản đã kích hoạt không cần OTP");
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _emailServiceMock.Verify(e => e.SendWorkspaceInvitationAsync(
+            user.Email, It.IsAny<string>(), "Test Studio", "Artist",
+            null, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -257,6 +301,7 @@ public class WorkspaceInvitationTests
             new ResendWorkspaceInvitationCommand(actorId, workspace.Id, pending.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed);
         result.ErrorMessage.Should().Contain("Không gửi được email");
     }
 

@@ -133,16 +133,20 @@ public sealed class AddWorkspaceMemberCommandHandler
             WorkspaceMapper.ToMemberDto(member, targetUser, workspace.OwnerId) with { InvitationEmailSent = emailSent });
     }
 
-    // Lỗi gửi email không làm hỏng thao tác thêm thành viên (đã lưu) nhưng được báo lại qua InvitationEmailSent
+    // Thành viên đã được lưu nên lỗi gửi email không làm hỏng thao tác; Producer biết qua InvitationEmailSent
+    // để bấm "Gửi lại lời mời". EmailService trả false cho lỗi SMTP; catch dưới đây chặn lỗi ngoài dự kiến
+    // (vd. đọc cấu hình email từ DB) để không trả 500 cho một thao tác đã thành công.
     private async Task<bool> NotifyAsync(User user, string workspaceName, WorkspaceRole role, string? inviteOtp, CancellationToken cancellationToken)
     {
         try
         {
-            await _emailService.SendWorkspaceInvitationAsync(
+            var sent = await _emailService.SendWorkspaceInvitationAsync(
                 user.Email, user.FullName, workspaceName, role.ToString(), inviteOtp, WorkspaceInvitation.OtpLifetime, cancellationToken);
-            return true;
+            if (!sent)
+                _logger.LogWarning("Đã thêm {Email} vào Studio nhưng chưa gửi được email mời", user.Email);
+            return sent;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Không gửi được email mời thành viên tới {Email}", user.Email);
             return false;

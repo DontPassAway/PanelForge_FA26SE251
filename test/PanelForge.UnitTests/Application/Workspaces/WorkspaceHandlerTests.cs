@@ -202,6 +202,7 @@ public class WorkspaceHandlerTests
             new AddWorkspaceMemberCommand(actorId, workspace.Id, existingUser.Email, WorkspaceRole.Member), CancellationToken.None);
 
         result.Value!.UserId.Should().Be(existingUser.Id);
+        result.Value.InvitationEmailSent.Should().BeFalse();
         existingUser.PasswordResetToken.Should().BeNull("user đã có tài khoản không cần OTP kích hoạt");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

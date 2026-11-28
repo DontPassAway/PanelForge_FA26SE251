@@ -212,11 +212,12 @@ public class WorkspacesController : ControllerBase
             : ToError(result, notFoundStatus: StatusCodes.Status400BadRequest);
     }
 
-    /// <summary>Gửi lại OTP kích hoạt cho thành viên được mời nhưng chưa kích hoạt tài khoản.</summary>
+    /// <summary>Gửi lại email mời cho thành viên chưa chấp nhận lời mời / chưa kích hoạt tài khoản (503 khi không gửi được mail).</summary>
     [HttpPost("{id:guid}/members/{userId:guid}/resend-invitation")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(WorkspaceMemberDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ResendInvitation(Guid id, Guid userId, CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } actorId)
@@ -500,6 +501,7 @@ public class WorkspacesController : ControllerBase
             ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
             ResultErrorCodes.NotFound => StatusCode(notFoundStatus, body),
             ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.EmailDeliveryFailed => StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(body)
         };
     }

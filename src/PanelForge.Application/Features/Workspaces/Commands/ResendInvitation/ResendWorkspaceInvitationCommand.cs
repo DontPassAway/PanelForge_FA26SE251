@@ -6,12 +6,14 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Workspaces.Common;
 using PanelForge.Application.Features.Workspaces.Models;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Workspaces.Commands.ResendInvitation;
 
 /// <summary>
-/// POST /api/workspaces/{id}/members/{userId}/resend-invitation — Owner / Producer gửi lại OTP kích hoạt
-/// cho thành viên được mời nhưng chưa kích hoạt tài khoản (OTP cũ hết hạn hoặc mail không tới).
+/// POST /api/workspaces/{id}/members/{userId}/resend-invitation — Owner / Producer gửi lại email mời
+/// cho thành viên chưa chấp nhận lời mời (Pending) hoặc chưa kích hoạt tài khoản (OTP cũ hết hạn, mail không tới).
+/// Tài khoản chưa kích hoạt nhận OTP mới; mail không gửi được → EMAIL_DELIVERY_FAILED (503).
 /// </summary>
 public sealed record ResendWorkspaceInvitationCommand(Guid ActorId, Guid WorkspaceId, Guid TargetUserId)
     : IRequest<Result<WorkspaceMemberDto>>;
@@ -57,21 +59,24 @@ public sealed class ResendWorkspaceInvitationCommandHandler
         var user = member.User;
         if (!user.IsActive)
             return Result<WorkspaceMemberDto>.Failure("Tài khoản của thành viên này hiện đang bị vô hiệu hóa.");
-        if (!user.IsPendingInvitation)
-            return Result<WorkspaceMemberDto>.Failure("Thành viên này đã kích hoạt tài khoản, không cần gửi lại lời mời.");
+        if (!user.IsPendingInvitation && member.Status != WorkspaceMemberStatus.Pending)
+            return Result<WorkspaceMemberDto>.Failure("Thành viên này đã tham gia Studio, không cần gửi lại lời mời.");
 
-        var otp = WorkspaceInvitation.IssueOtp(user);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        try
+        string? otp = null;
+        if (user.IsPendingInvitation)
         {
-            await _emailService.SendWorkspaceInvitationAsync(
-                user.Email, user.FullName, workspace.Name, member.Role.ToString(), otp, WorkspaceInvitation.OtpLifetime, cancellationToken);
+            otp = WorkspaceInvitation.IssueOtp(user);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex)
+
+        var sent = await _emailService.SendWorkspaceInvitationAsync(
+            user.Email, user.FullName, workspace.Name, member.Role.ToString(), otp, WorkspaceInvitation.OtpLifetime, cancellationToken);
+        if (!sent)
         {
-            _logger.LogError(ex, "Không gửi lại được email mời tới {Email}", user.Email);
-            return Result<WorkspaceMemberDto>.Failure("Không gửi được email mời. Vui lòng kiểm tra cấu hình email và thử lại.");
+            _logger.LogWarning("Không gửi lại được email mời tới {Email}", user.Email);
+            return Result<WorkspaceMemberDto>.Failure(
+                "Không gửi được email mời. Vui lòng kiểm tra cấu hình email của hệ thống và thử lại.",
+                ResultErrorCodes.EmailDeliveryFailed);
         }
 
         return Result<WorkspaceMemberDto>.Success(
