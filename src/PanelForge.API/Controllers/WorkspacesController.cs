@@ -22,6 +22,7 @@ using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceById;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceMembers;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
+using PanelForge.Application.Features.Workspaces.Queries.GetReaderTimeseries;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceActiveSessions;
 using PanelForge.Application.Features.Workspaces.Commands.RevokeWorkspaceSession;
 using PanelForge.Application.Features.Workspaces.Commands.AcceptInvitation;
@@ -340,6 +341,29 @@ public class WorkspacesController : ControllerBase
     public async Task<IActionResult> GetReaderStats(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetWorkspaceReaderStatsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/{id}/reader-stats/timeseries?from&amp;to&amp;granularity&amp;seriesId
+    /// BR-32: lượt đọc theo ngày/tuần/tháng cho Producer (không kèm doanh thu — thuộc Publisher).
+    /// </summary>
+    [HttpGet("{id:guid}/reader-stats/timeseries")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(ReaderTimeseriesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetReaderTimeseries(
+        Guid id,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] TimeseriesGranularity granularity = TimeseriesGranularity.Day,
+        [FromQuery] Guid? seriesId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new GetReaderTimeseriesQuery(id, seriesId, from, to, granularity, IncludeRevenue: false),
+            cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
