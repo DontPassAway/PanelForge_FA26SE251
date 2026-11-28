@@ -13,6 +13,9 @@ using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
 using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
+using PanelForge.Application.Features.Admin.Queries.GetAdminUserDetail;
+using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaceDetail;
+using PanelForge.Application.Features.Admin.Queries.GetSystemHealth;
 using PanelForge.Application.Features.Audit.Queries.ExportAuditLogs;
 using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
 using PanelForge.Application.Features.Users.Commands.GrantStudioPermission;
@@ -204,6 +207,36 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetSystemStats(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetSystemStatsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/admin/system-health — gọi thử DB, kho file, service AI và đếm việc nền kẹt/lỗi (OPS-32).
+    /// Luôn 200: thành phần hỏng nằm trong body với status Down.
+    /// </summary>
+    [HttpGet("system-health")]
+    [ProducesResponseType(typeof(SystemHealthDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSystemHealth(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSystemHealthQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/users/{id} — chi tiết tài khoản: phiên, Studio, Ví, AI tháng này, nhật ký gần đây (OPS-30).</summary>
+    [HttpGet("users/{id:guid}")]
+    [ProducesResponseType(typeof(AdminUserDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUserDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminUserDetailQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/workspaces/{id} — chi tiết Studio: tài nguyên, thành viên, Series, yêu cầu, AI 30 ngày (OPS-31).</summary>
+    [HttpGet("workspaces/{id:guid}")]
+    [ProducesResponseType(typeof(AdminWorkspaceDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetWorkspaceDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminWorkspaceDetailQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
