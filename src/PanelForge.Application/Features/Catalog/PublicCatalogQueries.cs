@@ -190,7 +190,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
         if (series is null || series.Chapters.Count == 0)
             return Result<PublicSeriesDetailDto>.Failure("Không tìm thấy Series đã phát hành.", ResultErrorCodes.NotFound);
 
-        // Cùng quy tắc với API đọc chương (ChapterReadAccess): Publisher/Admin/thành viên Studio, VIP còn hạn,
+        // Cùng quy tắc với API đọc chương (ChapterReadAccess): Publisher/Admin/thành viên Studio
         // hoặc đã mua đúng bản ngôn ngữ đang chọn (mua theo từng ngôn ngữ).
         var language = ContentLanguages.Normalize(q.Language) ?? ContentLanguages.Original;
         bool canReadAll = false;
@@ -198,8 +198,7 @@ public sealed class GetPublicSeriesDetailQueryHandler : IRequestHandler<GetPubli
         var currentUserId = _currentUser.UserId;
         if (currentUserId.HasValue)
         {
-            canReadAll = await ChapterReadAccess.IsStaffAsync(_dbContext, currentUserId, series.WorkspaceId, ct)
-                || await ChapterReadAccess.HasActiveVipAsync(_dbContext, currentUserId.Value, now, ct);
+            canReadAll = await ChapterReadAccess.IsStaffAsync(_dbContext, currentUserId, series.WorkspaceId, ct);
 
             var rows = await _dbContext.ChapterEntitlements
                 .Where(e => e.UserId == currentUserId.Value && !e.IsDeleted)

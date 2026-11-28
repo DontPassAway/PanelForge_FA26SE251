@@ -13,8 +13,8 @@ namespace PanelForge.Application.Features.Payments.Commands.CreateTopup;
 
 /// <summary>
 /// Tạo đơn chuyển khoản VietQR ở trạng thái Pending (hiển thị ngay trên màn hình Thanh toán của Producer).
-/// Purpose: Topup (nạp ví) | ChapterUnlock (mở chương trực tiếp) | VipSubscription (gói VIP trực tiếp).
-/// Với ChapterUnlock / VipSubscription, số tiền và Workspace do server quyết định — không tin giá client gửi.
+/// Purpose: Topup (nạp ví) | ChapterUnlock (mở chương trực tiếp). Gói VIP đã gỡ (Q4, OPS-11).
+/// Với ChapterUnlock, số tiền và Workspace do server quyết định — không tin giá client gửi.
 /// </summary>
 public sealed record CreateTopupCommand(
     Guid UserId,
@@ -98,9 +98,6 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 amountVnd = (int)terms.PriceVnd;
                 break;
             }
-            case PaymentTransactionType.VipSubscription:
-                amountVnd = VipPricing.CostVnd(req.VipPlan);
-                break;
             default:
                 amountVnd = req.AmountVnd ?? (req.CoinsAmount.HasValue ? req.CoinsAmount.Value * 100 : 0);
                 if (amountVnd < MinTopupVnd)
@@ -241,8 +238,8 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             type = PaymentTransactionType.Topup;
             return true;
         }
-        // Refund chỉ do Admin ghi (OPS-06), độc giả không tạo được đơn loại này
+        // Refund chỉ do Admin ghi (OPS-06); gói VIP đã gỡ (Q4, OPS-11): độc giả không tạo được đơn hai loại này
         return Enum.TryParse(purpose.Trim(), ignoreCase: true, out type) && Enum.IsDefined(type)
-            && type != PaymentTransactionType.Refund;
+            && type is not (PaymentTransactionType.Refund or PaymentTransactionType.VipSubscription);
     }
 }

@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Features.Payments.Commands.AdminRefundWallet;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
 using PanelForge.Application.Features.Payments.Commands.ReportTransactionIssue;
-using PanelForge.Application.Features.Payments.Commands.SubscribeVip;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
 using PanelForge.Application.Features.Payments.Commands.VerifyGooglePlayPurchase;
 using PanelForge.Application.Features.Payments.Models;
@@ -16,7 +15,7 @@ using PanelForge.Application.Features.Payments.Queries.GetTransactionStatus;
 namespace PanelForge.API.Controllers;
 
 /// <summary>
-/// API Quản lý Ví độc giả, Mở khóa chương truyện, Gói VIP và Nạp tiền VietQR cho Mobile App.
+/// API Quản lý Ví độc giả, Mở khóa chương truyện và Nạp tiền VietQR cho Mobile App.
 /// </summary>
 [ApiController]
 [Route("api/wallet")]
@@ -38,7 +37,7 @@ public class WalletController : ControllerBase
 
     /// <summary>
     /// GET /api/wallet/me
-    /// Lấy thông tin số dư ví, đặc quyền VIP, danh sách chương đã mở khóa và lịch sử giao dịch gần nhất.
+    /// Lấy thông tin số dư ví, danh sách chương đã mở khóa và lịch sử giao dịch gần nhất.
     /// </summary>
     [HttpGet("me")]
     [ProducesResponseType(typeof(UserWalletDto), StatusCodes.Status200OK)]
@@ -75,7 +74,7 @@ public class WalletController : ControllerBase
 
     /// <summary>
     /// POST /api/wallet/unlock-chapter
-    /// Mở khóa chương truyện bằng số dư ví (VNĐ) hoặc đặc quyền VIP.
+    /// Mở khóa chương truyện bằng số dư ví (VNĐ).
     /// </summary>
     [HttpPost("unlock-chapter")]
     [ProducesResponseType(typeof(UnlockChapterResponse), StatusCodes.Status200OK)]
@@ -93,21 +92,6 @@ public class WalletController : ControllerBase
             ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(new { message = result.ErrorMessage }),
         };
-    }
-
-    /// <summary>
-    /// POST /api/wallet/subscribe-vip
-    /// Kích hoạt gói đọc truyện VIP (tháng / năm) bằng số dư ví.
-    /// </summary>
-    [HttpPost("subscribe-vip")]
-    [ProducesResponseType(typeof(SubscribeVipResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SubscribeVip([FromBody] SubscribeVipRequest request, CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
-
-        var result = await _mediator.Send(new SubscribeVipCommand(userId, request), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
     }
 
     /// <summary>

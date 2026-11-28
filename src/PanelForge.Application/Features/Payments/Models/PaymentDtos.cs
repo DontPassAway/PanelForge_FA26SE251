@@ -23,8 +23,8 @@ public sealed record UserWalletDto(
 );
 
 /// <param name="Purpose">
-/// "Topup" (mặc định, nạp ví) | "ChapterUnlock" (trả VietQR trực tiếp để mở chương — cần ChapterId)
-/// | "VipSubscription" (trả VietQR trực tiếp gói VIP — dùng VipPlan). Với ChapterUnlock/VIP số tiền do server quyết định.
+/// "Topup" (mặc định, nạp ví) | "ChapterUnlock" (trả VietQR trực tiếp để mở chương — cần ChapterId, số tiền do server quyết định).
+/// Gói VIP đã bỏ (Q4): "VipSubscription" bị từ chối; <c>VipPlan</c> giữ lại cho client cũ và bị bỏ qua.
 /// </param>
 public sealed record TopupRequest(
     int? CoinsAmount = null,
@@ -52,22 +52,6 @@ public sealed record TopupResponse(
     string Status = "Pending"
 );
 
-/// <summary>Bảng giá & thời hạn gói VIP — dùng chung cho thanh toán bằng Ví và VietQR trực tiếp.</summary>
-public static class VipPricing
-{
-    public const int MonthlyVnd = 19900;
-    public const int YearlyVnd = 199900;
-
-    public static bool IsYearly(string? plan) =>
-        string.Equals(plan?.Trim(), "yearly", StringComparison.OrdinalIgnoreCase);
-
-    public static int CostVnd(string? plan) => IsYearly(plan) ? YearlyVnd : MonthlyVnd;
-
-    /// <summary>Thời hạn theo số tiền đã trả (giao dịch VietQR chỉ lưu AmountVnd).</summary>
-    public static TimeSpan DurationForAmount(decimal amountVnd) =>
-        amountVnd >= YearlyVnd ? TimeSpan.FromDays(365) : TimeSpan.FromDays(30);
-}
-
 public sealed record UnlockChapterRequest(
     Guid ChapterId,
     int? PriceVnd = null,
@@ -87,18 +71,6 @@ public sealed record UnlockChapterResponse(
     string? Message = null,
     bool IsPermanent = true,
     int? RemainingViews = null
-);
-
-public sealed record SubscribeVipRequest(
-    string Plan = "monthly"
-);
-
-public sealed record SubscribeVipResponse(
-    bool Success,
-    bool IsVip,
-    DateTime? VipExpiresAt,
-    int RemainingCoins,
-    string? Message
 );
 
 public sealed record TransactionStatusDto(

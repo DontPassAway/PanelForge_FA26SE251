@@ -98,8 +98,9 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
         return Result<UserWalletDto>.Success(new UserWalletDto(
             BalanceVnd: balanceVndInt,
             BalanceCoins: balanceVndInt / 100,
-            IsVip: wallet.IsVip && (wallet.VipExpiresAt == null || wallet.VipExpiresAt > DateTime.UtcNow),
-            VipExpiresAt: wallet.VipExpiresAt,
+            // Q4 (OPS-11): VIP không còn quyền đọc; giữ trường cho client cũ nhưng luôn báo không VIP.
+            IsVip: false,
+            VipExpiresAt: null,
             UnlockedChapterIds: unlockedChapterIds,
             Transactions: txDtos
         ));

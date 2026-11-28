@@ -14,7 +14,7 @@ using DomainSeries = PanelForge.Domain.Entities.Content.Series;
 namespace PanelForge.UnitTests.Application.Catalog;
 
 /// <summary>
-/// Chương trả phí (IsLocked) trên API catalog công khai: chỉ Publisher/Admin, thành viên Studio, VIP còn hạn
+/// Chương trả phí (IsLocked) trên API catalog công khai: chỉ Publisher/Admin, thành viên Studio
 /// hoặc người đã mua mới đọc được toàn bộ (IsUnlocked); còn lại chỉ thấy trang xem trước (xem PreviewPageAccessTests).
 /// </summary>
 public class PaidChapterAccessTests
@@ -80,17 +80,13 @@ public class PaidChapterAccessTests
     }
 
     [Fact]
-    public async Task ActiveVip_CanRead_ExpiredVip_Cannot()
+    public async Task LegacyVip_NoLongerUnlocksPaidChapter_OPS11()
     {
         var vip = AddUser();
-        var expired = AddUser();
-        _db.ReaderWallets.AddRange(
-            ReaderWallet.Create(vip, 0m, isVip: true, vipExpiresAt: DateTime.UtcNow.AddDays(5)),
-            ReaderWallet.Create(expired, 0m, isVip: true, vipExpiresAt: DateTime.UtcNow.AddDays(-1)));
+        _db.ReaderWallets.Add(ReaderWallet.Create(vip, 0m, isVip: true, vipExpiresAt: DateTime.UtcNow.AddDays(5)));
         await _db.SaveChangesAsync();
 
-        (await Read(vip)).Value!.IsUnlocked.Should().BeTrue();
-        (await Read(expired)).Value!.IsUnlocked.Should().BeFalse();
+        (await Read(vip)).Value!.IsUnlocked.Should().BeFalse("Q4: chỉ mở chương bằng Ví hoặc VietQR");
     }
 
     [Fact]

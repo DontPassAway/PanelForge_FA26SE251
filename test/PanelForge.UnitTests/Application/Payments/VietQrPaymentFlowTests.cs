@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Payments.Commands.ApprovePayment;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
-using PanelForge.Application.Features.Payments.Commands.SubscribeVip;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Content;
@@ -108,11 +107,12 @@ public class VietQrPaymentFlowTests
     }
 
     [Fact]
-    public async Task VipOrder_WithoutContext_IsNeverOrphaned()
+    public async Task VipOrder_IsRejected_OPS11()
     {
-        await CreateOrder(new TopupRequest(Purpose: "VipSubscription", VipPlan: "monthly"));
+        var result = await CreateOrder(new TopupRequest(Purpose: "VipSubscription", VipPlan: "monthly"));
 
-        (await _db.PaymentTransactions.SingleAsync()).WorkspaceId.Should().Be(_studio.Id);
+        result.IsSuccess.Should().BeFalse("Q4: bỏ gói VIP");
+        (await _db.PaymentTransactions.AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -164,20 +164,6 @@ public class VietQrPaymentFlowTests
     }
 
     [Fact]
-    public async Task ApprovingYearlyVipOrder_GrantsOneYear()
-    {
-        var order = await CreateOrder(new TopupRequest(Purpose: "VipSubscription", VipPlan: "yearly", SeriesId: _series.Id));
-        order.Value!.AmountVnd.Should().Be(VipPricing.YearlyVnd);
-        var tx = await _db.PaymentTransactions.SingleAsync();
-
-        await new ApprovePaymentCommandHandler(_db).Handle(new ApprovePaymentCommand(_studio.Id, tx.Id, _producerId), default);
-
-        var wallet = await _db.ReaderWallets.SingleAsync(w => w.UserId == _readerId);
-        wallet.IsVip.Should().BeTrue();
-        wallet.VipExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(365), TimeSpan.FromMinutes(1));
-    }
-
-    [Fact]
     public async Task WalletUnlock_ChargesChapterPrice_AndRecordsTransaction()
     {
         _db.ReaderWallets.Add(ReaderWallet.Create(_readerId, 20000m));
@@ -191,20 +177,6 @@ public class VietQrPaymentFlowTests
         var tx = await _db.PaymentTransactions.SingleAsync();
         tx.Status.Should().Be(PaymentTransactionStatus.Approved);
         tx.QrImageUrl.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task WalletVip_DeductsMonthlyPrice()
-    {
-        _db.ReaderWallets.Add(ReaderWallet.Create(_readerId, 50000m));
-        await _db.SaveChangesAsync();
-
-        var result = await new SubscribeVipCommandHandler(_db, new DefaultBankSettings())
-            .Handle(new SubscribeVipCommand(_readerId, new SubscribeVipRequest("monthly")), default);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.IsVip.Should().BeTrue();
-        (await _db.ReaderWallets.SingleAsync()).BalanceVnd.Should().Be(50000m - VipPricing.MonthlyVnd);
     }
 
     [Fact]
