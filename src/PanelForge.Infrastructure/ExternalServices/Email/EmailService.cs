@@ -148,7 +148,7 @@ public class EmailService : IEmailService
             ? $"{(int)validFor.TotalHours} giờ"
             : $"{(int)validFor.TotalMinutes} phút";
 
-    public Task SendWorkspaceInvitationAsync(
+    public Task<bool> SendWorkspaceInvitationAsync(
         string toEmail,
         string recipientName,
         string workspaceName,

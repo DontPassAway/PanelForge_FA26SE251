@@ -12,7 +12,8 @@ public interface IEmailService
     /// Thông báo được thêm vào Studio (UC-01 / UC-03 bước 4).
     /// inviteOtp != null: tài khoản vừa được tạo từ lời mời, người nhận dùng OTP để đặt mật khẩu.
     /// </summary>
-    Task SendWorkspaceInvitationAsync(
+    /// <returns>false khi không gửi được (thiếu cấu hình SMTP hoặc SMTP lỗi); lỗi đã được ghi log.</returns>
+    Task<bool> SendWorkspaceInvitationAsync(
         string toEmail,
         string recipientName,
         string workspaceName,
