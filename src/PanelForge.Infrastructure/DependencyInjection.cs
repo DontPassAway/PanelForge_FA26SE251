@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Application.Features.Payments.Models;
+using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Infrastructure.ExternalServices;
 using PanelForge.Application.Common.Interfaces.Authentication;
 using PanelForge.Application.Common.Interfaces.Persistence;
@@ -153,6 +154,13 @@ public static class DependencyInjection
         configuration.GetSection(DefaultBankSettings.SectionName).Bind(defaultBank);
         services.AddSingleton(defaultBank);
 
+        // ── Hạn mức cấp cho Studio mới (OPS-01, BR-22): server tự đặt, client không gửi ──
+        var workspaceDefaults = new WorkspaceDefaultsSettings();
+        configuration.GetSection(WorkspaceDefaultsSettings.SectionName).Bind(workspaceDefaults);
+        if (workspaceDefaults.StorageQuotaBytes < 0 || workspaceDefaults.MonthlyTokenQuota < 0 || workspaceDefaults.MonthlyImageQuota < 0)
+            throw new InvalidOperationException($"{WorkspaceDefaultsSettings.SectionName}: hạn mức mặc định không được âm.");
+        services.AddSingleton(workspaceDefaults);
+
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──
         var aiSettings = new AiAgentSettings();
         configuration.GetSection(AiAgentSettings.SectionName).Bind(aiSettings);
@@ -185,6 +193,14 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.ImageTimeoutSeconds, 15, 200));
         });
+
+        // OPS-32 System Health: gọi /health/ai không retry, timeout ngắn để trang Admin không treo khi AI tắt
+        services.AddHttpClient(SystemHealthProbe.AiHealthHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(4);
+        });
+        services.AddScoped<ISystemHealthProbe, SystemHealthProbe>();
 
         // ── Dịch kịch bản / thoại (LibreTranslate tự lưu trữ) ──
         var translationBaseUrl = configuration["TranslationService:BaseUrl"] ?? "http://localhost:5000";

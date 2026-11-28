@@ -23,8 +23,8 @@ public sealed record UserWalletDto(
 );
 
 /// <param name="Purpose">
-/// "Topup" (mặc định, nạp ví) | "ChapterUnlock" (trả VietQR trực tiếp để mở chương — cần ChapterId)
-/// | "VipSubscription" (trả VietQR trực tiếp gói VIP — dùng VipPlan). Với ChapterUnlock/VIP số tiền do server quyết định.
+/// "Topup" (mặc định, nạp ví) | "ChapterUnlock" (trả VietQR trực tiếp để mở chương — cần ChapterId, số tiền do server quyết định).
+/// Gói VIP đã bỏ (Q4): "VipSubscription" bị từ chối; <c>VipPlan</c> giữ lại cho client cũ và bị bỏ qua.
 /// </param>
 public sealed record TopupRequest(
     int? CoinsAmount = null,
@@ -52,22 +52,6 @@ public sealed record TopupResponse(
     string Status = "Pending"
 );
 
-/// <summary>Bảng giá & thời hạn gói VIP — dùng chung cho thanh toán bằng Ví và VietQR trực tiếp.</summary>
-public static class VipPricing
-{
-    public const int MonthlyVnd = 19900;
-    public const int YearlyVnd = 199900;
-
-    public static bool IsYearly(string? plan) =>
-        string.Equals(plan?.Trim(), "yearly", StringComparison.OrdinalIgnoreCase);
-
-    public static int CostVnd(string? plan) => IsYearly(plan) ? YearlyVnd : MonthlyVnd;
-
-    /// <summary>Thời hạn theo số tiền đã trả (giao dịch VietQR chỉ lưu AmountVnd).</summary>
-    public static TimeSpan DurationForAmount(decimal amountVnd) =>
-        amountVnd >= YearlyVnd ? TimeSpan.FromDays(365) : TimeSpan.FromDays(30);
-}
-
 public sealed record UnlockChapterRequest(
     Guid ChapterId,
     int? PriceVnd = null,
@@ -76,6 +60,20 @@ public sealed record UnlockChapterRequest(
     int? RentalViews = null,
     string? Language = null,
     int? ExpectedPriceVnd = null
+);
+
+// ─── Gói mở Studio (D11) ─────────────────────────────────────────────────────
+
+/// <summary>Gói mở Studio đang bán: <c>PriceVnd</c> null khi Admin chưa đặt giá (chưa bán).</summary>
+public sealed record StudioPackageDto(bool IsOnSale, int? PriceVnd);
+
+public sealed record PurchaseStudioPackageRequest(int ExpectedPriceVnd);
+
+public sealed record PurchaseStudioPackageResponse(
+    int PriceVnd,
+    int RemainingBalanceVnd,
+    string OrderCode,
+    bool CanCreateStudio
 );
 
 public sealed record UnlockChapterResponse(
@@ -87,18 +85,6 @@ public sealed record UnlockChapterResponse(
     string? Message = null,
     bool IsPermanent = true,
     int? RemainingViews = null
-);
-
-public sealed record SubscribeVipRequest(
-    string Plan = "monthly"
-);
-
-public sealed record SubscribeVipResponse(
-    bool Success,
-    bool IsVip,
-    DateTime? VipExpiresAt,
-    int RemainingCoins,
-    string? Message
 );
 
 public sealed record TransactionStatusDto(
@@ -151,18 +137,28 @@ public sealed record RejectPaymentRequest(
     string? Reason = null
 );
 
-public sealed record WorkspaceBankSettingsDto(
-    Guid WorkspaceId,
-    string? BankBin,
-    string? BankName,
-    string? BankAccountNo,
-    string? BankAccountName
+/// <summary>Tài khoản ngân hàng nền tảng đang nhận tiền VietQR (Q13). <c>IsConfigured = false</c>: đang dùng <c>SePay:DefaultBank</c>.</summary>
+public sealed record PlatformBankAccountDto(
+    string BankBin,
+    string BankName,
+    string AccountNo,
+    string AccountName,
+    bool IsConfigured,
+    DateTime? ChangedAt,
+    string? ChangedByName
 );
 
-public sealed record UpdateWorkspaceBankSettingsRequest(
-    string? BankBin,
-    string? BankName,
-    string? BankAccountNo,
-    string? BankAccountName
+public sealed record PlatformBankAccountResponseDto(
+    PlatformBankAccountDto Current,
+    IReadOnlyList<PlatformBankAccountDto> History
+);
+
+/// <summary>Đổi tài khoản nhận tiền bắt buộc mã 2FA (TOTP hoặc mã khôi phục) của Publisher.</summary>
+public sealed record UpdatePlatformBankAccountRequest(
+    string BankBin,
+    string BankName,
+    string AccountNo,
+    string AccountName,
+    string TwoFactorCode
 );
 

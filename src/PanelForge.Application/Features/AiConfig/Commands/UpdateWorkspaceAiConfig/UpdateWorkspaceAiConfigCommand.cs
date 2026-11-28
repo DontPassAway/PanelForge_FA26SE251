@@ -10,13 +10,14 @@ using PanelForge.Domain.Entities.Workspaces;
 namespace PanelForge.Application.Features.AiConfig.Commands.UpdateWorkspaceAiConfig;
 
 /// <summary>
-/// Bật/tắt, quota, model của Studio. API dùng (chữ/ảnh) chọn qua SetWorkspaceAiProvider/SetWorkspaceAiImageProvider;
+/// Bật/tắt, model của Studio. Hạn mức token/ảnh/lượt gọi đặt ở màn Tài nguyên (OPS-23/24); hai trường quota ở đây
+/// còn nhận cho client cũ, null = giữ nguyên. API dùng (chữ/ảnh) chọn qua SetWorkspaceAiProvider/SetWorkspaceAiImageProvider;
 /// TASK-350: không còn nhận Provider/ApiKey riêng theo Studio.
 /// </summary>
 public sealed record UpdateWorkspaceAiConfigCommand(
     Guid WorkspaceId,
     bool IsEnabled,
-    long MonthlyTokenQuota,
+    long? MonthlyTokenQuota,
     IReadOnlyList<string> AllowedModels,
     long? MonthlyImageQuota = null
 ) : IRequest<Result<WorkspaceAiConfigDto>>;
@@ -46,7 +47,7 @@ public sealed class UpdateWorkspaceAiConfigCommandHandler(
             db.WorkspaceAiConfigs.Add(config);
         }
         // provider rỗng = giữ nguyên, apiKey null = không đụng cột key cũ
-        config.UpdateSettings("", null, request.IsEnabled, request.MonthlyTokenQuota, modelsJson);
+        config.UpdateSettings("", null, request.IsEnabled, request.MonthlyTokenQuota ?? config.MonthlyTokenQuota, modelsJson);
 
         // V1.2: null = giữ nguyên quota ảnh hiện tại
         if (request.MonthlyImageQuota.HasValue)

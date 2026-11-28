@@ -5,11 +5,12 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Chapters.Commands.SetChapterCover;
 
 /// <summary>
-/// Producer đặt ảnh bìa chương (PNG/JPEG/WebP, ≤ 5 MB) hoặc xoá bìa (<see cref="Content"/> = null). Cùng luật với bìa Series:
+/// Producer đặt ảnh bìa chương (PNG/JPEG/WebP, tối đa theo giới hạn upload của Admin) hoặc xoá bìa (<see cref="Content"/> = null). Cùng luật với bìa Series:
 /// file lưu theo SHA-256 nội dung nên không ghi đè bìa cũ, Chapter chỉ giữ hash bìa hiện tại. Bìa là metadata hiển thị,
 /// không phải nội dung sản xuất, nên đổi được cả khi chương đã khoá/phát hành.
 /// </summary>
@@ -17,8 +18,6 @@ public sealed record SetChapterCoverCommand(Guid ChapterId, Guid UserId, byte[]?
 
 public sealed class SetChapterCoverCommandHandler : IRequestHandler<SetChapterCoverCommand, Result<string?>>
 {
-    public const long MaxBytes = SetSeriesCoverCommandHandler.MaxBytes;
-
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
 
@@ -43,21 +42,34 @@ public sealed class SetChapterCoverCommandHandler : IRequestHandler<SetChapterCo
         string? sha = null;
         if (cmd.Content is not null)
         {
-            if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)
-                return Result<string?>.Failure("Ảnh bìa phải từ 1 byte đến 5 MB.", ResultErrorCodes.Validation);
+            if (cmd.Content.Length == 0)
+                return Result<string?>.Failure("File ảnh rỗng.", ResultErrorCodes.Validation);
+            if (await UploadLimits.CheckAsync(_db, UploadKind.CoverImage, cmd.Content.Length, ct) is { } tooLarge)
+                return Result<string?>.Failure(tooLarge, ResultErrorCodes.FileTooLarge);
 
             var contentType = AssetRules.DetectImageContentType(cmd.Content);
             if (contentType is null)
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            var workspaceId = await _db.Series.AsNoTracking()
+                .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, workspaceId, StorageKey(chapter.Id, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(chapter.Id, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = "chapter-cover" }), ct);
         }
 
         chapter.SetCover(sha);
         chapter.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(CoverUrl(chapter.Id, sha));
     }
 }

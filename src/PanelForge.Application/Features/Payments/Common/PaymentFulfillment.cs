@@ -8,13 +8,13 @@ namespace PanelForge.Application.Features.Payments.Common;
 
 /// <summary>
 /// Kích hoạt quyền lợi của một giao dịch VietQR vừa được duyệt (Producer duyệt tay hoặc webhook SePay):
-/// nạp ví, mở chương hoặc gia hạn VIP. Không gọi SaveChanges — để caller lưu cùng lúc với trạng thái giao dịch.
+/// nạp ví hoặc mở chương. Đơn VIP cũ (tạo trước khi gỡ VIP, OPS-11) được cộng vào Ví thay vì kích hoạt VIP. Không gọi SaveChanges — để caller lưu cùng lúc với trạng thái giao dịch.
 /// </summary>
 public static class PaymentFulfillment
 {
     public static async Task GrantAsync(IPanelForgeDbContext db, PaymentTransaction tx, Guid workspaceId, CancellationToken ct)
     {
-        if (tx.Type == PaymentTransactionType.Topup)
+        if (tx.Type is PaymentTransactionType.Topup or PaymentTransactionType.VipSubscription)
         {
             var wallet = await GetOrCreateWalletAsync(db, tx.UserId, ct);
             wallet.AddBalance(tx.AmountVnd);
@@ -40,14 +40,6 @@ public static class PaymentFulfillment
                     language: tx.Language
                 ));
             }
-        }
-        else if (tx.Type == PaymentTransactionType.VipSubscription)
-        {
-            var wallet = await GetOrCreateWalletAsync(db, tx.UserId, ct);
-            // Gia hạn tiếp từ hạn VIP hiện tại (nếu còn), thời hạn theo số tiền gói (tháng / năm).
-            var now = DateTime.UtcNow;
-            var start = wallet.IsVip && wallet.VipExpiresAt > now ? wallet.VipExpiresAt.Value : now;
-            wallet.SetVip(true, start.Add(VipPricing.DurationForAmount(tx.AmountVnd)));
         }
     }
 

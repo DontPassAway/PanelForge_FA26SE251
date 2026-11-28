@@ -8,6 +8,7 @@ using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Application.Features.Bible.Queries.GetBibleEntriesAtChapter;
 using PanelForge.Application.Features.Bible.Queries.GetBibleReferenceImage;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
@@ -77,7 +78,7 @@ public class BibleReferenceAccessTests
     [Fact]
     public async Task Upload_ShouldRejectNonImage()
     {
-        var handler = new UploadBibleReferenceImageCommandHandler(Mock.Of<IAssetStorage>());
+        var handler = new UploadBibleReferenceImageCommandHandler(_db.Object, Mock.Of<IAssetStorage>());
 
         var result = await handler.Handle(new UploadBibleReferenceImageCommand(_seriesId, "not an image"u8.ToArray()), CancellationToken.None);
 
@@ -87,14 +88,21 @@ public class BibleReferenceAccessTests
     [Fact]
     public async Task Upload_ShouldStoreUnderSeriesAndReturnHashUrl()
     {
+        await using var db = InMemoryDb.Create();
+        var studio = StudioWorkspace.Create("Studio", Guid.NewGuid());
+        var series = PanelForge.Domain.Entities.Content.Series.Create(studio.Id, "Series", ReadingDirection.RightToLeft);
+        db.StudioWorkspaces.Add(studio);
+        db.Series.Add(series);
+        await db.SaveChangesAsync();
         var storage = new Mock<IAssetStorage>();
         var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
 
-        var result = await new UploadBibleReferenceImageCommandHandler(storage.Object)
-            .Handle(new UploadBibleReferenceImageCommand(_seriesId, png), CancellationToken.None);
+        var result = await new UploadBibleReferenceImageCommandHandler(db, storage.Object)
+            .Handle(new UploadBibleReferenceImageCommand(series.Id, png), CancellationToken.None);
 
-        result.Value!.Url.Should().Be($"/api/series/{_seriesId}/bible/assets/{result.Value.Sha256}");
-        storage.Verify(s => s.SaveAsync($"bible/{_seriesId:N}/{result.Value.Sha256}", png, It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()));
+        result.Value!.Url.Should().Be($"/api/series/{series.Id}/bible/assets/{result.Value.Sha256}");
+        storage.Verify(s => s.SaveAsync($"bible/{series.Id:N}/{result.Value.Sha256}", png, It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()));
+        db.StudioWorkspaces.Single().UsedStorageBytes.Should().Be(png.Length, "OPS-02: ảnh reference tính vào dung lượng Studio");
     }
 
     [Theory]

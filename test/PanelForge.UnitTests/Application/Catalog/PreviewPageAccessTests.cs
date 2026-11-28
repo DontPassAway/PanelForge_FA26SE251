@@ -137,13 +137,13 @@ public class PreviewPageAccessTests
     }
 
     [Fact]
-    public async Task Vip_AndStudioMember_SeeAllPages()
+    public async Task StudioMember_SeesAllPages_LegacyVipDoesNot_OPS11()
     {
         var artist = AddUser();
         _db.WorkspaceMembers.Add(WorkspaceMember.Create(_studio.Id, artist, WorkspaceRole.Artist));
         await _db.SaveChangesAsync();
 
-        (await Read(AddUser(vip: true))).Pages.Should().OnlyContain(p => p.IsUnlocked);
+        (await Read(AddUser(vip: true))).Pages.Should().Contain(p => !p.IsUnlocked);
         (await Read(artist)).Pages.Should().OnlyContain(p => p.IsUnlocked);
     }
 

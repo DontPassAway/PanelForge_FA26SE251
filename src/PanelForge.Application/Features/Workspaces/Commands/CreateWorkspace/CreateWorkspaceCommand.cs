@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Quotas.Common;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
@@ -11,16 +12,22 @@ namespace PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
 
 /// <summary>
 /// POST /api/workspaces — tạo Studio. Chỉ User có CanCreateStudio (BR-22), không phải Admin (BR-07).
-/// Người tạo tự động là Producer trong workspace_members.
+/// Người tạo tự động là Producer trong workspace_members. Hạn mức (dung lượng, token và ảnh AI) lấy từ chính sách
+/// Admin đang dùng, chưa có thì từ <see cref="WorkspaceDefaultsSettings"/>; không nhận từ client (OPS-01, OPS-20).
 /// </summary>
-public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name, long StorageQuotaBytes)
+public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name)
     : IRequest<Result<WorkspaceDto>>;
 
 public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorkspaceCommand, Result<WorkspaceDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly WorkspaceDefaultsSettings _defaults;
 
-    public CreateWorkspaceCommandHandler(IPanelForgeDbContext dbContext) => _dbContext = dbContext;
+    public CreateWorkspaceCommandHandler(IPanelForgeDbContext dbContext, WorkspaceDefaultsSettings defaults)
+    {
+        _dbContext = dbContext;
+        _defaults = defaults;
+    }
 
     public async Task<Result<WorkspaceDto>> Handle(CreateWorkspaceCommand command, CancellationToken cancellationToken)
     {
@@ -32,12 +39,14 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
             return Unauthorized("Administrator không được phép tạo Studio (BR-07).");
 
         if (!owner.CanCreateStudio)
-            return Unauthorized("Bạn không có quyền tạo Studio. Vui lòng yêu cầu Administrator cấp quyền CanCreateStudio.");
+            return Unauthorized("Bạn chưa có quyền tạo Studio. Mua gói mở Studio trong Ví hoặc nhờ Administrator cấp quyền.");
+
+        var policy = await QuotaPolicies.GetEffectiveAsync(_dbContext, _defaults, cancellationToken);
 
         StudioWorkspace workspace;
         try
         {
-            workspace = StudioWorkspace.Create(command.Name, owner.Id, command.StorageQuotaBytes);
+            workspace = StudioWorkspace.Create(command.Name, owner.Id, policy.StorageQuotaBytes);
         }
         catch (ArgumentException ex)
         {
@@ -47,7 +56,12 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
         _dbContext.StudioWorkspaces.Add(workspace);
         _dbContext.WorkspaceMembers.Add(WorkspaceMember.Create(workspace.Id, owner.Id, WorkspaceRole.Producer));
         // TASK-355: Studio mới có sẵn cấu hình AI mặc định → dùng ngay API mặc định Admin đã đặt
-        _dbContext.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(workspace.Id));
+        var aiConfig = WorkspaceAiConfig.Create(workspace.Id, monthlyTokenQuota: policy.MonthlyTokenQuota);
+        aiConfig.SetMonthlyImageQuota(policy.MonthlyImageQuota);
+        aiConfig.SetRequestLimits(policy.MonthlyRequestQuota, policy.RequestsPerMinute);
+        if (!policy.AiEnabledByDefault)
+            aiConfig.UpdateSettings(aiConfig.Provider, null, false, policy.MonthlyTokenQuota, string.Empty);
+        _dbContext.WorkspaceAiConfigs.Add(aiConfig);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<WorkspaceDto>.Success(new WorkspaceDto(

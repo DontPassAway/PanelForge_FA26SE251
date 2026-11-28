@@ -41,7 +41,8 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
             .AsNoTracking()
             .Where(t => t.UserId == q.UserId && !t.IsDeleted
                         && t.Status == PaymentTransactionStatus.Approved
-                        && (t.Type == PaymentTransactionType.Topup || t.QrImageUrl == ""))
+                        && (t.Type == PaymentTransactionType.Topup || t.Type == PaymentTransactionType.Refund
+                            || t.QrImageUrl == ""))
             .OrderByDescending(t => t.ConfirmedAt ?? t.CreatedAt)
             .ThenByDescending(t => t.CreatedAt)
             .Take(50)
@@ -69,17 +70,19 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 PaymentTransactionType.Topup => t.BankBin switch
                 {
                     "GOOGLE_PLAY" => $"Nạp tiền Ví qua Google Play ({t.OrderCode})",
-                    "ADMIN_REFUND" => $"Hoàn tiền vào Ví ({t.OrderCode})",
                     _ => $"Nạp tiền Ví qua VietQR ({t.OrderCode})"
                 },
+                PaymentTransactionType.Refund => $"Hoàn tiền vào Ví ({t.OrderCode})",
                 PaymentTransactionType.ChapterUnlock => t.ChapterNumber.HasValue
                     ? $"Mở khóa Tập {t.ChapterNumber} - {t.SeriesTitle ?? "Truyện"}"
                     : $"Mở khóa chương truyện ({t.OrderCode})",
                 PaymentTransactionType.VipSubscription => $"Đăng ký gói đọc truyện VIP ({t.OrderCode})",
+                PaymentTransactionType.StudioPackage => $"Mua gói mở Studio ({t.OrderCode})",
                 _ => $"Giao dịch {t.OrderCode}"
             };
 
-            int signAmount = t.Type == PaymentTransactionType.Topup ? (int)t.AmountVnd : -(int)t.AmountVnd;
+            int signAmount = t.Type is PaymentTransactionType.Topup or PaymentTransactionType.Refund
+                ? (int)t.AmountVnd : -(int)t.AmountVnd;
 
             txDtos.Add(new WalletTransactionDto(
                 Id: t.Id.ToString(),
@@ -96,8 +99,9 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
         return Result<UserWalletDto>.Success(new UserWalletDto(
             BalanceVnd: balanceVndInt,
             BalanceCoins: balanceVndInt / 100,
-            IsVip: wallet.IsVip && (wallet.VipExpiresAt == null || wallet.VipExpiresAt > DateTime.UtcNow),
-            VipExpiresAt: wallet.VipExpiresAt,
+            // Q4 (OPS-11): VIP không còn quyền đọc; giữ trường cho client cũ nhưng luôn báo không VIP.
+            IsVip: false,
+            VipExpiresAt: null,
             UnlockedChapterIds: unlockedChapterIds,
             Transactions: txDtos
         ));

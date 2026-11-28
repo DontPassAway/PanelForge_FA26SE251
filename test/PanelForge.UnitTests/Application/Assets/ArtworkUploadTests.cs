@@ -38,6 +38,7 @@ public class ArtworkUploadTests
         public readonly List<Panel> Panels = [];
         public readonly List<StageTask> Cells = [];
         public readonly List<StageTaskLot> Lots = [];
+        public readonly List<UploadLimitPolicy> UploadLimitPolicies = [];
         public readonly Mock<IPanelForgeDbContext> Db = new();
         public readonly Mock<IAssetStorage> Storage = new();
         public readonly Mock<IPageRepository> PageRepo = new();
@@ -78,6 +79,7 @@ public class ArtworkUploadTests
             Db.Setup(d => d.StageTasks).Returns(DbSetMockHelper.CreateDbSetMock(Cells));
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
             Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
+            Db.Setup(d => d.UploadLimitPolicies).Returns(DbSetMockHelper.CreateDbSetMock(UploadLimitPolicies));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         }
 
@@ -226,7 +228,18 @@ public class ArtworkUploadTests
         var f = new Fixture();
 
         (await f.Upload([])).ErrorCode.Should().Be(ResultErrorCodes.Validation);
-        (await f.Upload(Png(size: 25 * 1024 * 1024 + 1))).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        (await f.Upload(Png(size: 25 * 1024 * 1024 + 1))).ErrorCode.Should().Be(ResultErrorCodes.FileTooLarge);
+        f.Assets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_OverAdminArtworkLimit_IsFileTooLarge_WithoutReservingStorage()
+    {
+        var f = new Fixture(quota: 100 * 1024 * 1024);
+        f.UploadLimitPolicies.Add(UploadLimitPolicy.Create(1024 * 1024, 10 * 1024 * 1024, 5 * 1024 * 1024, Guid.NewGuid()));
+
+        (await f.Upload(Png(size: 1024 * 1024 + 1))).ErrorCode.Should().Be(ResultErrorCodes.FileTooLarge);
+        f.Workspace.UsedStorageBytes.Should().Be(0);
         f.Assets.Should().BeEmpty();
     }
 

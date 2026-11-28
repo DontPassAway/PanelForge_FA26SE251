@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using MediatR;
+using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Application.Features.Quotas.Queries.GetUploadLimits;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
@@ -17,8 +19,8 @@ namespace PanelForge.API.Controllers;
 [Authorize]
 public sealed class AssetsController : ControllerBase
 {
-    // 25 MB nội dung + dư cho phần còn lại của multipart
-    private const long MaxRequestBytes = 26 * 1024 * 1024;
+    // Trần artwork + dư cho phần còn lại của multipart; giới hạn thật do Admin đặt, kiểm trong handler
+    private const long MaxRequestBytes = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ArtworkCeilingBytes + 1024 * 1024;
 
     private readonly IMediator _mediator;
 
@@ -59,6 +61,15 @@ public sealed class AssetsController : ControllerBase
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetPageArtwork), new { chapterId, pageId }, result.Value)
             : Error(result);
+    }
+
+    /// <summary>GET /api/assets/upload-limits — giới hạn kích thước file đang áp (byte), để client kiểm trước khi gửi.</summary>
+    [HttpGet("api/assets/upload-limits")]
+    [ProducesResponseType(typeof(UploadLimitsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUploadLimits(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetUploadLimitsQuery(), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
     /// <summary>GET /api/chapters/{chapterId}/pages/{pageId}/artwork?stageId= — các phiên bản artwork của Page (thành viên Workspace).</summary>
@@ -110,7 +121,8 @@ public sealed class AssetsController : ControllerBase
         ResultErrorCodes.Conflict => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode }),
         ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorMessage, code = result.ErrorCode }),
         ResultErrorCodes.Unauthorized => Unauthorized(new { error = result.ErrorMessage }),
-        _ => BadRequest(new { error = result.ErrorMessage })
+        ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = result.ErrorMessage, code = result.ErrorCode }),
+        _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
     };
 }
 

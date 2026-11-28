@@ -108,6 +108,18 @@ public sealed class ThumbnailTests
     }
 
     [Fact]
+    public async Task StorageAlmostFull_ReturnsConflict_BeforeCallingAi_OPS02()
+    {
+        var c = await SetupAsync();
+        var workspace = await c.H.Db.StudioWorkspaces.SingleAsync();
+        workspace.SetStorageQuota(1024);
+        await c.H.Db.SaveChangesAsync();
+
+        (await RunAsync(c)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        c.H.AiClient.Verify(a => a.GenerateImageAsync(It.IsAny<ImageGenRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ImageQuotaAndConcurrentJobLimit_ReturnQuotaExceeded_BeforeDecryptingKey()
     {
         var c = await SetupAsync();

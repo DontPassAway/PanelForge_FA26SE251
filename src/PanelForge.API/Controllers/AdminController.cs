@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Quotas.Commands.UpdateUploadLimits;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
@@ -6,13 +7,18 @@ using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
 using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
+using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
+using PanelForge.Application.Features.Admin.Queries.GetAdminStudioPackage;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
 using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
+using PanelForge.Application.Features.Admin.Queries.GetAdminUserDetail;
+using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaceDetail;
+using PanelForge.Application.Features.Admin.Queries.GetSystemHealth;
 using PanelForge.Application.Features.Audit.Queries.ExportAuditLogs;
 using PanelForge.Application.Features.Audit.Queries.GetAuditLogs;
 using PanelForge.Application.Features.Users.Commands.GrantStudioPermission;
@@ -54,6 +60,17 @@ using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
 using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
 using PanelForge.Application.Features.AiUsage.Queries.ExportAiUsageRecords;
 using PanelForge.Domain.Enums;
+using System.Security.Claims;
+using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaPolicy;
+using PanelForge.Application.Features.Quotas.Commands.UpdateQuotaPolicy;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
+using PanelForge.Application.Features.Quotas.Commands.ApproveQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Commands.RejectQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Queries.GetAdminResources;
+using PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResources;
+using PanelForge.Application.Features.Quotas.Commands.ReconcileStorage;
+using PanelForge.Application.Features.Quotas.Commands.DeleteOrphanFiles;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.AiUsage.Models;
 using PanelForge.Application.Features.Audit.Models;
@@ -193,6 +210,36 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetSystemStats(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetSystemStatsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/admin/system-health — gọi thử DB, kho file, service AI và đếm việc nền kẹt/lỗi (OPS-32).
+    /// Luôn 200: thành phần hỏng nằm trong body với status Down.
+    /// </summary>
+    [HttpGet("system-health")]
+    [ProducesResponseType(typeof(SystemHealthDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSystemHealth(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSystemHealthQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/users/{id} — chi tiết tài khoản: phiên, Studio, Ví, AI tháng này, nhật ký gần đây (OPS-30).</summary>
+    [HttpGet("users/{id:guid}")]
+    [ProducesResponseType(typeof(AdminUserDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUserDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminUserDetailQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/workspaces/{id} — chi tiết Studio: tài nguyên, thành viên, Series, yêu cầu, AI 30 ngày (OPS-31).</summary>
+    [HttpGet("workspaces/{id:guid}")]
+    [ProducesResponseType(typeof(AdminWorkspaceDetailDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetWorkspaceDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminWorkspaceDetailQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -562,6 +609,32 @@ public class AdminController : ControllerBase
         });
     }
 
+    // ─── D11: Gói mở Studio ────────────────────────────────────────────────────
+
+    /// <summary>GET /api/admin/studio-package — giá gói mở Studio hiện hành và số lượt đã mua.</summary>
+    [HttpGet("studio-package")]
+    [ProducesResponseType(typeof(AdminStudioPackageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStudioPackage(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminStudioPackageQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>PUT /api/admin/studio-package/price — đặt giá gói mở Studio (append-only, có audit).</summary>
+    [HttpPut("studio-package/price")]
+    [ProducesResponseType(typeof(AdminStudioPackageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetStudioPackagePrice(
+        [FromBody] SetStudioPackagePriceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new SetStudioPackagePriceCommand(adminId.Value, request.PriceVnd), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+    }
+
     // ─── Element Type Master Data ──────────────────────────────────────────────
 
     [HttpGet("element-types")]
@@ -744,4 +817,134 @@ public class AdminController : ControllerBase
         var result = await _mediator.Send(new UpdateWorkspaceQuotaCommand(id, request.StorageQuotaBytes), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
+    // ─── OPS-20..23: chính sách hạn mức, yêu cầu tăng hạn mức, màn Tài nguyên ───
+
+    /// <summary>GET /api/admin/quota-policy — hạn mức cấp cho Studio mới (OPS-20).</summary>
+    [HttpGet("quota-policy")]
+    [ProducesResponseType(typeof(QuotaPolicyDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaPolicy(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotaPolicyQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/admin/quota-policy — lưu chính sách mới, chỉ áp cho Studio tạo sau đó (OPS-20).</summary>
+    [HttpPut("quota-policy")]
+    [ProducesResponseType(typeof(QuotaPolicyDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateQuotaPolicy([FromBody] UpdateQuotaPolicyRequest request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new UpdateQuotaPolicyCommand(
+            adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
+            request.AiEnabledByDefault, request.WarningThresholdPercent,
+            request.MonthlyRequestQuota, request.RequestsPerMinute), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/upload-limits — giới hạn kích thước một file tải lên cho toàn nền tảng, áp ngay (đọc qua
+    /// <c>GET /api/assets/upload-limits</c>). Mỗi lần lưu là một bản ghi mới.
+    /// </summary>
+    [HttpPut("upload-limits")]
+    [ProducesResponseType(typeof(UploadLimitsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateUploadLimits([FromBody] UpdateUploadLimitsRequest request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new UpdateUploadLimitsCommand(
+            adminId, request.ArtworkMaxBytes, request.ReferenceImageMaxBytes, request.CoverImageMaxBytes), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/quota-requests?status=Pending — yêu cầu tăng hạn mức của mọi Studio (OPS-21).</summary>
+    [HttpGet("quota-requests")]
+    [ProducesResponseType(typeof(IReadOnlyList<QuotaIncreaseRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaRequests(
+        [FromQuery] QuotaIncreaseRequestStatus? status, [FromQuery] QuotaResourceType? resourceType, [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetQuotaIncreaseRequestsQuery(null, status, ResourceType: resourceType, Search: search), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/quota-requests/{id}/approve — duyệt, cấp mức xin hoặc mức Admin chọn (OPS-21).</summary>
+    [HttpPost("quota-requests/{id:guid}/approve")]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApproveQuotaRequest(
+        Guid id, [FromBody] ApproveQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(
+            new ApproveQuotaIncreaseRequestCommand(id, adminId, request.GrantedQuota, request.Note), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/quota-requests/{id}/reject — từ chối kèm lý do (OPS-21).</summary>
+    [HttpPost("quota-requests/{id:guid}/reject")]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RejectQuotaRequest(
+        Guid id, [FromBody] RejectQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new RejectQuotaIncreaseRequestCommand(id, adminId, request.Note), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/resources — mức dùng và mức cấp của mọi Studio (OPS-23).</summary>
+    [HttpGet("resources")]
+    [ProducesResponseType(typeof(AdminResourceOverviewDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetResources(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminResourcesQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/workspaces/{id}/resources — chỉnh cấp phát một Studio (OPS-23); null = giữ, 0 = không giới hạn.
+    /// Bắt buộc lý do; Nhật ký hệ thống ghi giá trị cũ, mới và lý do.
+    /// </summary>
+    [HttpPut("workspaces/{id:guid}/resources")]
+    [ProducesResponseType(typeof(AdminWorkspaceResourceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateWorkspaceResources(
+        Guid id, [FromBody] UpdateWorkspaceResourcesRequest request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new UpdateWorkspaceResourcesCommand(
+            id, adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
+            request.AiEnabled, request.Reason ?? string.Empty,
+            request.MonthlyRequestQuota, request.RequestsPerMinute), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/admin/storage/reconcile?apply=false — đối soát kho file (OPS-22): dung lượng thật của từng Studio từ file còn
+    /// được dùng, kèm danh sách file mồ côi. apply=true ghi lại dung lượng đã tính. Không xoá file nào.
+    /// </summary>
+    [HttpPost("storage/reconcile")]
+    [ProducesResponseType(typeof(StorageReconcileReportDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ReconcileStorage([FromQuery] bool apply, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ReconcileStorageCommand(apply), cancellationToken);
+        // 409 chỉ trả message: lời nhắc "chạy lại" cụ thể hơn câu dịch chung của mã CONFLICT ở FE.
+        if (result.ErrorCode == ResultErrorCodes.Conflict) return Conflict(new { message = result.ErrorMessage });
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/admin/storage/orphans/delete — xoá file mồ côi đã cũ hơn 7 ngày của Studio đang hoạt động (OPS-22).
+    /// Không khôi phục được; FE bắt Admin xác nhận. File không rõ chủ và bản ghi lịch sử không bị đụng.
+    /// </summary>
+    [HttpPost("storage/orphans/delete")]
+    [ProducesResponseType(typeof(DeleteOrphanFilesResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DeleteOrphanFiles(CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new DeleteOrphanFilesCommand(adminId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    private Guid? CurrentUserId()
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var id) ? id : null;
 }

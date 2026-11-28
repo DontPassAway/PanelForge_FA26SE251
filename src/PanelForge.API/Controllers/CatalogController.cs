@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Models;
 using PanelForge.Application.Features.Catalog;
+using PanelForge.Application.Features.Payments.Models;
+using PanelForge.Application.Features.Payments.Queries.GetStudioPackage;
 
 namespace PanelForge.API.Controllers;
 
@@ -19,6 +21,15 @@ public class CatalogController : ControllerBase
     private readonly IMediator _mediator;
 
     public CatalogController(IMediator mediator) => _mediator = mediator;
+
+    /// <summary>GET /api/catalog/studio-package — giá gói mở Studio đang bán (D11); <c>priceVnd</c> null khi chưa bán.</summary>
+    [HttpGet("studio-package")]
+    [ProducesResponseType(typeof(StudioPackageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStudioPackage(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetStudioPackageQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
 
     /// <summary>GET /api/catalog/series — danh sách Series có ít nhất một chương Published.</summary>
     [HttpGet("series")]

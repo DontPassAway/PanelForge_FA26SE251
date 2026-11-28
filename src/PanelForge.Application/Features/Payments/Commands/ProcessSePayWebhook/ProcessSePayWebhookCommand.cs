@@ -33,6 +33,8 @@ public enum SePayWebhookOutcome
     IgnoredNoOrderCode,
     IgnoredOrderNotFound,
     IgnoredAlreadyProcessed,
+    /// <summary>Đơn đã duyệt bởi một lần chuyển khoản khác: độc giả trả hai lần, cần đối soát và hoàn tay.</summary>
+    IgnoredPaidTwice,
     IgnoredAccountMismatch,
     IgnoredAmountTooLow
 }
@@ -76,10 +78,21 @@ public sealed partial class ProcessSePayWebhookCommandHandler
         if (tx is null)
             return Done(SePayWebhookOutcome.IgnoredOrderNotFound, p, orderCode);
 
-        // SePay gửi lại khi lỗi mạng → đơn đã duyệt thì bỏ qua (idempotent theo trạng thái đơn).
+        // OPS-12: SePay gửi lại cùng giao dịch (cùng Id) → bỏ qua. Producer đã duyệt tay (chưa gắn mã giao dịch) → coi
+        // chính lần chuyển này là tiền Producer đã thấy. Đơn đã xong bởi giao dịch khác hoặc đã bị từ chối → không cộng,
+        // nhưng ghi cảnh báo để đối soát vì tiền thật đã vào tài khoản.
         // Đơn Expired vẫn được duyệt nếu tiền đã vào đúng tài khoản: độc giả đã trả tiền thật.
+        var reference = $"sepay:{p.Id}";
         if (tx.Status is not (PaymentTransactionStatus.Pending or PaymentTransactionStatus.Expired))
-            return Done(SePayWebhookOutcome.IgnoredAlreadyProcessed, p, orderCode);
+        {
+            if (tx.ProviderReference == reference
+                || (tx.Status == PaymentTransactionStatus.Approved && tx.ProviderReference is null))
+                return Done(SePayWebhookOutcome.IgnoredAlreadyProcessed, p, orderCode);
+            _logger.LogWarning(
+                "SePay webhook {SePayId} ({Reference}) trả cho đơn {OrderCode} đã ở trạng thái {Status} (giao dịch {Existing}): cần đối soát, {Amount} VND",
+                p.Id, p.ReferenceCode, orderCode, tx.Status, tx.ProviderReference, p.TransferAmount);
+            return Result<SePayWebhookOutcome>.Success(SePayWebhookOutcome.IgnoredPaidTwice);
+        }
 
         // Tiền phải vào đúng tài khoản ghi trên QR của đơn (chính hoặc tài khoản ảo/VA).
         if (!SameAccount(p.AccountNumber, tx.BankAccountNo) && !SameAccount(p.SubAccount, tx.BankAccountNo))
@@ -89,10 +102,11 @@ public sealed partial class ProcessSePayWebhookCommandHandler
             return Done(SePayWebhookOutcome.IgnoredAmountTooLow, p, orderCode);
 
         if (tx.Status == PaymentTransactionStatus.Expired) tx.Reopen();
-        tx.Approve(confirmedByUserId: null, DateTime.UtcNow);
+        tx.Approve(confirmedByUserId: null, DateTime.UtcNow, reference);
         await PaymentFulfillment.GrantAsync(_db, tx, tx.WorkspaceId ?? Guid.Empty, ct);
         // Hai lần gửi đến cùng lúc (hoặc Producer duyệt tay đúng lúc này): giao dịch và ví có concurrency token,
         // lần lưu sau ném DbUpdateConcurrencyException → 409 → SePay gửi lại → lần đó gặp IgnoredAlreadyProcessed.
+        // provider_reference là khoá duy nhất nên cùng một giao dịch ngân hàng cũng không thể duyệt hai đơn.
         await _db.SaveChangesAsync(ct);
 
         return Done(SePayWebhookOutcome.Approved, p, orderCode);

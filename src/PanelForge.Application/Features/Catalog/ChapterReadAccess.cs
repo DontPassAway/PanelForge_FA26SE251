@@ -26,16 +26,16 @@ public sealed record EditionTerms(bool IsPaid, decimal PriceVnd, int FreePreview
 /// Quyền đọc ấn bản ngôn ngữ trên các API catalog công khai. Mua ấn bản mở mọi trang của đúng ngôn ngữ đó;
 /// người chưa mua chỉ xem N trang đầu, N = <c>ChapterEdition.FreePreviewPages</c> (BR-33). Ấn bản Free mở toàn bộ.
 /// Được đọc khi: Publisher/Admin hệ thống, thành viên đang hoạt động của Studio sở hữu truyện,
-/// VIP còn hạn, hoặc đã mua (entitlement) <b>đúng ngôn ngữ</b> đang đọc — mua theo từng bản ngôn ngữ.
+/// hoặc đã mua (entitlement) <b>đúng ngôn ngữ</b> đang đọc — mua theo từng bản ngôn ngữ.
 /// Một nguồn duy nhất cho danh sách chương, nội dung chương, ảnh trang và mở khóa để các nơi không lệch nhau.
 /// </summary>
 public static class ChapterReadAccess
 {
     public const string LockedMessage =
-        "Chương truyện trả phí. Vui lòng đăng nhập và mở khóa chương (bằng Ví, VietQR hoặc gói VIP) để đọc.";
+        "Chương truyện trả phí. Vui lòng đăng nhập và mở khóa chương (bằng Ví hoặc VietQR) để đọc.";
 
     public const string LockedPageMessage =
-        "Trang thuộc chương trả phí. Vui lòng mở khóa chương (bằng Ví, VietQR hoặc gói VIP) để xem.";
+        "Trang thuộc chương trả phí. Vui lòng mở khóa chương (bằng Ví hoặc VietQR) để xem.";
 
     public const string LanguageUnavailableMessage = "Bản ngôn ngữ này của chương chưa phát hành.";
 
@@ -57,10 +57,6 @@ public static class ChapterReadAccess
                            && m.Status == WorkspaceMemberStatus.Active, ct);
     }
 
-    public static Task<bool> HasActiveVipAsync(IPanelForgeDbContext db, Guid userId, DateTime now, CancellationToken ct) =>
-        db.ReaderWallets.AsNoTracking()
-            .AnyAsync(w => w.UserId == userId && !w.IsDeleted && w.IsVip
-                           && (w.VipExpiresAt == null || w.VipExpiresAt > now), ct);
 
     // ─── Ngôn ngữ & giá ───────────────────────────────────────────────────────
 
@@ -191,7 +187,6 @@ public static class ChapterReadAccess
         if (!isLocked) return true;
         if (!userId.HasValue) return false;
         if (await IsStaffAsync(db, userId, workspaceId, ct)) return true;
-        if (await HasActiveVipAsync(db, userId.Value, DateTime.UtcNow, ct)) return true;
 
         return await db.ChapterEntitlements.AsNoTracking()
             .AnyAsync(e => e.UserId == userId.Value && e.ChapterId == chapterId && e.Language == language && !e.IsDeleted, ct);

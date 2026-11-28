@@ -38,8 +38,24 @@ public class AiWorkflowRun : BaseEntity
     public string? ErrorMessage { get; private set; }
     public DateTime LastActivityAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    /// <summary>OPS-03: token đã giữ chỗ trước khi gọi AI service, chưa chốt. Bước đầu có token chốt phần này; run kết thúc thì trả lại phần còn.</summary>
+    public long ReservedTokens { get; private set; }
 
     private AiWorkflowRun() { }
+
+    public void HoldReservation(long tokens)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(tokens);
+        ReservedTokens = tokens;
+    }
+
+    /// <summary>Lấy phần giữ chỗ còn lại để chốt hoặc trả, rồi về 0 (chỉ chốt một lần).</summary>
+    public long TakeReservation()
+    {
+        var tokens = ReservedTokens;
+        ReservedTokens = 0;
+        return tokens;
+    }
 
     public static AiWorkflowRun Create(
         Guid workspaceId, Guid seriesId, Guid chapterId, Guid? sceneId, Guid requestedByUserId,
