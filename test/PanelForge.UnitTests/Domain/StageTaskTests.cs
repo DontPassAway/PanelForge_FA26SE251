@@ -40,6 +40,26 @@ public class StageTaskTests
     }
 
     [Fact]
+    public void SiblingBranchEnds_OnlyForLastStageOfEachBranch_SkipsDisabledColor()
+    {
+        var pencil = Stage("Pencil", 1);
+        var ink = Stage("Ink", 2, "A");
+        var color = Stage("Color", 3, "A");
+        var lettering = Stage("Lettering", 4, "B");
+        var approved = Stage("Approved", 5);
+        var all = new[] { pencil, ink, color, lettering, approved };
+
+        Names(StageDependencies.SiblingBranchEnds(color, all)).Should().Equal("Lettering");
+        Names(StageDependencies.SiblingBranchEnds(lettering, all)).Should().Equal("Color");
+        StageDependencies.SiblingBranchEnds(ink, all).Should().BeEmpty("Ink chưa phải bước cuối nhánh A");
+        StageDependencies.SiblingBranchEnds(pencil, all).Should().BeEmpty();
+
+        color.SetEnabled(false);
+        Names(StageDependencies.SiblingBranchEnds(ink, all)).Should().Equal("Lettering");
+        Names(StageDependencies.SiblingBranchEnds(lettering, all)).Should().Equal("Ink");
+    }
+
+    [Fact]
     public void Prerequisites_DisabledColor_IsSkipped_ReviewWaitsForInkAndLettering()
     {
         var pencil = Stage("Pencil", 1);

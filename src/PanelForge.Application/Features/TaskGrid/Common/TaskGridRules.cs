@@ -40,6 +40,27 @@ internal static class TaskGridRules
     }
 
     /// <summary>
+    /// Gate 2 ghép (Module 3 mục 1): ô bước cuối của một nhánh chỉ được duyệt khi bước cuối các nhánh song song của cùng trang
+    /// (hoặc ô cấp Chương của chúng) đã nộp, đang duyệt hoặc đã duyệt, để Editor xem trang có cả tranh lẫn chữ.
+    /// Trả tên công đoạn còn chờ, hoặc null nếu đã đủ.
+    /// </summary>
+    public static string? AwaitingSiblingBranch(StageTask task, IReadOnlyList<PipelineStage> stages, IReadOnlyList<StageTask> chapterTasks)
+    {
+        var stage = stages.FirstOrDefault(s => s.Id == task.PipelineStageId);
+        if (stage is null) return null;
+
+        foreach (var sibling in StageDependencies.SiblingBranchEnds(stage, stages))
+        {
+            var cells = chapterTasks.Where(t => t.PipelineStageId == sibling.Id && t.Status != StageTaskStatus.Cancelled
+                                                && (task.PageId is null || t.PageId == task.PageId || t.PageId == null)).ToList();
+            if (cells.Count == 0 || cells.Any(t => t.Status is not (StageTaskStatus.Submitted or StageTaskStatus.UnderReview
+                    or StageTaskStatus.Approved)))
+                return sibling.Name;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Ô hạ nguồn (bắc cầu theo BR-19) của <paramref name="task"/>, chưa huỷ: cùng trang, hoặc một bên là ô cấp Chương.
     /// Dùng khi mở lại ô để gắn cờ đầu vào lỗi thời.
     /// </summary>

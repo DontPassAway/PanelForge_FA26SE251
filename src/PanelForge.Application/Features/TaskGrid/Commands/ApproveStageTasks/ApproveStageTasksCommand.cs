@@ -68,6 +68,8 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
                 blocked.Add((order, $"{Label(task)}: đầu vào đã lỗi thời, cần xử lý Impact Review trước.", ResultErrorCodes.Conflict));
             else if (task.Status is not (StageTaskStatus.Submitted or StageTaskStatus.UnderReview))
                 blocked.Add((order, $"{Label(task)}: đang {task.Status}, chưa có bài chờ duyệt.", ResultErrorCodes.Conflict));
+            else if (TaskGridRules.AwaitingSiblingBranch(task, stages, chapterTasks) is { } waiting)
+                blocked.Add((order, $"{Label(task)}: Gate 2 chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict));
         }
         if (blocked.Count > 0)
             return Fail(string.Join("\n", blocked.OrderBy(b => b.Order).Select(b => b.Message)),

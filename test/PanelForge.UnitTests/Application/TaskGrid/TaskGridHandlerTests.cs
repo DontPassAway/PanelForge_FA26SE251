@@ -190,7 +190,18 @@ public class TaskGridHandlerTests
                 foreach (var i in new[] { 0, 1 }) (await Start(Cell(stage, i), ArtistId)).IsSuccess.Should().BeTrue();
                 (await Submit(ArtistId, Cell(stage, 0), Cell(stage, 1))).IsSuccess.Should().BeTrue();
             }
+            await SubmitLettering(0, 1);
             return [Cell(Color, 0), Cell(Color, 1)];
+        }
+
+        /// <summary>Gate 2 ghép: Letterer nộp Lettering các trang, để ô bước cuối nhánh tranh (Color) duyệt được.</summary>
+        public async Task SubmitLettering(params int[] pageIndexes)
+        {
+            var cells = pageIndexes.Select(i => Cell(Lettering, i)).ToArray();
+            var unassigned = cells.Where(c => c.Status == StageTaskStatus.Unassigned).ToArray();
+            if (unassigned.Length > 0) (await Assign(false, Lot(Lettering, LettererId, unassigned))).IsSuccess.Should().BeTrue();
+            foreach (var c in cells) (await Start(c, LettererId)).IsSuccess.Should().BeTrue();
+            (await Submit(LettererId, cells)).IsSuccess.Should().BeTrue();
         }
 
         public Task<Result<GenerateStageTasksResultDto>> Generate() =>
@@ -707,6 +718,12 @@ public class TaskGridHandlerTests
         color.Status.Should().Be(StageTaskStatus.Submitted);
 
         (await f.Approve(color, f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        // Gate 2 ghép: Lettering của trang chưa nộp thì chưa duyệt được nhánh tranh
+        var early = await f.Approve(color, f.EditorId);
+        early.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        early.ErrorMessage.Should().Contain("Lettering");
+        color.Status.Should().Be(StageTaskStatus.Submitted);
+        await f.SubmitLettering(0);
         (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
 
         color.Status.Should().Be(StageTaskStatus.Approved);
@@ -924,6 +941,7 @@ public class TaskGridHandlerTests
         await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Sửa"), default);
         await f.Start(color, f.ArtistId);
         await f.Submit(f.ArtistId, color);
+        await f.SubmitLettering(0);
         (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
 
         var history = await new GetStageTaskSubmissionsQueryHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id), default);
@@ -989,6 +1007,7 @@ public class TaskGridHandlerTests
         {
             await f.Start(color, f.ArtistId);
             await f.Submit(f.ArtistId, color);
+            await f.SubmitLettering(0);
             await new ApproveStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId), default);
             (await Deny(f.ArtistId)).Should().Contain("không có ô việc");
         }
@@ -1193,6 +1212,7 @@ public class TaskGridHandlerTests
         item.StageName.Should().Be("Color");
         item.AssigneeUserId.Should().Be(f.ArtistId);
         item.AttemptNumber.Should().Be(1);
+        item.AwaitingStageName.Should().Be("Lettering", "Gate 2 ghép: chữ của trang chưa nộp");
 
         // Đang có người duyệt: hàng đợi trả tên người giữ khoá, FE khỏi gọi danh sách thành viên
         var editor = User.Create("ed@test.com", "Biên tập A");
