@@ -59,4 +59,6 @@ public static class ResultErrorCodes
     public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";
     /// <summary>File rỗng hoặc vượt giới hạn kích thước Admin đặt (<c>upload_limit_policies</c>) → HTTP 413.</summary>
     public const string FileTooLarge = "FILE_TOO_LARGE";
+    /// <summary>D12: kho tài nguyên của Producer không đủ để chia cho Studio (tạo mới / tăng hạn mức) → HTTP 409.</summary>
+    public const string InsufficientStudioResources = "INSUFFICIENT_STUDIO_RESOURCES";
 }

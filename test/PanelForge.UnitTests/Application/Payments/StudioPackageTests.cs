@@ -11,6 +11,7 @@ using PanelForge.Application.Features.Payments.Commands.CreateTopup;
 using PanelForge.Application.Features.Payments.Commands.PurchaseStudioPackage;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Application.Features.Payments.Queries.GetStudioPackage;
+using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -40,7 +41,7 @@ public class StudioPackageTests
         new SetStudioPackagePriceCommandHandler(_db).Handle(new SetStudioPackagePriceCommand(_admin.Id, priceVnd), default);
 
     private Task<Result<PurchaseStudioPackageResponse>> Purchase(Guid userId, int expectedPriceVnd) =>
-        new PurchaseStudioPackageCommandHandler(_db, new DefaultBankSettings())
+        new PurchaseStudioPackageCommandHandler(_db, new DefaultBankSettings(), new WorkspaceDefaultsSettings())
             .Handle(new PurchaseStudioPackageCommand(userId, expectedPriceVnd), default);
 
     private void FundWallet(Guid userId, decimal balanceVnd)

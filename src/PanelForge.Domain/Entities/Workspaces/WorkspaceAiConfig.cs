@@ -20,6 +20,12 @@ public class WorkspaceAiConfig : BaseEntity
     public long MonthlyTokenQuota { get; private set; } = 1_000_000;
     public long UsedTokensCurrentMonth { get; private set; } = 0;
 
+    /// <summary>
+    /// D12: Studio dùng token chia từ kho Producer đã mua một lần. Khi true, <see cref="MonthlyTokenQuota"/> là tổng
+    /// token được chia (không theo tháng) và <see cref="UsedTokensCurrentMonth"/> là tổng đã dùng, không reset đầu tháng.
+    /// </summary>
+    public bool IsPrepaidTokenBudget { get; private set; }
+
     /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
     public long MonthlyImageQuota { get; private set; } = 0;
     public long UsedImagesCurrentMonth { get; private set; } = 0;
@@ -230,9 +236,23 @@ public class WorkspaceAiConfig : BaseEntity
         return last.Year == utcNow.Year && last.Month == utcNow.Month;
     }
 
+    /// <summary>D12: chuyển Studio sang token mua một lần (đặt khi chia tài nguyên từ kho Producer).</summary>
+    public void UsePrepaidTokenBudget(long totalTokens)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(totalTokens);
+        IsPrepaidTokenBudget = true;
+        MonthlyTokenQuota = totalTokens;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Bộ đếm token có thuộc kỳ đang hiển thị không: token mua một lần luôn tính, token theo tháng chỉ khi cùng tháng.</summary>
+    public static bool AreTokensCounted(bool isPrepaid, DateTime? lastResetAt, DateTime createdAt, DateTime utcNow)
+        => isPrepaid || IsCountedThisMonth(lastResetAt, createdAt, utcNow);
+
     public void ResetMonthlyUsage()
     {
-        UsedTokensCurrentMonth = 0;
+        // D12: token mua một lần dùng tới khi hết, không trả lại đầu tháng
+        if (!IsPrepaidTokenBudget) UsedTokensCurrentMonth = 0;
         UsedImagesCurrentMonth = 0;
         UsedRequestsCurrentMonth = 0;
         LastResetAt = DateTime.UtcNow;

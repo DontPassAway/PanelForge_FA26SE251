@@ -38,6 +38,9 @@ using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceReaderStats
 using PanelForge.Application.Features.Quotas.Models;
 using PanelForge.Application.Features.Quotas.Commands.SubmitQuotaIncreaseRequest;
 using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
+using PanelForge.Application.Features.StudioResources.Commands.AllocateStudioResources;
+using PanelForge.Application.Features.StudioResources.Models;
+using PanelForge.Application.Features.StudioResources.Queries.GetMyStudioResources;
 
 namespace PanelForge.API.Controllers;
 
@@ -61,10 +64,41 @@ public class WorkspacesController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(
-            new CreateWorkspaceCommand(userId, request.Name), cancellationToken);
+            new CreateWorkspaceCommand(userId, request.Name, request.StorageQuotaBytes, request.TokenQuota), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Value!.Id }, result.Value)
             : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/workspaces/resources — kho tài nguyên (dung lượng, token AI mua một lần) của người đang đăng nhập,
+    /// phần đã chia cho từng Studio họ sở hữu và phần còn lại (D12).
+    /// </summary>
+    [HttpGet("resources")]
+    [ProducesResponseType(typeof(StudioResourcesDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyResources(CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new GetMyStudioResourcesQuery(userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/workspaces/{id}/resources — chủ Studio chia lại dung lượng / token từ kho cho Studio này (D12).</summary>
+    [HttpPut("{id:guid}/resources")]
+    [ProducesResponseType(typeof(StudioResourcesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> AllocateResources(
+        Guid id, [FromBody] AllocateStudioResourcesRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(
+            new AllocateStudioResourcesCommand(userId, id, request.StorageQuotaBytes, request.TokenQuota), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     [HttpGet]
@@ -524,6 +558,7 @@ public class WorkspacesController : ControllerBase
             ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
             ResultErrorCodes.NotFound => StatusCode(notFoundStatus, body),
             ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.InsufficientStudioResources => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(body)
         };
     }

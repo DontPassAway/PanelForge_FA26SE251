@@ -22,6 +22,7 @@ public interface IPanelForgeDbContext
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
+    DbSet<StudioResourcePool> StudioResourcePools { get; }
     DbSet<QuotaPolicy> QuotaPolicies { get; }
     DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests { get; }
     DbSet<UploadLimitPolicy> UploadLimitPolicies { get; }
@@ -91,6 +92,7 @@ public interface IPanelForgeDbContext
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<PlatformBankAccount> PlatformBankAccounts { get; }
     DbSet<StudioPackagePrice> StudioPackagePrices { get; }
+    DbSet<StudioResourcePrice> StudioResourcePrices { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
     DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }

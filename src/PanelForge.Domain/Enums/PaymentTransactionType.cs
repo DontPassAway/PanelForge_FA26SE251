@@ -18,6 +18,9 @@ public enum PaymentTransactionType
     Refund = 4,
 
     /// <summary>Độc giả mua gói mở Studio bằng Ví (D11): cấp CanCreateStudio vĩnh viễn; doanh thu nền tảng, không thuộc Workspace.</summary>
-    StudioPackage = 5
+    StudioPackage = 5,
+
+    /// <summary>Producer mua thêm dung lượng / token AI bằng Ví (D12): cộng vào kho tài nguyên; doanh thu nền tảng.</summary>
+    StudioResources = 6
 }
 
