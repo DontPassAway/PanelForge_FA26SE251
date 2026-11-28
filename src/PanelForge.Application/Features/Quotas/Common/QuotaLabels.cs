@@ -10,6 +10,7 @@ internal static class QuotaLabels
         QuotaResourceType.Storage => "dung lượng lưu trữ",
         QuotaResourceType.AiTokens => "token AI mỗi tháng",
         QuotaResourceType.AiImages => "ảnh AI mỗi tháng",
+        QuotaResourceType.AiRequests => "lượt gọi AI mỗi tháng",
         _ => type.ToString()
     };
 }

@@ -184,6 +184,27 @@ public class QuotaGovernanceTests
     }
 
     [Fact]
+    public async Task Approve_AiRequests_RaisesMonthlyRequestQuota_KeepsPerMinute_OPS24()
+    {
+        var (db, admin, producer, ws, ai) = await SeedAsync();
+        await using var _db = db;
+        ai.SetRequestLimits(500, 10);
+        await db.SaveChangesAsync();
+
+        var submitted = await new SubmitQuotaIncreaseRequestCommandHandler(db).Handle(
+            new SubmitQuotaIncreaseRequestCommand(ws.Id, producer.Id, QuotaResourceType.AiRequests, 2_000, "Chạy kịch bản cả mùa"), CancellationToken.None);
+        submitted.Value!.CurrentQuota.Should().Be(500);
+
+        await new ApproveQuotaIncreaseRequestCommandHandler(db).Handle(
+            new ApproveQuotaIncreaseRequestCommand(submitted.Value.Id, admin.Id, null, null), CancellationToken.None);
+
+        var config = (await db.WorkspaceAiConfigs.FindAsync(ai.Id))!;
+        config.MonthlyRequestQuota.Should().Be(2_000);
+        config.RequestsPerMinuteLimit.Should().Be(10);
+        db.Notifications.Should().Contain(n => n.UserId == producer.Id && n.Message.Contains("lượt gọi AI"));
+    }
+
+    [Fact]
     public async Task Approve_AlreadyReviewed_IsConflict_OPS21()
     {
         var (db, admin, producer, ws, _) = await SeedAsync();

@@ -11,6 +11,8 @@ public sealed record UsageMeterDto(long Used, long Quota, bool IsUnlimited, doub
 
 /// <param name="AiTokens">Null nếu Workspace chưa có cấu hình AI (query này không tự tạo cấu hình).</param>
 /// <param name="Images">Ảnh sinh ra trong tháng so với quota; null nếu chưa có cấu hình AI. Quota 0 = không giới hạn.</param>
+/// <param name="AiRequests">Lượt gọi AI trong tháng so với quota (OPS-24); null nếu chưa có cấu hình AI.</param>
+/// <param name="RequestsPerMinuteLimit">Lượt gọi AI tối đa mỗi phút, 0 = không giới hạn.</param>
 /// <param name="ActiveSessions">Số lượng thiết bị/phiên đang đăng nhập đồng thời của Studio so với quota.</param>
 /// <param name="ActiveMemberCount">Số lượng thành viên đang có ít nhất 1 phiên hoạt động.</param>
 /// <param name="MaxConcurrentSessionsPerUser">Chính sách số phiên đồng thời tối đa cho mỗi thành viên.</param>
@@ -22,7 +24,9 @@ public sealed record WorkspaceUsageDto(
     UsageMeterDto? Images = null,
     UsageMeterDto? ActiveSessions = null,
     int? ActiveMemberCount = null,
-    int? MaxConcurrentSessionsPerUser = null);
+    int? MaxConcurrentSessionsPerUser = null,
+    UsageMeterDto? AiRequests = null,
+    int? RequestsPerMinuteLimit = null);
 
 public sealed record GetWorkspaceUsageQuery(Guid WorkspaceId) : IRequest<Result<WorkspaceUsageDto>>;
 
@@ -43,7 +47,8 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
 
         var ai = await _db.WorkspaceAiConfigs.AsNoTracking()
             .Where(c => c.WorkspaceId == q.WorkspaceId)
-            .Select(c => new { c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.IsEnabled, c.MonthlyImageQuota, c.UsedImagesCurrentMonth, c.LastResetAt, c.CreatedAt })
+            .Select(c => new { c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.IsEnabled, c.MonthlyImageQuota, c.UsedImagesCurrentMonth,
+                c.MonthlyRequestQuota, c.UsedRequestsCurrentMonth, c.RequestsPerMinuteLimit, c.LastResetAt, c.CreatedAt })
             .FirstOrDefaultAsync(ct);
         // OPS-22: tháng mới mà chưa gọi AI lần nào thì bộ đếm còn số tháng trước; hiện 0
         var aiCounted = ai is not null && WorkspaceAiConfig.IsCountedThisMonth(ai.LastResetAt, ai.CreatedAt, DateTime.UtcNow);
@@ -78,7 +83,9 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
             ai is null ? null : Meter(aiCounted ? ai.UsedImagesCurrentMonth : 0, ai.MonthlyImageQuota),
             Meter(activeSessionsCount, sessionQuota),
             activeMembersCount,
-            workspace.MaxConcurrentSessions));
+            workspace.MaxConcurrentSessions,
+            ai is null ? null : Meter(aiCounted ? ai.UsedRequestsCurrentMonth : 0, ai.MonthlyRequestQuota),
+            ai?.RequestsPerMinuteLimit));
     }
 
     private static UsageMeterDto Meter(long used, long quota) =>

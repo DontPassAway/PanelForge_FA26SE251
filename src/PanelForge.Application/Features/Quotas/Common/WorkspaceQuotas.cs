@@ -14,6 +14,7 @@ internal static class WorkspaceQuotas
         QuotaResourceType.Storage => workspace.StorageQuotaBytes,
         QuotaResourceType.AiTokens => ai?.MonthlyTokenQuota,
         QuotaResourceType.AiImages => ai?.MonthlyImageQuota,
+        QuotaResourceType.AiRequests => ai?.MonthlyRequestQuota,
         _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 
@@ -33,8 +34,13 @@ internal static class WorkspaceQuotas
             db.WorkspaceAiConfigs.Add(ai);
         }
 
-        if (type == QuotaResourceType.AiTokens) ai.SetMonthlyTokenQuota(quota);
-        else ai.SetMonthlyImageQuota(quota);
+        switch (type)
+        {
+            case QuotaResourceType.AiTokens: ai.SetMonthlyTokenQuota(quota); break;
+            case QuotaResourceType.AiImages: ai.SetMonthlyImageQuota(quota); break;
+            case QuotaResourceType.AiRequests: ai.SetRequestLimits(quota, null); break;
+            default: throw new ArgumentOutOfRangeException(nameof(type));
+        }
         return ai;
     }
 

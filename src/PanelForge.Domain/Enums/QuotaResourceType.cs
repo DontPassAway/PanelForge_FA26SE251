@@ -8,5 +8,7 @@ public enum QuotaResourceType
     /// <summary>Token AI mỗi tháng, cột <c>workspace_ai_configs.monthly_token_quota</c>.</summary>
     AiTokens = 2,
     /// <summary>Ảnh AI mỗi tháng, cột <c>workspace_ai_configs.monthly_image_quota</c>.</summary>
-    AiImages = 3
+    AiImages = 3,
+    /// <summary>Lượt gọi AI mỗi tháng, cột <c>workspace_ai_configs.monthly_request_quota</c> (OPS-24).</summary>
+    AiRequests = 4
 }
