@@ -157,6 +157,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             if (string.IsNullOrEmpty(apiKey))
             {
                 run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
+                AiRunHelpers.NotifyRequesterOfFinish(_db, run);
                 await _db.SaveChangesAsync(ct);
                 return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
             }
@@ -209,6 +210,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (payload is null)
         {
             run.MarkFailed(response.ErrorCode ?? ResultErrorCodes.AiUnavailable, response.ErrorMessage);
+            AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             await _db.SaveChangesAsync(ct);
             return Fail(response.ErrorMessage ?? "Không sinh được ảnh.",
                 response.ErrorCode == ResultErrorCodes.AiUnavailable ? ResultErrorCodes.AiUnavailable
@@ -223,6 +225,7 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             run.BibleRevisionIdsJson, null, false);
         _db.AiSuggestions.Add(suggestion);
         run.MarkCompleted();
+        AiRunHelpers.NotifyRequesterOfFinish(_db, run);
         await _db.SaveChangesAsync(ct);
 
         return Result<AiSuggestionDto>.Success(AiRunHelpers.ToDto(suggestion, [], role));

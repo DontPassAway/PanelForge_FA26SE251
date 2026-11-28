@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.PageComments.Common;
 using PanelForge.Application.Features.PageComments.Models;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.PageComments.Commands.ReopenPageComment;
 
@@ -40,6 +41,8 @@ public sealed class ReopenPageCommentCommandHandler
             return Result<PageCommentDto>.Failure(ex.Message, ResultErrorCodes.Validation);
         }
 
+        PageCommentNotifications.NotifyAuthor(_db, comment, cmd.UserId,
+            NotificationType.PageCommentReopened, "Góp ý trên trang của bạn được mở lại");
         await _db.SaveChangesAsync(ct);
         return Result<PageCommentDto>.Success(await PageCommentMapper.ToDtoAsync(_db, comment, ct));
     }

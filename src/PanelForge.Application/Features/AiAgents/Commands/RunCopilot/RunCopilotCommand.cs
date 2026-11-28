@@ -177,6 +177,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         if (apiKey is "")
         {
             run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
+            AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             await _db.SaveChangesAsync(ct);
             return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
         }
@@ -205,6 +206,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
         {
             // Lỗi: không ghi đề xuất nào, run Failed giữ lại để truy vết
             run.MarkFailed(response.ErrorCode ?? ResultErrorCodes.AiUnavailable, response.ErrorMessage);
+            AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             await _db.SaveChangesAsync(ct);
             if (shorten && response.ErrorCode == "INVALID_OUTPUT")
                 return Fail($"AI chưa rút gọn được xuống {maxChars} ký tự. Hãy thử lại hoặc tăng số ký tự tối đa.", ResultErrorCodes.AiInvalidOutput);
@@ -218,6 +220,7 @@ public sealed class RunCopilotCommandHandler : IRequestHandler<RunCopilotCommand
             chapter.VersionVector, latestScriptRevisionId, run.BibleRevisionIdsJson, null, false);
         _db.AiSuggestions.Add(suggestion);
         run.MarkCompleted();
+        AiRunHelpers.NotifyRequesterOfFinish(_db, run);
         await _db.SaveChangesAsync(ct);
 
         return Result<AiSuggestionDto>.Success(AiRunHelpers.ToDto(suggestion, [], role));

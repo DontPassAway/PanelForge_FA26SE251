@@ -96,6 +96,7 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
             if (!r.Succeeded)
             {
                 run.MarkFailed(r.ErrorCode!, r.ErrorMessage);
+                AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             }
             else if (agent == AiAgentType.Continuity && !HasWriter(run.WorkflowType))
             {
@@ -116,11 +117,13 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
                         _db.AiSuggestions.Add(ScriptSuggestion(run, writer, hasBlocking: true,
                             $"Script lượt {writer.Round} còn {lastContinuity.Findings.Count(f => f.Severity == AiProtocol.SeverityBlocking)} finding chặn; Supervisor dừng sau {run.RevisionRounds} lượt sửa."));
                     run.MarkWaitingForHuman();
+                    AiRunHelpers.NotifyRequesterOfFinish(_db, run);
                 }
                 else if (action == WorkflowRules.ActionFinish)
                 {
                     AddFinishSuggestions(run, steps);
                     run.MarkCompleted();
+                    AiRunHelpers.NotifyRequesterOfFinish(_db, run);
                 }
             }
 
@@ -204,7 +207,10 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
         {
             var availability = await _usage.CheckAvailabilityAsync(run.WorkspaceId, ct);
             if (!availability.IsAvailable)
+            {
                 run.MarkFailed(ResultErrorCodes.AiQuotaExceeded, availability.Message);
+                AiRunHelpers.NotifyRequesterOfFinish(_db, run);
+            }
         }
         await _db.SaveChangesAsync(ct);
     }

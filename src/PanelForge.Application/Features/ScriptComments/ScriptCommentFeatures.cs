@@ -83,7 +83,7 @@ public sealed class ScriptCommentHandlers :
         var chapter = await _db.Chapters.FirstAsync(c => c.Id == cmd.ChapterId, ct);
         var preview = comment.Body.Length > 120 ? comment.Body[..120] + "…" : comment.Body;
         await ScriptNotifications.NotifyWritersAsync(_db, chapter, cmd.UserId,
-            $"Góp ý mới trên kịch bản Chương {chapter.ChapterNumber}", preview, ct);
+            $"Góp ý mới trên kịch bản Chương {chapter.ChapterNumber}", preview, ct, NotificationType.ScriptCommentAdded);
 
         await _db.SaveChangesAsync(ct);
 
