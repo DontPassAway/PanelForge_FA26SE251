@@ -3,6 +3,8 @@ using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
 using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
+using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
+using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
 using PanelForge.Application.Common.Interfaces.Authentication;
@@ -197,5 +199,52 @@ public class AdminUserCommandTests
         var index = entityType.GetIndexes().FirstOrDefault(i =>
             i.IsUnique && i.Properties.Any(p => p.Name == nameof(User.Role)));
         index.Should().NotBeNull("Q12 requires a unique partial index on users(role) for active Publisher");
+    }
+
+    [Fact]
+    public async Task LastActiveAdmin_CannotBeDemotedLockedOrDeactivated()
+    {
+        await using var db = InMemoryDb.Create();
+        var admin = User.Create("root@test.com", "Root", role: SystemRole.Admin);
+        admin.Activate();
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+
+        var assign = await new AssignUserRoleCommandHandler(db)
+            .Handle(new AssignUserRoleCommand(admin.Id, "User"), CancellationToken.None);
+        var update = await new UpdateUserByAdminCommandHandler(db)
+            .Handle(new UpdateUserByAdminCommand(admin.Id, "Root", null, SystemRole.Admin, false), CancellationToken.None);
+        var toggle = await new ToggleUserStatusCommandHandler(db)
+            .Handle(new ToggleUserStatusCommand(admin.Id), CancellationToken.None);
+        var deactivate = await new DeactivateUserCommandHandler(db)
+            .Handle(new DeactivateUserCommand(admin.Id), CancellationToken.None);
+
+        new[] { assign.ErrorCode, update.ErrorCode, toggle.ErrorCode, deactivate.ErrorCode }
+            .Should().AllBe(ResultErrorCodes.Conflict);
+        admin.Role.Should().Be(SystemRole.Admin);
+        admin.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AdminCreatedInApp_AllowsDemotingTheOriginalAdmin()
+    {
+        await using var db = InMemoryDb.Create();
+        var hasher = new Mock<IPasswordHasher>();
+        hasher.Setup(h => h.HashPassword(It.IsAny<string>())).Returns("hash");
+        var root = User.Create("root@test.com", "Root", role: SystemRole.Admin);
+        root.Activate();
+        db.Users.Add(root);
+        await db.SaveChangesAsync();
+
+        var created = await new CreateUserByAdminCommandHandler(db, hasher.Object).Handle(
+            new CreateUserByAdminCommand("second@test.com", "Second", "Secret#123", null, SystemRole.Admin, true),
+            CancellationToken.None);
+        var demote = await new AssignUserRoleCommandHandler(db)
+            .Handle(new AssignUserRoleCommand(root.Id, "User"), CancellationToken.None);
+
+        created.IsSuccess.Should().BeTrue();
+        created.Value!.Role.Should().Be("Admin");
+        demote.IsSuccess.Should().BeTrue();
+        root.Role.Should().Be(SystemRole.User);
     }
 }

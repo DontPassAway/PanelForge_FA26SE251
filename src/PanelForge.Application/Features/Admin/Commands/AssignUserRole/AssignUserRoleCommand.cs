@@ -53,6 +53,12 @@ public sealed class AssignUserRoleCommandHandler
 
         if (Enum.TryParse<SystemRole>(rawRole, true, out var parsedSystemRole) && Enum.IsDefined(parsedSystemRole))
         {
+            if (parsedSystemRole != SystemRole.Admin
+                && await LastAdminGuard.IsLastActiveAdminAsync(_dbContext, user, cancellationToken))
+            {
+                return Result<AssignUserRoleResponse>.Failure(LastAdminGuard.ConflictMessage, ResultErrorCodes.Conflict);
+            }
+
             if (parsedSystemRole == SystemRole.Admin && user.Role != SystemRole.Admin)
             {
                 var blockReason = await AdminPromotionGuard.GetBlockReasonAsync(_dbContext, user.Id, cancellationToken);

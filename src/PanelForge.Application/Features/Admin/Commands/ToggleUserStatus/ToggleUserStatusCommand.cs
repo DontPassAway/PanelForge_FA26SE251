@@ -28,6 +28,8 @@ public sealed class ToggleUserStatusCommandHandler
 
         if (user.IsActive)
         {
+            if (await LastAdminGuard.IsLastActiveAdminAsync(_dbContext, user, cancellationToken))
+                return Result<AdminUserStatusDto>.Failure(LastAdminGuard.ConflictMessage, ResultErrorCodes.Conflict);
             user.Deactivate();
         }
         else

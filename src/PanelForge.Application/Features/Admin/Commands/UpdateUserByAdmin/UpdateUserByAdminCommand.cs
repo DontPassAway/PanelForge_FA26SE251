@@ -41,6 +41,12 @@ public sealed class UpdateUserByAdminCommandHandler
             return Result<AdminUserDto>.Failure(SinglePublisherGuard.ConflictMessage, ResultErrorCodes.Conflict);
         }
 
+        if ((command.Role != SystemRole.Admin || !command.IsActive)
+            && await LastAdminGuard.IsLastActiveAdminAsync(_dbContext, user, cancellationToken))
+        {
+            return Result<AdminUserDto>.Failure(LastAdminGuard.ConflictMessage, ResultErrorCodes.Conflict);
+        }
+
         if (command.Role == SystemRole.Admin && user.Role != SystemRole.Admin)
         {
             var blockReason = await AdminPromotionGuard.GetBlockReasonAsync(_dbContext, user.Id, cancellationToken);

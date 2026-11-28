@@ -42,6 +42,25 @@ internal static class AdminPromotionGuard
     }
 }
 
+/// <summary>
+/// Admin đầu tiên được tạo thẳng trong DB; từ đó Admin tạo/cấp quyền Admin khác trong app.
+/// Không cho hạ quyền hoặc khoá Administrator đang hoạt động cuối cùng, tránh hệ thống mất hết quyền quản trị.
+/// </summary>
+internal static class LastAdminGuard
+{
+    public const string ConflictMessage =
+        "Đây là tài khoản Administrator đang hoạt động cuối cùng. Hãy cấp quyền Administrator cho một tài khoản khác trước khi hạ quyền hoặc khoá tài khoản này.";
+
+    /// <summary>True khi user là Admin đang hoạt động và không còn Admin đang hoạt động nào khác.</summary>
+    public static async Task<bool> IsLastActiveAdminAsync(
+        IPanelForgeDbContext dbContext, User user, CancellationToken cancellationToken) =>
+        user.Role == SystemRole.Admin
+        && user.IsActive
+        && !await dbContext.Users.AsNoTracking().AnyAsync(
+            u => u.Role == SystemRole.Admin && u.IsActive && u.Id != user.Id,
+            cancellationToken);
+}
+
 internal static class SinglePublisherGuard
 {
     public const string ConflictMessage =

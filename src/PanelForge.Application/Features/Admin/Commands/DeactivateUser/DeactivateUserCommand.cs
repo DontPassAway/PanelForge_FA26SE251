@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Admin.Common;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 
@@ -23,6 +24,9 @@ public sealed class DeactivateUserCommandHandler
         var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == command.UserId, cancellationToken);
         if (user is null)
             return Result<AdminUserStatusDto>.Failure("Không tìm thấy người dùng.", ResultErrorCodes.NotFound);
+
+        if (await LastAdminGuard.IsLastActiveAdminAsync(_dbContext, user, cancellationToken))
+            return Result<AdminUserStatusDto>.Failure(LastAdminGuard.ConflictMessage, ResultErrorCodes.Conflict);
 
         user.Deactivate();
         await _dbContext.SaveChangesAsync(cancellationToken);
