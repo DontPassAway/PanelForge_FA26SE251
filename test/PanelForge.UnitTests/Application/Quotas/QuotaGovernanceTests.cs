@@ -62,7 +62,8 @@ public class QuotaGovernanceTests
         var update = new UpdateQuotaPolicyCommandHandler(db, settings);
 
         await update.Handle(new UpdateQuotaPolicyCommand(admin.Id, 8 * Gb, 2_000_000, 50), CancellationToken.None);
-        var latest = await update.Handle(new UpdateQuotaPolicyCommand(admin.Id, 10 * Gb, 3_000_000, 60), CancellationToken.None);
+        var latest = await update.Handle(new UpdateQuotaPolicyCommand(admin.Id, 10 * Gb, 3_000_000, 60,
+            MonthlyRequestQuota: 800, RequestsPerMinute: 12), CancellationToken.None);
 
         latest.Value!.IsFromSettings.Should().BeFalse();
         latest.Value.UpdatedByName.Should().Be("Admin");
@@ -79,6 +80,8 @@ public class QuotaGovernanceTests
         var ai = await db.WorkspaceAiConfigs.SingleAsync(c => c.WorkspaceId == created.Value.Id);
         ai.MonthlyTokenQuota.Should().Be(3_000_000);
         ai.MonthlyImageQuota.Should().Be(60);
+        ai.MonthlyRequestQuota.Should().Be(800);
+        ai.RequestsPerMinuteLimit.Should().Be(12);
 
         (await db.StudioWorkspaces.FindAsync(existing.Id))!.StorageQuotaBytes.Should().Be(5 * Gb, "Studio đã có giữ mức cấp riêng");
     }
@@ -270,6 +273,34 @@ public class QuotaGovernanceTests
         result.Value!.Storage.IsUnlimited.Should().BeTrue();
         result.Value.AiTokens!.Quota.Should().Be(1_000_000);
         result.Value.AiImages!.Quota.Should().Be(250);
+    }
+
+    [Fact]
+    public async Task UpdateWorkspaceResources_SetsRequestLimits_AndShowsRequestMeter_OPS24()
+    {
+        var (db, admin, _, ws, _) = await SeedAsync();
+        await using var _db = db;
+
+        var result = await UpdateResources(db).Handle(
+            new UpdateWorkspaceResourcesCommand(ws.Id, admin.Id, null, null, null, null, "Giới hạn lượt gọi",
+                MonthlyRequestQuota: 300, RequestsPerMinute: 5), CancellationToken.None);
+
+        result.Value!.AiRequests!.Quota.Should().Be(300);
+        result.Value.RequestsPerMinuteLimit.Should().Be(5);
+        result.Value.AiTokens!.Quota.Should().Be(1_000_000, "null giữ nguyên token");
+        (await db.AuditLogs.SingleAsync(a => a.Action == "RESOURCE_ALLOCATION_UPDATED")).ChangesJson.Should().Contain("300");
+    }
+
+    [Fact]
+    public async Task UpdateQuotaPolicy_RejectsZeroRequestLimits_OPS24()
+    {
+        var (db, admin, _, _, _) = await SeedAsync();
+        await using var _db = db;
+
+        var result = await new UpdateQuotaPolicyCommandHandler(db, new WorkspaceDefaultsSettings()).Handle(
+            new UpdateQuotaPolicyCommand(admin.Id, Gb, 1, 1, RequestsPerMinute: 0), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
     }
 
     [Fact]

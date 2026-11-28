@@ -70,8 +70,8 @@ public sealed class AiHarness
                 AiUsageRecord.Create(e.WorkspaceId, e.Feature, "Google Gemini", e.Status));
         Usage.Setup(u => u.CheckAvailabilityAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AiAvailability.Available());
-        Usage.Setup(u => u.TryReserveTokensAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        Usage.Setup(u => u.TryStartRequestAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AiAvailability.Available());
         // Marten giả: nhớ các Page đã lưu (do Accept layout) để test có thể thêm bubble/element rồi trả lại qua GetAsync
         Pages.Setup(p => p.SaveAsync(It.IsAny<PanelForge.Domain.Entities.Content.Page>(), It.IsAny<CancellationToken>()))
             .Callback<PanelForge.Domain.Entities.Content.Page, CancellationToken>((page, _) => SavedPages[page.Id] = page)

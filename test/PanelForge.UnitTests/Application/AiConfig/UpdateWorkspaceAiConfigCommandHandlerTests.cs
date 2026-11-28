@@ -55,6 +55,20 @@ public class UpdateWorkspaceAiConfigCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_NullTokenQuota_KeepsQuotaSetOnResourcesScreen_OPS24()
+    {
+        var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());
+        var config = WorkspaceAiConfig.Create(workspace.Id, monthlyTokenQuota: 321_000);
+        var handler = Setup([workspace], [config]);
+
+        var result = await handler.Handle(
+            new UpdateWorkspaceAiConfigCommand(workspace.Id, false, null, ["gemini-2.5-pro"]), CancellationToken.None);
+
+        result.Value!.MonthlyTokenQuota.Should().Be(321_000);
+        result.Value.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Handle_ExistingConfig_KeepsChosenSharedApi_AndReportsIt()
     {
         var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());

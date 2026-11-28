@@ -6304,9 +6304,21 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("monthly_image_quota");
 
+                    b.Property<long>("MonthlyRequestQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(5000L)
+                        .HasColumnName("monthly_request_quota");
+
                     b.Property<long>("MonthlyTokenQuota")
                         .HasColumnType("bigint")
                         .HasColumnName("monthly_token_quota");
+
+                    b.Property<int>("RequestsPerMinute")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20)
+                        .HasColumnName("requests_per_minute");
 
                     b.Property<long>("StorageQuotaBytes")
                         .HasColumnType("bigint")
@@ -6336,6 +6348,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("quota_policies", null, t =>
                         {
                             t.HasCheckConstraint("ck_quota_policies_images_positive", "monthly_image_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_requests_per_minute_positive", "requests_per_minute > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_requests_positive", "monthly_request_quota > 0");
 
                             t.HasCheckConstraint("ck_quota_policies_storage_positive", "storage_quota_bytes > 0");
 
@@ -6487,6 +6503,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("monthly_image_quota");
 
+                    b.Property<long>("MonthlyRequestQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("monthly_request_quota");
+
                     b.Property<long>("MonthlyTokenQuota")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
@@ -6501,6 +6523,22 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ProviderCredentialId")
                         .HasColumnType("uuid")
                         .HasColumnName("provider_credential_id");
+
+                    b.Property<DateTime?>("RateWindowStartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("rate_window_started_at");
+
+                    b.Property<int>("RequestsInRateWindow")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("requests_in_rate_window");
+
+                    b.Property<int>("RequestsPerMinuteLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("requests_per_minute_limit");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -6521,6 +6559,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasDefaultValue(0L)
                         .HasColumnName("used_images_current_month");
+
+                    b.Property<long>("UsedRequestsCurrentMonth")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("used_requests_current_month");
 
                     b.Property<long>("UsedTokensCurrentMonth")
                         .ValueGeneratedOnAdd()

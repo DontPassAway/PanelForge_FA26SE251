@@ -22,7 +22,7 @@ public class WorkflowTokenReservationTests
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        h.Usage.Verify(u => u.TryReserveTokensAsync(AiDemoSeeder.WorkspaceId, h.Settings.WorkflowReservedTokens, It.IsAny<CancellationToken>()), Times.Once);
+        h.Usage.Verify(u => u.TryStartRequestAsync(AiDemoSeeder.WorkspaceId, h.Settings.WorkflowReservedTokens, It.IsAny<CancellationToken>()), Times.Once);
         (await h.RunAsync(result.Value!.RunId)).ReservedTokens.Should().Be(h.Settings.WorkflowReservedTokens);
     }
 
@@ -30,8 +30,8 @@ public class WorkflowTokenReservationTests
     public async Task Run_WhenReservationFails_IsQuotaExceeded_AndStartsNothing()
     {
         var h = await AiHarness.CreateAsync();
-        h.Usage.Setup(u => u.TryReserveTokensAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        h.Usage.Setup(u => u.TryStartRequestAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AiAvailability.Blocked(PanelForge.Domain.Enums.AiUsageStatus.QuotaExceeded, "hết token"));
 
         var result = await h.RunHandler().Handle(h.RunCommand(), default);
 

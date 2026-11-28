@@ -19,9 +19,10 @@ public sealed record WorkspaceAiConfigDto(
     Guid? ImageProviderCredentialId = null
 );
 
+/// <param name="MonthlyTokenQuota">Không còn dùng ở màn Cấu hình AI (đặt ở màn Tài nguyên); null = giữ nguyên.</param>
 public sealed record UpdateWorkspaceAiConfigRequest(
     bool IsEnabled,
-    long MonthlyTokenQuota,
+    long? MonthlyTokenQuota,
     IReadOnlyList<string> AllowedModels,
     long? MonthlyImageQuota = null
 );

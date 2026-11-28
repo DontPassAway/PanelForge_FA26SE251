@@ -138,6 +138,15 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (!useCred && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
             return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
 
+        // OPS-24: đếm lượt gọi AI (tháng/phút) sau cùng, khi mọi cổng khác đã qua; ảnh không giữ chỗ token
+        var started = await _usage.TryStartRequestAsync(series.WorkspaceId, 0, ct);
+        if (!started.IsAvailable)
+        {
+            await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, started.BlockedReason!.Value,
+                ErrorMessage: started.Message, UserId: cmd.UserId), ct);
+            return Fail(started.Message!, ResultErrorCodes.AiQuotaExceeded);
+        }
+
         var prompt = ThumbnailRules.WithStyle(panelPrompt.Prompt, _settings.ThumbnailStylePrefix);
         if (!string.IsNullOrWhiteSpace(cmd.Instruction)) prompt = $"{prompt}\n\nYêu cầu thêm: {cmd.Instruction.Trim()}";
         if (prompt.Length > MaxPromptChars) prompt = prompt[..MaxPromptChars];

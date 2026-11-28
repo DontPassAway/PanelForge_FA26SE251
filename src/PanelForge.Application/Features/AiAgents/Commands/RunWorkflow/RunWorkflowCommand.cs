@@ -167,14 +167,15 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         if (!WorkflowRules.HasRequiredInput(type.ToString(), snapshot.Inputs))
             return AiRunHelpers.Fail<RunWorkflowResponse>(MissingInputMessage(type), ResultErrorCodes.Conflict);
 
-        // OPS-03: giữ chỗ sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không giữ token
+        // OPS-03/OPS-24: giữ chỗ token và đếm lượt sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không tốn gì.
+        // Cả workflow nhiều agent tính là một lượt gọi AI của Studio.
         var reserved = _settings.WorkflowReservedTokens;
-        if (!await _usage.TryReserveTokensAsync(workspaceId.Value, reserved, ct))
+        var started = await _usage.TryStartRequestAsync(workspaceId.Value, reserved, ct);
+        if (!started.IsAvailable)
         {
-            const string message = "Workspace không còn đủ hạn mức token AI cho lượt này. Vui lòng tiếp tục bằng thao tác thủ công.";
-            await _usage.RecordAsync(new AiUsageEntry(workspaceId.Value, "AiAgents.RunWorkflow", AiUsageStatus.QuotaExceeded,
-                ErrorMessage: message, UserId: cmd.UserId), ct);
-            return AiRunHelpers.Fail<RunWorkflowResponse>(message, ResultErrorCodes.AiQuotaExceeded);
+            await _usage.RecordAsync(new AiUsageEntry(workspaceId.Value, "AiAgents.RunWorkflow", started.BlockedReason!.Value,
+                ErrorMessage: started.Message, UserId: cmd.UserId), ct);
+            return AiRunHelpers.Fail<RunWorkflowResponse>(started.Message!, ResultErrorCodes.AiQuotaExceeded);
         }
 
         var run = AiWorkflowRun.Create(
