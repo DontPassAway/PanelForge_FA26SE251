@@ -6331,22 +6331,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("BankAccountName")
-                        .HasColumnType("varchar(200)")
-                        .HasColumnName("bank_account_name");
-
-                    b.Property<string>("BankAccountNo")
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("bank_account_no");
-
-                    b.Property<string>("BankBin")
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("bank_bin");
-
-                    b.Property<string>("BankName")
-                        .HasColumnType("varchar(100)")
-                        .HasColumnName("bank_name");
-
                     b.Property<string>("CoverImageSha256")
                         .HasColumnType("varchar(64)")
                         .HasColumnName("cover_image_sha256");

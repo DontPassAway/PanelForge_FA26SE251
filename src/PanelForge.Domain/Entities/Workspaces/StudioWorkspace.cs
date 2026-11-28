@@ -24,12 +24,6 @@ public class StudioWorkspace : BaseEntity
     /// <summary>SHA-256 của ảnh bìa Studio lưu trong IAssetStorage (R2); null nếu dùng bìa mặc định.</summary>
     public string? CoverImageSha256 { get; private set; }
 
-    // Cột ngân hàng cũ theo Studio (trước Q13). Không còn ghi; giữ để không mất dữ liệu cũ, sẽ bỏ ở migration sau (OPS-10).
-    public string? BankBin { get; private set; }
-    public string? BankName { get; private set; }
-    public string? BankAccountNo { get; private set; }
-    public string? BankAccountName { get; private set; }
-
     public User Owner { get; private set; } = default!;
     public ICollection<WorkspaceMember> Members { get; private set; } = [];
     public ICollection<Series> Series { get; private set; } = [];
