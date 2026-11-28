@@ -18,6 +18,9 @@ public interface IAiUsageService
     /// </summary>
     Task<bool> TryReserveTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default);
 
+    /// <summary>OPS-03: trả lại token đã giữ chỗ khi lượt gọi không xảy ra hoặc run kết thúc mà chưa chốt (không tạo AiUsageRecord).</summary>
+    Task ReleaseReservedTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default);
+
     /// <summary>Ghi một AiUsageRecord; lần gọi thành công được cộng vào UsedTokensCurrentMonth của workspace.</summary>
     Task<AiUsageRecord> RecordAsync(AiUsageEntry entry, CancellationToken cancellationToken = default);
 }

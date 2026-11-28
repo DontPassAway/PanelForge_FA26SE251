@@ -586,6 +586,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("requested_by_user_id");
 
+                    b.Property<long>("ReservedTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("reserved_tokens");
+
                     b.Property<int>("RevisionRounds")
                         .HasColumnType("int")
                         .HasColumnName("revision_rounds");

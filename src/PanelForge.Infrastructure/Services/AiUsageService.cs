@@ -65,6 +65,29 @@ public sealed class AiUsageService : IAiUsageService
         }
     }
 
+    public async Task ReleaseReservedTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default)
+    {
+        if (tokens <= 0) return;
+        for (var attempt = 0; ; attempt++)
+        {
+            var config = await _dbContext.WorkspaceAiConfigs
+                .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
+            if (config is null) return;
+
+            // Sang tháng mới thì bộ đếm đã về 0, phần giữ chỗ của tháng trước không còn để trả.
+            if (!ResetIfNewMonth(config)) config.SettleReservedTokens(tokens, 0);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < MaxConcurrencyRetries)
+            {
+                await ReloadAsync(ex);
+            }
+        }
+    }
+
     public async Task<AiUsageRecord> RecordAsync(AiUsageEntry entry, CancellationToken cancellationToken = default)
     {
         var config = await _dbContext.WorkspaceAiConfigs

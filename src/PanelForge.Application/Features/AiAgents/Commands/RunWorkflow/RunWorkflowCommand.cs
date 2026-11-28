@@ -167,10 +167,21 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         if (!WorkflowRules.HasRequiredInput(type.ToString(), snapshot.Inputs))
             return AiRunHelpers.Fail<RunWorkflowResponse>(MissingInputMessage(type), ResultErrorCodes.Conflict);
 
+        // OPS-03: giữ chỗ sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không giữ token
+        var reserved = _settings.WorkflowReservedTokens;
+        if (!await _usage.TryReserveTokensAsync(workspaceId.Value, reserved, ct))
+        {
+            const string message = "Workspace không còn đủ hạn mức token AI cho lượt này. Vui lòng tiếp tục bằng thao tác thủ công.";
+            await _usage.RecordAsync(new AiUsageEntry(workspaceId.Value, "AiAgents.RunWorkflow", AiUsageStatus.QuotaExceeded,
+                ErrorMessage: message, UserId: cmd.UserId), ct);
+            return AiRunHelpers.Fail<RunWorkflowResponse>(message, ResultErrorCodes.AiQuotaExceeded);
+        }
+
         var run = AiWorkflowRun.Create(
             workspaceId.Value, cmd.SeriesId, cmd.ChapterId, scene?.Id, cmd.UserId, provider, model, brief,
             cmd.ReadingDirection, _settings.MaxRevisionRounds, chapter.VersionVector, latestScriptRevisionId,
             AiJson.Serialize(snapshot), AiJson.Serialize(snapshot.Bible.Select(b => b.RevisionId)), type);
+        run.HoldReservation(reserved);
         _db.AiWorkflowRuns.Add(run);
         await _db.SaveChangesAsync(ct);
 
@@ -201,7 +212,8 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         await _db.SaveChangesAsync(ct);
         await _usage.RecordAsync(new AiUsageEntry(
             workspaceId, "AiAgents.RunWorkflow", AiUsageStatus.ProviderUnavailable,
-            Model: run.Model, ErrorMessage: message, UserId: userId, Provider: run.Provider), ct);
+            Model: run.Model, ErrorMessage: message, UserId: userId, Provider: run.Provider,
+            ReservedTokens: run.TakeReservation()), ct);
         return AiRunHelpers.Fail<RunWorkflowResponse>(message, ResultErrorCodes.AiUnavailable);
     }
 }
