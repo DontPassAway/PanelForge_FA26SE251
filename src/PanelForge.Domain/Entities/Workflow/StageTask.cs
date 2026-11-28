@@ -195,6 +195,19 @@ public class StageTask : BaseEntity
         Touch();
     }
 
+    /// <summary>
+    /// BR-27.1 Self-Rollback: chính người làm lùi công đoạn tiền đề (Pencil) của trang. Ô đang làm chưa nộp về Assigned
+    /// (giữ lô, ảnh đã tải vẫn còn), chờ tiền đề nộp lại rồi Start lại; không cần Impact Review vì cùng một người tự sửa.
+    /// </summary>
+    public void ReturnToWaiting()
+    {
+        if (Status is not (StageTaskStatus.Assigned or StageTaskStatus.InProgress or StageTaskStatus.ReworkRequired))
+            throw Invalid("đưa về chờ công đoạn trước");
+        if (Status == StageTaskStatus.InProgress) Status = StageTaskStatus.Assigned;
+        ReadyAt = null;
+        Touch();
+    }
+
     /// <summary>Công đoạn tiền đề bị mở lại. Chỉ gắn cờ cho ô đã bắt đầu; ô chưa bắt đầu vẫn bị chặn Start bởi tiền đề.</summary>
     public void MarkInputOutdated(string reason)
     {

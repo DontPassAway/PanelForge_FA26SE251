@@ -8,6 +8,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
+using PanelForge.Application.Features.TaskGrid.Commands.RollbackToPencil;
 using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
@@ -120,6 +121,13 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reopen(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new ReopenStageTaskCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
+
+    /// <summary>POST /tasks/{taskId}/rollback-to-pencil — Artist giữ ô Pencil tự quay lại sửa khi trang chưa vào duyệt (BR-27.1).</summary>
+    [HttpPost("tasks/{taskId:guid}/rollback-to-pencil")]
+    [RequireWorkspaceRole(WorkspaceRole.Artist)]
+    [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RollbackToPencil(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new RollbackToPencilCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
 
     /// <summary>POST /tasks/{taskId}/resolve-impact — Producer/Editor xử lý Impact Review (keep / rework).</summary>
     [HttpPost("tasks/{taskId:guid}/resolve-impact")]

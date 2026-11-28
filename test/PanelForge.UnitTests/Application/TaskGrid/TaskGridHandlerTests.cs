@@ -18,6 +18,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.RollbackToPencil;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -884,6 +885,62 @@ public class TaskGridHandlerTests
         (await resolve.Handle(new(f.Chapter.Id, lettering.Id, f.ProducerId, Keep: false), default)).IsSuccess.Should().BeTrue();
         lettering.Status.Should().Be(StageTaskStatus.ReworkRequired);
         lettering.IsInputOutdated.Should().BeFalse();
+    }
+
+    // ---- BR-27.1 Self-Rollback Ink → Pencil ----
+
+    private static Task<Result<ReopenStageTaskResultDto>> Rollback(Fixture f, StageTask cell, Guid userId, string reason = "Sai phối cảnh") =>
+        new RollbackToPencilCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, cell.Id, userId, reason), default);
+
+    [Fact]
+    public async Task RollbackToPencil_ArtistReopensOwnPencil_InkWaitsAgain_LetteringKeepsWorking_LettererIsReminded()
+    {
+        var f = new Fixture();
+        var (pencil, ink, lettering) = await PencilDoneInkAndLetteringStarted(f);
+
+        var result = await Rollback(f, pencil, f.ArtistId);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        pencil.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        ink.Status.Should().Be(StageTaskStatus.Assigned, "ô Ink của chính Artist quay về chờ, không cần Impact Review");
+        ink.IsInputOutdated.Should().BeFalse();
+        lettering.Status.Should().Be(StageTaskStatus.InProgress, "vị trí bóng thoại độc lập, nhánh chữ không bị chặn");
+        lettering.IsInputOutdated.Should().BeFalse();
+        f.Notifications.Should().Contain(n => n.UserId == f.LettererId && n.Title == "Kiểm tra lại vị trí bóng thoại");
+
+        (await f.Start(ink, f.ArtistId)).IsSuccess.Should().BeFalse("Pencil chưa nộp lại");
+        (await f.Start(pencil, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue();
+        (await f.Start(ink, f.ArtistId)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RollbackToPencil_OnlyPencilHolder_OnlyFirstStage_AndNeedsReason()
+    {
+        var f = new Fixture();
+        var (pencil, ink, _) = await PencilDoneInkAndLetteringStarted(f);
+
+        (await Rollback(f, pencil, f.LettererId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await Rollback(f, ink, f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        (await Rollback(f, pencil, f.ArtistId, " ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        pencil.Status.Should().Be(StageTaskStatus.Approved);
+    }
+
+    [Fact]
+    public async Task RollbackToPencil_PageUnderReviewOrApprovedAtGate2_IsConflict()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink, f.Color })
+        {
+            await f.Start(f.Cell(stage, 0), f.ArtistId);
+            await f.Submit(f.ArtistId, f.Cell(stage, 0));
+        }
+        var color = f.Cell(f.Color, 0);
+        color.OpenReview(f.EditorId);
+
+        (await Rollback(f, f.Cell(f.Pencil, 0), f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.Cell(f.Pencil, 0).Status.Should().Be(StageTaskStatus.Approved);
     }
 
     [Fact]
