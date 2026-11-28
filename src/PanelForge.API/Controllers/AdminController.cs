@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
 using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
+using PanelForge.Application.Features.Admin.Commands.ConfirmUserEmailByAdmin;
 using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
+using PanelForge.Application.Features.Admin.Commands.ResendUserVerificationByAdmin;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
 using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
@@ -206,6 +208,47 @@ public class AdminController : ControllerBase
         if (!result.IsSuccess) return ToError(result);
 
         return Ok(new { message = $"Đã đặt lại mật khẩu cho tài khoản {result.Value!.Email} thành công." });
+    }
+
+    /// <summary>
+    /// POST /api/admin/users/{id}/resend-verification
+    /// Gửi lại mã OTP xác thực email cho tài khoản chưa xác thực (có audit). 409 khi đã xác thực / đang chờ lời mời, 503 khi SMTP lỗi.
+    /// </summary>
+    [HttpPost("users/{id:guid}/resend-verification")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ResendUserVerification(Guid id, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new ResendUserVerificationByAdminCommand(adminId, id), cancellationToken);
+        if (!result.IsSuccess)
+            return result.ErrorCode == ResultErrorCodes.EmailDeliveryFailed
+                ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage, code = result.ErrorCode })
+                : ToError(result);
+
+        return Ok(new { message = $"Đã gửi lại mã xác thực tới {result.Value!.Email}." });
+    }
+
+    /// <summary>
+    /// POST /api/admin/users/{id}/confirm-email
+    /// Admin đánh dấu email đã xác thực thủ công, bắt buộc kèm lý do (ghi audit log).
+    /// </summary>
+    [HttpPost("users/{id:guid}/confirm-email")]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmUserEmail(
+        Guid id,
+        [FromBody] ConfirmEmailByAdminRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new ConfirmUserEmailByAdminCommand(adminId, id, request.Reason), cancellationToken);
+        if (!result.IsSuccess) return ToError(result);
+
+        return Ok(new { message = $"Đã đánh dấu email {result.Value!.Email} là đã xác thực." });
     }
 
     [HttpGet("system-stats")]

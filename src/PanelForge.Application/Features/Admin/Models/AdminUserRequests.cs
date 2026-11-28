@@ -41,3 +41,10 @@ public record ResetPasswordByAdminRequest
     [MinLength(6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự.")]
     public string NewPassword { get; init; } = default!;
 }
+
+public record ConfirmEmailByAdminRequest
+{
+    [Required(ErrorMessage = "Lý do là bắt buộc.")]
+    [MaxLength(500, ErrorMessage = "Lý do tối đa 500 ký tự.")]
+    public string Reason { get; init; } = default!;
+}
