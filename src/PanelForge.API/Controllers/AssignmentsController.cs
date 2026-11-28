@@ -282,15 +282,16 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
-    /// <summary>GET /api/chapters/{chapterId}/change-requests?assignmentId=&amp;status=&amp;responsibleUserId= (mọi thành viên Workspace).</summary>
+    /// <summary>GET /api/chapters/{chapterId}/change-requests?assignmentId=&amp;stageTaskId=&amp;status=&amp;responsibleUserId= (mọi thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/change-requests")]
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<ChangeRequestDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChangeRequests(
         Guid chapterId, [FromQuery] Guid? assignmentId, [FromQuery] ChangeRequestStatus? status,
-        [FromQuery] Guid? responsibleUserId, CancellationToken ct)
+        [FromQuery] Guid? responsibleUserId, CancellationToken ct, [FromQuery] Guid? stageTaskId = null)
     {
-        var result = await _mediator.Send(new GetChangeRequestsByChapterQuery(chapterId, assignmentId, status, responsibleUserId), ct);
+        var result = await _mediator.Send(
+            new GetChangeRequestsByChapterQuery(chapterId, assignmentId, status, responsibleUserId, stageTaskId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

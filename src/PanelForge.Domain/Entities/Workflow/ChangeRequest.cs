@@ -11,7 +11,10 @@ namespace PanelForge.Domain.Entities.Workflow;
 /// </summary>
 public class ChangeRequest : BaseEntity
 {
-    public Guid AssignmentId { get; private set; }
+    /// <summary>Việc V2 nhận yêu cầu; null khi yêu cầu thuộc ô lưới V3 (<see cref="StageTaskId"/>). Đúng một trong hai có giá trị.</summary>
+    public Guid? AssignmentId { get; private set; }
+    /// <summary>Ô lưới V3 (công đoạn × trang) nhận yêu cầu sửa; null với việc V2.</summary>
+    public Guid? StageTaskId { get; private set; }
     public Guid ChapterId { get; private set; }
     public Guid? SubmissionId { get; private set; }
     public Guid ResponsibleUserId { get; private set; }
@@ -82,6 +85,25 @@ public class ChangeRequest : BaseEntity
             CreatedAt = DateTime.UtcNow
         };
     }
+
+    /// <summary>
+    /// Lưới V3 (Module 3 mục 1, REV-01/02): yêu cầu sửa khoanh trên một khung của ô (công đoạn × trang). Người chịu trách nhiệm là
+    /// người giữ ô; các yêu cầu sinh từ cùng một vùng khoanh dùng chung <paramref name="groupId"/>.
+    /// </summary>
+    public static ChangeRequest CreateForStageTask(
+        Guid stageTaskId, Guid chapterId, Guid responsibleUserId, Guid createdByUserId, string description,
+        string? regionJson = null, Guid? panelId = null, Guid? groupId = null,
+        ChangeRequestLayer layer = ChangeRequestLayer.Artwork, Guid? assetReferenceId = null, DateTime? dueDate = null)
+    {
+        var cr = Create(Guid.Empty, chapterId, null, responsibleUserId, createdByUserId, description, regionJson, dueDate,
+            assetReferenceId, panelId, groupId: groupId, layer: layer);
+        cr.AssignmentId = null;
+        cr.StageTaskId = stageTaskId;
+        return cr;
+    }
+
+    /// <summary>Id việc nhận yêu cầu (V2) hoặc ô lưới (V3), dùng làm đích thông báo.</summary>
+    public Guid WorkItemId => AssignmentId ?? StageTaskId ?? Guid.Empty;
 
     public void SetLanguageCode(string? languageCode) => LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? null : languageCode.Trim();
 

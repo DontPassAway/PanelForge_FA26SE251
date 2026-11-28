@@ -212,6 +212,42 @@ internal static class TaskGridRules
     }
 
     /// <summary>Lần nộp đang chờ quyết định của ô (theo CurrentSubmissionId), hoặc null.</summary>
+    /// <summary>REV-02: nộp lại ô là báo đã sửa mọi phiếu sửa đang mở của ô (Open → Resolved).</summary>
+    public static async Task ResolveOpenChangeRequestsAsync(IPanelForgeDbContext db, IReadOnlyCollection<Guid> taskIds, CancellationToken ct)
+    {
+        var open = await db.ChangeRequests.Where(c => c.StageTaskId != null && taskIds.Contains(c.StageTaskId.Value) &&
+                                                      c.Status == ChangeRequestStatus.Open).ToListAsync(ct);
+        foreach (var cr in open) cr.Resolve("Đã sửa trong lần nộp lại.");
+    }
+
+    /// <summary>
+    /// Ô mà một lần duyệt ô có cổng xác nhận (Gate 2 ghép): chính ô và ô cuối nhánh song song cùng trang, vì phiếu sửa lớp Chữ
+    /// từ lần duyệt trang được gửi sang ô làm chữ.
+    /// </summary>
+    public static List<Guid> ReviewScope(StageTask task, IReadOnlyList<PipelineStage> stages, IReadOnlyList<StageTask> chapterTasks)
+    {
+        var ids = new List<Guid> { task.Id };
+        if (stages.FirstOrDefault(s => s.Id == task.PipelineStageId) is not { } stage || task.PageId is null) return ids;
+        var siblings = StageDependencies.SiblingBranchEnds(stage, stages).Select(s => s.Id).ToHashSet();
+        ids.AddRange(chapterTasks.Where(t => siblings.Contains(t.PipelineStageId) && t.PageId == task.PageId &&
+                                             t.Status != StageTaskStatus.Cancelled).Select(t => t.Id));
+        return ids;
+    }
+
+    /// <summary>Số phiếu sửa còn mở (Editor mở lại phiếu chưa đạt, hoặc ô nhận chưa nộp lại): còn thì chưa duyệt được.</summary>
+    public static Task<int> OpenChangeRequestCountAsync(IPanelForgeDbContext db, IReadOnlyCollection<Guid> taskIds, CancellationToken ct) =>
+        db.ChangeRequests.CountAsync(c => c.StageTaskId != null && taskIds.Contains(c.StageTaskId.Value) &&
+                                          c.Status == ChangeRequestStatus.Open, ct);
+
+    /// <summary>REV-02: duyệt là người duyệt xác minh mọi phiếu sửa đã sửa trong phạm vi duyệt (Resolved → Verified).</summary>
+    public static async Task VerifyResolvedChangeRequestsAsync(
+        IPanelForgeDbContext db, IReadOnlyCollection<Guid> taskIds, Guid userId, CancellationToken ct)
+    {
+        var resolved = await db.ChangeRequests.Where(c => c.StageTaskId != null && taskIds.Contains(c.StageTaskId.Value) &&
+                                                          c.Status == ChangeRequestStatus.Resolved).ToListAsync(ct);
+        foreach (var cr in resolved) cr.Verify(userId);
+    }
+
     public static Task<StageTaskSubmission?> PendingSubmissionAsync(IPanelForgeDbContext db, StageTask task, CancellationToken ct) =>
         task.CurrentSubmissionId is { } id
             ? db.StageTaskSubmissions.FirstOrDefaultAsync(s => s.Id == id && s.Status == SubmissionStatus.Pending, ct)

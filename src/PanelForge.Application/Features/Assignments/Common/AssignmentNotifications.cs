@@ -57,11 +57,11 @@ internal static class AssignmentNotifications
 
     public static Notification ChangeRequestResolved(ChangeRequest cr) => Notification.Create(
         cr.CreatedByUserId, NotificationType.ChangeRequestResolved, "Yêu cầu sửa đã được báo xong, chờ xác minh",
-        cr.ResolutionNote ?? cr.Description, cr.AssignmentId, cr.ChapterId);
+        cr.ResolutionNote ?? cr.Description, cr.WorkItemId, cr.ChapterId);
 
     public static Notification ChangeRequestReopened(ChangeRequest cr) => Notification.Create(
         cr.ResponsibleUserId, NotificationType.ChangeRequestReopened, "Yêu cầu sửa bị mở lại, chưa đạt",
-        cr.ReviewerComment ?? cr.Description, cr.AssignmentId, cr.ChapterId);
+        cr.ReviewerComment ?? cr.Description, cr.WorkItemId, cr.ChapterId);
 
     public static Notification DueSoon(Assignment a) => Notification.Create(
         a.AssigneeUserId, NotificationType.AssignmentDueSoon, "Việc sắp đến hạn", Describe(a), a.Id, a.ChapterId);
@@ -70,10 +70,10 @@ internal static class AssignmentNotifications
         a.AssigneeUserId, NotificationType.AssignmentOverdue, "Việc đã quá hạn", Describe(a), a.Id, a.ChapterId);
 
     public static Notification ChangeRequestDueSoon(ChangeRequest cr) => Notification.Create(
-        cr.ResponsibleUserId, NotificationType.ChangeRequestDueSoon, "Yêu cầu sửa sắp đến hạn", DescribeChangeRequest(cr), cr.AssignmentId, cr.ChapterId);
+        cr.ResponsibleUserId, NotificationType.ChangeRequestDueSoon, "Yêu cầu sửa sắp đến hạn", DescribeChangeRequest(cr), cr.WorkItemId, cr.ChapterId);
 
     public static Notification ChangeRequestOverdue(ChangeRequest cr) => Notification.Create(
-        cr.ResponsibleUserId, NotificationType.ChangeRequestOverdue, "Yêu cầu sửa đã quá hạn", DescribeChangeRequest(cr), cr.AssignmentId, cr.ChapterId);
+        cr.ResponsibleUserId, NotificationType.ChangeRequestOverdue, "Yêu cầu sửa đã quá hạn", DescribeChangeRequest(cr), cr.WorkItemId, cr.ChapterId);
 
     public static string Describe(Assignment a)
     {

@@ -255,7 +255,7 @@ public class PageCommentTests
         var comment = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Needs fix", fx.Page1.Id);
         fx.Comments.Add(comment);
 
-        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
         var result = await handler.Handle(
             new ConvertPageCommentToReworkCommand(fx.Chapter.Id, comment.Id, fx.Producer.Id, task.Id, "Please redraw"),
             default);
@@ -274,7 +274,7 @@ public class PageCommentTests
         var comment = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Fix pose", fx.Page1.Id);
         fx.Comments.Add(comment);
 
-        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
         var result = await handler.Handle(
             new ConvertPageCommentToReworkCommand(fx.Chapter.Id, comment.Id, fx.Producer.Id, pencilTask.Id, "Fix hand anatomy"),
             default);
@@ -296,7 +296,7 @@ public class PageCommentTests
         var comment = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Too dark", fx.Page1.Id);
         fx.Comments.Add(comment);
 
-        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
         var result = await handler.Handle(
             new ConvertPageCommentToReworkCommand(fx.Chapter.Id, comment.Id, fx.Producer.Id, pencilTask.Id, "Lighten shadows"),
             default);
@@ -317,7 +317,7 @@ public class PageCommentTests
         comment.MarkConvertedToRework(pencilTask.Id, fx.Producer.Id);
         fx.Comments.Add(comment);
 
-        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
         var result = await handler.Handle(
             new ConvertPageCommentToReworkCommand(fx.Chapter.Id, comment.Id, fx.Producer.Id, pencilTask.Id, "Again"),
             default);
@@ -334,7 +334,7 @@ public class PageCommentTests
         var commentOnPage1 = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Page 1 issue", fx.Page1.Id);
         fx.Comments.Add(commentOnPage1);
 
-        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
         var result = await handler.Handle(
             new ConvertPageCommentToReworkCommand(fx.Chapter.Id, commentOnPage1.Id, fx.Producer.Id, page2Task.Id, "Fix"),
             default);

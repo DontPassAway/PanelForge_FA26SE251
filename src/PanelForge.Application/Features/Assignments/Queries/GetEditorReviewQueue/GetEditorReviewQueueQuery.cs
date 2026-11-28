@@ -96,9 +96,9 @@ public sealed class GetEditorReviewQueueQueryHandler
 
         // 3. Đếm ChangeRequest chưa đóng theo đúng luật cổng duyệt (Open + Resolved chưa xác minh; Rejected đã đóng)
         var openChangeRequests = await _db.ChangeRequests.AsNoTracking()
-            .Where(cr => assignmentIds.Contains(cr.AssignmentId) &&
+            .Where(cr => cr.AssignmentId != null && assignmentIds.Contains(cr.AssignmentId.Value) &&
                          (cr.Status == ChangeRequestStatus.Open || cr.Status == ChangeRequestStatus.Resolved))
-            .GroupBy(cr => cr.AssignmentId)
+            .GroupBy(cr => cr.AssignmentId!.Value)
             .Select(g => new { AssignmentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.AssignmentId, x => x.Count, ct);
 

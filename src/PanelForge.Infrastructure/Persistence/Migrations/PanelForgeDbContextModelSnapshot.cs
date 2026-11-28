@@ -5077,7 +5077,7 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("asset_reference_id");
 
-                    b.Property<Guid>("AssignmentId")
+                    b.Property<Guid?>("AssignmentId")
                         .HasColumnType("uuid")
                         .HasColumnName("assignment_id");
 
@@ -5175,6 +5175,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("script_line_id");
 
+                    b.Property<Guid?>("StageTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_task_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("varchar(30)")
@@ -5212,7 +5216,13 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("ChapterId", "Status")
                         .HasDatabaseName("ix_change_requests_chapter_status");
 
-                    b.ToTable("change_requests", (string)null);
+                    b.HasIndex("StageTaskId", "Status")
+                        .HasDatabaseName("ix_change_requests_stage_task_status");
+
+                    b.ToTable("change_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_change_requests_one_work_item", "num_nonnulls(assignment_id, stage_task_id) = 1");
+                        });
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workflow.Notification", b =>
@@ -7242,8 +7252,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Workflow.Assignment", null)
                         .WithMany()
                         .HasForeignKey("AssignmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("PanelForge.Domain.Entities.Workflow.StageTask", null)
+                        .WithMany()
+                        .HasForeignKey("StageTaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("PanelForge.Domain.Entities.Workflow.Submission", null)
                         .WithMany()
