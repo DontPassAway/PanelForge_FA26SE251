@@ -77,6 +77,7 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                     ? $"Mở khóa Tập {t.ChapterNumber} - {t.SeriesTitle ?? "Truyện"}"
                     : $"Mở khóa chương truyện ({t.OrderCode})",
                 PaymentTransactionType.VipSubscription => $"Đăng ký gói đọc truyện VIP ({t.OrderCode})",
+                PaymentTransactionType.StudioPackage => $"Mua gói mở Studio ({t.OrderCode})",
                 _ => $"Giao dịch {t.OrderCode}"
             };
 

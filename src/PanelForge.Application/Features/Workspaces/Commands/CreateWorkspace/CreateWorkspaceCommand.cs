@@ -39,7 +39,7 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
             return Unauthorized("Administrator không được phép tạo Studio (BR-07).");
 
         if (!owner.CanCreateStudio)
-            return Unauthorized("Bạn không có quyền tạo Studio. Vui lòng yêu cầu Administrator cấp quyền CanCreateStudio.");
+            return Unauthorized("Bạn chưa có quyền tạo Studio. Mua gói mở Studio trong Ví hoặc nhờ Administrator cấp quyền.");
 
         var policy = await QuotaPolicies.GetEffectiveAsync(_dbContext, _defaults, cancellationToken);
 

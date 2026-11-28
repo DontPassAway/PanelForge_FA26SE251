@@ -207,8 +207,10 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             type = PaymentTransactionType.Topup;
             return true;
         }
-        // Refund chỉ do Admin ghi (OPS-06); gói VIP đã gỡ (Q4, OPS-11): độc giả không tạo được đơn hai loại này
+        // Refund chỉ do Admin ghi (OPS-06); gói VIP đã gỡ (Q4, OPS-11); gói mở Studio chỉ mua bằng Ví (D11):
+        // độc giả không tạo được đơn VietQR ba loại này
         return Enum.TryParse(purpose.Trim(), ignoreCase: true, out type) && Enum.IsDefined(type)
-            && type is not (PaymentTransactionType.Refund or PaymentTransactionType.VipSubscription);
+            && type is not (PaymentTransactionType.Refund or PaymentTransactionType.VipSubscription
+                or PaymentTransactionType.StudioPackage);
     }
 }

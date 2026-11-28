@@ -4475,6 +4475,63 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("reader_wallets", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioPackagePrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("PriceVnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("price_vnd");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_studio_package_prices_created_at");
+
+                    b.ToTable("studio_package_prices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_studio_package_prices_price_positive", "price_vnd > 0");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7451,6 +7508,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioPackagePrice", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>

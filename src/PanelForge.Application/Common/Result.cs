@@ -36,6 +36,8 @@ public static class ResultErrorCodes
     public const string Conflict = "CONFLICT";
     /// <summary>AUD-BE-10: giá ấn bản thay đổi so với giá kỳ vọng client gửi lên → HTTP 409.</summary>
     public const string PriceChanged = "PRICE_CHANGED";
+    /// <summary>D11: tài khoản đã có quyền tạo Studio, không mua lại gói mở Studio → HTTP 409.</summary>
+    public const string AlreadyOwned = "ALREADY_OWNED";
     public const string HashMismatch = "HASH_MISMATCH";
     public const string BibleGateBlocked = "BIBLE_GATE_BLOCKED";
     public const string ActiveArtworkOnRemovedPage = "ACTIVE_ARTWORK_ON_REMOVED_PAGE";

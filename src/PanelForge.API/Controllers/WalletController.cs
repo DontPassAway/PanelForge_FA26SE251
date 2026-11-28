@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Features.Payments.Commands.AdminRefundWallet;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
+using PanelForge.Application.Features.Payments.Commands.PurchaseStudioPackage;
 using PanelForge.Application.Features.Payments.Commands.ReportTransactionIssue;
 using PanelForge.Application.Features.Payments.Commands.UnlockChapter;
 using PanelForge.Application.Features.Payments.Commands.VerifyGooglePlayPurchase;
@@ -91,6 +92,34 @@ public class WalletController : ControllerBase
                 NotFound(new { message = result.ErrorMessage, code = result.ErrorCode }),
             ResultErrorCodes.Conflict or ResultErrorCodes.PriceChanged => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(new { message = result.ErrorMessage }),
+        };
+    }
+
+    /// <summary>
+    /// POST /api/wallet/studio-package
+    /// Độc giả mua gói mở Studio bằng số dư Ví (D11): trừ Ví, cấp quyền tạo Studio vĩnh viễn.
+    /// </summary>
+    [HttpPost("studio-package")]
+    [ProducesResponseType(typeof(PurchaseStudioPackageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> PurchaseStudioPackage([FromBody] PurchaseStudioPackageRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new PurchaseStudioPackageCommand(userId, request.ExpectedPriceVnd), cancellationToken);
+        if (result.IsSuccess) return Ok(result.Value);
+        var body = new { message = result.ErrorMessage, code = result.ErrorCode };
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.Unauthorized => Unauthorized(body),
+            ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
+            ResultErrorCodes.NotFound => NotFound(body),
+            ResultErrorCodes.AlreadyOwned or ResultErrorCodes.PriceChanged => Conflict(body),
+            _ => BadRequest(body),
         };
     }
 
