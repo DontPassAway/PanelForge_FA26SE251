@@ -52,6 +52,10 @@ public sealed class GetSystemHealthQueryHandler(IPanelForgeDbContext db, ISystem
                 .Where(r => (r.Status == AiUsageStatus.Failed || r.Status == AiUsageStatus.ProviderUnavailable) && r.OccurredAtUtc >= dayAgo);
             signals.Add(await CountAsync("aiCallsFailed24h", failedCalls.Select(r => r.OccurredAtUtc), _ => true, ct));
 
+            var failedEmails = db.EmailDeliveryLogs.AsNoTracking()
+                .Where(l => !l.Succeeded && l.CreatedAt >= dayAgo);
+            signals.Add(await CountAsync("emailsFailed24h", failedEmails.Select(l => l.CreatedAt), _ => true, ct));
+
             var stuckExportBefore = now - ExportStuckAfter;
             var stuckExports = db.ExportJobs.AsNoTracking()
                 .Where(j => (j.Status == ExportJobStatus.Queued || j.Status == ExportJobStatus.Processing) && j.CreatedAt < stuckExportBefore);

@@ -91,6 +91,7 @@ public interface IPanelForgeDbContext
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<PlatformBankAccount> PlatformBankAccounts { get; }
     DbSet<PanelForge.Domain.Entities.Platform.PlatformEmailSettings> PlatformEmailSettings { get; }
+    DbSet<PanelForge.Domain.Entities.Platform.EmailDeliveryLog> EmailDeliveryLogs { get; }
     DbSet<StudioPackagePrice> StudioPackagePrices { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }

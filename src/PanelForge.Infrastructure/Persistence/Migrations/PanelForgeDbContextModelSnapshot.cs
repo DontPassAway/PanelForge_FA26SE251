@@ -4532,6 +4532,88 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Platform.EmailDeliveryLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("ErrorDetail")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("error_detail");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("varchar(40)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("MailType")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)")
+                        .HasColumnName("mail_type");
+
+                    b.Property<int?>("SmtpPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("smtp_port");
+
+                    b.Property<string>("SmtpServer")
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("smtp_server");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("subject");
+
+                    b.Property<bool>("Succeeded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("succeeded");
+
+                    b.Property<string>("ToEmail")
+                        .IsRequired()
+                        .HasColumnType("varchar(254)")
+                        .HasColumnName("to_email");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_email_delivery_logs_created_at");
+
+                    b.HasIndex("Succeeded", "CreatedAt")
+                        .HasDatabaseName("ix_email_delivery_logs_succeeded_created_at");
+
+                    b.ToTable("email_delivery_logs", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Platform.PlatformEmailSettings", b =>
                 {
                     b.Property<Guid>("Id")

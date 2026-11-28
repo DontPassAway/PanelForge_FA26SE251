@@ -20,6 +20,7 @@ public sealed class SystemHealthProbe(
     IHttpClientFactory httpFactory,
     AiAgentSettings aiSettings,
     IConfiguration configuration,
+    IEmailService email,
     ILogger<SystemHealthProbe> logger) : ISystemHealthProbe
 {
     public const string AiHealthHttpClient = "ai-health";
@@ -41,8 +42,39 @@ public sealed class SystemHealthProbe(
                 await foreach (var _ in storage.ListAsync("", ct)) break;
                 return (int?)null;
             }, cancellationToken),
-            await ProbeAiAsync(cancellationToken)
+            await ProbeAiAsync(cancellationToken),
+            await ProbeEmailAsync(cancellationToken)
         ];
+    }
+
+    /// <summary>
+    /// Không kết nối SMTP mỗi lần mở trang (chậm, có nơi chặn đăng nhập dồn dập): chỉ xem cấu hình có đủ không
+    /// và lần gửi gần nhất trong 24h có lỗi không. Gửi thử thật ở Admin → Cấu hình email.
+    /// </summary>
+    private async Task<DependencyHealthDto> ProbeEmailAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var status = await email.GetConfigurationStatusAsync(cancellationToken);
+            var provider = status.SmtpServer is null ? "SMTP" : $"{status.SmtpServer}:{status.SmtpPort}";
+            if (!status.IsConfigured)
+                return new DependencyHealthDto("email", HealthStatus.Down, provider, null, status.Problem, null);
+
+            var dayAgo = DateTime.UtcNow.AddDays(-1);
+            var last = await db.EmailDeliveryLogs.AsNoTracking()
+                .Where(l => l.CreatedAt >= dayAgo)
+                .OrderByDescending(l => l.CreatedAt)
+                .Select(l => new { l.Succeeded, l.FailureReason })
+                .FirstOrDefaultAsync(cancellationToken);
+            return last is { Succeeded: false }
+                ? new DependencyHealthDto("email", HealthStatus.Degraded, provider, null, last.FailureReason, null)
+                : new DependencyHealthDto("email", HealthStatus.Healthy, provider, null, null, null);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("System health: email lỗi ({Type})", ex.GetType().Name);
+            return new DependencyHealthDto("email", HealthStatus.Down, "SMTP", null, "UNREACHABLE", null);
+        }
     }
 
     private async Task<DependencyHealthDto> ProbeAiAsync(CancellationToken cancellationToken)

@@ -5,6 +5,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
+using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Enums;
@@ -119,8 +120,8 @@ public class PlatformEmailSettingsTests
     {
         var admin = Admin();
         var email = new Mock<IEmailService>();
-        email.Setup(e => e.SendEmailAsync(admin.Email, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(delivered);
+        email.Setup(e => e.SendTestEmailAsync(admin.Email, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(delivered ? EmailSendResult.Ok : new EmailSendResult(false, "AUTH_FAILED", "535 5.7.8 Username and Password not accepted"));
 
         var result = await new SendTestEmailCommandHandler(_db, email.Object)
             .Handle(new SendTestEmailCommand(admin.Id), CancellationToken.None);
@@ -129,6 +130,11 @@ public class PlatformEmailSettingsTests
         if (delivered)
             result.Value!.SentTo.Should().Be(admin.Email);
         else
+        {
             result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed);
+            result.ErrorMessage.Should().Contain("mật khẩu ứng dụng");
+            result.ErrorDetails.Should().BeEquivalentTo(
+                new EmailDeliveryFailureDto("AUTH_FAILED", "535 5.7.8 Username and Password not accepted"));
+        }
     }
 }

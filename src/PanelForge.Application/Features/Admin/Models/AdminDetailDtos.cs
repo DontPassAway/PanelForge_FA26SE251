@@ -98,8 +98,9 @@ public sealed record AdminWorkspaceAiActivityDto(long Tokens, int Calls, int Fai
 public enum HealthStatus { Healthy = 0, Degraded = 1, Down = 2 }
 
 /// <summary>
-/// Một thành phần hạ tầng (Key = database | storage | ai): kết quả gọi thử ngay lúc Admin mở trang.
-/// Reason khi không Healthy: SLOW | TIMEOUT | UNREACHABLE | SERVICE_KEY_MISSING. QueueDepth chỉ có ở ai.
+/// Một thành phần hạ tầng (Key = database | storage | ai | email): kết quả gọi thử ngay lúc Admin mở trang.
+/// Reason khi không Healthy: SLOW | TIMEOUT | UNREACHABLE | SERVICE_KEY_MISSING; email dùng mã EmailFailureReasons
+/// (NOT_CONFIGURED, PASSWORD_UNREADABLE = Down; lỗi của lần gửi gần nhất trong 24h = Degraded). QueueDepth chỉ có ở ai.
 /// </summary>
 public sealed record DependencyHealthDto(
     string Key, HealthStatus Status, string Provider, int? LatencyMs, string? Reason, int? QueueDepth);
