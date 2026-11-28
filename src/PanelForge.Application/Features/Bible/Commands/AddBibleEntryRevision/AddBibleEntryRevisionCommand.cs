@@ -335,7 +335,14 @@ public sealed class AddBibleEntryRevisionCommandHandler : IRequestHandler<AddBib
                 return Result<BibleEntryRevisionDto>.Failure("Không tìm thấy bản nháp để cập nhật.", ResultErrorCodes.NotFound);
             }
 
-            targetDraft.UpdateDraft(summary, snapshotJson, contentHash, command.UserId, stageName);
+            try
+            {
+                targetDraft.UpdateDraft(summary, snapshotJson, contentHash, command.UserId, stageName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Result<BibleEntryRevisionDto>.Failure(ex.Message, ResultErrorCodes.Conflict);
+            }
             revision = targetDraft;
         }
 
