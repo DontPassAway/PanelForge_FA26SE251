@@ -103,6 +103,20 @@ public sealed class R2AssetStorage : IAssetStorage
         }
     }
 
+    public async IAsyncEnumerable<StoredObject> ListAsync(
+        string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = new ListObjectsV2Request { BucketName = _bucket, Prefix = prefix };
+        ListObjectsV2Response response;
+        do
+        {
+            response = await _s3.ListObjectsV2Async(request, cancellationToken);
+            foreach (var obj in response.S3Objects ?? [])
+                yield return new StoredObject(obj.Key, obj.Size ?? 0);
+            request.ContinuationToken = response.NextContinuationToken;
+        } while (response.IsTruncated == true);
+    }
+
     private async Task<bool> ExistsAsync(string key, CancellationToken cancellationToken)
     {
         try

@@ -63,6 +63,7 @@ using PanelForge.Application.Features.Quotas.Commands.ApproveQuotaIncreaseReques
 using PanelForge.Application.Features.Quotas.Commands.RejectQuotaIncreaseRequest;
 using PanelForge.Application.Features.Quotas.Queries.GetAdminResources;
 using PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResources;
+using PanelForge.Application.Features.Quotas.Commands.ReconcileStorage;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.AiUsage.Models;
 using PanelForge.Application.Features.Audit.Models;
@@ -824,6 +825,21 @@ public class AdminController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateWorkspaceResourcesCommand(
             id, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/admin/storage/reconcile?apply=false — đối soát kho file (OPS-22): dung lượng thật của từng Studio từ file còn
+    /// được dùng, kèm danh sách file mồ côi. apply=true ghi lại dung lượng đã tính. Không xoá file nào.
+    /// </summary>
+    [HttpPost("storage/reconcile")]
+    [ProducesResponseType(typeof(StorageReconcileReportDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ReconcileStorage([FromQuery] bool apply, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ReconcileStorageCommand(apply), cancellationToken);
+        // 409 chỉ trả message: lời nhắc "chạy lại" cụ thể hơn câu dịch chung của mã CONFLICT ở FE.
+        if (result.ErrorCode == ResultErrorCodes.Conflict) return Conflict(new { message = result.ErrorMessage });
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

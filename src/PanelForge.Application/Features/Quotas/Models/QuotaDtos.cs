@@ -57,3 +57,35 @@ public sealed record AdminWorkspaceResourceDto(
 
 /// <summary>Admin sửa nhanh hạn mức một Studio. null = giữ nguyên; 0 = không giới hạn.</summary>
 public sealed record UpdateWorkspaceResourcesRequest(long? StorageQuotaBytes, long? MonthlyTokenQuota, long? MonthlyImageQuota);
+
+/// <summary>
+/// Kết quả đối soát kho file (OPS-22). Không xoá file nào: chỉ so dung lượng đang ghi với dung lượng file còn được dùng,
+/// và liệt kê file mồ côi. <see cref="Applied"/> = true khi đã ghi dung lượng tính lại vào từng Studio.
+/// </summary>
+public sealed record StorageReconcileReportDto(
+    DateTime ScannedAt,
+    bool Applied,
+    int ScannedFiles,
+    long ScannedBytes,
+    IReadOnlyList<StorageReconcileWorkspaceDto> Workspaces,
+    int UnattributedFiles,
+    long UnattributedBytes,
+    IReadOnlyList<StorageOrphanFileDto> OrphanSamples,
+    bool OrphanSamplesTruncated);
+
+/// <summary>
+/// Một Studio trong báo cáo đối soát. ComputedBytes = tổng file gốc còn được tham chiếu (artwork, ảnh bìa, ảnh Bible).
+/// DerivedBytes = ảnh thu nhỏ và file xuất bản, không tính vào hạn mức. MissingFiles = file DB còn trỏ tới nhưng kho không có.
+/// </summary>
+public sealed record StorageReconcileWorkspaceDto(
+    Guid WorkspaceId,
+    string Name,
+    long RecordedBytes,
+    long ComputedBytes,
+    int OrphanFiles,
+    long OrphanBytes,
+    long DerivedBytes,
+    int MissingFiles);
+
+/// <summary>File không còn bản ghi nào tham chiếu. WorkspaceId null = không xác định được Studio từ khoá.</summary>
+public sealed record StorageOrphanFileDto(string Key, long SizeBytes, Guid? WorkspaceId);

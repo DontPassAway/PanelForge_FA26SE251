@@ -49,6 +49,21 @@ public sealed class LocalAssetStorage : IAssetStorage
         return Task.FromResult(stream);
     }
 
+    public async IAsyncEnumerable<StoredObject> ListAsync(
+        string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_root)) yield break;
+        foreach (var path in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) continue; // file đang ghi dở
+            var key = Path.GetRelativePath(_root, path).Replace('\\', '/');
+            if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            yield return new StoredObject(key, new FileInfo(path).Length);
+        }
+        await Task.CompletedTask;
+    }
+
     private string Resolve(string key)
     {
         var full = Path.GetFullPath(Path.Combine(_root, key));
