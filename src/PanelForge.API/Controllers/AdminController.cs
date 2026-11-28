@@ -57,6 +57,7 @@ using PanelForge.Domain.Enums;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.AiUsage.Models;
 using PanelForge.Application.Features.Audit.Models;
+using PanelForge.Application.Features.Payments.Models;
 
 namespace PanelForge.API.Controllers;
 
@@ -740,5 +741,26 @@ public class AdminController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateWorkspaceQuotaCommand(id, request.StorageQuotaBytes), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/admin/payment-config
+    /// Trạng thái cấu hình SePay cấp hệ thống (webhook key có/không, tài khoản nhận mặc định). Không trả về key.
+    /// Đổi giá trị qua env SePay__WebhookApiKey / SePay__DefaultBank__* rồi khởi động lại API.
+    /// </summary>
+    [HttpGet("payment-config")]
+    [ProducesResponseType(typeof(AdminPaymentConfigDto), StatusCodes.Status200OK)]
+    public IActionResult GetPaymentConfig(
+        [FromServices] IConfiguration configuration,
+        [FromServices] DefaultBankSettings defaultBank)
+    {
+        return Ok(new AdminPaymentConfigDto(
+            WebhookApiKeyConfigured: !string.IsNullOrWhiteSpace(configuration["SePay:WebhookApiKey"]),
+            WebhookPath: "/api/payments/sepay/webhook",
+            DefaultBankBin: defaultBank.Bin,
+            DefaultBankName: defaultBank.Name,
+            DefaultBankAccountNo: defaultBank.AccountNo,
+            DefaultBankAccountName: defaultBank.AccountName,
+            DefaultBankIsPlaceholder: defaultBank.IsPlaceholder));
     }
 }
