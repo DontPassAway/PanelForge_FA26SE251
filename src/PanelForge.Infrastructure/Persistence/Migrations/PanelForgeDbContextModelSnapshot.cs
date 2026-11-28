@@ -4261,6 +4261,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(64)")
                         .HasColumnName("order_code");
 
+                    b.Property<string>("ProviderReference")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("provider_reference");
+
                     b.Property<string>("QrImageUrl")
                         .IsRequired()
                         .HasColumnType("varchar(1000)")
@@ -4312,6 +4316,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrderCode")
                         .IsUnique()
                         .HasDatabaseName("ix_payment_transactions_order_code");
+
+                    b.HasIndex("ProviderReference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_transactions_provider_reference")
+                        .HasFilter("provider_reference IS NOT NULL");
 
                     b.HasIndex("SeriesId");
 
