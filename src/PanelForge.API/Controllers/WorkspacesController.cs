@@ -338,6 +338,7 @@ public class WorkspacesController : ControllerBase
     /// Producer xem lượt đọc / số người đọc theo bộ truyện và chương (không kèm doanh thu — thuộc Publisher).
     /// </summary>
     [HttpGet("{id:guid}/reader-stats")]
+    [AllowAdminOversight]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(WorkspaceReaderStatsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReaderStats(Guid id, CancellationToken cancellationToken)

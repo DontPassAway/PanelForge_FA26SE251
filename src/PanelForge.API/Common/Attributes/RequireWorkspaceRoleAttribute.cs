@@ -150,8 +150,27 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
 
         bool isPublisher = user.IsInRole("Publisher") ||
             user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && c.Value == "Publisher");
-        // BR-07: Admin nền tảng không có quyền nội dung trong Studio. Không đi tắt ở đây;
-        // IWorkspaceAuthorizationService trả false cho Admin nên Admin nhận 403.
+        bool isAdmin = user.IsInRole("Admin") ||
+            user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && (c.Value == "Admin" || c.Value == "Administrator"));
+
+        // BR-07: Admin nền tảng không có quyền nội dung trong Studio. Ngoại lệ duy nhất là GET có
+        // [AllowAdminOversight] (vd dashboard độc giả, BR-32: Admin là người xem).
+        if (isAdmin)
+        {
+            bool oversight = HttpMethods.IsGet(context.HttpContext.Request.Method)
+                && context.ActionDescriptor.EndpointMetadata?.OfType<AllowAdminOversightAttribute>().Any() == true;
+            if (oversight)
+            {
+                await next();
+                return;
+            }
+
+            context.Result = new ObjectResult(new { message = "Administrator không thao tác trên dữ liệu sản xuất của Studio (BR-07)." })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
+            return;
+        }
 
         // BR-32: Publisher là vai trò hệ thống, không phải thành viên Studio. Chỉ cho qua khi endpoint
         // khai báo rõ WorkspaceRole.Publisher, hoặc là GET/HEAD được đánh dấu [AllowPublisherRead].
