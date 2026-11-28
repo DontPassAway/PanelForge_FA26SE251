@@ -7,7 +7,7 @@ using PanelForge.Application.Features.Admin.Models;
 
 namespace PanelForge.Application.Features.Admin.Queries.GetEmailTemplates;
 
-/// <summary>GET /api/admin/email-templates — mẫu đang dùng của từng loại email hệ thống, kèm mẫu mặc định.</summary>
+/// <summary>GET /api/admin/email-templates — nội dung đang dùng của từng loại email hệ thống, kèm nội dung mặc định.</summary>
 public sealed record GetEmailTemplatesQuery : IRequest<Result<IReadOnlyList<AdminEmailTemplateDto>>>;
 
 public sealed class GetEmailTemplatesQueryHandler
@@ -33,8 +33,7 @@ public sealed class GetEmailTemplatesQueryHandler
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new
             {
-                t.Subject,
-                t.BodyHtml,
+                Content = new EmailTemplateContent(t.Subject, t.Greeting, t.Intro, t.Note, t.Signature),
                 t.CreatedAt,
                 ChangedByName = db.Users.Where(u => u.Id == t.ChangedByUserId).Select(u => u.FullName).FirstOrDefault()
             })
@@ -42,13 +41,11 @@ public sealed class GetEmailTemplatesQueryHandler
 
         return new AdminEmailTemplateDto(
             definition.Key,
-            saved?.Subject ?? definition.DefaultSubject,
-            saved?.BodyHtml ?? definition.DefaultBodyHtml,
-            definition.DefaultSubject,
-            definition.DefaultBodyHtml,
+            saved?.Content ?? definition.Default,
+            definition.Default,
             definition.Placeholders,
-            definition.RequiredPlaceholders,
-            saved is not null && (saved.Subject != definition.DefaultSubject || saved.BodyHtml != definition.DefaultBodyHtml),
+            definition.HasCode,
+            saved is not null && saved.Content != definition.Default,
             saved?.CreatedAt,
             saved?.ChangedByName);
     }

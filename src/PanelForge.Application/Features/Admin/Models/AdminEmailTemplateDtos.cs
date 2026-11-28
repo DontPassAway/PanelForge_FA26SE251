@@ -1,19 +1,20 @@
+using PanelForge.Application.Common.Email;
+
 namespace PanelForge.Application.Features.Admin.Models;
 
 /// <summary>
-/// Mẫu một loại email hệ thống cho màn Admin. <c>IsCustomized = false</c>: đang dùng mẫu mặc định.
-/// Biến viết dạng <c>{{ten}}</c>; <c>RequiredPlaceholders</c> phải có trong nội dung (ví dụ <c>{{code}}</c> của email OTP).
+/// Mẫu một loại email hệ thống cho màn Admin. <c>IsCustomized = false</c>: đang dùng nội dung mặc định.
+/// <c>HasCode</c>: email có ô mã OTP do hệ thống tự đặt sau đoạn mở đầu.
 /// </summary>
 public sealed record AdminEmailTemplateDto(
     string Key,
-    string Subject,
-    string BodyHtml,
-    string DefaultSubject,
-    string DefaultBodyHtml,
+    EmailTemplateContent Content,
+    EmailTemplateContent DefaultContent,
     IReadOnlyList<string> Placeholders,
-    IReadOnlyList<string> RequiredPlaceholders,
+    bool HasCode,
     bool IsCustomized,
     DateTime? ChangedAt,
     string? ChangedByName);
 
-public sealed record UpdateEmailTemplateRequest(string Subject, string BodyHtml);
+/// <summary>Email đã dựng với dữ liệu mẫu, đúng như khi gửi.</summary>
+public sealed record EmailTemplatePreviewDto(string Subject, string BodyHtml);

@@ -16,7 +16,10 @@ internal sealed class PlatformEmailTemplateConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.TemplateKey).HasColumnName("template_key").HasColumnType("varchar(64)").IsRequired();
         builder.Property(t => t.Subject).HasColumnName("subject")
                .HasColumnType($"varchar({PlatformEmailTemplate.MaxSubjectLength})").IsRequired();
-        builder.Property(t => t.BodyHtml).HasColumnName("body_html").HasColumnType("text").IsRequired();
+        builder.Property(t => t.Greeting).HasColumnName("greeting").HasColumnType("text").IsRequired();
+        builder.Property(t => t.Intro).HasColumnName("intro").HasColumnType("text").IsRequired();
+        builder.Property(t => t.Note).HasColumnName("note").HasColumnType("text").IsRequired();
+        builder.Property(t => t.Signature).HasColumnName("signature").HasColumnType("text").IsRequired();
         builder.Property(t => t.ChangedByUserId).HasColumnName("changed_by_user_id").HasColumnType("uuid").IsRequired();
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();

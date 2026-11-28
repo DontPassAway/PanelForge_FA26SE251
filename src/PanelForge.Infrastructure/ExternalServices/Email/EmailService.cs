@@ -147,7 +147,7 @@ public class EmailService : IEmailService
             cancellationToken);
     }
 
-    /// <summary>Mẫu Admin sửa trong app (bản mới nhất của loại email) được ưu tiên; chưa sửa thì dùng mẫu mặc định.</summary>
+    /// <summary>Nội dung Admin sửa trong app (bản mới nhất của loại email) được ưu tiên; chưa sửa thì dùng nội dung mặc định.</summary>
     private async Task<bool> SendTemplateAsync(
         string toEmail, string templateKey, Dictionary<string, string> values, CancellationToken ct)
     {
@@ -157,11 +157,10 @@ public class EmailService : IEmailService
         var saved = await _db.PlatformEmailTemplates.AsNoTracking()
             .Where(t => t.TemplateKey == templateKey && !t.IsDeleted)
             .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new { t.Subject, t.BodyHtml })
+            .Select(t => new EmailTemplateContent(t.Subject, t.Greeting, t.Intro, t.Note, t.Signature))
             .FirstOrDefaultAsync(ct);
 
-        var (subject, body) = EmailTemplateCatalog.Render(
-            saved?.Subject ?? definition.DefaultSubject, saved?.BodyHtml ?? definition.DefaultBodyHtml, values);
+        var (subject, body) = EmailTemplateCatalog.Render(definition, saved ?? definition.Default, values);
         return await SendEmailAsync(toEmail, subject, body, ct);
     }
 }

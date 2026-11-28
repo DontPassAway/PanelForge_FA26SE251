@@ -4612,11 +4612,6 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("BodyHtml")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("body_html");
-
                     b.Property<Guid>("ChangedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by_user_id");
@@ -4637,11 +4632,31 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("Greeting")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("greeting");
+
+                    b.Property<string>("Intro")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("intro");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("signature");
 
                     b.Property<string>("Subject")
                         .IsRequired()
