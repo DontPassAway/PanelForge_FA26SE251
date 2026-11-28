@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PanelForge.Application.Features.Payments.Commands.CreateTopup;
 using PanelForge.Application.Features.Payments.Commands.ProcessSePayWebhook;
-using PanelForge.Application.Features.Payments.Queries.GetWorkspaceBankSettings;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Payments;
@@ -208,16 +207,16 @@ public class SePayWebhookTests
     }
 
     [Fact]
-    public async Task BankSettingsQuery_FallsBackToConfiguredDefaultBank()
+    public async Task PlatformBankAccount_OverridesDefaultBank_ForNewOrders()
     {
-        var configured = new DefaultBankSettings { Bin = "970436", Name = "Vietcombank", AccountNo = "1029384756", AccountName = "PANELFORGE JSC" };
+        _db.PlatformBankAccounts.Add(PlatformBankAccount.Create("970436", "Vietcombank", "1029384756", "PANELFORGE JSC", Guid.NewGuid()));
+        await _db.SaveChangesAsync();
 
-        var dto = (await new GetWorkspaceBankSettingsQueryHandler(_db, configured)
-            .Handle(new GetWorkspaceBankSettingsQuery(_studio.Id), default)).Value!;
+        var order = await CreateOrder(new TopupRequest(AmountVnd: 20000));
 
-        dto.BankAccountNo.Should().Be("1029384756");
-        dto.BankName.Should().Be("Vietcombank");
+        order.AccountNumber.Should().Be("1029384756");
+        order.QrCodeUrl.Should().Contain("/970436-1029384756-");
+        (await Webhook(order, 20000, account: "1029384756")).Should().Be(SePayWebhookOutcome.Approved);
         new DefaultBankSettings().IsPlaceholder.Should().BeTrue();
-        configured.IsPlaceholder.Should().BeFalse();
     }
 }

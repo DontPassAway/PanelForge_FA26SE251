@@ -6,13 +6,12 @@ using PanelForge.Application.Features.Catalog;
 using PanelForge.Application.Features.Payments.Common;
 using PanelForge.Application.Features.Payments.Models;
 using PanelForge.Domain.Entities.Payments;
-using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Payments.Commands.CreateTopup;
 
 /// <summary>
-/// Tạo đơn chuyển khoản VietQR ở trạng thái Pending (hiển thị ngay trên màn hình Thanh toán của Producer).
+/// Tạo đơn chuyển khoản VietQR ở trạng thái Pending vào tài khoản ngân hàng nền tảng (Q13); Publisher đối soát và duyệt.
 /// Purpose: Topup (nạp ví) | ChapterUnlock (mở chương trực tiếp). Gói VIP đã gỡ (Q4, OPS-11).
 /// Với ChapterUnlock, số tiền và Workspace do server quyết định — không tin giá client gửi.
 /// </summary>
@@ -25,7 +24,6 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
 {
     private const int MinTopupVnd = 1000;
     private const int MaxTopupVnd = 50_000_000;
-    private const string DefaultStudioName = "komaforge";
     private static readonly TimeSpan PendingReuseWindow = TimeSpan.FromMinutes(15);
 
     private readonly IPanelForgeDbContext _db;
@@ -107,39 +105,19 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
                 break;
         }
 
-        // Suy ra Workspace (Studio nhận tiền) từ Series nếu client chỉ gửi ngữ cảnh bộ truyện.
-        if (seriesId.HasValue && !workspaceId.HasValue)
+        // Q13: mọi tiền chuyển vào tài khoản ngân hàng của nền tảng. Đơn nạp Ví không thuộc Studio nào;
+        // đơn mở chương gắn Workspace của chương để tính doanh thu Studio (BR-32).
+        if (type != PaymentTransactionType.ChapterUnlock)
         {
-            workspaceId = await _db.Series
-                .AsNoTracking()
-                .Where(s => s.Id == seriesId.Value)
-                .Select(s => (Guid?)s.WorkspaceId)
-                .FirstOrDefaultAsync(ct);
+            workspaceId = null;
+            seriesId = null;
         }
 
-        // Mọi đơn VietQR phải thuộc một Studio có thật để Producer thấy và duyệt được trên /workspaces/{id}/payments.
-        // Không có (hoặc sai) ngữ cảnh → fallback Studio mặc định (ưu tiên KomaForge Studio).
-        var ws = workspaceId.HasValue
-            ? await _db.StudioWorkspaces.AsNoTracking().FirstOrDefaultAsync(w => w.Id == workspaceId.Value && !w.IsDeleted, ct)
-            : null;
-        ws ??= await FindDefaultStudioAsync(ct);
-        if (ws is null)
-            return Result<TopupResponse>.Failure("Hệ thống chưa có Studio nào nhận thanh toán. Vui lòng thử lại sau.", ResultErrorCodes.Validation);
-        workspaceId = ws.Id;
-
-        // Tài khoản thụ hưởng: của Studio nếu đã cấu hình, ngược lại dùng SePay:DefaultBank.
-        string bankBin = _defaultBank.Bin;
-        string bankName = _defaultBank.Name;
-        string accountNo = _defaultBank.AccountNo;
-        string accountName = _defaultBank.AccountName;
-
-        if (!string.IsNullOrWhiteSpace(ws.BankBin) && !string.IsNullOrWhiteSpace(ws.BankAccountNo))
-        {
-            bankBin = ws.BankBin;
-            bankName = ws.BankName ?? bankName;
-            accountNo = ws.BankAccountNo;
-            accountName = ws.BankAccountName ?? accountName;
-        }
+        var bank = await PlatformBank.CurrentAsync(_db, _defaultBank, ct);
+        string bankBin = bank.Bin;
+        string bankName = bank.Name;
+        string accountNo = bank.AccountNo;
+        string accountName = bank.AccountName;
 
         // Chống spam đơn Pending: độc giả đóng/mở popup QR nhiều lần → dùng lại đơn Pending cùng loại/số tiền/chương
         // còn mới (≤ 15 phút, cùng tài khoản nhận); đơn Pending cũ hơn cùng loại được chuyển Expired để bảng Producer gọn.
@@ -221,15 +199,6 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             Status: PaymentTransactionStatus.Pending.ToString()
         ));
     }
-
-    /// <summary>Studio nhận đơn khi client không gửi ngữ cảnh: ưu tiên "KomaForge Studio", rồi Studio đã cấu hình ngân hàng, rồi Studio cũ nhất.</summary>
-    private Task<StudioWorkspace?> FindDefaultStudioAsync(CancellationToken ct) =>
-        _db.StudioWorkspaces.AsNoTracking()
-            .Where(w => !w.IsDeleted)
-            .OrderByDescending(w => w.Name.ToLower().Contains(DefaultStudioName))
-            .ThenByDescending(w => w.BankBin != null && w.BankAccountNo != null)
-            .ThenBy(w => w.CreatedAt)
-            .FirstOrDefaultAsync(ct);
 
     private static bool TryParsePurpose(string? purpose, out PaymentTransactionType type)
     {

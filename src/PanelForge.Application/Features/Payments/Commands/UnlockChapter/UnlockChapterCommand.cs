@@ -127,15 +127,16 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         wallet.DeductBalance(priceVnd);
 
         string orderCode = await OrderCodeGenerator.GenerateUniqueAsync(_db, ct);
+        var bank = await PlatformBank.CurrentAsync(_db, _defaultBank, ct);
         var transaction = PaymentTransaction.Create(
             userId: command.UserId,
             orderCode: orderCode,
             type: PaymentTransactionType.ChapterUnlock,
             amountVnd: priceVnd,
             qrImageUrl: "",
-            bankBin: _defaultBank.Bin,
-            bankAccountNo: _defaultBank.AccountNo,
-            bankAccountName: _defaultBank.AccountName,
+            bankBin: bank.Bin,
+            bankAccountNo: bank.AccountNo,
+            bankAccountName: bank.AccountName,
             workspaceId: chapter.Series.WorkspaceId,
             seriesId: chapter.SeriesId,
             chapterId: chapter.Id,

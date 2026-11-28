@@ -83,27 +83,23 @@ public class VietQrPaymentFlowTests
     }
 
     [Fact]
-    public async Task TopupOrder_WithSeriesOnly_IsAttributedToSeriesStudio()
+    public async Task TopupOrder_IsNotAttributedToAnyStudio_Q13()
     {
         var result = await CreateOrder(new TopupRequest(AmountVnd: 50000, SeriesId: _series.Id));
 
         result.IsSuccess.Should().BeTrue();
-        (await _db.PaymentTransactions.SingleAsync()).WorkspaceId.Should().Be(_studio.Id);
+        var tx = await _db.PaymentTransactions.SingleAsync();
+        tx.WorkspaceId.Should().BeNull("tiền nạp Ví vào tài khoản nền tảng, không thuộc Studio");
+        tx.BankAccountNo.Should().Be(DefaultBankSettings.PlaceholderAccountNo);
     }
 
     [Fact]
-    public async Task TopupOrder_WithoutContext_FallsBackToDefaultStudio_PreferringKomaForge()
+    public async Task ChapterUnlockOrder_IsAttributedToChapterStudio()
     {
-        var koma = StudioWorkspace.Create("KomaForge Studio", Guid.NewGuid());
-        koma.UpdateBankInfo("970436", "Vietcombank", "999888777", "KOMAFORGE");
-        _db.StudioWorkspaces.Add(koma);
-        await _db.SaveChangesAsync();
-
-        var result = await CreateOrder(new TopupRequest(AmountVnd: 50000));
+        var result = await CreateOrder(new TopupRequest(ChapterId: _paidChapter.Id, Purpose: "ChapterUnlock"));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.AccountNumber.Should().Be("999888777");
-        (await _db.PaymentTransactions.SingleAsync()).WorkspaceId.Should().Be(koma.Id);
+        (await _db.PaymentTransactions.SingleAsync()).WorkspaceId.Should().Be(_studio.Id);
     }
 
     [Fact]
@@ -190,12 +186,14 @@ public class VietQrPaymentFlowTests
             .Handle(new CreateTopupCommand(reader.Id, new TopupRequest(AmountVnd: 100000, SeriesId: _series.Id)), default);
         var topupTx = await _db.PaymentTransactions.SingleAsync(t => t.OrderCode == topupOrder.Value!.OrderId);
         await new ApprovePaymentCommandHandler(_db)
-            .Handle(new ApprovePaymentCommand(_studio.Id, topupTx.Id, _producerId), default);
+            .Handle(new ApprovePaymentCommand(null, topupTx.Id, _producerId), default);
 
         var queryHandler = new PanelForge.Application.Features.Payments.Queries.GetWorkspacePayments.GetWorkspacePaymentsQueryHandler(_db);
         var afterTopup = (await queryHandler.Handle(new(_studio.Id), default)).Value!;
+        var platform = (await queryHandler.Handle(new((Guid?)null), default)).Value!;
 
-        afterTopup.Summary.TotalTopupsVnd.Should().Be(100000m);
+        afterTopup.Summary.TotalTopupsVnd.Should().Be(0m, "Q13: tiền nạp Ví thuộc nền tảng, không thuộc Studio");
+        platform.Summary.TotalTopupsVnd.Should().Be(100000m);
         afterTopup.Summary.TotalUnlockRevenueVnd.Should().Be(0m);
         afterTopup.Summary.TotalRevenueVnd.Should().Be(0m, "nạp ví không phải doanh thu mở khóa (AUD-BE-07)");
 
@@ -205,7 +203,7 @@ public class VietQrPaymentFlowTests
         unlock.IsSuccess.Should().BeTrue();
 
         var afterUnlock = (await queryHandler.Handle(new(_studio.Id), default)).Value!;
-        afterUnlock.Summary.TotalTopupsVnd.Should().Be(100000m);
+        afterUnlock.Summary.TotalTopupsVnd.Should().Be(0m);
         afterUnlock.Summary.TotalUnlockRevenueVnd.Should().Be(15000m);
         afterUnlock.Summary.TotalRevenueVnd.Should().Be(15000m);
     }

@@ -7,7 +7,7 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.Payments.Commands.RejectPayment;
 
 public sealed record RejectPaymentCommand(
-    Guid WorkspaceId,
+    Guid? WorkspaceId,
     Guid TransactionId,
     Guid ProducerUserId,
     string? Reason = null
@@ -22,7 +22,7 @@ public sealed class RejectPaymentCommandHandler : IRequestHandler<RejectPaymentC
     public async Task<Result<string>> Handle(RejectPaymentCommand command, CancellationToken ct)
     {
         var tx = await _db.PaymentTransactions
-            .FirstOrDefaultAsync(t => t.Id == command.TransactionId && t.WorkspaceId == command.WorkspaceId && !t.IsDeleted, ct);
+            .FirstOrDefaultAsync(t => t.Id == command.TransactionId && (command.WorkspaceId == null || t.WorkspaceId == command.WorkspaceId) && !t.IsDeleted, ct);
 
         if (tx == null)
             return Result<string>.Failure("Không tìm thấy giao dịch thanh toán trong Workspace này.", ResultErrorCodes.NotFound);

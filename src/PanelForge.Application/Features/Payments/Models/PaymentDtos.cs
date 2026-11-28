@@ -123,18 +123,28 @@ public sealed record RejectPaymentRequest(
     string? Reason = null
 );
 
-public sealed record WorkspaceBankSettingsDto(
-    Guid WorkspaceId,
-    string? BankBin,
-    string? BankName,
-    string? BankAccountNo,
-    string? BankAccountName
+/// <summary>Tài khoản ngân hàng nền tảng đang nhận tiền VietQR (Q13). <c>IsConfigured = false</c>: đang dùng <c>SePay:DefaultBank</c>.</summary>
+public sealed record PlatformBankAccountDto(
+    string BankBin,
+    string BankName,
+    string AccountNo,
+    string AccountName,
+    bool IsConfigured,
+    DateTime? ChangedAt,
+    string? ChangedByName
 );
 
-public sealed record UpdateWorkspaceBankSettingsRequest(
-    string? BankBin,
-    string? BankName,
-    string? BankAccountNo,
-    string? BankAccountName
+public sealed record PlatformBankAccountResponseDto(
+    PlatformBankAccountDto Current,
+    IReadOnlyList<PlatformBankAccountDto> History
+);
+
+/// <summary>Đổi tài khoản nhận tiền bắt buộc mã 2FA (TOTP hoặc mã khôi phục) của Publisher.</summary>
+public sealed record UpdatePlatformBankAccountRequest(
+    string BankBin,
+    string BankName,
+    string AccountNo,
+    string AccountName,
+    string TwoFactorCode
 );
 

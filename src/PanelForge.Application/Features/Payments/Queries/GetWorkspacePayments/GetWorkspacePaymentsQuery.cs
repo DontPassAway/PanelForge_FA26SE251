@@ -8,8 +8,9 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Payments.Queries.GetWorkspacePayments;
 
+/// <summary>Giao dịch VietQR/Ví của một Studio; <c>WorkspaceId = null</c> là toàn nền tảng (gồm đơn nạp Ví không thuộc Studio, Q13).</summary>
 public sealed record GetWorkspacePaymentsQuery(
-    Guid WorkspaceId,
+    Guid? WorkspaceId,
     string? Status = null,
     Guid? SeriesId = null,
     string? Search = null,
@@ -28,29 +29,24 @@ public sealed class GetWorkspacePaymentsQueryHandler : IRequestHandler<GetWorksp
         var pageIndex = Math.Max(1, q.PageIndex);
         var pageSize = Math.Clamp(q.PageSize, 1, 100);
 
-        // 1. KPI Summary của Studio (Q13 / BR-32 / AUD-BE-07): tách tiền nạp ví (Topup) khỏi doanh thu mở khóa (ChapterUnlock).
-        var totalUnlockRevenue = await _db.PaymentTransactions
-            .Where(t => t.WorkspaceId == q.WorkspaceId
-                        && t.Status == PaymentTransactionStatus.Approved
-                        && t.Type == PaymentTransactionType.ChapterUnlock
-                        && !t.IsDeleted)
+        // 1. KPI Summary (Q13 / BR-32 / AUD-BE-07): tách tiền nạp ví (Topup) khỏi doanh thu mở khóa (ChapterUnlock).
+        var scoped = _db.PaymentTransactions
+            .Where(t => !t.IsDeleted && (q.WorkspaceId == null || t.WorkspaceId == q.WorkspaceId));
+
+        var totalUnlockRevenue = await scoped
+            .Where(t => t.Status == PaymentTransactionStatus.Approved && t.Type == PaymentTransactionType.ChapterUnlock)
             .SumAsync(t => (decimal?)t.AmountVnd, ct) ?? 0m;
 
-        var totalTopups = await _db.PaymentTransactions
-            .Where(t => t.WorkspaceId == q.WorkspaceId
-                        && t.Status == PaymentTransactionStatus.Approved
-                        && t.Type == PaymentTransactionType.Topup
-                        && !t.IsDeleted)
+        var totalTopups = await scoped
+            .Where(t => t.Status == PaymentTransactionStatus.Approved && t.Type == PaymentTransactionType.Topup)
             .SumAsync(t => (decimal?)t.AmountVnd, ct) ?? 0m;
 
-        var pendingCount = await _db.PaymentTransactions
-            .CountAsync(t => t.WorkspaceId == q.WorkspaceId && t.Status == PaymentTransactionStatus.Pending && !t.IsDeleted, ct);
+        var pendingCount = await scoped.CountAsync(t => t.Status == PaymentTransactionStatus.Pending, ct);
 
         var totalUnlocked = await _db.ChapterEntitlements
-            .CountAsync(e => e.WorkspaceId == q.WorkspaceId && !e.IsDeleted, ct);
+            .CountAsync(e => !e.IsDeleted && (q.WorkspaceId == null || e.WorkspaceId == q.WorkspaceId), ct);
 
-        var paidTxCount = await _db.PaymentTransactions
-            .CountAsync(t => t.WorkspaceId == q.WorkspaceId && t.Status == PaymentTransactionStatus.Approved && !t.IsDeleted, ct);
+        var paidTxCount = await scoped.CountAsync(t => t.Status == PaymentTransactionStatus.Approved, ct);
 
         var summary = new WorkspacePaymentsSummaryDto(
             TotalRevenueVnd: totalUnlockRevenue,
@@ -62,9 +58,7 @@ public sealed class GetWorkspacePaymentsQueryHandler : IRequestHandler<GetWorksp
         );
 
         // 2. Query danh sách giao dịch
-        var query = _db.PaymentTransactions
-            .AsNoTracking()
-            .Where(t => t.WorkspaceId == q.WorkspaceId && !t.IsDeleted);
+        var query = scoped.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(q.Status) && !q.Status.Equals("All", StringComparison.OrdinalIgnoreCase))
         {

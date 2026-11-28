@@ -86,6 +86,7 @@ public interface IPanelForgeDbContext
     // Payments & Monetization
     DbSet<ReaderWallet> ReaderWallets { get; }
     DbSet<PaymentTransaction> PaymentTransactions { get; }
+    DbSet<PlatformBankAccount> PlatformBankAccounts { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
     DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews { get; }

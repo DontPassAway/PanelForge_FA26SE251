@@ -5,16 +5,14 @@ using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Features.Payments.Commands.ApprovePayment;
 using PanelForge.Application.Features.Payments.Commands.RejectPayment;
-using PanelForge.Application.Features.Payments.Commands.UpdateWorkspaceBankSettings;
 using PanelForge.Application.Features.Payments.Models;
-using PanelForge.Application.Features.Payments.Queries.GetWorkspaceBankSettings;
 using PanelForge.Application.Features.Payments.Queries.GetWorkspacePayments;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.API.Controllers;
 
 /// <summary>
-/// API Quản lý doanh thu (giao dịch VietQR/Ví, phê duyệt, thiết lập ngân hàng) của một Studio — chỉ Publisher/Admin.
+/// API giao dịch VietQR/Ví của một Studio — Publisher/Admin. Tài khoản ngân hàng nhận tiền là của nền tảng (Q13): xem PlatformPaymentsController.
 /// Producer không còn xem/quản lý doanh thu; Producer xem lượt đọc qua GET /api/workspaces/{id}/reader-stats.
 /// </summary>
 [ApiController]
@@ -98,39 +96,4 @@ public class WorkspacePaymentsController : ControllerBase
         );
         return result.IsSuccess ? Ok(new { message = result.Value }) : BadRequest(new { message = result.ErrorMessage });
     }
-
-    /// <summary>
-    /// GET /api/workspaces/{workspaceId}/payments/bank-settings
-    /// Lấy thông tin tài khoản ngân hàng thụ hưởng VietQR (chỉ Publisher — Q13).
-    /// </summary>
-    [HttpGet("bank-settings")]
-    [Authorize(Roles = "Publisher")]
-    [ProducesResponseType(typeof(WorkspaceBankSettingsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetBankSettings(
-        [FromRoute] Guid workspaceId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new GetWorkspaceBankSettingsQuery(workspaceId), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.ErrorMessage });
-    }
-
-    /// <summary>
-    /// PUT /api/workspaces/{workspaceId}/payments/bank-settings
-    /// Cập nhật thông tin tài khoản ngân hàng thụ hưởng VietQR (chỉ Publisher — Q13).
-    /// </summary>
-    [HttpPut("bank-settings")]
-    [Authorize(Roles = "Publisher")]
-    [ProducesResponseType(typeof(WorkspaceBankSettingsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpdateBankSettings(
-        [FromRoute] Guid workspaceId,
-        [FromBody] UpdateWorkspaceBankSettingsRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(
-            new UpdateWorkspaceBankSettingsCommand(workspaceId, request.BankBin, request.BankName, request.BankAccountNo, request.BankAccountName),
-            cancellationToken
-        );
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
-    }
 }
-

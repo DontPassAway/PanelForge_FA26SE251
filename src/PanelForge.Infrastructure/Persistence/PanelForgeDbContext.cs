@@ -101,6 +101,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     // Payments & Monetization
     public DbSet<ReaderWallet> ReaderWallets => Set<ReaderWallet>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<PlatformBankAccount> PlatformBankAccounts => Set<PlatformBankAccount>();
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
     public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();
     public DbSet<PanelForge.Domain.Entities.Content.ChapterView> ChapterViews => Set<PanelForge.Domain.Entities.Content.ChapterView>();
