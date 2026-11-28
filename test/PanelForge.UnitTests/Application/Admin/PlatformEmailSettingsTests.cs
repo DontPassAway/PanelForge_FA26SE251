@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Admin.Commands.RestoreEmailSettings;
 using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
+using PanelForge.Application.Features.Admin.Queries.GetEmailSettingsHistory;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
@@ -130,5 +132,45 @@ public class PlatformEmailSettingsTests
             result.Value!.SentTo.Should().Be(admin.Email);
         else
             result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed);
+    }
+
+    [Fact]
+    public async Task Restore_OldVersion_AppendsCopyWithItsPassword_AndAudits()
+    {
+        var admin = Admin();
+        await Update().Handle(Command(admin.Id, password: "old-secret", sender: "old@panelforge.vn"), CancellationToken.None);
+        await Update().Handle(Command(admin.Id, password: "new-secret", sender: "new@panelforge.vn"), CancellationToken.None);
+
+        var history = (await new GetEmailSettingsHistoryQueryHandler(_db)
+            .Handle(new GetEmailSettingsHistoryQuery(), CancellationToken.None)).Value!;
+        history.Select(v => v.SenderEmail).Should().Equal("new@panelforge.vn", "old@panelforge.vn");
+        history.Select(v => v.IsCurrent).Should().Equal(true, false);
+
+        var result = await new RestoreEmailSettingsCommandHandler(_db)
+            .Handle(new RestoreEmailSettingsCommand(admin.Id, history[1].Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.SenderEmail.Should().Be("old@panelforge.vn");
+        var rows = await _db.PlatformEmailSettings.OrderBy(s => s.CreatedAt).ToListAsync();
+        rows.Should().HaveCount(3);
+        rows[^1].ProtectedPassword.Should().Be("enc:old-secret");
+        (await _db.AuditLogs.AnyAsync(a => a.Action == "PLATFORM_EMAIL_SETTINGS_RESTORED")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Restore_CurrentOrUnknownVersion_IsRejected()
+    {
+        var admin = Admin();
+        var saved = await Update().Handle(Command(admin.Id, password: "secret"), CancellationToken.None);
+        var currentId = (await _db.PlatformEmailSettings.SingleAsync()).Id;
+        var handler = new RestoreEmailSettingsCommandHandler(_db);
+
+        var current = await handler.Handle(new RestoreEmailSettingsCommand(admin.Id, currentId), CancellationToken.None);
+        var unknown = await handler.Handle(new RestoreEmailSettingsCommand(admin.Id, Guid.NewGuid()), CancellationToken.None);
+
+        saved.IsSuccess.Should().BeTrue();
+        current.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        unknown.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        _db.PlatformEmailSettings.Should().HaveCount(1);
     }
 }

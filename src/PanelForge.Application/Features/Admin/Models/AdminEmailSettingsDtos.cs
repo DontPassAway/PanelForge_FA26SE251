@@ -23,3 +23,14 @@ public sealed record UpdateEmailSettingsRequest(
     string? Password);
 
 public sealed record SendTestEmailResponse(string SentTo);
+
+/// <summary>Một phiên bản cấu hình SMTP trong lịch sử (append-only). Không kèm mật khẩu.</summary>
+public sealed record AdminEmailSettingsVersionDto(
+    Guid Id,
+    string SmtpServer,
+    int SmtpPort,
+    string SenderName,
+    string SenderEmail,
+    DateTime ChangedAt,
+    string? ChangedByName,
+    bool IsCurrent);

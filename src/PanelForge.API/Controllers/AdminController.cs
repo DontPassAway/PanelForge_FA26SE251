@@ -7,10 +7,12 @@ using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
 using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
+using PanelForge.Application.Features.Admin.Commands.RestoreEmailSettings;
 using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
+using PanelForge.Application.Features.Admin.Queries.GetEmailSettingsHistory;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
@@ -635,6 +637,26 @@ public class AdminController : ControllerBase
             adminId.Value, request.SmtpServer, request.SmtpPort, request.SenderName, request.SenderEmail, request.Password),
             cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage, code = result.ErrorCode });
+    }
+
+    /// <summary>GET /api/admin/email-settings/history — các phiên bản cấu hình SMTP, mới nhất trước.</summary>
+    [HttpGet("email-settings/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminEmailSettingsVersionDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEmailSettingsHistory(CancellationToken cancellationToken)
+        => Ok((await _mediator.Send(new GetEmailSettingsHistoryQuery(), cancellationToken)).Value);
+
+    /// <summary>POST /api/admin/email-settings/history/{versionId}/restore — dùng lại phiên bản cũ (thêm bản mới, có audit).</summary>
+    [HttpPost("email-settings/history/{versionId:guid}/restore")]
+    [ProducesResponseType(typeof(AdminEmailSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestoreEmailSettings(Guid versionId, CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new RestoreEmailSettingsCommand(adminId.Value, versionId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>POST /api/admin/email-settings/test — gửi email thử tới chính Admin. 503 khi SMTP không gửi được.</summary>
