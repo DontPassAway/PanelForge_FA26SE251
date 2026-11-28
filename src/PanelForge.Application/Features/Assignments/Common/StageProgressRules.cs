@@ -209,6 +209,26 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// ART-03: nộp công đoạn vẽ đầu tiên (Pencil) khi mọi dòng thoại của các phân cảnh có mặt trên trang đã gắn vào một Panel.
+    /// Phân cảnh có mặt trên trang = phân cảnh của các Panel trang đó; dòng đã gắn Panel ở trang khác vẫn tính là đã phủ.
+    /// Trang chưa có Panel nào gắn phân cảnh thì xét mọi phân cảnh của chương (không để trang "chưa gắn gì" lọt qua).
+    /// </summary>
+    public static async Task<string?> ScriptCoverageBlockReasonAsync(
+        IPanelForgeDbContext db, Guid chapterId, IReadOnlyList<Panel> pagePanels, CancellationToken ct)
+    {
+        var sceneIds = pagePanels.Where(p => p.SceneId != null).Select(p => p.SceneId!.Value).Distinct().ToList();
+        var lines = db.ScriptLines.AsNoTracking()
+            .Where(l => l.PanelId == null && l.DialogueText != null && l.DialogueText.Trim() != "");
+        lines = sceneIds.Count > 0
+            ? lines.Where(l => sceneIds.Contains(l.SceneId))
+            : lines.Where(l => db.Scenes.Any(sc => sc.Id == l.SceneId && sc.ChapterId == chapterId));
+        var uncovered = await lines.CountAsync(ct);
+        return uncovered > 0
+            ? $"Còn {uncovered} dòng thoại của phân cảnh trên trang chưa gắn vào khung nào (cần phủ 100% kịch bản trước khi nộp Pencil)."
+            : null;
+    }
+
+    /// <summary>
     /// Cổng nộp Lettering (BR-05, BR-20): mọi Page việc bao phủ không được còn chữ lỗi thời so với script, và mọi cảnh báo
     /// tràn chữ phải đã xác nhận kèm lý do. Thứ tự đọc / đè Key Artwork Region chỉ cảnh báo, không chặn. Trả lỗi hoặc null.
     /// </summary>
@@ -236,6 +256,9 @@ internal static class StageProgressRules
         {
             var page = await pages.GetAsync(pageId, ct);
             if (page is null) continue;
+
+            // ART-06: tranh dưới bóng vừa đổi thì người làm chữ phải xác nhận đã kiểm tra lại vị trí bóng trước khi nộp
+            if (await BalloonFitRules.PendingReasonAsync(db, pageId, ct) is { } balloon) return balloon;
 
             var analysis = await LetteringPageAnalysis.AnalyzeAsync(db, page, ct);
             if (analysis.SubmissionBlockReason(page.PageNumber) is { } reason) return reason;

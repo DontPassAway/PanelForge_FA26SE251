@@ -2574,6 +2574,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("BalloonCheckRequestedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("balloon_check_requested_at");
+
                     b.Property<string>("BoundingBox")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

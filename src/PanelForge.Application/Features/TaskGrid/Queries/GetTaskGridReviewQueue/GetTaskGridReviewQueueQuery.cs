@@ -2,7 +2,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Application.Features.TaskGrid.Models;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.TaskGrid.Queries.GetTaskGridReviewQueue;
@@ -45,6 +47,14 @@ public sealed class GetTaskGridReviewQueueQueryHandler
         var reviewerNames = await _db.Users.AsNoTracking().Where(u => reviewerIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
+        // Gate 2 ghép: cần trạng thái các ô nhánh song song cùng trang để biết ô đã duyệt được chưa
+        var chapterIds = rows.Select(r => r.Task.ChapterId).Distinct().ToList();
+        var tasksByChapter = (await _db.StageTasks.AsNoTracking().Where(t => chapterIds.Contains(t.ChapterId)).ToListAsync(ct))
+            .GroupBy(t => t.ChapterId).ToDictionary(g => g.Key, g => (IReadOnlyList<StageTask>)g.ToList());
+        var stagesBySeries = new Dictionary<Guid, IReadOnlyList<PipelineStage>>();
+        foreach (var seriesId in rows.Select(r => r.Task.SeriesId).Distinct())
+            stagesBySeries[seriesId] = await TaskGridRules.LoadStagesAsync(_db, seriesId, ct);
+
         var result = rows.Select(r =>
         {
             var t = r.Task;
@@ -54,7 +64,8 @@ public sealed class GetTaskGridReviewQueueQueryHandler
                 t.PageId, t.PageId is { } pid && pageNumbers.TryGetValue(pid, out var no) ? no : null, t.Status,
                 t.LotId is { } lid && assignees.TryGetValue(lid, out var a) ? a : null, t.ReviewerUserId,
                 sub?.AttemptNumber, sub?.SubmittedAt,
-                t.ReviewerUserId is { } rid ? reviewerNames.GetValueOrDefault(rid) : null, t.IsInputOutdated);
+                t.ReviewerUserId is { } rid ? reviewerNames.GetValueOrDefault(rid) : null, t.IsInputOutdated,
+                TaskGridRules.AwaitingSiblingBranch(t, stagesBySeries[t.SeriesId], tasksByChapter[t.ChapterId]));
         })
             .OrderBy(i => i.SubmittedAt ?? DateTime.MaxValue).ThenBy(i => i.ChapterNumber).ThenBy(i => i.PageNumber ?? 0)
             .ToList();

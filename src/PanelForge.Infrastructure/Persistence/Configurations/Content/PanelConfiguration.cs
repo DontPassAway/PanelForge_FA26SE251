@@ -42,6 +42,9 @@ internal sealed class PanelConfiguration : IEntityTypeConfiguration<Panel>
                .HasColumnType("int")
                .IsRequired();
 
+        builder.Property(p => p.BalloonCheckRequestedAt)
+               .HasColumnName("balloon_check_requested_at");
+
         // BR-11: chống ghi đè khi hai người sửa cùng panel
         builder.Property(p => p.Version)
                .HasColumnName("version")

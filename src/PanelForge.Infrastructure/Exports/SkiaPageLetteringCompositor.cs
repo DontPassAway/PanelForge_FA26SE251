@@ -6,7 +6,7 @@ using SkiaSharp;
 namespace PanelForge.Infrastructure.Exports;
 
 /// <summary>
-/// Vẽ lớp chữ lên ảnh trang bằng SkiaSharp, cùng quy tắc với FE `roles/letterer/lib/balloonRender.ts` + `textStyle.ts`
+/// Vẽ lớp chữ lên ảnh trang bằng SkiaSharp, cùng quy tắc với FE `shared/lib/lettering/balloonRender.ts` + `textStyle.ts`
 /// (sửa một bên thì sửa cả bên kia). Toạ độ element là px trên khổ trang (hoặc % khi width/height ≤ 100, cùng quy tắc FE),
 /// được co theo kích thước ảnh trang. Font lấy từ thư mục <c>Exports/Fonts</c> cạnh DLL (vd <c>Mali-Regular.ttf</c>);
 /// thiếu file thì dùng font hệ thống cùng tên hoặc font mặc định, nên chữ có thể lệch nhẹ so với trình duyệt.
@@ -186,7 +186,12 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
         }
 
         using var font = new SKFont(Typeface(style), style.FontSize) { Subpixel = true };
-        var layout = Layout(el.Text.Trim(), style, ap.Shape, w, h, s => font.MeasureText(s));
+        var layout = LayoutBalloon(el.Text.Trim(), style, ap.Shape, w, h, (s, size) =>
+        {
+            font.Size = size;
+            return font.MeasureText(s);
+        });
+        font.Size = (float)layout.FontSize;
         var align = style.Align switch { "left" => SKTextAlign.Left, "right" => SKTextAlign.Right, _ => SKTextAlign.Center };
         var tx = align switch
         {
@@ -216,10 +221,16 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
         canvas.Restore();
     }
 
-    // ── Bố trí chữ (FE textSafeArea / wrapLines / layoutText) ──
+    // ── Bố trí chữ (FE balloonRender.ts: textSafeArea / wrapDiamond / layoutText / fitFontSize / layoutBalloonText) ──
+
+    /// <summary>Đo bề rộng chuỗi ở một cỡ chữ (px trang).</summary>
+    public delegate float MeasureAt(string text, float fontSize);
 
     public sealed record TextLayout(
-        IReadOnlyList<string> Lines, (double X, double Y, double W, double H) Area, double LineHeight, double TextHeight, bool Overflow);
+        IReadOnlyList<string> Lines, (double X, double Y, double W, double H) Area, double LineHeight, double TextHeight, bool Overflow,
+        double FontSize);
+
+    private static readonly string[] EllipticShapes = ["oval", "cloud", "spiky"];
 
     private static double Inset(string shape) =>
         shape is "oval" or "cloud" ? Math.Sqrt(0.5) : shape == "spiky" ? 0.82 * Math.Sqrt(0.5) : 1;
@@ -232,13 +243,114 @@ public sealed class SkiaPageLetteringCompositor : IPageLetteringCompositor
         return ((w - aw) / 2, (h - ah) / 2, aw, ah);
     }
 
-    public static TextLayout Layout(string text, TextStyle style, string shape, double w, double h, Func<string, float> measure)
+    /// <summary>Bán trục vùng chữ bên trong viền cong: chừa lề cho nét viền, mây gợn và răng cưa.</summary>
+    private static (double Rx, double Ry) InnerEllipse(string shape, double w, double h)
     {
-        var area = SafeArea(shape, w, h);
-        var lines = WrapLines(text, area.W, measure);
-        var lineHeight = style.FontSize * style.LineHeight;
-        var textHeight = lines.Count * lineHeight;
-        return new TextLayout(lines, area, lineHeight, textHeight, textHeight > area.H + 1);
+        var k = shape == "spiky" ? 0.74 : 0.9;
+        return (Math.Max(1, w / 2 * k - 4), Math.Max(1, h / 2 * k - 4));
+    }
+
+    /// <summary>Bề rộng dùng được của từng dòng khi n dòng cao lh xếp giữa elip (rx, ry); 0 = chạm mép trên/dưới.</summary>
+    public static double[] EllipseLineWidths(int n, double lh, double rx, double ry) =>
+        Enumerable.Range(0, n).Select(i =>
+        {
+            var edge = Math.Abs((i - (n - 1) / 2.0) * lh) + lh / 2;
+            return edge >= ry ? 0 : 2 * rx * Math.Sqrt(1 - Math.Pow(edge / ry, 2));
+        }).ToArray();
+
+    private static List<string>? WrapToWidths(string[] words, double[] widths, Func<string, float> measure)
+    {
+        var lines = new List<string>();
+        var line = "";
+        foreach (var word in words)
+        {
+            var candidate = line.Length > 0 ? $"{line} {word}" : word;
+            if (measure(candidate) <= widths[lines.Count]) { line = candidate; continue; }
+            if (line.Length == 0) return null;
+            lines.Add(line);
+            if (lines.Count >= widths.Length || measure(word) > widths[lines.Count]) return null;
+            line = word;
+        }
+        lines.Add(line);
+        return lines;
+    }
+
+    private static List<string>? WrapInEllipse(string[] words, double lh, double rx, double ry, Func<string, float> measure)
+    {
+        var maxLines = (int)Math.Floor(2 * ry / lh);
+        for (var n = 1; n <= maxLines; n++)
+        {
+            var widths = EllipseLineWidths(n, lh, rx, ry);
+            if (widths.Any(x => x <= 0)) break;
+            var lines = WrapToWidths(words, widths, measure);
+            if (lines is not null) return lines;
+        }
+        return null;
+    }
+
+    /// <summary>Ngắt dòng hình thoi theo elip nhỏ nhất còn chứa câu; null = không vừa.</summary>
+    public static List<string>? WrapDiamond(string text, double lh, double rx, double ry, Func<string, float> measure)
+    {
+        var words = text.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0) return [""];
+        var best = WrapInEllipse(words, lh, rx, ry, measure);
+        if (best is null) return null;
+        double lo = 0.2, hi = 1;
+        for (var i = 0; i < 10; i++)
+        {
+            var mid = (lo + hi) / 2;
+            var tighter = WrapInEllipse(words, lh, rx * mid, ry * mid, measure);
+            if (tighter is not null) { best = tighter; hi = mid; }
+            else lo = mid;
+        }
+        return best;
+    }
+
+    /// <summary>Bố trí chữ đúng cỡ <paramref name="fontSize"/> (mặc định cỡ đã chọn), không tự thu nhỏ; tràn thì Overflow.</summary>
+    public static TextLayout Layout(string text, TextStyle style, string shape, double w, double h, MeasureAt measureAt, double? fontSize = null)
+    {
+        var size = fontSize ?? style.FontSize;
+        var lineHeight = size * style.LineHeight;
+        Func<string, float> measure = s => measureAt(s, (float)size);
+
+        // Bóng cong: xếp theo lòng elip
+        if (EllipticShapes.Contains(shape) && !text.Contains('\n'))
+        {
+            var (rx, ry) = InnerEllipse(shape, w, h);
+            var area = (w / 2 - rx, h / 2 - ry, rx * 2, ry * 2);
+            var lines = WrapDiamond(text, lineHeight, rx, ry, measure);
+            if (lines is not null) return new TextLayout(lines, area, lineHeight, lines.Count * lineHeight, false, size);
+            var fallback = WrapLines(text, area.Item3, measure);
+            return new TextLayout(fallback, area, lineHeight, fallback.Count * lineHeight, true, size);
+        }
+
+        var safe = SafeArea(shape, w, h);
+        var wrapped = WrapLines(text, safe.W, measure);
+        var textHeight = wrapped.Count * lineHeight;
+        return new TextLayout(wrapped, safe, lineHeight, textHeight, textHeight > safe.H + 1, size);
+    }
+
+    /// <summary>Cỡ chữ lớn nhất (TextStyle.MinFontSize..MaxFontSize) còn vừa bóng.</summary>
+    public static int FitFontSize(string text, TextStyle style, string shape, double w, double h, MeasureAt measureAt)
+    {
+        int lo = TextStyle.MinFontSize, hi = TextStyle.MaxFontSize;
+        if (Layout(text, style, shape, w, h, measureAt, lo).Overflow) return lo;
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+            if (Layout(text, style, shape, w, h, measureAt, mid).Overflow) hi = mid - 1;
+            else lo = mid;
+        }
+        return lo;
+    }
+
+    /// <summary>Như FE layoutBalloonText: tràn thì thu nhỏ tới cỡ lớn nhất còn vừa, không vượt cỡ đã chọn.</summary>
+    public static TextLayout LayoutBalloon(string text, TextStyle style, string shape, double w, double h, MeasureAt measureAt)
+    {
+        var layout = Layout(text, style, shape, w, h, measureAt);
+        if (!layout.Overflow) return layout;
+        var size = Math.Min(style.FontSize, FitFontSize(text, style, shape, w, h, measureAt));
+        return Layout(text, style, shape, w, h, measureAt, size);
     }
 
     /// <summary>Giữ xuống dòng thủ công, ngắt theo từ, từ quá dài cắt theo ký tự (Unicode scalar, như Array.from).</summary>

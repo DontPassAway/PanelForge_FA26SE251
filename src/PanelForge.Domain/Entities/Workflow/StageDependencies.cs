@@ -34,4 +34,24 @@ public static class StageDependencies
         if (branchEnds.Count > 0) return branchEnds;
         return lastShared is null ? [] : [lastShared];
     }
+
+    /// <summary>
+    /// Gate 2 ghép (Module 3 mục 1, BR-19): nếu <paramref name="stage"/> là bước cuối đang bật của nhánh mình, trả bước cuối đang bật
+    /// của các nhánh song song khác trong cùng đoạn rẽ nhánh (giữa hai công đoạn chung). Vd Ink (hoặc Color nếu bật) ↔ Lettering.
+    /// Không phải bước cuối nhánh, hoặc không có nhánh song song, thì rỗng.
+    /// </summary>
+    public static IReadOnlyList<PipelineStage> SiblingBranchEnds(PipelineStage stage, IEnumerable<PipelineStage> pipeline)
+    {
+        if (!stage.IsEnabled || stage.Track is not { } track) return [];
+        var enabled = pipeline
+            .Where(s => s.IsEnabled && s.PipelineDefinitionId == stage.PipelineDefinitionId)
+            .OrderBy(s => s.StageOrder)
+            .ToList();
+        var from = enabled.LastOrDefault(s => s.Track is null && s.StageOrder < stage.StageOrder)?.StageOrder ?? int.MinValue;
+        var to = enabled.FirstOrDefault(s => s.Track is null && s.StageOrder > stage.StageOrder)?.StageOrder ?? int.MaxValue;
+        var group = enabled.Where(s => s.Track is not null && s.StageOrder > from && s.StageOrder < to).ToList();
+
+        if (group.Last(s => s.Track == track).Id != stage.Id) return [];
+        return group.Where(s => s.Track != track).GroupBy(s => s.Track).Select(g => g.Last()).ToList();
+    }
 }

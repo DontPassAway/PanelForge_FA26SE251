@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -68,6 +69,10 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
                 blocked.Add((order, $"{Label(task)}: đầu vào đã lỗi thời, cần xử lý Impact Review trước.", ResultErrorCodes.Conflict));
             else if (task.Status is not (StageTaskStatus.Submitted or StageTaskStatus.UnderReview))
                 blocked.Add((order, $"{Label(task)}: đang {task.Status}, chưa có bài chờ duyệt.", ResultErrorCodes.Conflict));
+            else if (TaskGridRules.AwaitingSiblingBranch(task, stages, chapterTasks) is { } waiting)
+                blocked.Add((order, $"{Label(task)}: Gate 2 chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict));
+            else if (task.PageId is { } pageId && await BalloonFitRules.PendingReasonAsync(_db, pageId, ct) is { } balloon)
+                blocked.Add((order, $"{Label(task)}: {balloon}", ResultErrorCodes.Conflict));
         }
         if (blocked.Count > 0)
             return Fail(string.Join("\n", blocked.OrderBy(b => b.Order).Select(b => b.Message)),

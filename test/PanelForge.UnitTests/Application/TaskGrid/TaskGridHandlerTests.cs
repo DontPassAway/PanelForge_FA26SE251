@@ -18,6 +18,8 @@ using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
+using PanelForge.Application.Features.TaskGrid.Commands.RollbackToPencil;
+using PanelForge.Application.Features.TaskGrid.Commands.AcknowledgeBalloonCheck;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -52,6 +54,8 @@ public class TaskGridHandlerTests
         public readonly PipelineStage Pencil, Ink, Color, Lettering, Review;
         public readonly List<Page> Pages = [];
         public readonly List<Panel> Panels = [];
+        public readonly List<Scene> Scenes = [];
+        public readonly List<ScriptLine> ScriptLines = [];
         public readonly List<StageTask> Tasks = [];
         public readonly List<StageTaskLot> Lots = [];
         public readonly List<StageTaskSubmission> Submissions = [];
@@ -134,6 +138,8 @@ public class TaskGridHandlerTests
                 return r;
             })).ToList();
             Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(Panels));
+            Db.Setup(d => d.Scenes).Returns(DbSetMockHelper.CreateDbSetMock(Scenes));
+            Db.Setup(d => d.ScriptLines).Returns(DbSetMockHelper.CreateDbSetMock(ScriptLines));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(Artwork));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
@@ -190,7 +196,18 @@ public class TaskGridHandlerTests
                 foreach (var i in new[] { 0, 1 }) (await Start(Cell(stage, i), ArtistId)).IsSuccess.Should().BeTrue();
                 (await Submit(ArtistId, Cell(stage, 0), Cell(stage, 1))).IsSuccess.Should().BeTrue();
             }
+            await SubmitLettering(0, 1);
             return [Cell(Color, 0), Cell(Color, 1)];
+        }
+
+        /// <summary>Gate 2 ghép: Letterer nộp Lettering các trang, để ô bước cuối nhánh tranh (Color) duyệt được.</summary>
+        public async Task SubmitLettering(params int[] pageIndexes)
+        {
+            var cells = pageIndexes.Select(i => Cell(Lettering, i)).ToArray();
+            var unassigned = cells.Where(c => c.Status == StageTaskStatus.Unassigned).ToArray();
+            if (unassigned.Length > 0) (await Assign(false, Lot(Lettering, LettererId, unassigned))).IsSuccess.Should().BeTrue();
+            foreach (var c in cells) (await Start(c, LettererId)).IsSuccess.Should().BeTrue();
+            (await Submit(LettererId, cells)).IsSuccess.Should().BeTrue();
         }
 
         public Task<Result<GenerateStageTasksResultDto>> Generate() =>
@@ -674,6 +691,34 @@ public class TaskGridHandlerTests
         pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
+    /// <summary>
+    /// ART-03: nộp Pencil cần mọi dòng thoại của phân cảnh trên trang đã gắn khung. Trang chưa gắn phân cảnh nào thì xét cả chương;
+    /// trang có phân cảnh thì không bị chặn vì dòng của phân cảnh khác (dành cho trang khác).
+    /// </summary>
+    [Fact]
+    public async Task Submit_Pencil_RequiresDialogueOfScenesOnPageAnchored()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        var scene = Scene.Create(f.Chapter.Id, 1);
+        var other = Scene.Create(f.Chapter.Id, 2);
+        f.Scenes.AddRange([scene, other]);
+        var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Chạy đi!");
+        var laterPage = ScriptLine.Create(other.Id, 1, dialogueText: "Để sau");
+        f.ScriptLines.AddRange([line, laterPage]);
+        var panel = f.Panels.Single(p => p.PageId == f.Pages[0].Id);
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+
+        (await f.Submit(f.ArtistId, pencil)).ErrorMessage.Should().Contain("dòng thoại", "trang chưa gắn phân cảnh: xét cả chương");
+
+        panel.AssignToScene(scene.Id);
+        (await f.Submit(f.ArtistId, pencil)).ErrorMessage.Should().Contain("1 dòng thoại");
+
+        line.AssignToPanel(panel.Id);
+        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue("dòng của phân cảnh khác không chặn trang này");
+    }
+
     /// <summary>BR-31: Artist tự đặt chữ thì công đoạn Lettering là lớp chữ vector, không bắt tải ảnh như Pencil/Ink.</summary>
     [Fact]
     public async Task Submit_ArtistLetteringCell_DoesNotRequireArtwork_BR31()
@@ -707,6 +752,12 @@ public class TaskGridHandlerTests
         color.Status.Should().Be(StageTaskStatus.Submitted);
 
         (await f.Approve(color, f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        // Gate 2 ghép: Lettering của trang chưa nộp thì chưa duyệt được nhánh tranh
+        var early = await f.Approve(color, f.EditorId);
+        early.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        early.ErrorMessage.Should().Contain("Lettering");
+        color.Status.Should().Be(StageTaskStatus.Submitted);
+        await f.SubmitLettering(0);
         (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
 
         color.Status.Should().Be(StageTaskStatus.Approved);
@@ -869,6 +920,102 @@ public class TaskGridHandlerTests
         lettering.IsInputOutdated.Should().BeFalse();
     }
 
+    // ---- BR-27.1 Self-Rollback Ink → Pencil ----
+
+    private static Task<Result<ReopenStageTaskResultDto>> Rollback(Fixture f, StageTask cell, Guid userId, string reason = "Sai phối cảnh") =>
+        new RollbackToPencilCommandHandler(f.Db.Object, f.PageRepo.Object).Handle(new(f.Chapter.Id, cell.Id, userId, reason), default);
+
+    [Fact]
+    public async Task RollbackToPencil_ArtistReopensOwnPencil_InkWaitsAgain_LetteringKeepsWorking_LettererIsReminded()
+    {
+        var f = new Fixture();
+        var (pencil, ink, lettering) = await PencilDoneInkAndLetteringStarted(f);
+
+        var result = await Rollback(f, pencil, f.ArtistId);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        pencil.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        ink.Status.Should().Be(StageTaskStatus.Assigned, "ô Ink của chính Artist quay về chờ, không cần Impact Review");
+        ink.IsInputOutdated.Should().BeFalse();
+        lettering.Status.Should().Be(StageTaskStatus.InProgress, "vị trí bóng thoại độc lập, nhánh chữ không bị chặn");
+        lettering.IsInputOutdated.Should().BeFalse();
+        f.Notifications.Should().Contain(n => n.UserId == f.LettererId && n.Title == "Kiểm tra lại vị trí bóng thoại");
+
+        (await f.Start(ink, f.ArtistId)).IsSuccess.Should().BeFalse("Pencil chưa nộp lại");
+        (await f.Start(pencil, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue();
+        (await f.Start(ink, f.ArtistId)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RollbackToPencil_OnlyPencilHolder_OnlyFirstStage_AndNeedsReason()
+    {
+        var f = new Fixture();
+        var (pencil, ink, _) = await PencilDoneInkAndLetteringStarted(f);
+
+        (await Rollback(f, pencil, f.LettererId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await Rollback(f, ink, f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        (await Rollback(f, pencil, f.ArtistId, " ")).ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        pencil.Status.Should().Be(StageTaskStatus.Approved);
+    }
+
+    [Fact]
+    public async Task RollbackToPencil_PageUnderReviewOrApprovedAtGate2_IsConflict()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        foreach (var stage in new[] { f.Pencil, f.Ink, f.Color })
+        {
+            await f.Start(f.Cell(stage, 0), f.ArtistId);
+            await f.Submit(f.ArtistId, f.Cell(stage, 0));
+        }
+        var color = f.Cell(f.Color, 0);
+        color.OpenReview(f.EditorId);
+
+        (await Rollback(f, f.Cell(f.Pencil, 0), f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.Cell(f.Pencil, 0).Status.Should().Be(StageTaskStatus.Approved);
+    }
+
+    private static Task<Result<BalloonCheckAckDto>> AckBalloons(Fixture f, int pageIndex, Guid userId) =>
+        new AcknowledgeBalloonCheckCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, f.Pages[pageIndex].Id, userId), default);
+
+    /// <summary>ART-06: quay lại Pencil bật cờ Check Balloon Fit trên khung có bóng; người làm chữ phải xác nhận trước khi nộp.</summary>
+    [Fact]
+    public async Task RollbackToPencil_FlagsPanelsWithBalloons_BlocksLetteringSubmitUntilAcknowledged()
+    {
+        var f = new Fixture();
+        var (pencil, _, lettering) = await PencilDoneInkAndLetteringStarted(f);
+        var page = f.Pages[0];
+        var panel = f.Panels.Single(p => p.PageId == page.Id);
+        page.AddElement("SPEECH_BALLOON", 10, 10, 100, 60, 1, f.LettererId, content: "Hi", panelId: panel.Id);
+        f.PageRepo.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        (await Rollback(f, pencil, f.ArtistId)).IsSuccess.Should().BeTrue();
+        panel.BalloonCheckRequestedAt.Should().NotBeNull();
+        f.Panels.Single(p => p.PageId == f.Pages[1].Id).BalloonCheckRequestedAt.Should().BeNull("trang khác không đổi");
+
+        (await f.Submit(f.LettererId, lettering)).ErrorMessage.Should().Contain("Check Balloon Fit");
+        (await AckBalloons(f, 0, f.EditorId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await AckBalloons(f, 0, f.LettererId)).Value!.Cleared.Should().Be(1);
+        panel.BalloonCheckRequestedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Approve_PageWithPendingBalloonCheck_IsConflict_UntilAcknowledged()
+    {
+        var f = new Fixture();
+        var color = await f.SubmitColorBothPages();
+        f.Panels.Single(p => p.PageId == f.Pages[0].Id).RequestBalloonCheck();
+        var approve = new ApproveStageTaskCommandHandler(f.Db.Object);
+
+        var blocked = await approve.Handle(new(f.Chapter.Id, color[0].Id, f.EditorId), default);
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("Check Balloon Fit");
+
+        (await AckBalloons(f, 0, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await approve.Handle(new(f.Chapter.Id, color[0].Id, f.EditorId), default)).IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Reopen_WithoutReason_IsValidationError()
     {
@@ -924,6 +1071,7 @@ public class TaskGridHandlerTests
         await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Sửa"), default);
         await f.Start(color, f.ArtistId);
         await f.Submit(f.ArtistId, color);
+        await f.SubmitLettering(0);
         (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
 
         var history = await new GetStageTaskSubmissionsQueryHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id), default);
@@ -989,6 +1137,7 @@ public class TaskGridHandlerTests
         {
             await f.Start(color, f.ArtistId);
             await f.Submit(f.ArtistId, color);
+            await f.SubmitLettering(0);
             await new ApproveStageTaskCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId), default);
             (await Deny(f.ArtistId)).Should().Contain("không có ô việc");
         }
@@ -1193,6 +1342,7 @@ public class TaskGridHandlerTests
         item.StageName.Should().Be("Color");
         item.AssigneeUserId.Should().Be(f.ArtistId);
         item.AttemptNumber.Should().Be(1);
+        item.AwaitingStageName.Should().Be("Lettering", "Gate 2 ghép: chữ của trang chưa nộp");
 
         // Đang có người duyệt: hàng đợi trả tên người giữ khoá, FE khỏi gọi danh sách thành viên
         var editor = User.Create("ed@test.com", "Biên tập A");

@@ -62,10 +62,19 @@ public static class SeriesPipelineFactory
             });
 
         // F-02 / RF-11: Manga trắng đen → Color tắt mặc định (template chuẩn vẫn có Color); Webtoon/Comic giữ bật.
+        // Cổng duyệt của Color chuyển sang Ink để nhánh tranh vẫn qua Editor theo trang (Gate 2).
         // Producer bật lại được trong cấu hình pipeline.
         if (formatUpper.Contains("MANGA"))
-            foreach (var stage in pipeline.Stages.Where(s => string.Equals(s.Slug, "color", StringComparison.OrdinalIgnoreCase)))
+            foreach (var stage in pipeline.Stages.Where(s => s.Slug == "color").ToList())
+            {
                 stage.SetEnabled(false);
+                pipeline.MoveGateOffDisabledStage(stage);
+            }
+
+        // Spec V2.6 chỉ có Gate 2 (Editor duyệt từng trang ở bước cuối mỗi nhánh) và Gate 3 (Producer chốt chương).
+        // Stage "Review" cấp chương bắt Producer duyệt thêm một lần nên tắt mặc định; Producer bật lại được nếu cần.
+        foreach (var stage in pipeline.Stages.Where(s => s.Slug == "review" && !s.IsInitial && !s.IsTerminal).ToList())
+            stage.SetEnabled(false);
 
         // Sinh transition mặc định
         pipeline.RebuildDefaultTransitions();
