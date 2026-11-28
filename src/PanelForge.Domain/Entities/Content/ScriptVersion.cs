@@ -4,7 +4,8 @@ namespace PanelForge.Domain.Entities.Content;
 
 /// <summary>
 /// "Commit" kịch bản cấp chương: ảnh chụp bất biến toàn bộ kịch bản (Trang → Panel → dòng) tại một thời điểm,
-/// đánh số tăng dần theo chương. Tạo khi Writer gửi duyệt; nội dung trùng phiên bản trước thì dùng lại phiên bản đó.
+/// đánh số tăng dần theo chương. Tạo mỗi lần lưu (commit, kể cả khi Writer lưu nháp); gửi duyệt (push) chỉ đánh dấu
+/// <see cref="SubmittedAt"/>. Nội dung trùng phiên bản trước thì dùng lại phiên bản đó.
 /// Không phụ thuộc Scene (Scene đang được gỡ khỏi mô hình kịch bản).
 /// </summary>
 public class ScriptVersion : BaseEntity
