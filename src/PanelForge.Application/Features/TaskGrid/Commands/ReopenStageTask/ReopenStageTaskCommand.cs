@@ -12,7 +12,9 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
 /// Producer mở lại ô đã duyệt (thay ReturnWork): ô về ReworkRequired, mọi ô hạ nguồn đã bắt đầu bị gắn cờ đầu vào lỗi thời
 /// và phải qua Impact Review. Ô hạ nguồn chưa bắt đầu tự bị chặn Start vì tiền đề không còn Approved.
 /// </summary>
-public sealed record ReopenStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Reason)
+/// <param name="PanelIds">Q27/REV-09: chỉ các Panel lỗi cần sửa (Panel khác giữ ảnh đã duyệt); null = cả trang.</param>
+public sealed record ReopenStageTaskCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Reason,
+    IReadOnlyList<Guid>? PanelIds = null)
     : IRequest<Result<ReopenStageTaskResultDto>>, ITransactionalCommand;
 
 public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageTaskCommand, Result<ReopenStageTaskResultDto>>
@@ -38,7 +40,15 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         var task = chapterTasks.FirstOrDefault(t => t.Id == cmd.TaskId);
         if (task is null) return Fail($"Ô {cmd.TaskId} không thuộc chương này.", ResultErrorCodes.NotFound);
 
-        try { task.Reopen(cmd.Reason); }
+        if (cmd.PanelIds is { Count: > 0 } panelIds)
+        {
+            var wanted = panelIds.Distinct().ToList();
+            var onPage = await _db.Panels.AsNoTracking()
+                .CountAsync(p => wanted.Contains(p.Id) && task.PageId != null && p.PageId == task.PageId, ct);
+            if (onPage != wanted.Count) return Fail("Panel được chọn không thuộc trang của ô này.");
+        }
+
+        try { task.Reopen(cmd.Reason, cmd.PanelIds); }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 
         var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
@@ -48,7 +58,9 @@ public sealed class ReopenStageTaskCommandHandler : IRequestHandler<ReopenStageT
         {
             downstream.ClearReady(); // N4: MarkInputOutdated bỏ qua ô chưa bắt đầu
             var wasOutdated = downstream.IsInputOutdated;
-            downstream.MarkInputOutdated($"{stageName} được mở lại: {cmd.Reason.Trim()}");
+            // Ô hạ nguồn cùng trang chỉ cần xem lại đúng các Panel bị mở lại; ô khác trang/cấp Chương → cả phạm vi
+            downstream.MarkInputOutdated($"{stageName} được mở lại: {cmd.Reason.Trim()}",
+                downstream.PageId == task.PageId ? cmd.PanelIds : null);
             if (!downstream.IsInputOutdated || wasOutdated) continue;
             downstream.UpdatedBy = cmd.UserId.ToString();
             outdated.Add(downstream.Id);

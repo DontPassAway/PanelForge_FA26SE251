@@ -191,13 +191,15 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
             sp.FlagScriptImpact(lineId);
         }
 
-        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review.
+        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review, kèm các Panel
+        // bị ảnh hưởng của trang đó (không khớp Panel nào còn sống → cả trang).
         // Không gắn ô cấp Chương: ô Script chính là phần vừa sửa, gắn cờ sẽ khoá mọi ô sau nó.
         foreach (var task in await _dbContext.StageTasks
                      .Where(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled &&
                                  artworkStageIds.Contains(t.PipelineStageId) && t.PageId != null &&
                                  affectedPageIds.Contains(t.PageId.Value)).ToListAsync(ct))
-            task.MarkInputOutdated(StageTask.ScriptChangedReason);
+            task.MarkInputOutdated(StageTask.ScriptChangedReason,
+                currentPanels.Where(p => p.PageId == task.PageId && affectedPanelIds.Contains(p.Id)).Select(p => p.Id));
     }
 }
 

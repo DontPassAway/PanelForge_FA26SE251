@@ -62,7 +62,7 @@ public sealed class GetMyTaskLotsQueryHandler : IRequestHandler<GetMyTaskLotsQue
                         && TaskGridRules.PrerequisitesApproved(t, stages, chapterTasks),
                     t.IsInputOutdated, t.OutdatedReason,
                     summary.TryGetValue(t.Id, out var s) ? s.Comment : null,
-                    summary.TryGetValue(t.Id, out var a) ? a.Attempts : 0, t.ReopenReason))
+                    summary.TryGetValue(t.Id, out var a) ? a.Attempts : 0, t.ReopenReason, t.FlaggedPanelIds))
                 .OrderBy(c => c.PageNumber ?? 0).ToList();
             return new MyTaskLotDto(
                 l.Id, l.SeriesId, series.First(s => s.Id == l.SeriesId).Title, l.ChapterId, chapter.ChapterNumber, chapter.Title,

@@ -10,7 +10,9 @@ using PanelForge.Domain.Enums;
 namespace PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
 
 /// <summary>Editor/Producer trả ô đã nộp về ReworkRequired kèm nhận xét bắt buộc (BR-06: khác người làm; ô đang do người khác duyệt thì không chồng).</summary>
-public sealed record RequestStageTaskChangesCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Comment) : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
+/// <param name="PanelIds">Panel cần sửa (góp ý ghim trên Panel); null = cả trang.</param>
+public sealed record RequestStageTaskChangesCommand(Guid ChapterId, Guid TaskId, Guid UserId, string Comment,
+    IReadOnlyList<Guid>? PanelIds = null) : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
 
 public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<RequestStageTaskChangesCommand, Result<StageTaskDto>>
 {
@@ -46,7 +48,7 @@ public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<Requ
         try
         {
             if (task.Status == StageTaskStatus.Submitted) task.OpenReview(cmd.UserId);
-            task.RequestChanges(TaskGridRules.PrerequisitesApproved(task, stages, chapterTasks));
+            task.RequestChanges(TaskGridRules.PrerequisitesApproved(task, stages, chapterTasks), cmd.PanelIds);
         }
         catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 

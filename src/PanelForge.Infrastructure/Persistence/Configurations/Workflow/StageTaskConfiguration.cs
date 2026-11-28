@@ -35,6 +35,8 @@ internal sealed class StageTaskConfiguration : IEntityTypeConfiguration<StageTas
                .HasColumnName("outdated_reason").HasColumnType($"varchar({StageTask.MaxOutdatedReasonLength})");
         builder.Property(t => t.ReopenReason)
                .HasColumnName("reopen_reason").HasColumnType($"varchar({StageTask.MaxOutdatedReasonLength})");
+        builder.Property(t => t.FlaggedPanelIds)
+               .HasColumnName("flagged_panel_ids").HasColumnType("uuid[]").HasDefaultValueSql("'{}'::uuid[]").IsRequired();
         builder.Property(t => t.StartedAt).HasColumnName("started_at").HasColumnType("timestamptz");
         builder.Property(t => t.ReadyAt).HasColumnName("ready_at").HasColumnType("timestamptz");
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();

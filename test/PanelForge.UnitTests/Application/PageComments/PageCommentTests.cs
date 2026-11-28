@@ -312,6 +312,33 @@ public class PageCommentTests
     }
 
     [Fact]
+    public async Task ReworkHandler_PanelComment_FlagsOnlyThatPanel_SecondCommentWidensScope()
+    {
+        var fx = new Fixture(ChapterStatus.InProduction);
+        var pencilTask = fx.AddTask(fx.Pencil, fx.Page1.Id, StageTaskStatus.Approved, fx.Artist.Id);
+        var onPanel = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Tóc sai màu", fx.Page1.Id, fx.PanelOnPage1.Id);
+        var wholePage = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Nền lệch tông", fx.Page1.Id);
+        fx.Comments.AddRange([onPanel, wholePage]);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object);
+
+        (await handler.Handle(new ConvertPageCommentToReworkCommand(
+            fx.Chapter.Id, onPanel.Id, fx.Producer.Id, pencilTask.Id, "Sửa màu tóc theo Model Sheet"), default))
+            .IsSuccess.Should().BeTrue();
+
+        pencilTask.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        pencilTask.FlaggedPanelIds.Should().Equal(fx.PanelOnPage1.Id); // Panel khác giữ ảnh đã duyệt (Q27)
+
+        var notificationsBefore = fx.Notifications.Count;
+        (await handler.Handle(new ConvertPageCommentToReworkCommand(
+            fx.Chapter.Id, wholePage.Id, fx.Producer.Id, pencilTask.Id, "Chỉnh tông nền"), default))
+            .IsSuccess.Should().BeTrue();
+
+        pencilTask.FlaggedPanelIds.Should().BeEmpty(); // lỗi không gắn Panel → cả trang
+        wholePage.Status.Should().Be(PageCommentStatus.ConvertedToRework);
+        fx.Notifications.Count.Should().Be(notificationsBefore + 1);
+    }
+
+    [Fact]
     public async Task ReworkHandler_WhenCommentAlreadyConverted_ReturnsConflict()
     {
         var fx = new Fixture(ChapterStatus.InProduction);
