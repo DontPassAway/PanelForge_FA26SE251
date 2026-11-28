@@ -11,6 +11,7 @@ using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
+using PanelForge.Application.Features.Admin.Queries.GetEmailDeliveryLogs;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
@@ -637,7 +638,7 @@ public class AdminController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage, code = result.ErrorCode });
     }
 
-    /// <summary>POST /api/admin/email-settings/test — gửi email thử tới chính Admin. 503 khi SMTP không gửi được.</summary>
+    /// <summary>POST /api/admin/email-settings/test — gửi email thử tới chính Admin. 503 khi SMTP không gửi được, details = { reason, detail }.</summary>
     [HttpPost("email-settings/test")]
     [ProducesResponseType(typeof(SendTestEmailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -650,8 +651,23 @@ public class AdminController : ControllerBase
         return result.IsSuccess
             ? Ok(result.Value)
             : result.ErrorCode == ResultErrorCodes.EmailDeliveryFailed
-                ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage, code = result.ErrorCode })
+                ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails })
                 : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/email-logs — nhật ký gửi email (người nhận, loại thư, thời gian, kết quả, lý do lỗi).</summary>
+    [HttpGet("email-logs")]
+    [ProducesResponseType(typeof(EmailDeliveryLogsPageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEmailLogs(
+        [FromQuery] bool? succeeded,
+        [FromQuery] string? mailType,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(new GetEmailDeliveryLogsQuery(succeeded, mailType, search, page, pageSize), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     // ─── D11: Gói mở Studio ────────────────────────────────────────────────────
