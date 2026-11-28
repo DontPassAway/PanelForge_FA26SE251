@@ -14,8 +14,8 @@ VM tự build từ mã nguồn, không dùng image GHCR (image do `ci.yml` build
 ## Luồng CI/CD
 
 1. Push lên `dev`/`main` → GitHub Actions (`.github/workflows/ci.yml`) chạy build + test như cũ.
-2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút. Với từng môi trường: nhánh có commit mới thì `git reset` về commit đó, build lại API + AI của môi trường đó, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200.
-3. Build lỗi thì giữ bản cũ đang chạy, ghi log, không build lại cho tới commit sau. Hai môi trường build lần lượt (chung một khoá), không chạy song song.
+2. Trên VM, `panelforge-deploy.timer` chạy `deploy.sh` mỗi 2 phút. Với từng môi trường: nhánh có commit mới thì `git reset` về commit đó, gắn tag `:<env>-previous` cho image đang chạy, build lại API + AI, **pg_dump DB** của môi trường đó, `up -d`, rồi đợi `/swagger/v1/swagger.json` trả 200 (tối đa 120 giây).
+3. Build lỗi thì giữ bản cũ đang chạy, ghi log, không build lại cho tới commit sau. pg_dump lỗi thì không chạy bản mới. API bản mới không lên thì tự chạy lại image trước (xem [Backup và rollback](#backup-và-rollback)). Hai môi trường build lần lượt (chung một khoá), không chạy song song.
 
 VM không giữ secret nào của GitHub và GitHub không cần SSH key vào VM.
 
@@ -74,6 +74,25 @@ Cập nhật cấu hình server khi file trong `deploy/staging` đổi: chạy l
 
 Sửa xong: `sudo docker compose up -d` (chỉ đổi biến) hoặc `sudo ./deploy.sh --force`.
 
+### Backup và rollback
+
+API tự chạy migration EF khi khởi động, nên mỗi lần deploy `deploy.sh` sao lưu DB trước khi chạy bản mới:
+
+- **Backup:** `pg_dump -Fc` của `postgres-<env>` vào `/opt/panelforge/backups/<env>-<UTC>.dump` (quyền 600), giữ 10 bản mới nhất mỗi môi trường. Đổi bằng biến `BACKUP_DIR`, `BACKUP_KEEP`. Dump lỗi (hoặc file rỗng) thì môi trường đó **không** deploy, bản đang chạy giữ nguyên.
+- **Rollback image:** trước khi build, image đang chạy được gắn tag `panelforge-api:<env>-previous` và `panelforge-ai:<env>-previous`. Nếu API bản mới không trả lời sau `HEALTH_TIMEOUT` giây (mặc định 120), script đưa hai image đó về tag `:<env>`, `up -d` lại, rồi thoát với mã lỗi. Lần deploy đầu chưa có bản trước nên không rollback được.
+- **DB không tự khôi phục.** Nếu bản mới đã chạy migration làm bản cũ không chạy được, khôi phục tay từ bản dump mà log in ra (`journalctl -u panelforge-deploy`):
+
+```bash
+cd /opt/panelforge
+ls -lt backups/                                        # chọn bản dump, ví dụ backups/dev-20261128T140000Z.dump
+sudo docker compose stop api-dev ai-dev                # dừng API để không ghi vào DB khi đang khôi phục
+sudo docker compose exec -T postgres-dev pg_restore -U panelforge -d panelforge --clean --if-exists --no-owner \
+  < backups/dev-20261128T140000Z.dump
+sudo docker compose up -d api-dev ai-dev               # bản test; bản chính thức thay dev bằng main
+```
+
+Sau khi khôi phục, sửa lỗi rồi push commit mới (hoặc `sudo ENVS=dev ./deploy.sh --force`). Bản dump có dữ liệu thật: không copy ra khỏi VM nếu không cần.
+
 ### Tạo tài khoản Admin đầu tiên (mỗi môi trường làm riêng)
 
 Server không chạy `DevUserSeeder` (mật khẩu mặc định nằm trong repo public). Khi chưa có SMTP:
@@ -89,5 +108,6 @@ cd /opt/panelforge && sudo docker compose exec postgres-main psql -U panelforge 
 
 - VM 4 GB chạy cả 2 môi trường khá sát RAM; thiếu thì nâng cỡ VM (Azure: Size → `B2s_v2` 8 GB) hoặc tạm dừng bản test (`sudo docker compose stop api-dev ai-dev postgres-dev`).
 - OpenCV chỉ có native x64 (`OpenCvSharp4.official.runtime.linux-x64.slim`): tách khung tranh (`SplitArtwork`) lỗi nếu chạy trên VM ARM (Oracle).
-- CORS của API đang cố định `localhost`: FE deploy ở domain khác cần sửa `Program.cs`.
+- CORS lấy từ `Cors__AllowedOrigins__*` trong `docker-compose.yml`: bản chính thức `MAIN_FE_ORIGIN` (mặc định `https://panelforge-dx3.pages.dev`), bản test `DEV_FE_ORIGIN` (mặc định `https://dev.panelforge-dx3.pages.dev`) và `http://localhost:3000`. FE ở domain khác thì đặt biến tương ứng trong `.env`.
+- **Cookie đăng nhập khác site:** FE chạy ở `*.pages.dev`, API ở `*.cloudapp.azure.com`, là hai site khác nhau. Cookie refresh token vì vậy phải là `SameSite=None; Secure`, và bị chặn trên Safari (ITP) cũng như ở chế độ ẩn danh hoặc khi trình duyệt chặn cookie bên thứ ba: người dùng sẽ bị đăng xuất khi access token hết hạn. Cách sửa lâu dài là dùng chung một tên miền gốc, ví dụ `app.<domain>` cho FE và `api.<domain>` cho API, để cookie là same-site. Việc này chưa đổi code cookie.
 - Oracle thu hồi VM Always Free nhàn rỗi (CPU < 20% suốt 7 ngày) với tài khoản Free Tier.
