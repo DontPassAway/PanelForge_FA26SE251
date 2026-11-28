@@ -9,6 +9,7 @@ using PanelForge.Application.Features.Publisher.Queries.GetPublisherChapters;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeries;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherSeriesDetail;
 using PanelForge.Application.Features.Publisher.Queries.GetPublisherWorkspaces;
+using PanelForge.Application.Features.Workspaces.Queries.GetReaderTimeseries;
 
 namespace PanelForge.API.Controllers;
 
@@ -112,6 +113,35 @@ public sealed class PublisherController : ControllerBase
         CancellationToken ct = default)
     {
         var result = await _mediator.Send(new GetPublisherRevenueQuery(workspaceId, search), ct);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// GET /api/publisher/revenue/timeseries?from&amp;to&amp;granularity&amp;workspaceId&amp;seriesId
+    /// Dashboard BR-32: lượt đọc và doanh thu mở khóa chương theo ngày/tuần/tháng (Publisher &amp; Admin chỉ đọc).
+    /// </summary>
+    [HttpGet("revenue/timeseries")]
+    [Authorize(Roles = "Publisher,Admin")]
+    [ProducesResponseType(typeof(ReaderTimeseriesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRevenueTimeseries(
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] TimeseriesGranularity granularity = TimeseriesGranularity.Day,
+        [FromQuery] Guid? workspaceId = null,
+        [FromQuery] Guid? seriesId = null,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(
+            new GetReaderTimeseriesQuery(workspaceId, seriesId, from, to, granularity, IncludeRevenue: true), ct);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode == ResultErrorCodes.NotFound
+                ? NotFound(new { message = result.ErrorMessage })
+                : BadRequest(new { message = result.ErrorMessage });
+        }
+
         return Ok(result.Value);
     }
 
