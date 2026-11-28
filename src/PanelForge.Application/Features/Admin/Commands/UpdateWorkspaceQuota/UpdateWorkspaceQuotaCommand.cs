@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.StudioResources.Common;
 
 namespace PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 
@@ -37,6 +38,15 @@ public sealed class UpdateWorkspaceQuotaCommandHandler
         {
             return Result<AdminWorkspaceDto>.Failure("Không tìm thấy Studio Workspace.", ResultErrorCodes.NotFound);
         }
+
+        var tokenQuota = await _dbContext.WorkspaceAiConfigs.AsNoTracking()
+            .Where(c => c.WorkspaceId == workspace.Id)
+            .Select(c => (long?)c.MonthlyTokenQuota)
+            .FirstOrDefaultAsync(cancellationToken) ?? 0;
+        var poolError = await StudioResourceLedger.CheckAdminQuotaWithinPoolAsync(
+            _dbContext, workspace, command.StorageQuotaBytes, tokenQuota, cancellationToken);
+        if (poolError is not null)
+            return Result<AdminWorkspaceDto>.Failure(poolError, ResultErrorCodes.InsufficientStudioResources);
 
         workspace.SetStorageQuota(command.StorageQuotaBytes);
 

@@ -27,7 +27,9 @@ public sealed record PublisherRevenueSummaryDto(
     int PendingCount,
     int TotalViews,
     decimal VipRevenueVnd = 0m,
-    decimal TopupRevenueVnd = 0m);
+    decimal TopupRevenueVnd = 0m,
+    decimal StudioPackageRevenueVnd = 0m,
+    decimal StudioResourcesRevenueVnd = 0m);
 
 public sealed record PublisherRevenueDto(
     PublisherRevenueSummaryDto Summary,
@@ -36,6 +38,8 @@ public sealed record PublisherRevenueDto(
 /// <summary>
 /// Publisher quản lý doanh thu theo bộ truyện trên toàn hệ thống (lọc theo Studio / tên truyện).
 /// Chỉ tính giao dịch mở khóa chương trả phí (nạp Ví và gói VIP không gắn với bộ truyện).
+/// Tổng doanh thu cộng thêm doanh thu nền tảng: gói VIP, gói Mở Studio (D11) và tài nguyên Studio mua thêm (D12).
+/// Hai loại Studio không gắn Workspace nên chỉ có khi không lọc theo Studio hay tên truyện.
 /// </summary>
 public sealed record GetPublisherRevenueQuery(Guid? WorkspaceId = null, string? Search = null)
     : IRequest<Result<PublisherRevenueDto>>;
@@ -98,6 +102,8 @@ public sealed class GetPublisherRevenueQueryHandler : IRequestHandler<GetPublish
 
         decimal vipRevenue = 0m;
         decimal topupRevenue = 0m;
+        decimal studioPackageRevenue = 0m;
+        decimal studioResourcesRevenue = 0m;
         int nonSeriesPendingCount = 0;
 
         if (string.IsNullOrWhiteSpace(q.Search))
@@ -120,6 +126,12 @@ public sealed class GetPublisherRevenueQueryHandler : IRequestHandler<GetPublish
             topupRevenue = globalTx
                 .Where(t => t.Type == PaymentTransactionType.Topup && t.Status == PaymentTransactionStatus.Approved)
                 .Sum(t => t.Amount);
+            studioPackageRevenue = globalTx
+                .Where(t => t.Type == PaymentTransactionType.StudioPackage && t.Status == PaymentTransactionStatus.Approved)
+                .Sum(t => t.Amount);
+            studioResourcesRevenue = globalTx
+                .Where(t => t.Type == PaymentTransactionType.StudioResources && t.Status == PaymentTransactionStatus.Approved)
+                .Sum(t => t.Amount);
             nonSeriesPendingCount = globalTx
                 .Where(t => t.Status == PaymentTransactionStatus.Pending)
                 .Sum(t => t.Count);
@@ -127,12 +139,14 @@ public sealed class GetPublisherRevenueQueryHandler : IRequestHandler<GetPublish
 
         var chapterRevenueTotal = rows.Sum(r => r.ChapterRevenueVnd);
         var summary = new PublisherRevenueSummaryDto(
-            chapterRevenueTotal + vipRevenue,
+            chapterRevenueTotal + vipRevenue + studioPackageRevenue + studioResourcesRevenue,
             chapterRevenueTotal,
             rows.Sum(r => r.PendingCount) + nonSeriesPendingCount,
             rows.Sum(r => r.TotalViews),
             vipRevenue,
-            topupRevenue);
+            topupRevenue,
+            studioPackageRevenue,
+            studioResourcesRevenue);
 
         return Result<PublisherRevenueDto>.Success(new PublisherRevenueDto(summary, rows));
     }

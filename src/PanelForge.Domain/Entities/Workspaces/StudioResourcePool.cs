@@ -3,7 +3,7 @@ using PanelForge.Domain.Common;
 namespace PanelForge.Domain.Entities.Workspaces;
 
 /// <summary>
-/// Kho tài nguyên của một Producer (D12, 2026-11-28): Admin bán dung lượng lưu trữ và token AI cho Producer,
+/// Kho tài nguyên của một Producer (D12, 2026-11-28): Producer mua dung lượng lưu trữ và token AI bằng Ví (theo đơn giá Admin đặt),
 /// Producer chia kho này cho các Studio mình sở hữu (<see cref="StudioWorkspace.StorageQuotaBytes"/>,
 /// <see cref="WorkspaceAiConfig.TokenQuota"/>). Tổng phần đã chia không được vượt kho.
 /// Producer chưa có kho (cấp quyền trước D12) giữ cách cũ: hạn mức Studio do Admin đặt.
@@ -26,7 +26,7 @@ public class StudioResourcePool : BaseEntity
         return new StudioResourcePool { OwnerId = ownerId, StorageBytes = storageBytes, Tokens = tokens };
     }
 
-    /// <summary>Admin bán thêm: cộng dồn vào kho (chỉ cộng, không trừ, để không cắt phần Producer đã chia).</summary>
+    /// <summary>Mua gói / mua thêm: cộng dồn vào kho (chỉ cộng, không trừ, để không cắt phần Producer đã chia).</summary>
     public void Add(long storageBytes, long tokens)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(storageBytes);

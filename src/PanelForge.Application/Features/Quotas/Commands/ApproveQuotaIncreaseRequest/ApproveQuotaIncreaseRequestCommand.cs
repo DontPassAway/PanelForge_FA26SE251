@@ -5,6 +5,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Quotas.Common;
 using PanelForge.Application.Features.Quotas.Models;
 using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
+using PanelForge.Application.Features.StudioResources.Common;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
@@ -41,7 +42,14 @@ public sealed class ApproveQuotaIncreaseRequestCommandHandler(IPanelForgeDbConte
         }
 
         var ai = await WorkspaceQuotas.LoadAiConfigAsync(db, request.WorkspaceId, ct);
-        WorkspaceQuotas.Apply(db, request.ResourceType, request.GrantedQuota!.Value, request.Workspace, ai);
+        ai = WorkspaceQuotas.Apply(db, request.ResourceType, request.GrantedQuota!.Value, request.Workspace, ai);
+        if (request.ResourceType is QuotaResourceType.Storage or QuotaResourceType.AiTokens)
+        {
+            var poolError = await StudioResourceLedger.CheckAdminQuotaWithinPoolAsync(
+                db, request.Workspace, request.Workspace.StorageQuotaBytes, ai?.MonthlyTokenQuota ?? 0, ct);
+            if (poolError is not null)
+                return Result<QuotaIncreaseRequestDto>.Failure(poolError, ResultErrorCodes.InsufficientStudioResources);
+        }
 
         db.Notifications.Add(Notification.Create(
             request.RequestedByUserId,

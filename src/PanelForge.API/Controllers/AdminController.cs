@@ -13,7 +13,6 @@ using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetAdminStudioPackage;
-using PanelForge.Application.Features.StudioResources.Commands.GrantStudioResources;
 using PanelForge.Application.Features.StudioResources.Commands.SetStudioResourcePrice;
 using PanelForge.Application.Features.StudioResources.Models;
 using PanelForge.Application.Features.StudioResources.Queries.GetAdminStudioResourcePrice;
@@ -252,7 +251,8 @@ public class AdminController : ControllerBase
         result.ErrorCode switch
         {
             ResultErrorCodes.NotFound => NotFound(new { message = result.ErrorMessage }),
-            ResultErrorCodes.Conflict => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
+            ResultErrorCodes.Conflict or ResultErrorCodes.InsufficientStudioResources
+                => Conflict(new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(new { message = result.ErrorMessage })
         };
 
@@ -665,30 +665,6 @@ public class AdminController : ControllerBase
             new SetStudioResourcePriceCommand(adminId.Value, request.PricePerGbVnd, request.PricePerMillionTokensVnd),
             cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
-    }
-
-    /// <summary>
-    /// POST /api/admin/users/{id}/studio-resources — Admin cộng dung lượng / token vào kho của Producer
-    /// (bán ngoài hệ thống, tặng, bù). Chỉ cộng; audit ghi người cộng.
-    /// </summary>
-    [HttpPost("users/{id:guid}/studio-resources")]
-    [ProducesResponseType(typeof(StudioResourcesDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GrantStudioResources(
-        Guid id,
-        [FromBody] GrantStudioResourcesRequest request,
-        CancellationToken cancellationToken)
-    {
-        var adminId = CurrentUserId();
-        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
-
-        var result = await _mediator.Send(
-            new GrantStudioResourcesCommand(adminId.Value, id, request.StorageBytes, request.Tokens), cancellationToken);
-        if (result.IsSuccess) return Ok(result.Value);
-        return result.ErrorCode == ResultErrorCodes.NotFound
-            ? NotFound(new { message = result.ErrorMessage })
-            : BadRequest(new { message = result.ErrorMessage });
     }
 
     // ─── Element Type Master Data ──────────────────────────────────────────────

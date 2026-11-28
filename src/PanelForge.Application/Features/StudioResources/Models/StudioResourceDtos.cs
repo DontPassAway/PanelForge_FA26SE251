@@ -50,5 +50,3 @@ public sealed record AdminStudioResourcePriceDto(
 
 public sealed record SetStudioResourcePriceRequest(int PricePerGbVnd, int PricePerMillionTokensVnd);
 
-/// <summary>Admin bán thêm tài nguyên: cộng vào kho của Producer.</summary>
-public sealed record GrantStudioResourcesRequest(long StorageBytes, long Tokens);

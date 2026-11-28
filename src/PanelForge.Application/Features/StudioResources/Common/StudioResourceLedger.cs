@@ -84,6 +84,33 @@ public static class StudioResourceLedger
         return pool;
     }
 
+    /// <summary>
+    /// Admin đổi hạn mức dung lượng / token của một Studio (màn Tài nguyên, duyệt yêu cầu tăng, đặt quota):
+    /// chủ Studio đã có kho thì hạn mức mới phải lớn hơn 0 (0 = không giới hạn sẽ không chiếm kho) và tổng
+    /// các Studio của họ không vượt kho. Hợp lệ thì đánh dấu kho đã đổi để xmin bắt lần chia song song.
+    /// Trả null khi hợp lệ hoặc chủ Studio chưa có kho (Producer trước D12 giữ cách cũ).
+    /// </summary>
+    public static async Task<string?> CheckAdminQuotaWithinPoolAsync(
+        IPanelForgeDbContext db, StudioWorkspace workspace, long storageQuotaBytes, long tokenQuota, CancellationToken ct)
+    {
+        var pool = await db.StudioResourcePools
+            .FirstOrDefaultAsync(p => p.OwnerId == workspace.OwnerId && !p.IsDeleted, ct);
+        if (pool is null) return null;
+
+        if (storageQuotaBytes <= 0 || tokenQuota <= 0)
+            return "Studio này dùng kho tài nguyên của Producer: dung lượng và token AI phải lớn hơn 0 (không đặt không giới hạn).";
+
+        var others = (await OwnedStudiosAsync(db, workspace.OwnerId, ct)).Where(s => s.WorkspaceId != workspace.Id).ToList();
+        var storageLeft = Math.Max(0, pool.StorageBytes - others.Sum(s => s.StorageQuotaBytes));
+        var tokensLeft = Math.Max(0, pool.Tokens - others.Sum(s => s.TokenQuota));
+        if (storageQuotaBytes > storageLeft || tokenQuota > tokensLeft)
+            return $"Kho tài nguyên của Producer không đủ: Studio này nhận tối đa {FormatBytes(storageLeft)} và {tokensLeft:N0} token. " +
+                   "Producer cần mua thêm tài nguyên bằng Ví trước khi tăng hạn mức.";
+
+        pool.MarkAllocationChanged();
+        return null;
+    }
+
     public const long BytesPerGb = 1L << 30;
     public const long TokensPerUnit = 1_000_000;
 

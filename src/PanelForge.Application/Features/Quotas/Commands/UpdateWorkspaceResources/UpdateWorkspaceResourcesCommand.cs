@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.StudioResources.Common;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,14 @@ public sealed class UpdateWorkspaceResourcesCommandHandler(IPanelForgeDbContext 
                 db.WorkspaceAiConfigs.Add(ai);
             }
             ai.UpdateSettings(ai.Provider, null, enabled, ai.MonthlyTokenQuota, string.Empty);
+        }
+
+        if (command.StorageQuotaBytes is not null || command.MonthlyTokenQuota is not null)
+        {
+            var poolError = await StudioResourceLedger.CheckAdminQuotaWithinPoolAsync(
+                db, workspace, workspace.StorageQuotaBytes, ai?.MonthlyTokenQuota ?? 0, ct);
+            if (poolError is not null)
+                return Fail(poolError, ResultErrorCodes.InsufficientStudioResources);
         }
 
         db.AuditLogs.Add(AuditLog.Create(

@@ -3,9 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Payments.Commands.PurchaseStudioPackage;
+using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Payments.Models;
+using PanelForge.Application.Features.Publisher.Queries.GetPublisherRevenue;
+using PanelForge.Application.Features.Quotas.Commands.ApproveQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Commands.SubmitQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResources;
 using PanelForge.Application.Features.StudioResources.Commands.AllocateStudioResources;
-using PanelForge.Application.Features.StudioResources.Commands.GrantStudioResources;
 using PanelForge.Application.Features.StudioResources.Commands.PurchaseStudioResources;
 using PanelForge.Application.Features.StudioResources.Commands.SetStudioResourcePrice;
 using PanelForge.Application.Features.StudioResources.Models;
@@ -182,18 +186,85 @@ public class StudioResourcePoolTests
     }
 
     [Fact]
-    public async Task AdminGrant_ToLegacyProducer_StartsPoolFromCurrentAllocations()
+    public async Task BuyMore_ByLegacyProducer_StartsPoolFromCurrentAllocations()
     {
         _producer.GrantStudioCreation();
+        _db.ReaderWallets.Add(ReaderWallet.Create(_producer.Id, 1_000_000m));
         await _db.SaveChangesAsync();
         (await Create("Legacy")).IsSuccess.Should().BeTrue();
+        await new SetStudioResourcePriceCommandHandler(_db).Handle(new SetStudioResourcePriceCommand(_admin.Id, 20_000, 50_000), default);
 
-        var granted = await new GrantStudioResourcesCommandHandler(_db, _defaults)
-            .Handle(new GrantStudioResourcesCommand(_admin.Id, _producer.Id, 10 * Gb, 2_000_000), default);
+        var bought = await new PurchaseStudioResourcesCommandHandler(_db, new DefaultBankSettings(), _defaults)
+            .Handle(new PurchaseStudioResourcesCommand(_producer.Id, 10, 2, 300_000), default);
 
-        granted.IsSuccess.Should().BeTrue(granted.ErrorMessage);
-        granted.Value!.Storage.Should().Be(new ResourceBudgetDto(15 * Gb, 5 * Gb, 10 * Gb));
-        granted.Value.Tokens.Should().Be(new ResourceBudgetDto(3_000_000, 1_000_000, 2_000_000));
-        _db.AuditLogs.Count(l => l.Action == "STUDIO_RESOURCES_GRANTED").Should().Be(1);
+        bought.IsSuccess.Should().BeTrue(bought.ErrorMessage);
+        bought.Value!.Resources.Storage.Should().Be(new ResourceBudgetDto(15 * Gb, 5 * Gb, 10 * Gb));
+        bought.Value.Resources.Tokens.Should().Be(new ResourceBudgetDto(3_000_000, 1_000_000, 2_000_000));
+    }
+
+    // Admin đổi hạn mức Studio của Producer có kho: phải nằm trong kho, không tặng thêm ngoài phần đã mua.
+    [Fact]
+    public async Task AdminUpdateResources_OnPooledStudio_CannotExceedPoolOrSetUnlimited()
+    {
+        await BuyPackage();
+        var studio = (await Create("A", 2 * Gb, 400_000)).Value!;
+        var handler = new UpdateWorkspaceResourcesCommandHandler(_db, _defaults);
+
+        var tooMuch = await handler.Handle(
+            new UpdateWorkspaceResourcesCommand(studio.Id, _admin.Id, 6 * Gb, null, null, null, "Tăng"), default);
+        var unlimited = await handler.Handle(
+            new UpdateWorkspaceResourcesCommand(studio.Id, _admin.Id, null, 0, null, null, "Bỏ giới hạn"), default);
+        var withinPool = await handler.Handle(
+            new UpdateWorkspaceResourcesCommand(studio.Id, _admin.Id, 5 * Gb, 1_000_000, null, null, "Dùng hết kho"), default);
+
+        tooMuch.ErrorCode.Should().Be(ResultErrorCodes.InsufficientStudioResources);
+        unlimited.ErrorCode.Should().Be(ResultErrorCodes.InsufficientStudioResources);
+        withinPool.IsSuccess.Should().BeTrue(withinPool.ErrorMessage);
+        (await Resources()).Storage.Should().Be(new ResourceBudgetDto(5 * Gb, 5 * Gb, 0));
+    }
+
+    [Fact]
+    public async Task AdminUpdateQuota_OnPooledStudio_CannotExceedPool()
+    {
+        await BuyPackage();
+        var studio = (await Create("A", 2 * Gb, 400_000)).Value!;
+
+        var result = await new UpdateWorkspaceQuotaCommandHandler(_db).Handle(new UpdateWorkspaceQuotaCommand(studio.Id, 8 * Gb), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.InsufficientStudioResources);
+        (await _db.StudioWorkspaces.SingleAsync(w => w.Id == studio.Id)).StorageQuotaBytes.Should().Be(2 * Gb);
+    }
+
+    [Fact]
+    public async Task ApproveIncrease_OnPooledStudio_BeyondPool_IsRejectedAndRequestStaysPending()
+    {
+        await BuyPackage();
+        var studio = (await Create("A", 2 * Gb, 400_000)).Value!;
+        var submitted = await new SubmitQuotaIncreaseRequestCommandHandler(_db).Handle(
+            new SubmitQuotaIncreaseRequestCommand(studio.Id, _producer.Id, QuotaResourceType.Storage, 10 * Gb, "Thêm bộ mới"), default);
+        submitted.IsSuccess.Should().BeTrue(submitted.ErrorMessage);
+
+        var approved = await new ApproveQuotaIncreaseRequestCommandHandler(_db).Handle(
+            new ApproveQuotaIncreaseRequestCommand(submitted.Value!.Id, _admin.Id, 10 * Gb, null), default);
+
+        approved.ErrorCode.Should().Be(ResultErrorCodes.InsufficientStudioResources);
+        _db.ChangeTracker.Clear();
+        (await _db.QuotaIncreaseRequests.SingleAsync()).Status.Should().Be(QuotaIncreaseRequestStatus.Pending);
+        (await _db.StudioWorkspaces.SingleAsync(w => w.Id == studio.Id)).StorageQuotaBytes.Should().Be(2 * Gb);
+    }
+
+    [Fact]
+    public async Task PublisherRevenue_IncludesStudioPackageAndResourceSales()
+    {
+        await BuyPackage();
+        await new SetStudioResourcePriceCommandHandler(_db).Handle(new SetStudioResourcePriceCommand(_admin.Id, 20_000, 50_000), default);
+        (await new PurchaseStudioResourcesCommandHandler(_db, new DefaultBankSettings(), _defaults)
+            .Handle(new PurchaseStudioResourcesCommand(_producer.Id, 1, 1, 70_000), default)).IsSuccess.Should().BeTrue();
+
+        var summary = (await new GetPublisherRevenueQueryHandler(_db).Handle(new GetPublisherRevenueQuery(), default)).Value!.Summary;
+
+        summary.StudioPackageRevenueVnd.Should().Be(100_000m);
+        summary.StudioResourcesRevenueVnd.Should().Be(70_000m);
+        summary.TotalRevenueVnd.Should().Be(170_000m);
     }
 }
