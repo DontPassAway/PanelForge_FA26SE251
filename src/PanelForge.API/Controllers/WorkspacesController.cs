@@ -479,7 +479,7 @@ public class WorkspacesController : ControllerBase
         if (result.IsSuccess)
             return CreatedAtAction(nameof(GetQuotaRequests), new { id }, result.Value);
         return result.ErrorCode == ResultErrorCodes.Conflict
-            ? Conflict(new { message = result.ErrorMessage, code = result.ErrorCode })
+            ? Conflict(new { message = result.ErrorMessage })
             : ToError(result);
     }
 
