@@ -132,4 +132,22 @@ public class WalletHistoryTests
         method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true)
             .Should().BeEmpty("endpoint must require authentication (AUD-BE-05)");
     }
+
+    [Fact]
+    public async Task AdminRefund_IsRecordedAsRefund_AndShownAsCredit_OPS06()
+    {
+        _db.Users.Add(PanelForge.Domain.Entities.Identity.User.Create("reader@test.com", "Reader"));
+        await _db.SaveChangesAsync();
+        var reader = _db.Users.Single();
+        var refund = await new PanelForge.Application.Features.Payments.Commands.AdminRefundWallet.AdminRefundWalletCommandHandler(_db)
+            .Handle(new PanelForge.Application.Features.Payments.Commands.AdminRefundWallet.AdminRefundWalletCommand(
+                Guid.NewGuid(), reader.Id, 15_000, "Lỗi mở khoá chương", "PF123"), default);
+        refund.IsSuccess.Should().BeTrue(refund.ErrorMessage);
+
+        var tx = _db.PaymentTransactions.Single(t => t.UserId == reader.Id);
+        tx.Type.Should().Be(PaymentTransactionType.Refund, "hoàn tiền không được tính là tiền nạp");
+
+        var wallet = (await new GetMyWalletQueryHandler(_db).Handle(new GetMyWalletQuery(reader.Id), default)).Value!;
+        wallet.Transactions.Should().ContainSingle(t => t.AmountVnd == 15_000 && t.Title.StartsWith("Hoàn tiền"));
+    }
 }

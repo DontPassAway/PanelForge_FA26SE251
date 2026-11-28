@@ -241,6 +241,8 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
             type = PaymentTransactionType.Topup;
             return true;
         }
-        return Enum.TryParse(purpose.Trim(), ignoreCase: true, out type) && Enum.IsDefined(type);
+        // Refund chỉ do Admin ghi (OPS-06), độc giả không tạo được đơn loại này
+        return Enum.TryParse(purpose.Trim(), ignoreCase: true, out type) && Enum.IsDefined(type)
+            && type != PaymentTransactionType.Refund;
     }
 }

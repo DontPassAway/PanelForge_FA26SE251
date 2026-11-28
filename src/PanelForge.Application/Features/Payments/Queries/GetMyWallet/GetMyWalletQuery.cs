@@ -41,7 +41,8 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
             .AsNoTracking()
             .Where(t => t.UserId == q.UserId && !t.IsDeleted
                         && t.Status == PaymentTransactionStatus.Approved
-                        && (t.Type == PaymentTransactionType.Topup || t.QrImageUrl == ""))
+                        && (t.Type == PaymentTransactionType.Topup || t.Type == PaymentTransactionType.Refund
+                            || t.QrImageUrl == ""))
             .OrderByDescending(t => t.ConfirmedAt ?? t.CreatedAt)
             .ThenByDescending(t => t.CreatedAt)
             .Take(50)
@@ -69,9 +70,9 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 PaymentTransactionType.Topup => t.BankBin switch
                 {
                     "GOOGLE_PLAY" => $"Nạp tiền Ví qua Google Play ({t.OrderCode})",
-                    "ADMIN_REFUND" => $"Hoàn tiền vào Ví ({t.OrderCode})",
                     _ => $"Nạp tiền Ví qua VietQR ({t.OrderCode})"
                 },
+                PaymentTransactionType.Refund => $"Hoàn tiền vào Ví ({t.OrderCode})",
                 PaymentTransactionType.ChapterUnlock => t.ChapterNumber.HasValue
                     ? $"Mở khóa Tập {t.ChapterNumber} - {t.SeriesTitle ?? "Truyện"}"
                     : $"Mở khóa chương truyện ({t.OrderCode})",
@@ -79,7 +80,8 @@ public sealed class GetMyWalletQueryHandler : IRequestHandler<GetMyWalletQuery, 
                 _ => $"Giao dịch {t.OrderCode}"
             };
 
-            int signAmount = t.Type == PaymentTransactionType.Topup ? (int)t.AmountVnd : -(int)t.AmountVnd;
+            int signAmount = t.Type is PaymentTransactionType.Topup or PaymentTransactionType.Refund
+                ? (int)t.AmountVnd : -(int)t.AmountVnd;
 
             txDtos.Add(new WalletTransactionDto(
                 Id: t.Id.ToString(),
