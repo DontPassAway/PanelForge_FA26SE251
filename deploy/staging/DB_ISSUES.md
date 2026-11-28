@@ -99,6 +99,27 @@ Nhánh `deploy-b2b` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkie
   - Riêng `SimplifyBibleEntrySchema`: xác nhận không còn cần dữ liệu 6 cột trên. Nếu cần thì export ra trước.
 - **Ai quyết:** người duyệt deploy `main`.
 
+## 8. Gộp `feature/admin-b2b` và `claude/project-thread-0wp0dx` vào `deploy-b2b`
+
+Ghi ngày 2026-11-28. Chỉ kiểm tra trên code và một Postgres tạm trong máy cloud, không đụng DB thật nào.
+
+- **Gộp:** `feature/admin-b2b` (23 commit) rồi `claude/project-thread-0wp0dx` (kho tài nguyên Producer, D12) đều tự gộp sạch ở BE, kể cả `PanelForgeDbContextModelSnapshot.cs`.
+- **Build:** 0 lỗi. **Test:** 1932/1932 pass, lần này **có cả** 8 test `*PostgresIntegrationTests` (chạy trên Postgres 16 tạm), nên `EndToEnd_MigrationsClean...` xác nhận toàn bộ migration chạy sạch từ DB rỗng.
+- **Snapshot khớp model:** `dotnet ef migrations add` thử ra migration rỗng, đã xoá, không commit.
+- **Số migration:** 125 (thêm 12 so với mục 7):
+  `AddWorkspaceAiConfigConcurrencyToken`, `ReclassifyAdminRefundTransactions`, `AddPaymentProviderReference`, `AddPlatformBankAccounts`, `AddQuotaPoliciesAndIncreaseRequests`, `DropStudioBankColumns`, `AddQuotaPolicyAiDefaultAndWarning`, `AddAiWorkflowRunReservedTokens`, `AddAiRequestLimits`, `AddUploadLimitPolicies`, `AddStudioPackagePrices` (từ `admin-b2b`) và `20261128083317_AddStudioResourcePools` (từ `0wp0dx`).
+- **Timestamp xen kẽ:** 11 migration của `admin-b2b` (03:50 đến 06:56) nằm xen giữa `AddPanelBalloonCheck` (05:10), `AddStageTaskChangeRequests` (06:06), `BackfillBibleConceptEventPointers` (06:30) đã có trên `deploy-b2b`. EF áp mọi migration còn thiếu nên vẫn chạy; không thấy hai bên sửa cùng cột.
+- **Thao tác có thể mất / đổi dữ liệu** (phần `Up`):
+
+| Migration | Thao tác | Ghi chú |
+|---|---|---|
+| `20261128042048_DropStudioBankColumns` | `Sql` (chép giá trị cũ vào `audit_logs` với action `STUDIO_BANK_INFO_ARCHIVED`) rồi `DropColumn` ×4 trên `studio_workspaces` (`bank_account_name`, `bank_account_no`, `bank_bin`, `bank_name`) | **Mất cột** trên DB thật. Giá trị cũ còn trong `audit_logs` dạng chuỗi, nhưng rollback image cũ sẽ lỗi vì thiếu cột (xem mục 4). Export các cột này trước khi deploy. |
+| `20261128035356_ReclassifyAdminRefundTransactions` | `Sql` | Đổi loại các giao dịch hoàn tiền do Admin tạo. Kiểm tra số dòng bị đổi trên bản sao DB. |
+
+  10 migration còn lại chỉ thêm bảng / cột / index.
+- **Đề xuất:** chạy thử 12 migration này trên bản sao DB chính thức trước khi promote, export 4 cột ngân hàng của `studio_workspaces`.
+- **Ai quyết:** chủ nghiệp vụ thanh toán / người duyệt deploy `main`.
+
 ---
 
 ## Ghi chú deploy
