@@ -6,6 +6,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Commands.DownloadAsset;
 using PanelForge.Application.Features.Assets.Commands.IssueArtworkAccessLink;
+using PanelForge.Application.Features.Assets.Commands.RestoreArtworkVersion;
 using PanelForge.Application.Features.Assets.Commands.UploadArtwork;
 using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assets.Queries.GetPageArtwork;
@@ -777,5 +778,82 @@ public class ArtworkUploadTests
 
         withBalloon.BalloonCheckRequestedAt.Should().NotBeNull();
         empty.BalloonCheckRequestedAt.Should().BeNull();
+    }
+
+    // ── ART-16 (Q27): khôi phục bản ảnh cũ = phiên bản mới trỏ cùng Asset ──
+
+    private static Task<Result<AssetReferenceDto>> Restore(Fixture f, Guid referenceId, Guid? userId = null, Guid? chapterId = null) =>
+        new RestoreArtworkVersionCommandHandler(f.Db.Object, f.PageRepo.Object).Handle(
+            new RestoreArtworkVersionCommand(chapterId ?? f.Chapter.Id, referenceId, userId ?? f.ArtistId), CancellationToken.None);
+
+    [Fact]
+    public async Task Restore_OldVersion_AddsNextVersionOnSameAsset_WithoutStoringBytes()
+    {
+        var f = new Fixture();
+        var v1 = (await f.Upload(Png(1))).Value!;
+        (await f.Upload(Png(2))).IsSuccess.Should().BeTrue();
+
+        var result = await Restore(f, v1.Id);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.VersionNumber.Should().Be(3);
+        result.Value.AssetId.Should().Be(v1.AssetId);
+        result.Value.Reused.Should().BeTrue();
+        f.References.Should().HaveCount(3);
+        f.References.Single(r => r.Id == v1.Id).VersionNumber.Should().Be(1); // bản cũ giữ nguyên (BR-01)
+        f.Assets.Should().HaveCount(2);
+        f.Storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Restore_LatestVersion_IsConflict()
+    {
+        var f = new Fixture();
+        var v1 = (await f.Upload(Png(1))).Value!;
+
+        var result = await Restore(f, v1.Id);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.References.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Restore_ByMemberNotHoldingWork_IsForbidden()
+    {
+        var f = new Fixture();
+        var v1 = (await f.Upload(Png(1))).Value!;
+        (await f.Upload(Png(2))).IsSuccess.Should().BeTrue();
+
+        var result = await Restore(f, v1.Id, userId: f.OtherId);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        f.References.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Restore_OnApprovedGridCell_IsConflict()
+    {
+        var f = new Fixture();
+        var cell = f.GridCell(f.ArtistId);
+        var v1 = (await f.Upload(Png(1))).Value!;
+        (await f.Upload(Png(2))).IsSuccess.Should().BeTrue();
+        cell.Submit(null, isApprovalGate: false); // công đoạn không có cổng duyệt: nộp = duyệt
+
+        var result = await Restore(f, v1.Id);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        f.References.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Restore_ReferenceFromAnotherChapter_IsNotFound()
+    {
+        var f = new Fixture();
+        var v1 = (await f.Upload(Png(1))).Value!;
+
+        var result = await Restore(f, v1.Id, chapterId: Guid.NewGuid());
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
     }
 }

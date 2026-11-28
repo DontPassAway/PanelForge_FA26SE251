@@ -6,6 +6,7 @@ using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
 using PanelForge.Application.Features.Assets.Commands.DownloadAsset;
 using PanelForge.Application.Features.Assets.Commands.IssueArtworkAccessLink;
+using PanelForge.Application.Features.Assets.Commands.RestoreArtworkVersion;
 using PanelForge.Application.Features.Assets.Commands.UploadArtwork;
 using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assets.Queries.GetPageArtwork;
@@ -69,6 +70,21 @@ public sealed class AssetsController : ControllerBase
     {
         var result = await _mediator.Send(new GetPageArtworkQuery(chapterId, pageId, stageId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/artwork/{assetReferenceId}/restore — dùng lại bản artwork cũ (ART-16): tạo phiên bản mới
+    /// trỏ cùng file, không tải lại. Quyền như upload; ô đã duyệt → 409 (cần mở lại trang trước).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/artwork/{assetReferenceId:guid}/restore")]
+    [RequireWorkspaceRole]
+    [ProducesResponseType(typeof(AssetReferenceDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> RestoreVersion(Guid chapterId, Guid assetReferenceId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RestoreArtworkVersionCommand(chapterId, assetReferenceId, GetCurrentUserId()), ct);
+        return result.IsSuccess
+            ? CreatedAtAction(nameof(GetPageArtwork), new { chapterId, pageId = result.Value!.PageId }, result.Value)
+            : Error(result);
     }
 
     /// <summary>POST /api/chapters/{chapterId}/artwork/{assetReferenceId}/access-link — xin link tải ngắn hạn (BR-16).</summary>

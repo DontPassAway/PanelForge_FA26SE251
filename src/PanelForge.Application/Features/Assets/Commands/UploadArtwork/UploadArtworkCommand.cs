@@ -7,7 +7,6 @@ using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.CanvasElements.Common;
-using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -123,84 +122,9 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         if (layerType is not null && !await _db.ElementTypes.AnyAsync(t => t.Code == layerType, ct))
             return Fail($"Loại layer '{layerType}' không tồn tại.");
 
-        // ── Quyền: chỉ người đang giữ việc InProgress ở đúng stage. Việc cấp Page: ảnh cả trang hoặc khung bất kỳ của trang.
-        //    Việc cấp Panel: chỉ ảnh của đúng khung đó (không được ghi ảnh cả trang, vì sẽ đè phần người khác làm) ──
-        // Lưới V3: chương đã giao việc qua lưới thì quyền xét theo ô (trang × công đoạn), không rơi về luật V2 (bảng Assignments
-        // rỗng → mọi Artist ghi đè được trang người khác hoặc trang đã duyệt). Ô chưa giao: chỉ Producer tải được.
-        var usesGrid = await _db.StageTasks.AnyAsync(
-            t => t.ChapterId == chapter.Id && t.Status != StageTaskStatus.Cancelled, ct);
-        if (usesGrid)
-        {
-            var cell = await (from t in _db.StageTasks.AsNoTracking()
-                              join l in _db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
-                              where t.ChapterId == chapter.Id && t.PipelineStageId == stageId && t.PageId == cmd.PageId &&
-                                    t.Status != StageTaskStatus.Cancelled
-                              select new { t.Status, t.IsInputOutdated, l.AssigneeUserId }).FirstOrDefaultAsync(ct);
-            var holdsCell = cell is not null && cell.AssigneeUserId == cmd.UserId && !cell.IsInputOutdated &&
-                            (cell.Status == StageTaskStatus.InProgress || cell.Status == StageTaskStatus.ReworkRequired);
-            var producerOnFreeCell = cell is null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
-                m.WorkspaceId == workspaceId && m.UserId == cmd.UserId && m.Status == WorkspaceMemberStatus.Active &&
-                m.Role == WorkspaceRole.Producer, ct);
-            if (!holdsCell && !producerOnFreeCell)
-                return Fail("Chỉ người đang làm ô (trang × công đoạn) này trên lưới giao việc mới tải được artwork.",
-                    ResultErrorCodes.Forbidden);
-        }
-
-        var holdsTheWork = usesGrid;
-        if (!holdsTheWork && stageId != Guid.Empty)
-        {
-            holdsTheWork = await _db.Assignments.AnyAsync(a =>
-                a.ChapterId == chapter.Id && a.PipelineStageId == stageId && a.AssigneeUserId == cmd.UserId &&
-                a.Status == AssignmentStatus.InProgress &&
-                ((a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
-                 (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
-
-            if (!holdsTheWork && await _db.Assignments.AnyAsync(a =>
-                    a.ChapterId == chapter.Id && a.PipelineStageId == stageId && a.AssigneeUserId == cmd.UserId &&
-                    a.Status == AssignmentStatus.InProgress && a.EntityType == WorkflowEntityType.Chapter, ct))
-            {
-                var carved = await StageProgressRules.CarvedOutAsync(_db, chapter.Id, stageId, ct);
-                holdsTheWork = cmd.PanelId is { } pid
-                    ? !carved.Panels.Contains(pid)
-                    : !carved.Pages.Contains(cmd.PageId) &&
-                      !await _db.Panels.AsNoTracking().AnyAsync(p => p.PageId == cmd.PageId && carved.Panels.Contains(p.Id), ct);
-            }
-        }
-
-        // Hỗ trợ Artist / Producer hoặc Owner của Workspace upload trực tiếp khi stage này chưa giao cho ai ở phần đó.
-        // Việc cả chương cũng tính là đã giao, nếu không thành viên khác ghi đè được stage người khác đang giữ.
-        if (!holdsTheWork && cmd.UserId != Guid.Empty)
-        {
-            var hasSpecificAssignment = await _db.Assignments.AnyAsync(a =>
-                a.ChapterId == chapter.Id && a.PipelineStageId == stageId &&
-                (a.EntityType == WorkflowEntityType.Chapter ||
-                 (a.EntityType == WorkflowEntityType.Page && a.TargetEntityId == cmd.PageId) ||
-                 (a.EntityType == WorkflowEntityType.Panel && cmd.PanelId != null && a.TargetEntityId == cmd.PanelId)), ct);
-
-            if (!hasSpecificAssignment)
-            {
-                var isOwnerOrAuthorizedRole =
-                    (_db.StudioWorkspaces != null && await _db.StudioWorkspaces.AsNoTracking().AnyAsync(w =>
-                        w.Id == workspaceId && (w.OwnerId == cmd.UserId || w.CreatedBy == cmd.UserId.ToString()), ct))
-                    || (_db.WorkspaceMembers != null && await _db.WorkspaceMembers.AsNoTracking().AnyAsync(m =>
-                        m.WorkspaceId == workspaceId && m.UserId == cmd.UserId && m.Status == WorkspaceMemberStatus.Active &&
-                        m.Role == WorkspaceRole.Producer, ct)) // D10: Artist chỉ tính theo vai trò Series bên dưới
-                    || (_db.SeriesMembers != null && await _db.SeriesMembers.AsNoTracking().AnyAsync(sm =>
-                        sm.SeriesId == chapter.SeriesId && sm.UserId == cmd.UserId &&
-                        (sm.Role == WorkspaceRole.Artist || sm.Role == WorkspaceRole.Producer), ct));
-
-                if (isOwnerOrAuthorizedRole)
-                {
-                    holdsTheWork = true;
-                }
-            }
-        }
-
-        if (!holdsTheWork)
-            return Fail(cmd.PanelId is null
-                    ? "Chỉ người giữ việc cả trang (InProgress) ở stage này hoặc thành viên Artist/Producer mới được tải artwork cả trang."
-                    : "Chỉ người đang làm việc (InProgress) ở stage này cho Page/khung này hoặc thành viên Artist/Producer mới được tải artwork.",
-                ResultErrorCodes.Forbidden);
+        // ── Quyền (lưới V3 theo ô, hoặc luật V2 theo Assignment) — dùng chung với khôi phục bản cũ (ART-16) ──
+        if (await ArtworkWriteRules.DeniedReasonAsync(_db, chapter, workspaceId, stageId, cmd.PageId, cmd.PanelId, cmd.UserId, ct) is { } denied)
+            return Fail(denied, ResultErrorCodes.Forbidden);
 
         // ── BR-13: dùng lại Asset nếu nội dung đã có; ngược lại giữ chỗ quota rồi lưu ──
         var asset = await _db.Assets.FirstOrDefaultAsync(a => a.WorkspaceId == workspaceId && a.Sha256 == hash, ct);
@@ -221,19 +145,15 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         }
 
         // Phiên bản mới của (Page, Panel, Stage), chỉ thêm (BR-01)
-        var versions = await _db.AssetReferences.AsNoTracking()
-            .Where(r => r.PageId == cmd.PageId && r.PanelId == cmd.PanelId && r.PipelineStageId == stageId)
-            .Select(r => r.VersionNumber).ToListAsync(ct);
-
         var reference = AssetReference.Create(
             asset.Id, workspaceId, chapter.Id, cmd.PageId, stageId,
-            versions.Count == 0 ? 1 : versions.Max() + 1,
+            await ArtworkWriteRules.NextVersionAsync(_db, cmd.PageId, cmd.PanelId, stageId, ct),
             layerType, AssetRules.SanitizeFileName(cmd.FileName), cmd.UserId, cmd.PanelId);
         reference.CreatedBy = cmd.UserId.ToString();
 
         _db.AssetReferences.Add(reference);
         // ART-06: tranh nét/màu mới (công đoạn vẽ sau Pencil) có thể làm lệch bóng thoại đã đặt → cờ Check Balloon Fit
-        if (await IsLaterArtStageAsync(chapter.SeriesId, stageId, ct))
+        if (await ArtworkWriteRules.IsLaterArtStageAsync(_db, chapter.SeriesId, stageId, ct))
             await BalloonFitRules.FlagAsync(_db, _pages, cmd.PageId, cmd.PanelId, ct);
         try
         {
@@ -247,14 +167,6 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         }
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
-    }
-
-    private async Task<bool> IsLaterArtStageAsync(Guid seriesId, Guid stageId, CancellationToken ct)
-    {
-        if (stageId == Guid.Empty) return false;
-        var stages = await TaskGridRules.LoadStagesAsync(_db, seriesId, ct);
-        var stage = stages.FirstOrDefault(s => s.Id == stageId);
-        return stage is not null && TaskGridRules.IsLaterArtStage(stage, stages);
     }
 
     /// <summary>
