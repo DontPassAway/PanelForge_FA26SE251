@@ -194,6 +194,14 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiSettings.ImageTimeoutSeconds, 15, 200));
         });
 
+        // OPS-32 System Health: gọi /health/ai không retry, timeout ngắn để trang Admin không treo khi AI tắt
+        services.AddHttpClient(SystemHealthProbe.AiHealthHttpClient, client =>
+        {
+            client.BaseAddress = new Uri(aiSettings.ServiceUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(4);
+        });
+        services.AddScoped<ISystemHealthProbe, SystemHealthProbe>();
+
         // ── Dịch kịch bản / thoại (LibreTranslate tự lưu trữ) ──
         var translationBaseUrl = configuration["TranslationService:BaseUrl"] ?? "http://localhost:5000";
         services.AddHttpClient<ITranslationService, LibreTranslateService>(client =>
