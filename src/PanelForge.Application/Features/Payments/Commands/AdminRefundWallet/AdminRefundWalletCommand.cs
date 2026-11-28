@@ -59,7 +59,7 @@ public sealed class AdminRefundWalletCommandHandler
         var tx = PaymentTransaction.Create(
             userId: command.TargetUserId,
             orderCode: refundCode,
-            type: PaymentTransactionType.Topup,
+            type: PaymentTransactionType.Refund,
             amountVnd: command.AmountVnd,
             qrImageUrl: string.Empty,
             bankBin: "ADMIN_REFUND",

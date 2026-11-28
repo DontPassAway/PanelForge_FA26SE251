@@ -28,6 +28,7 @@ public sealed record RunThumbnailCommand(Guid SeriesId, Guid PanelId, Guid UserI
 public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCommand, Result<AiSuggestionDto>>
 {
     private const int MaxReferences = 3, MaxReferenceBytes = 4 * 1024 * 1024, MaxPromptChars = 3500;
+    private const long EstimatedImageBytes = 2 * 1024 * 1024;
     private const string Feature = "AiAgents.Thumbnail";
 
     private readonly IPanelForgeDbContext _db;
@@ -105,6 +106,13 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
             return Fail($"Workspace đã dùng hết quota ảnh tháng này ({config.UsedImagesCurrentMonth}/{config.MonthlyImageQuota}).",
                 ResultErrorCodes.AiQuotaExceeded);
 
+        // OPS-02: kiểm dung lượng TRƯỚC khi gọi AI (chưa biết cỡ ảnh nên dùng mức ước lượng); giữ chỗ thật khi lưu ảnh bên dưới
+        var hasRoom = await _db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == series.WorkspaceId)
+            .Select(w => w.StorageQuotaBytes == 0 || w.UsedStorageBytes + EstimatedImageBytes <= w.StorageQuotaBytes)
+            .FirstOrDefaultAsync(ct);
+        if (!hasRoom)
+            return Fail("Vượt quota dung lượng của Workspace, không đủ chỗ lưu ảnh AI.", ResultErrorCodes.Conflict);
+
         var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
         if (provider is null)
             return Fail($"AiService:ImageProvider '{_settings.ImageProvider}' không được hỗ trợ (Gemini | Cloudflare).", ResultErrorCodes.AiDisabled);
@@ -129,6 +137,15 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         var models = JsonSerializer.Deserialize<List<string>>(config.AllowedModelsJson) ?? [];
         if (!useCred && !models.Contains(model, StringComparer.OrdinalIgnoreCase))
             return Fail($"Model ảnh '{model}' chưa nằm trong danh sách model được phép của Workspace.", ResultErrorCodes.Validation);
+
+        // OPS-24: đếm lượt gọi AI (tháng/phút) sau cùng, khi mọi cổng khác đã qua; ảnh không giữ chỗ token
+        var started = await _usage.TryStartRequestAsync(series.WorkspaceId, 0, ct);
+        if (!started.IsAvailable)
+        {
+            await _usage.RecordAsync(new AiUsageEntry(series.WorkspaceId, Feature, started.BlockedReason!.Value,
+                ErrorMessage: started.Message, UserId: cmd.UserId), ct);
+            return Fail(started.Message!, ResultErrorCodes.AiQuotaExceeded);
+        }
 
         var prompt = ThumbnailRules.WithStyle(panelPrompt.Prompt, _settings.ThumbnailStylePrefix);
         if (!string.IsNullOrWhiteSpace(cmd.Instruction)) prompt = $"{prompt}\n\nYêu cầu thêm: {cmd.Instruction.Trim()}";

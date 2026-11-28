@@ -19,6 +19,7 @@ internal sealed class AiWorkflowRunConfiguration : IEntityTypeConfiguration<AiWo
         builder.Property(r => r.SeriesId).HasColumnName("series_id").HasColumnType("uuid").IsRequired();
         builder.Property(r => r.ChapterId).HasColumnName("chapter_id").HasColumnType("uuid").IsRequired();
         builder.Property(r => r.SceneId).HasColumnName("scene_id").HasColumnType("uuid");
+        builder.Property(r => r.ReservedTokens).HasColumnName("reserved_tokens").HasColumnType("bigint").HasDefaultValue(0L).IsRequired();
         // Run tạo trước khi có loại workflow đọc như FullScene (giá trị mặc định ở DB cũng là FullScene)
         builder.Property(r => r.WorkflowType).HasColumnName("workflow_type").HasColumnType("varchar(30)")
                .HasConversion(v => v.ToString(), v => Enum.Parse<AiWorkflowType>(v))

@@ -43,10 +43,8 @@ public sealed class UpdateSeriesLanguagesCommandHandler
             m.Status == WorkspaceMemberStatus.Active &&
             m.Role == WorkspaceRole.Producer, cancellationToken);
 
-        var isSystemAdmin = await _dbContext.Users.AsNoTracking().AnyAsync(u =>
-            u.Id == command.UserId && u.Role == SystemRole.Admin, cancellationToken);
-
-        if (!isProducer && !isSystemAdmin)
+        // BR-07: Administrator không cấu hình nội dung sản xuất, kể cả ngôn ngữ Series.
+        if (!isProducer)
             return Result<SeriesDto>.Failure("Chỉ Producer của dự án mới có quyền thay đổi cấu hình ngôn ngữ.", ResultErrorCodes.Forbidden);
 
         // Xác thực ngôn ngữ thuộc ContentLanguages.All

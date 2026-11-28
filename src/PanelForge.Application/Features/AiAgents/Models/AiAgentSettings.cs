@@ -18,6 +18,10 @@ public sealed class AiAgentSettings
     /// <summary>Copilot sync: timeout một lần gọi và số lượt tối đa mỗi phút cho MỘT Series.</summary>
     public int CopilotTimeoutSeconds { get; set; } = 30;
     public int CopilotCallsPerMinutePerSeries { get; set; } = 10;
+    /// <summary>OPS-03: số token giữ chỗ trước mỗi lượt Copilot, chốt lại theo số thật sau khi gọi.</summary>
+    public long CopilotReservedTokens { get; set; } = 4000;
+    /// <summary>OPS-03: token giữ chỗ khi bắt đầu một workflow nhiều agent; bước đầu có token sẽ chốt về số thật.</summary>
+    public long WorkflowReservedTokens { get; set; } = 20000;
 
     /// <summary>Sinh ảnh thumbnail: Gemini (dùng key Workspace, nhận ảnh tham chiếu) hoặc Cloudflare (Workers AI text-to-image, token ở AI service).</summary>
     public string ImageProvider { get; set; } = "Gemini";

@@ -6,6 +6,7 @@ using PanelForge.Application.Features.Workspaces.Commands.AddMember;
 using PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
 using PanelForge.Application.Features.Workspaces.Commands.RemoveMember;
 using PanelForge.Application.Features.Workspaces.Queries.GetMyWorkspaces;
+using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
@@ -213,8 +214,8 @@ public class WorkspaceHandlerTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var result = await new CreateWorkspaceCommandHandler(db)
-            .Handle(new CreateWorkspaceCommand(user.Id, "Studio", 0), CancellationToken.None);
+        var result = await new CreateWorkspaceCommandHandler(db, new WorkspaceDefaultsSettings())
+            .Handle(new CreateWorkspaceCommand(user.Id, "Studio"), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
     }
@@ -228,12 +229,29 @@ public class WorkspaceHandlerTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var result = await new CreateWorkspaceCommandHandler(db)
-            .Handle(new CreateWorkspaceCommand(user.Id, "  My Studio ", 0), CancellationToken.None);
+        var result = await new CreateWorkspaceCommandHandler(db, new WorkspaceDefaultsSettings())
+            .Handle(new CreateWorkspaceCommand(user.Id, "  My Studio "), CancellationToken.None);
 
         result.Value!.IsOwner.Should().BeTrue();
         result.Value.CurrentUserRole.Should().Be(WorkspaceRole.Producer);
         db.WorkspaceMembers.Should().ContainSingle(m => m.UserId == user.Id && m.Role == WorkspaceRole.Producer);
+    }
+
+    [Fact]
+    public async Task CreateWorkspace_ShouldTakeStorageQuotaFromServerDefaults_OPS01()
+    {
+        await using var db = InMemoryDb.Create();
+        var user = User.Create("q@test.com", "Q");
+        user.GrantStudioCreation();
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        const long serverQuota = 2L * 1024 * 1024 * 1024;
+
+        var result = await new CreateWorkspaceCommandHandler(db, new WorkspaceDefaultsSettings { StorageQuotaBytes = serverQuota })
+            .Handle(new CreateWorkspaceCommand(user.Id, "Quota Studio"), CancellationToken.None);
+
+        result.Value!.StorageQuotaBytes.Should().Be(serverQuota);
+        db.StudioWorkspaces.Single(w => w.Id == result.Value.Id).StorageQuotaBytes.Should().Be(serverQuota);
     }
 
     [Fact]

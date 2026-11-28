@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Series.Commands.SetSeriesImage;
 
@@ -15,7 +16,7 @@ public enum SeriesImageKind
 }
 
 /// <summary>
-/// Producer đặt avatar/banner Series (PNG/JPEG/WebP, ≤ 5 MB) hoặc xoá (<see cref="Content"/> = null).
+/// Producer đặt avatar/banner Series (PNG/JPEG/WebP, tối đa theo giới hạn upload của Admin) hoặc xoá (<see cref="Content"/> = null).
 /// Cùng cơ chế với bìa dọc: lưu lên <see cref="IAssetStorage"/> (R2 khi cấu hình) theo SHA-256 nội dung, khoá bất biến,
 /// không ghi đè file cũ; chỉ cập nhật DB sau khi lưu file thành công. Ảnh mẫu: controller đọc file từ danh mục
 /// có kiểm soát rồi gửi bytes qua đúng lệnh này, nên đi qua cùng validation và cùng kho.
@@ -25,8 +26,6 @@ public sealed record SetSeriesImageCommand(Guid SeriesId, Guid UserId, SeriesIma
 
 public sealed class SetSeriesImageCommandHandler : IRequestHandler<SetSeriesImageCommand, Result<string?>>
 {
-    public const long MaxBytes = 5 * 1024 * 1024;
-
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
 
@@ -54,14 +53,18 @@ public sealed class SetSeriesImageCommandHandler : IRequestHandler<SetSeriesImag
         string? sha = null;
         if (cmd.Content is not null)
         {
-            if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)
-                return Result<string?>.Failure("Ảnh phải từ 1 byte đến 5 MB.", ResultErrorCodes.Validation);
+            if (cmd.Content.Length == 0)
+                return Result<string?>.Failure("File ảnh rỗng.", ResultErrorCodes.Validation);
+            if (await UploadLimits.CheckAsync(_db, UploadKind.CoverImage, cmd.Content.Length, ct) is { } tooLarge)
+                return Result<string?>.Failure(tooLarge, ResultErrorCodes.FileTooLarge);
 
             var contentType = AssetRules.DetectImageContentType(cmd.Content);
             if (contentType is null)
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, series.WorkspaceId, StorageKey(series.Id, cmd.Kind, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(series.Id, cmd.Kind, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = $"series-{Segment(cmd.Kind)}" }), ct);
         }
@@ -71,7 +74,14 @@ public sealed class SetSeriesImageCommandHandler : IRequestHandler<SetSeriesImag
         else
             series.SetBanner(sha);
         series.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(ImageUrl(series.Id, cmd.Kind, sha));
     }
 }

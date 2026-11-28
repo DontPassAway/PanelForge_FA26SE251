@@ -55,8 +55,6 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             _db.ReaderWallets.Add(wallet);
         }
 
-        bool isVip = wallet.IsVip && (wallet.VipExpiresAt == null || wallet.VipExpiresAt > DateTime.UtcNow);
-
         // Đã mở khóa trước đó
         var alreadyUnlocked = await _db.ChapterEntitlements
             .AnyAsync(e => e.UserId == command.UserId && e.ChapterId == chapter.Id && e.Language == language && !e.IsDeleted, ct);
@@ -74,7 +72,7 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             ));
         }
 
-        // Trường hợp chương miễn phí hoặc có đặc quyền VIP
+        // Ấn bản miễn phí: cấp quyền đọc 0đ. Không còn gói VIP (spec Q4, OPS-11): trả phí là phải mua đúng ấn bản.
         // BR-33: loại & giá theo ấn bản ngôn ngữ đang mở khóa; ấn bản chưa cấu hình (D4) không mở khóa được.
         var terms = await ChapterReadAccess.EditionTermsAsync(_db, chapter.Id, language, ct);
         if (!terms.IsConfigured)
@@ -88,7 +86,7 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
                 ResultErrorCodes.PriceChanged);
         }
 
-        if (!terms.IsPaid || isVip)
+        if (!terms.IsPaid)
         {
             var freeEntitlement = ChapterEntitlement.Create(
                 userId: command.UserId,
@@ -102,9 +100,7 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
             await _db.SaveChangesAsync(ct);
 
             var balVnd = (int)wallet.BalanceVnd;
-            string msg = isVip
-                ? "Đặc quyền VIP: Mở khóa chương truyện miễn phí!"
-                : "Chương truyện miễn phí, đã mở khóa thành công!";
+            const string msg = "Chương truyện miễn phí, đã mở khóa thành công!";
 
             return Result<UnlockChapterResponse>.Success(new UnlockChapterResponse(
                 ChapterId: chapter.Id.ToString(),
@@ -131,15 +127,16 @@ public sealed class UnlockChapterCommandHandler : IRequestHandler<UnlockChapterC
         wallet.DeductBalance(priceVnd);
 
         string orderCode = await OrderCodeGenerator.GenerateUniqueAsync(_db, ct);
+        var bank = await PlatformBank.CurrentAsync(_db, _defaultBank, ct);
         var transaction = PaymentTransaction.Create(
             userId: command.UserId,
             orderCode: orderCode,
             type: PaymentTransactionType.ChapterUnlock,
             amountVnd: priceVnd,
             qrImageUrl: "",
-            bankBin: _defaultBank.Bin,
-            bankAccountNo: _defaultBank.AccountNo,
-            bankAccountName: _defaultBank.AccountName,
+            bankBin: bank.Bin,
+            bankAccountNo: bank.AccountNo,
+            bankAccountName: bank.AccountName,
             workspaceId: chapter.Series.WorkspaceId,
             seriesId: chapter.SeriesId,
             chapterId: chapter.Id,

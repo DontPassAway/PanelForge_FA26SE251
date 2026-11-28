@@ -36,6 +36,18 @@ public class ExportJobTests
 
         public Task<Stream?> OpenReadAsync(string key, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(Files.TryGetValue(key, out var bytes) ? new MemoryStream(bytes) : null);
+
+        public async IAsyncEnumerable<StoredObject> ListAsync(string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            foreach (var (key, bytes) in Files.Where(i => i.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+                yield return new StoredObject(key, bytes.Length, DateTime.UtcNow);
+            await Task.CompletedTask;
+        }
+        public Task DeleteAsync(string key, CancellationToken ct = default)
+        {
+            Files.Remove(key);
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>Renderer giả: nối byte các trang theo thứ tự, để kiểm thứ tự và nội dung đúng bản đã chụp.</summary>

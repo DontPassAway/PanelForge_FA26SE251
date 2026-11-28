@@ -187,25 +187,32 @@ public sealed class RecordAgentStepCommandHandler : IRequestHandler<RecordAgentS
         }
     }
 
-    /// <summary>Ghi usage đúng một lần cho Gemini (mỗi step đã có lưu → retry callback không tới được đây); Mock không ghi.</summary>
+    /// <summary>
+    /// Ghi usage đúng một lần cho Gemini (mỗi step đã có lưu → retry callback không tới được đây); Mock không ghi.
+    /// OPS-03: bước đầu có token chốt phần giữ chỗ của run; run kết thúc mà còn giữ chỗ thì trả lại.
+    /// </summary>
     private async Task RecordUsageAsync(AiWorkflowRun run, AiAgentStep step, CancellationToken ct)
     {
-        if (step.PromptTokens is null && step.CompletionTokens is null) return;
-
-        var status = step.Status == AiStepStatus.Succeeded ? AiUsageStatus.Succeeded
-            : step.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed;
-        var record = await _usage.RecordAsync(new AiUsageEntry(
-            run.WorkspaceId, $"AiAgents.{step.Agent}", status, step.Model,
-            step.PromptTokens ?? 0, step.CompletionTokens ?? 0, null, step.ErrorMessage, step.DurationMs,
-            run.RequestedByUserId, Provider: step.Provider), ct);
-        step.LinkUsageRecord(record.Id);
-
-        if (run.IsActive)
+        if (step.PromptTokens is not null || step.CompletionTokens is not null)
         {
-            var availability = await _usage.CheckAvailabilityAsync(run.WorkspaceId, ct);
-            if (!availability.IsAvailable)
-                run.MarkFailed(ResultErrorCodes.AiQuotaExceeded, availability.Message);
+            var status = step.Status == AiStepStatus.Succeeded ? AiUsageStatus.Succeeded
+                : step.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed;
+            var record = await _usage.RecordAsync(new AiUsageEntry(
+                run.WorkspaceId, $"AiAgents.{step.Agent}", status, step.Model,
+                step.PromptTokens ?? 0, step.CompletionTokens ?? 0, null, step.ErrorMessage, step.DurationMs,
+                run.RequestedByUserId, Provider: step.Provider, ReservedTokens: run.TakeReservation()), ct);
+            step.LinkUsageRecord(record.Id);
+
+            if (run.IsActive)
+            {
+                var availability = await _usage.CheckAvailabilityAsync(run.WorkspaceId, ct);
+                if (!availability.IsAvailable)
+                    run.MarkFailed(ResultErrorCodes.AiQuotaExceeded, availability.Message);
+            }
         }
+
+        if (!run.IsActive && run.ReservedTokens > 0)
+            await _usage.ReleaseReservedTokensAsync(run.WorkspaceId, run.TakeReservation(), ct);
         await _db.SaveChangesAsync(ct);
     }
 

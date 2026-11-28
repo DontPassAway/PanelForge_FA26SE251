@@ -35,6 +35,9 @@ using PanelForge.API.Common;
 using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceReaderStats;
+using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Application.Features.Quotas.Commands.SubmitQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
 
 namespace PanelForge.API.Controllers;
 
@@ -58,7 +61,7 @@ public class WorkspacesController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(
-            new CreateWorkspaceCommand(userId, request.Name, request.StorageQuotaBytes), cancellationToken);
+            new CreateWorkspaceCommand(userId, request.Name), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Value!.Id }, result.Value)
             : ToError(result);
@@ -122,13 +125,13 @@ public class WorkspacesController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/workspaces/{id}/cover (multipart/form-data: file) — Producer đặt ảnh bìa Studio (PNG/JPEG/WebP, ≤ 5 MB).
+    /// PUT /api/workspaces/{id}/cover (multipart/form-data: file) — Producer đặt ảnh bìa Studio (PNG/JPEG/WebP, giới hạn theo upload-limits).
     /// </summary>
     [HttpPut("{id:guid}/cover")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -336,6 +339,7 @@ public class WorkspacesController : ControllerBase
     /// Producer xem lượt đọc / số người đọc theo bộ truyện và chương (không kèm doanh thu — thuộc Publisher).
     /// </summary>
     [HttpGet("{id:guid}/reader-stats")]
+    [AllowAdminOversight]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(WorkspaceReaderStatsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReaderStats(Guid id, CancellationToken cancellationToken)
@@ -475,6 +479,35 @@ public class WorkspacesController : ControllerBase
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
     }
 
+    /// <summary>GET /api/workspaces/{id}/quota-requests — Producer xem các yêu cầu tăng hạn mức của Studio (OPS-21).</summary>
+    [HttpGet("{id:guid}/quota-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<QuotaIncreaseRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaRequests(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotaIncreaseRequestsQuery(id, null, 50), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/workspaces/{id}/quota-requests — Producer xin Admin tăng hạn mức (OPS-21). 409 nếu đã có yêu cầu cùng loại đang chờ.</summary>
+    [HttpPost("{id:guid}/quota-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> SubmitQuotaRequest(
+        Guid id, [FromBody] SubmitQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } producerId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new SubmitQuotaIncreaseRequestCommand(
+            id, producerId, request.ResourceType, request.RequestedQuota, request.Reason), cancellationToken);
+        if (result.IsSuccess)
+            return CreatedAtAction(nameof(GetQuotaRequests), new { id }, result.Value);
+        return result.ErrorCode == ResultErrorCodes.Conflict
+            ? Conflict(new { message = result.ErrorMessage })
+            : ToError(result);
+    }
+
     private IActionResult UnknownUser()
         => Unauthorized(new { message = "Không xác định được danh tính người dùng." });
 
@@ -490,6 +523,7 @@ public class WorkspacesController : ControllerBase
             ResultErrorCodes.Unauthorized => Unauthorized(body),
             ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
             ResultErrorCodes.NotFound => StatusCode(notFoundStatus, body),
+            ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(body)
         };
     }

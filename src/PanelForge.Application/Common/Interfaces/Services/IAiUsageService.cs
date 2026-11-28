@@ -12,6 +12,17 @@ public interface IAiUsageService
 {
     Task<AiAvailability> CheckAvailabilityAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// OPS-03/OPS-24: mở một lượt gọi AI ngay trước khi gọi provider: giữ chỗ <paramref name="reserveTokens"/> token ước lượng
+    /// (0 = không giữ chỗ, vd sinh ảnh) và đếm lượt theo tháng và theo phút của Studio, cùng một lần lưu có khoá xmin
+    /// (thử lại khi đụng nhau). Bị từ chối thì trả lý do và không ghi gì. Đã giữ token thì lần <see cref="RecordAsync"/>
+    /// sau đó phải truyền cùng số trong <see cref="AiUsageEntry.ReservedTokens"/>.
+    /// </summary>
+    Task<AiAvailability> TryStartRequestAsync(Guid workspaceId, long reserveTokens, CancellationToken cancellationToken = default);
+
+    /// <summary>OPS-03: trả lại token đã giữ chỗ khi lượt gọi không xảy ra hoặc run kết thúc mà chưa chốt (không tạo AiUsageRecord).</summary>
+    Task ReleaseReservedTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default);
+
     /// <summary>Ghi một AiUsageRecord; lần gọi thành công được cộng vào UsedTokensCurrentMonth của workspace.</summary>
     Task<AiUsageRecord> RecordAsync(AiUsageEntry entry, CancellationToken cancellationToken = default);
 }
@@ -33,4 +44,5 @@ public sealed record AiUsageEntry(
     string? ErrorMessage = null,
     int? DurationMs = null,
     Guid? UserId = null,
-    string? Provider = null);
+    string? Provider = null,
+    long ReservedTokens = 0);

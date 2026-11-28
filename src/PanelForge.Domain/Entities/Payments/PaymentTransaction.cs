@@ -37,6 +37,12 @@ public class PaymentTransaction : BaseEntity
     public Guid? ConfirmedByUserId { get; private set; }
     public string? RejectionReason { get; private set; }
 
+    /// <summary>
+    /// OPS-12: mã giao dịch ngân hàng đã duyệt đơn này (vd <c>sepay:123456</c>); null khi duyệt tay hoặc trừ Ví.
+    /// Khoá duy nhất: một lần chuyển khoản không thể duyệt hai đơn.
+    /// </summary>
+    public string? ProviderReference { get; private set; }
+
     public User User { get; private set; } = default!;
     public StudioWorkspace? Workspace { get; private set; }
     public Series? Series { get; private set; }
@@ -85,7 +91,7 @@ public class PaymentTransaction : BaseEntity
     }
 
     /// <param name="confirmedByUserId">null khi hệ thống tự duyệt (webhook SePay).</param>
-    public void Approve(Guid? confirmedByUserId, DateTime? confirmedAt = null)
+    public void Approve(Guid? confirmedByUserId, DateTime? confirmedAt = null, string? providerReference = null)
     {
         if (Status != PaymentTransactionStatus.Pending)
             throw new InvalidOperationException($"Chỉ có thể duyệt giao dịch ở trạng thái Pending, hiện là {Status}.");
@@ -94,6 +100,7 @@ public class PaymentTransaction : BaseEntity
         ConfirmedByUserId = confirmedByUserId;
         ConfirmedAt = confirmedAt ?? DateTime.UtcNow;
         RejectionReason = null;
+        ProviderReference = string.IsNullOrWhiteSpace(providerReference) ? null : providerReference.Trim();
     }
 
     public void Reject(Guid confirmedByUserId, string? reason = null)

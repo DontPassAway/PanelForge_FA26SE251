@@ -586,6 +586,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("requested_by_user_id");
 
+                    b.Property<long>("ReservedTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("reserved_tokens");
+
                     b.Property<int>("RevisionRounds")
                         .HasColumnType("int")
                         .HasColumnName("revision_rounds");
@@ -4265,6 +4271,10 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(64)")
                         .HasColumnName("order_code");
 
+                    b.Property<string>("ProviderReference")
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("provider_reference");
+
                     b.Property<string>("QrImageUrl")
                         .IsRequired()
                         .HasColumnType("varchar(1000)")
@@ -4317,6 +4327,11 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_payment_transactions_order_code");
 
+                    b.HasIndex("ProviderReference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_transactions_provider_reference")
+                        .HasFilter("provider_reference IS NOT NULL");
+
                     b.HasIndex("SeriesId");
 
                     b.HasIndex("UserId", "Status")
@@ -4326,6 +4341,76 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_payment_transactions_workspace_status");
 
                     b.ToTable("payment_transactions", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PlatformBankAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountName")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("account_name");
+
+                    b.Property<string>("AccountNo")
+                        .IsRequired()
+                        .HasColumnType("varchar(19)")
+                        .HasColumnName("account_no");
+
+                    b.Property<string>("BankBin")
+                        .IsRequired()
+                        .HasColumnType("varchar(6)")
+                        .HasColumnName("bank_bin");
+
+                    b.Property<string>("BankName")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("bank_name");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_platform_bank_accounts_created_at");
+
+                    b.ToTable("platform_bank_accounts", (string)null);
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ReaderWallet", b =>
@@ -4392,6 +4477,63 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_reader_wallets_user_id");
 
                     b.ToTable("reader_wallets", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioPackagePrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("PriceVnd")
+                        .HasColumnType("integer")
+                        .HasColumnName("price_vnd");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_studio_package_prices_created_at");
+
+                    b.ToTable("studio_package_prices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_studio_package_prices_price_positive", "price_vnd > 0");
+                        });
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
@@ -6086,27 +6228,215 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("submissions", (string)null);
                 });
 
-            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaIncreaseRequest", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("BankAccountName")
-                        .HasColumnType("varchar(200)")
-                        .HasColumnName("bank_account_name");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
 
-                    b.Property<string>("BankAccountNo")
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("bank_account_no");
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
 
-                    b.Property<string>("BankBin")
+                    b.Property<long>("CurrentQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("current_quota");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<long?>("GrantedQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("granted_quota");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<long>("RequestedQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("requested_quota");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
                         .HasColumnType("varchar(20)")
-                        .HasColumnName("bank_bin");
+                        .HasColumnName("resource_type");
 
-                    b.Property<string>("BankName")
-                        .HasColumnType("varchar(100)")
-                        .HasColumnName("bank_name");
+                    b.Property<string>("ReviewNote")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_quota_increase_requests_status_created");
+
+                    b.HasIndex("WorkspaceId", "ResourceType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quota_increase_requests_pending")
+                        .HasFilter("status = 'Pending' AND is_deleted = false");
+
+                    b.ToTable("quota_increase_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_increase_requests_requested_gt_current", "requested_quota > current_quota");
+                        });
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AiEnabledByDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("ai_enabled_by_default");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<long>("MonthlyImageQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("monthly_image_quota");
+
+                    b.Property<long>("MonthlyRequestQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(5000L)
+                        .HasColumnName("monthly_request_quota");
+
+                    b.Property<long>("MonthlyTokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("monthly_token_quota");
+
+                    b.Property<int>("RequestsPerMinute")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20)
+                        .HasColumnName("requests_per_minute");
+
+                    b.Property<long>("StorageQuotaBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storage_quota_bytes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("WarningThresholdPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(80)
+                        .HasColumnName("warning_threshold_percent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_quota_policies_created_at");
+
+                    b.ToTable("quota_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_policies_images_positive", "monthly_image_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_requests_per_minute_positive", "requests_per_minute > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_requests_positive", "monthly_request_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_storage_positive", "storage_quota_bytes > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_tokens_positive", "monthly_token_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_warning_threshold", "warning_threshold_percent BETWEEN 1 AND 99");
+                        });
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
                     b.Property<string>("CoverImageSha256")
                         .HasColumnType("varchar(64)")
@@ -6187,6 +6517,73 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("studio_workspaces", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ArtworkMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("artwork_max_bytes");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<long>("CoverImageMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cover_image_max_bytes");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<long>("ReferenceImageMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reference_image_max_bytes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_upload_limit_policies_created_at");
+
+                    b.ToTable("upload_limit_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_upload_limit_policies_artwork", "artwork_max_bytes > 0 AND artwork_max_bytes <= 52428800");
+
+                            t.HasCheckConstraint("ck_upload_limit_policies_cover_image", "cover_image_max_bytes > 0 AND cover_image_max_bytes <= 20971520");
+
+                            t.HasCheckConstraint("ck_upload_limit_policies_reference_image", "reference_image_max_bytes > 0 AND reference_image_max_bytes <= 20971520");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6244,6 +6641,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("monthly_image_quota");
 
+                    b.Property<long>("MonthlyRequestQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("monthly_request_quota");
+
                     b.Property<long>("MonthlyTokenQuota")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
@@ -6259,6 +6662,28 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("provider_credential_id");
 
+                    b.Property<DateTime?>("RateWindowStartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("rate_window_started_at");
+
+                    b.Property<int>("RequestsInRateWindow")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("requests_in_rate_window");
+
+                    b.Property<int>("RequestsPerMinuteLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("requests_per_minute_limit");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
@@ -6272,6 +6697,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasDefaultValue(0L)
                         .HasColumnName("used_images_current_month");
+
+                    b.Property<long>("UsedRequestsCurrentMonth")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("used_requests_current_month");
 
                     b.Property<long>("UsedTokensCurrentMonth")
                         .ValueGeneratedOnAdd()
@@ -7140,6 +7571,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.Navigation("Workspace");
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.PlatformBankAccount", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.ReaderWallet", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Identity.User", "User")
@@ -7149,6 +7589,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioPackagePrice", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
@@ -7402,6 +7851,37 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaIncreaseRequest", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaPolicy", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Identity.User", "Owner")
@@ -7411,6 +7891,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>

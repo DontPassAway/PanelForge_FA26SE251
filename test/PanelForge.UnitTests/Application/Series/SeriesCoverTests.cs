@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 using PanelForge.Application.Features.Series.Queries.GetSeriesCover;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.UnitTests.Common;
@@ -20,7 +21,9 @@ public class SeriesCoverTests
     private static (PanelForgeDbContext db, SeriesEntity series) Seed()
     {
         var db = InMemoryDb.Create();
-        var series = SeriesEntity.Create(Guid.NewGuid(), "Thành phố mưa", ReadingDirection.RightToLeft);
+        var studio = StudioWorkspace.Create("Studio Mưa", Guid.NewGuid());
+        db.StudioWorkspaces.Add(studio);
+        var series = SeriesEntity.Create(studio.Id, "Thành phố mưa", ReadingDirection.RightToLeft);
         db.Series.Add(series);
         db.SaveChanges();
         return (db, series);
@@ -39,6 +42,40 @@ public class SeriesCoverTests
         result.Value.Should().Be($"/api/series/{series.Id}/cover?v={series.CoverImageSha256![..12]}");
         storage.Verify(s => s.SaveAsync($"covers/{series.Id:N}/{series.CoverImageSha256}", Png,
             It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task SetCover_OverStudioQuota_ReturnsConflict_WithoutWritingFile_OPS02()
+    {
+        var (db, series) = Seed();
+        var studio = db.StudioWorkspaces.Single();
+        studio.SetStorageQuota(Png.Length - 1);
+        db.SaveChanges();
+        var storage = new Mock<IAssetStorage>();
+
+        var result = await new SetSeriesCoverCommandHandler(db, storage.Object)
+            .Handle(new SetSeriesCoverCommand(series.Id, Guid.NewGuid(), Png), default);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        storage.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<AssetObjectInfo?>(), It.IsAny<CancellationToken>()), Times.Never);
+        series.CoverImageSha256.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetCover_ChargesStudioOnce_WhenSameFileAlreadyStored_OPS02()
+    {
+        var (db, series) = Seed();
+        var storage = new Mock<IAssetStorage>();
+        var handler = new SetSeriesCoverCommandHandler(db, storage.Object);
+
+        await handler.Handle(new SetSeriesCoverCommand(series.Id, Guid.NewGuid(), Png), default);
+        db.StudioWorkspaces.Single().UsedStorageBytes.Should().Be(Png.Length);
+
+        storage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemoryStream(Png));
+        await handler.Handle(new SetSeriesCoverCommand(series.Id, Guid.NewGuid(), Png), default);
+
+        db.StudioWorkspaces.Single().UsedStorageBytes.Should().Be(Png.Length);
     }
 
     [Fact]

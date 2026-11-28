@@ -9,6 +9,8 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<WorkspaceAiConfig> builder)
     {
         builder.ToTable("workspace_ai_configs");
+        builder.Property(c => c.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id)
@@ -77,6 +79,33 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
                .HasColumnName("used_images_current_month")
                .HasColumnType("bigint")
                .HasDefaultValue(0L)
+               .IsRequired();
+
+        // OPS-24: 0 = không giới hạn; Studio có từ trước giữ không giới hạn cho tới khi Admin đặt
+        builder.Property(c => c.MonthlyRequestQuota)
+               .HasColumnName("monthly_request_quota")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
+        builder.Property(c => c.UsedRequestsCurrentMonth)
+               .HasColumnName("used_requests_current_month")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
+        builder.Property(c => c.RequestsPerMinuteLimit)
+               .HasColumnName("requests_per_minute_limit")
+               .HasDefaultValue(0)
+               .IsRequired();
+
+        builder.Property(c => c.RateWindowStartedAt)
+               .HasColumnName("rate_window_started_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.RequestsInRateWindow)
+               .HasColumnName("requests_in_rate_window")
+               .HasDefaultValue(0)
                .IsRequired();
 
         builder.Property(c => c.AllowedModelsJson)

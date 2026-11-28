@@ -35,15 +35,9 @@ public static class PaymentDemoSeeder
         if (!existingUsers.Contains(ProducerUser) || !existingUsers.Contains(ReaderUser))
             return false;
 
-        // 1. Studio Workspace KomaForge Studio với thông tin VietQR ngân hàng MB Bank
+        // 1. Studio Workspace KomaForge Studio (tiền VietQR vào tài khoản nền tảng, Q13: SePay:DefaultBank khi chưa cấu hình)
         var workspace = StudioWorkspace.Create("KomaForge Studio", ProducerUser);
         SetId(workspace, KomaWorkspaceId);
-        workspace.UpdateBankInfo(
-            bankBin: "970422",
-            bankName: "MB Bank",
-            bankAccountNo: "0123456789",
-            bankAccountName: "KOMAFORGE STUDIO"
-        );
         db.StudioWorkspaces.Add(workspace);
         db.WorkspaceMembers.Add(WorkspaceMember.Create(KomaWorkspaceId, ProducerUser, WorkspaceRole.Producer));
 

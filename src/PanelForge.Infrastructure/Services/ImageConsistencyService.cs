@@ -233,6 +233,11 @@ public sealed class ImageConsistencyService : IImageConsistencyService
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("Workspace chưa có API key Gemini hợp lệ (Admin cần nhập/nhập lại key).");
 
+        // OPS-24: một lần so ảnh là một lượt gọi AI của Studio (giới hạn tháng/phút)
+        var started = await _usageService.TryStartRequestAsync(input.WorkspaceId, 0, cancellationToken);
+        if (!started.IsAvailable)
+            throw new InvalidOperationException(started.Message);
+
         var response = await _aiClient.CompareImagesAsync(new VisionCompareRequest(provider, model, apiKey, input.CharacterName,
             new ImageReference("character-sheet", input.CharacterSheetMimeType, Convert.ToBase64String(input.CharacterSheetBytes)),
             new ImageReference("artwork", input.ArtworkMimeType, Convert.ToBase64String(input.ArtworkBytes)), AccountId: cred?.AccountId), cancellationToken);

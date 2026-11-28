@@ -18,6 +18,17 @@ public class AssetStorageMigratorTests : IDisposable
         }
         public Task<Stream?> OpenReadAsync(string key, CancellationToken ct = default)
             => Task.FromResult<Stream?>(Items.TryGetValue(key, out var c) ? new MemoryStream(c) : null);
+        public async IAsyncEnumerable<StoredObject> ListAsync(string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            foreach (var (key, bytes) in Items.Where(i => i.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+                yield return new StoredObject(key, bytes.Length, DateTime.UtcNow);
+            await Task.CompletedTask;
+        }
+        public Task DeleteAsync(string key, CancellationToken ct = default)
+        {
+            Items.Remove(key);
+            return Task.CompletedTask;
+        }
     }
 
     private string WriteAsset(string workspace, byte[] content, string? nameOverride = null)
