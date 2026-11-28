@@ -4,6 +4,7 @@ using Moq;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.SeriesPipeline.Common;
 using PanelForge.Domain.Entities.Ai;
@@ -54,6 +55,7 @@ public class TaskGridHandlerTests
         public readonly PipelineStage Pencil, Ink, Color, Lettering, Review;
         public readonly List<Page> Pages = [];
         public readonly List<Panel> Panels = [];
+        public readonly List<ChangeRequest> ChangeRequests = [];
         public readonly List<Scene> Scenes = [];
         public readonly List<ScriptLine> ScriptLines = [];
         public readonly List<StageTask> Tasks = [];
@@ -143,7 +145,7 @@ public class TaskGridHandlerTests
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(Artwork));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
-            Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(new List<ChangeRequest>()));
+            Db.Setup(d => d.ChangeRequests).Returns(DbSetMockHelper.CreateDbSetMock(ChangeRequests));
             Db.Setup(d => d.ConsistencyFindings).Returns(DbSetMockHelper.CreateDbSetMock(new List<ConsistencyFinding>()));
             Db.Setup(d => d.AiSuggestions).Returns(DbSetMockHelper.CreateDbSetMock(new List<AiSuggestion>()));
             Db.Setup(d => d.ScriptVersions).Returns(DbSetMockHelper.CreateDbSetMock(ScriptVersions));
@@ -793,7 +795,7 @@ public class TaskGridHandlerTests
         await f.Start(color, f.ArtistId);
         await f.Submit(f.ArtistId, color);
 
-        var handler = new RequestStageTaskChangesCommandHandler(f.Db.Object);
+        var handler = new RequestStageTaskChangesCommandHandler(f.Db.Object, f.PageRepo.Object);
         (await handler.Handle(new(f.Chapter.Id, color.Id, f.ArtistId, "x"), default)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
         (await handler.Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default)).IsSuccess.Should().BeTrue();
 
@@ -877,7 +879,7 @@ public class TaskGridHandlerTests
         (await claim.Handle(new(f.Chapter.Id, color.Id, f.EditorId, Open: false), default)).IsSuccess.Should().BeTrue();
         color.Status.Should().Be(StageTaskStatus.Submitted);
 
-        var changed = await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default);
+        var changed = await new RequestStageTaskChangesCommandHandler(f.Db.Object, f.PageRepo.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Màu da lệch"), default);
         changed.Value!.LastDecisionComment.Should().Be("Màu da lệch"); // DTO trả về đã có sẵn, FE khỏi tải lại lưới
         changed.Value.AttemptCount.Should().Be(2);
         var grid = await new GetChapterTaskGridQueryHandler(f.Db.Object).Handle(new GetChapterTaskGridQuery(f.Chapter.Id), default);
@@ -1068,7 +1070,7 @@ public class TaskGridHandlerTests
         var color = f.Cell(f.Color, 0);
         await f.Start(color, f.ArtistId);
         await f.Submit(f.ArtistId, color);
-        await new RequestStageTaskChangesCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Sửa"), default);
+        await new RequestStageTaskChangesCommandHandler(f.Db.Object, f.PageRepo.Object).Handle(new(f.Chapter.Id, color.Id, f.EditorId, "Sửa"), default);
         await f.Start(color, f.ArtistId);
         await f.Submit(f.ArtistId, color);
         await f.SubmitLettering(0);
@@ -1355,5 +1357,100 @@ public class TaskGridHandlerTests
         // Công đoạn bị tắt thì ô của nó không còn trong hàng đợi
         f.Color.SetEnabled(false);
         (await new GetTaskGridReviewQueueQueryHandler(f.Db.Object).Handle(new GetTaskGridReviewQueueQuery(f.WorkspaceId), default)).Value!.Should().BeEmpty();
+    }
+
+    // ── REV-01/02/03: phiếu sửa cấp khung trên lưới ──
+
+    private static Task<Result<StageTaskDto>> RequestChanges(Fixture f, StageTask task, params ChangeRequestItemRequest[] changes) =>
+        new RequestStageTaskChangesCommandHandler(f.Db.Object, f.PageRepo.Object)
+            .Handle(new(f.Chapter.Id, task.Id, f.EditorId, "Xem các vùng khoanh", changes), default);
+
+    /// <summary>Vùng khoanh chạm 2 khung ≥ 15% sinh 2 phiếu chung nhóm; lỗi Tranh trên khung có bóng bật Check Balloon Fit;
+    /// nộp lại báo đã sửa, duyệt thì Editor xác minh.</summary>
+    [Fact]
+    public async Task RequestChanges_RegionAcrossTwoPanels_SplitsPerPanel_ThenResubmitResolves_AndApproveVerifies()
+    {
+        var f = new Fixture();
+        var color = (await f.SubmitColorBothPages())[0];
+        var page = f.Pages[0];
+        var left = f.Panels.Single(p => p.PageId == page.Id);
+        var right = Panel.Create(page.Id, 2, 2, "{\"x\":10,\"y\":0,\"width\":10,\"height\":10}");
+        f.Panels.Add(right);
+        page.AddElement("SPEECH_BALLOON", 10, 10, 100, 60, 1, f.LettererId, content: "Hi", panelId: left.Id);
+        f.PageRepo.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        var result = await RequestChanges(f, color, new ChangeRequestItemRequest("Bóng đổ sai hướng", "{\"x\":0.05,\"y\":0,\"w\":0.1,\"h\":0.1}"));
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        color.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        f.ChangeRequests.Should().HaveCount(2);
+        f.ChangeRequests.Select(c => c.PanelId).Should().BeEquivalentTo(new Guid?[] { left.Id, right.Id });
+        f.ChangeRequests.Select(c => c.GroupId).Distinct().Should().ContainSingle().Which.Should().NotBeNull();
+        f.ChangeRequests.Should().OnlyContain(c => c.StageTaskId == color.Id && c.AssignmentId == null && c.ResponsibleUserId == f.ArtistId);
+        left.BalloonCheckRequestedAt.Should().NotBeNull("khung có bóng thoại");
+        right.BalloonCheckRequestedAt.Should().BeNull("khung không có bóng thì không có gì để kiểm");
+
+        (await f.Start(color, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await f.Submit(f.ArtistId, color)).IsSuccess.Should().BeTrue();
+        f.ChangeRequests.Should().OnlyContain(c => c.Status == ChangeRequestStatus.Resolved);
+
+        (await AckBalloons(f, 0, f.LettererId)).IsSuccess.Should().BeTrue();
+        var approved = await f.Approve(color, f.EditorId);
+        approved.IsSuccess.Should().BeTrue(approved.ErrorMessage);
+        f.ChangeRequests.Should().OnlyContain(c => c.Status == ChangeRequestStatus.Verified);
+    }
+
+    /// <summary>Lỗi lớp Chữ khi duyệt ô Color: phiếu sang ô Lettering cùng trang (đã tự duyệt thì mở lại), Letterer chịu trách nhiệm.</summary>
+    [Fact]
+    public async Task RequestChanges_LetteringLayer_RoutesToLetteringCell_AndBlocksApproveUntilLettererResubmits()
+    {
+        var f = new Fixture();
+        var color = (await f.SubmitColorBothPages())[0];
+        var lettering = f.Cell(f.Lettering, 0);
+        lettering.Status.Should().Be(StageTaskStatus.Approved, "Lettering không có cổng: nộp là duyệt");
+
+        var result = await RequestChanges(f, color, new ChangeRequestItemRequest("Thoại tràn bóng", Layer: ChangeRequestLayer.Lettering));
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        var cr = f.ChangeRequests.Should().ContainSingle().Subject;
+        cr.StageTaskId.Should().Be(lettering.Id);
+        cr.ResponsibleUserId.Should().Be(f.LettererId);
+        lettering.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        f.Notifications.Should().Contain(n => n.UserId == f.LettererId && n.Type == NotificationType.AssignmentChangesRequested);
+
+        (await f.Start(color, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await f.Submit(f.ArtistId, color)).IsSuccess.Should().BeTrue();
+        (await f.Approve(color, f.EditorId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict, "Gate 2: Lettering chưa nộp lại");
+
+        await f.SubmitLettering(0);
+        cr.Status.Should().Be(ChangeRequestStatus.Resolved, "Letterer nộp lại là báo đã sửa, chưa tự xác minh");
+        (await f.Approve(color, f.EditorId)).IsSuccess.Should().BeTrue();
+        cr.Status.Should().Be(ChangeRequestStatus.Verified);
+    }
+
+    [Fact]
+    public async Task Approve_WithReopenedChangeRequest_IsConflict()
+    {
+        var f = new Fixture();
+        var color = (await f.SubmitColorBothPages())[0];
+        (await RequestChanges(f, color, new ChangeRequestItemRequest("Sai màu tóc"))).IsSuccess.Should().BeTrue();
+        await f.Start(color, f.ArtistId);
+        await f.Submit(f.ArtistId, color);
+        f.ChangeRequests.Single().Reopen("Vẫn chưa đúng");
+
+        var blocked = await f.Approve(color, f.EditorId);
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("phiếu sửa");
+        (await f.ApproveMany(f.EditorId, color)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+    }
+
+    [Fact]
+    public async Task RequestChanges_RegionOnChapterLevelCell_IsValidationError()
+    {
+        var f = new Fixture();
+        (await f.Generate()).IsSuccess.Should().BeTrue();
+        var review = f.Tasks.Single(t => t.PipelineStageId == f.Review.Id && t.PageId == null);
+        (await RequestChanges(f, review, new ChangeRequestItemRequest("x", "{\"x\":0,\"y\":0,\"w\":0.1,\"h\":0.1}")))
+            .ErrorCode.Should().Be(ResultErrorCodes.Validation);
     }
 }

@@ -246,12 +246,14 @@ public sealed record ChangeRequestDto(
 {
     public Guid? GroupId { get; init; }
     public ChangeRequestLayer Layer { get; init; }
+    /// <summary>Ô lưới V3 nhận yêu cầu; khác null thì <c>AssignmentId</c> mang cùng id này để client cũ vẫn gom theo việc.</summary>
+    public Guid? StageTaskId { get; init; }
 
     public static ChangeRequestDto From(ChangeRequest c) => new(
-        c.Id, c.AssignmentId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,
+        c.Id, c.WorkItemId, c.ChapterId, c.SubmissionId, c.ResponsibleUserId, c.CreatedByUserId, c.Description,
         c.RegionJson, c.DueDate, c.Status, c.ResolutionNote, c.ResolvedAt, c.ReviewerComment, c.ClosedByUserId,
         c.ClosedAt, c.CreatedAt, c.UpdatedAt, c.AssetReferenceId, c.PanelId, c.SceneId, c.ScriptLineId, c.QuotedText)
-        { GroupId = c.GroupId, Layer = c.Layer };
+        { GroupId = c.GroupId, Layer = c.Layer, StageTaskId = c.StageTaskId };
 }
 
 /// <summary>PUT thay toàn bộ: DependsOnAssignmentId null = bỏ dependency; ReferenceNotes/DueDate null = xoá.</summary>

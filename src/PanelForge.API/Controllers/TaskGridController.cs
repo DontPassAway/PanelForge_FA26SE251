@@ -107,7 +107,7 @@ public sealed class TaskGridController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(StageTaskDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> RequestChanges(Guid chapterId, Guid taskId, [FromBody] RequestStageTaskChangesRequest body, CancellationToken ct) =>
-        ToResult(await _mediator.Send(new RequestStageTaskChangesCommand(chapterId, taskId, CurrentUserId, body.Comment), ct));
+        ToResult(await _mediator.Send(new RequestStageTaskChangesCommand(chapterId, taskId, CurrentUserId, body.Comment, body.Changes), ct));
 
     /// <summary>GET /tasks/{taskId}/submissions — lịch sử lần nộp của ô, mới nhất trước.</summary>
     [HttpGet("tasks/{taskId:guid}/submissions")]

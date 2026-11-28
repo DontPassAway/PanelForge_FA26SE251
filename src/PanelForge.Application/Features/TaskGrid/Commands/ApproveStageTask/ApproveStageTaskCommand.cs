@@ -49,6 +49,9 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
             return Fail($"Gate 2 duyệt trang ghép: chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict);
         if (task.PageId is { } pageId && await BalloonFitRules.PendingReasonAsync(_db, pageId, ct) is { } balloon)
             return Fail(balloon, ResultErrorCodes.Conflict);
+        var reviewScope = TaskGridRules.ReviewScope(task, stages, chapterTasks);
+        if (await TaskGridRules.OpenChangeRequestCountAsync(_db, reviewScope, ct) is > 0 and var open)
+            return Fail($"Trang còn {open} phiếu sửa chưa xử lý.", ResultErrorCodes.Conflict);
 
         try
         {
@@ -59,6 +62,7 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
 
         task.UpdatedBy = cmd.UserId.ToString();
         if (await TaskGridRules.PendingSubmissionAsync(_db, task, ct) is { } submission) submission.Approve(cmd.UserId);
+        await TaskGridRules.VerifyResolvedChangeRequestsAsync(_db, reviewScope, cmd.UserId, ct);
 
         var stageName = stages.FirstOrDefault(s => s.Id == task.PipelineStageId)?.Name ?? "?";
         if (lot is not null) _db.Notifications.Add(TaskGridNotifications.Approved(lot.AssigneeUserId, chapter.Id, stageName));

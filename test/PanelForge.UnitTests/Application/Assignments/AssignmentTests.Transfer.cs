@@ -131,7 +131,7 @@ public partial class AssignmentTests
         var cr5 = f.ChangeRequests.Single(c => c.PanelId == panels[4].Id);
         cr5.ResponsibleUserId.Should().Be(f.Artist2Id);
         cr5.CreatedByUserId.Should().Be(f.EditorId);
-        parts.Single(p => p.TargetEntityId == pages[4].Id).Id.Should().Be(cr5.AssignmentId);
+        parts.Single(p => p.TargetEntityId == pages[4].Id).Id.Should().Be(cr5.AssignmentId!.Value);
         f.ChangeRequests.Single(c => c.PanelId == panels[5].Id).ResponsibleUserId.Should().Be(f.Artist2Id);
         var general = f.ChangeRequests.Single(c => c.PanelId == null);
         general.AssignmentId.Should().Be(whole.Id);

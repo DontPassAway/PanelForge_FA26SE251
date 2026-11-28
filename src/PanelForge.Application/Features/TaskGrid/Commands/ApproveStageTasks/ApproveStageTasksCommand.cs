@@ -73,6 +73,8 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
                 blocked.Add((order, $"{Label(task)}: Gate 2 chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict));
             else if (task.PageId is { } pageId && await BalloonFitRules.PendingReasonAsync(_db, pageId, ct) is { } balloon)
                 blocked.Add((order, $"{Label(task)}: {balloon}", ResultErrorCodes.Conflict));
+            else if (await TaskGridRules.OpenChangeRequestCountAsync(_db, TaskGridRules.ReviewScope(task, stages, chapterTasks), ct) is > 0 and var open)
+                blocked.Add((order, $"{Label(task)}: còn {open} phiếu sửa chưa xử lý.", ResultErrorCodes.Conflict));
         }
         if (blocked.Count > 0)
             return Fail(string.Join("\n", blocked.OrderBy(b => b.Order).Select(b => b.Message)),
@@ -89,6 +91,8 @@ public sealed class ApproveStageTasksCommandHandler : IRequestHandler<ApproveSta
             task.UpdatedBy = cmd.UserId.ToString();
             if (task.CurrentSubmissionId is { } sid && pending.GetValueOrDefault(sid) is { } submission) submission.Approve(cmd.UserId);
         }
+
+        await TaskGridRules.VerifyResolvedChangeRequestsAsync(_db, tasks.SelectMany(t => TaskGridRules.ReviewScope(t, stages, chapterTasks)).Distinct().ToList(), cmd.UserId, ct);
 
         // Một thông báo cho mỗi (người làm, công đoạn) thay vì mỗi ô
         foreach (var group in tasks.Where(t => t.LotId is { } lid && lots.ContainsKey(lid))

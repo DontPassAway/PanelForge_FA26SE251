@@ -26,8 +26,13 @@ public sealed class ConvertPageCommentToReworkCommandHandler
     : IRequestHandler<ConvertPageCommentToReworkCommand, Result<PageCommentDto>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly IPageRepository _pages;
 
-    public ConvertPageCommentToReworkCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public ConvertPageCommentToReworkCommandHandler(IPanelForgeDbContext db, IPageRepository pages)
+    {
+        _db = db;
+        _pages = pages;
+    }
 
     public async Task<Result<PageCommentDto>> Handle(ConvertPageCommentToReworkCommand cmd, CancellationToken ct)
     {
@@ -73,7 +78,7 @@ public sealed class ConvertPageCommentToReworkCommandHandler
             }
             case StageTaskStatus.Submitted or StageTaskStatus.UnderReview:
             {
-                var requested = await new RequestStageTaskChangesCommandHandler(_db)
+                var requested = await new RequestStageTaskChangesCommandHandler(_db, _pages)
                     .Handle(new RequestStageTaskChangesCommand(cmd.ChapterId, task.Id, cmd.UserId, trimmedReason), ct);
                 if (!requested.IsSuccess)
                     return Fail(requested.ErrorMessage!, requested.ErrorCode ?? ResultErrorCodes.Conflict);
