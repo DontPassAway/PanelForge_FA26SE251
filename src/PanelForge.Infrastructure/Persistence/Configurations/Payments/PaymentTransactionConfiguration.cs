@@ -47,6 +47,15 @@ internal sealed class PaymentTransactionConfiguration : IEntityTypeConfiguration
                .IsUnique()
                .HasDatabaseName("ix_payment_transactions_order_code");
 
+        builder.Property(t => t.ProviderReference)
+               .HasColumnName("provider_reference")
+               .HasColumnType("varchar(64)");
+
+        builder.HasIndex(t => t.ProviderReference)
+               .IsUnique()
+               .HasFilter("provider_reference IS NOT NULL")
+               .HasDatabaseName("ix_payment_transactions_provider_reference");
+
         builder.Property(t => t.Type)
                .HasColumnName("type")
                .HasColumnType("varchar(30)")

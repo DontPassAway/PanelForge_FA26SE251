@@ -44,8 +44,8 @@ public class SePayWebhookTests
         (await new CreateTopupCommandHandler(_db, new DefaultBankSettings()).Handle(new CreateTopupCommand(_readerId, request), default)).Value!;
 
     private static SePayWebhookPayload Payload(TopupResponse order, long amount, string? content = null,
-        string transferType = "in", string? account = null, string? subAccount = null) =>
-        new(Id: 92704, Gateway: "MBBank", TransactionDate: "2026-11-23 10:00:00",
+        string transferType = "in", string? account = null, string? subAccount = null, long id = 92704) =>
+        new(Id: id, Gateway: "MBBank", TransactionDate: "2026-11-23 10:00:00",
             AccountNumber: account ?? order.AccountNumber, Code: null,
             Content: content ?? $"MBVCB.123 {order.OrderId.ToLowerInvariant()} chuyen tien",
             TransferType: transferType, TransferAmount: amount, Accumulated: 0,
@@ -92,6 +92,30 @@ public class SePayWebhookTests
         (await Webhook(order, 20000)).Should().Be(SePayWebhookOutcome.IgnoredAlreadyProcessed);
 
         (await _db.ReaderWallets.SingleAsync()).BalanceVnd.Should().Be(20000m);
+    }
+
+    [Fact]
+    public async Task SecondTransferForApprovedOrder_IsFlaggedNotCredited_OPS12()
+    {
+        var order = await CreateOrder(new TopupRequest(AmountVnd: 20000));
+        await Webhook(order, 20000);
+
+        (await Handle(_db, Payload(order, 20000, id: 92705))).Should().Be(SePayWebhookOutcome.IgnoredPaidTwice);
+
+        (await _db.ReaderWallets.SingleAsync()).BalanceVnd.Should().Be(20000m);
+        (await _db.PaymentTransactions.SingleAsync()).ProviderReference.Should().Be("sepay:92704");
+    }
+
+    [Fact]
+    public async Task TransferForManuallyApprovedOrder_IsAlreadyProcessed_OPS12()
+    {
+        var order = await CreateOrder(new TopupRequest(AmountVnd: 20000));
+        (await _db.PaymentTransactions.SingleAsync()).Approve(confirmedByUserId: Guid.NewGuid(), DateTime.UtcNow);
+        await _db.SaveChangesAsync();
+
+        (await Webhook(order, 20000)).Should().Be(SePayWebhookOutcome.IgnoredAlreadyProcessed);
+
+        (await _db.PaymentTransactions.SingleAsync()).ProviderReference.Should().BeNull();
     }
 
     [Fact]
