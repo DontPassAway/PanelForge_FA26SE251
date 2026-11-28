@@ -96,9 +96,12 @@ public sealed class PageCommentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
-    /// <summary>POST /api/chapters/{chapterId}/page-comments/{commentId}/rework</summary>
+    /// <summary>
+    /// POST /api/chapters/{chapterId}/page-comments/{commentId}/rework — chuyển góp ý thành yêu cầu sửa; ô đã duyệt được mở lại
+    /// (REV-09, Q27: Editor chính, Producer dự phòng; sau Gate 3 → 409).
+    /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/page-comments/{commentId:guid}/rework")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(PageCommentDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> ConvertToRework(
         Guid chapterId,

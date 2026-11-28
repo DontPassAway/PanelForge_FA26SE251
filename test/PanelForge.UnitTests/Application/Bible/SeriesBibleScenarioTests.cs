@@ -303,7 +303,7 @@ public class SeriesBibleScenarioTests
         _db.BibleEntryRevisions.Add(rev);
         await _db.SaveChangesAsync();
 
-        var submitConceptHandler = new SubmitBibleConceptCommandHandler(_db, _sender.Object);
+        var submitConceptHandler = new SubmitBibleConceptCommandHandler(_db, _sender.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var reworkHandler = new RequestReworkBibleEntryRevisionCommandHandler(_db);
         var commentHandler = new CreateBibleConceptCommentCommandHandler(_db);
         var replyHandler = new ReplyBibleConceptCommentCommandHandler(_db);
@@ -468,7 +468,7 @@ public class SeriesBibleScenarioTests
 
         await _db.SaveChangesAsync();
 
-        var addRevHandler = new AddBibleEntryRevisionCommandHandler(_db);
+        var addRevHandler = new AddBibleEntryRevisionCommandHandler(_db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var cancelHandler = new CancelReplacementRevisionCommandHandler(_db);
         var confirmHandler = new ConfirmBibleEntryRevisionCommandHandler(_db, _resolver);
         var freezeHandler = new FreezeChapterScriptCommandHandler(_db, _castGate);

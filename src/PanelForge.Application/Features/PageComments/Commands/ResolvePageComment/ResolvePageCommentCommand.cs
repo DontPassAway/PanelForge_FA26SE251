@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.PageComments.Common;
 using PanelForge.Application.Features.PageComments.Models;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.PageComments.Commands.ResolvePageComment;
 
@@ -41,6 +42,8 @@ public sealed class ResolvePageCommentCommandHandler
             return Result<PageCommentDto>.Failure(ex.Message, ResultErrorCodes.Validation);
         }
 
+        PageCommentNotifications.NotifyAuthor(_db, comment, cmd.UserId,
+            NotificationType.PageCommentResolved, "Góp ý trên trang của bạn đã được xử lý");
         await _db.SaveChangesAsync(ct);
         return Result<PageCommentDto>.Success(await PageCommentMapper.ToDtoAsync(_db, comment, ct));
     }

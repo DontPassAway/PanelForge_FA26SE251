@@ -11,6 +11,7 @@ using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Preview;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
@@ -157,6 +158,8 @@ public class PageCommentTests
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
             Db.Setup(d => d.StageTaskSubmissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
+            Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesMember>()));
+            Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
             Db.Setup(d => d.LockChapterAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         }
@@ -306,6 +309,33 @@ public class PageCommentTests
         comment.Status.Should().Be(PageCommentStatus.ConvertedToRework);
         comment.StageTaskId.Should().Be(pencilTask.Id);
         fx.Submissions.Single().Status.Should().Be(SubmissionStatus.Rejected);
+    }
+
+    [Fact]
+    public async Task ReworkHandler_PanelComment_FlagsOnlyThatPanel_SecondCommentWidensScope()
+    {
+        var fx = new Fixture(ChapterStatus.InProduction);
+        var pencilTask = fx.AddTask(fx.Pencil, fx.Page1.Id, StageTaskStatus.Approved, fx.Artist.Id);
+        var onPanel = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Tóc sai màu", fx.Page1.Id, fx.PanelOnPage1.Id);
+        var wholePage = PageComment.Create(fx.Series.Id, fx.Chapter.Id, fx.Producer.Id, "Nền lệch tông", fx.Page1.Id);
+        fx.Comments.AddRange([onPanel, wholePage]);
+        var handler = new ConvertPageCommentToReworkCommandHandler(fx.Db.Object, Mock.Of<IPageRepository>());
+
+        (await handler.Handle(new ConvertPageCommentToReworkCommand(
+            fx.Chapter.Id, onPanel.Id, fx.Producer.Id, pencilTask.Id, "Sửa màu tóc theo Model Sheet"), default))
+            .IsSuccess.Should().BeTrue();
+
+        pencilTask.Status.Should().Be(StageTaskStatus.ReworkRequired);
+        pencilTask.FlaggedPanelIds.Should().Equal(fx.PanelOnPage1.Id); // Panel khác giữ ảnh đã duyệt (Q27)
+
+        var notificationsBefore = fx.Notifications.Count;
+        (await handler.Handle(new ConvertPageCommentToReworkCommand(
+            fx.Chapter.Id, wholePage.Id, fx.Producer.Id, pencilTask.Id, "Chỉnh tông nền"), default))
+            .IsSuccess.Should().BeTrue();
+
+        pencilTask.FlaggedPanelIds.Should().BeEmpty(); // lỗi không gắn Panel → cả trang
+        wholePage.Status.Should().Be(PageCommentStatus.ConvertedToRework);
+        fx.Notifications.Count.Should().Be(notificationsBefore + 1);
     }
 
     [Fact]

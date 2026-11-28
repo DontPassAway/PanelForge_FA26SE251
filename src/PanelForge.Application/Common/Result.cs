@@ -37,6 +37,8 @@ public static class ResultErrorCodes
     /// <summary>AUD-BE-10: giá ấn bản thay đổi so với giá kỳ vọng client gửi lên → HTTP 409.</summary>
     public const string PriceChanged = "PRICE_CHANGED";
     public const string HashMismatch = "HASH_MISMATCH";
+    /// <summary>Q26: Producer bấm bắt đầu sản xuất trên bản kịch bản cũ, Writer đã nộp bản mới → HTTP 409.</summary>
+    public const string ScriptVersionOutdated = "SCRIPT_VERSION_OUTDATED";
     public const string BibleGateBlocked = "BIBLE_GATE_BLOCKED";
     public const string ActiveArtworkOnRemovedPage = "ACTIVE_ARTWORK_ON_REMOVED_PAGE";
     public const string CannotDeleteActiveProductionPage = "CANNOT_DELETE_ACTIVE_PRODUCTION_PAGE";

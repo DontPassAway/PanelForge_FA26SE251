@@ -1018,6 +1018,36 @@ public class TaskGridHandlerTests
         (await approve.Handle(new(f.Chapter.Id, color[0].Id, f.EditorId), default)).IsSuccess.Should().BeTrue();
     }
 
+    /// <summary>Q27/REV-09: mở lại chỉ cho Panel lỗi; ô hạ nguồn cùng trang chỉ cần xem lại đúng Panel đó.</summary>
+    [Fact]
+    public async Task Reopen_WithPanels_FlagsThosePanels_OnCellAndSamePageDownstream()
+    {
+        var f = new Fixture();
+        var (pencil, ink, _) = await PencilDoneInkAndLetteringStarted(f);
+        var panel = f.Panels.Single(p => p.PageId == pencil.PageId);
+
+        var reopen = await new ReopenStageTaskCommandHandler(f.Db.Object)
+            .Handle(new(f.Chapter.Id, pencil.Id, f.EditorId, "Tóc sai màu", [panel.Id]), default);
+
+        reopen.IsSuccess.Should().BeTrue(reopen.ErrorMessage);
+        pencil.FlaggedPanelIds.Should().Equal(panel.Id);
+        ink.FlaggedPanelIds.Should().Equal(panel.Id);
+    }
+
+    [Fact]
+    public async Task Reopen_WithPanelOfAnotherPage_IsValidationError()
+    {
+        var f = new Fixture();
+        var (pencil, _, _) = await PencilDoneInkAndLetteringStarted(f);
+        var otherPagePanel = f.Panels.First(p => p.PageId != pencil.PageId);
+
+        var reopen = await new ReopenStageTaskCommandHandler(f.Db.Object)
+            .Handle(new(f.Chapter.Id, pencil.Id, f.EditorId, "Tóc sai màu", [otherPagePanel.Id]), default);
+
+        reopen.ErrorCode.Should().Be(ResultErrorCodes.Validation);
+        pencil.Status.Should().Be(StageTaskStatus.Approved);
+    }
+
     [Fact]
     public async Task Reopen_WithoutReason_IsValidationError()
     {

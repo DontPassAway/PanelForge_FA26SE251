@@ -87,6 +87,7 @@ public sealed class CreatePageCommentCommandHandler
         }
 
         _db.PageComments.Add(comment);
+        await PageCommentNotifications.NotifyViewersAsync(_db, comment, ct);
         await _db.SaveChangesAsync(ct);
 
         return Result<PageCommentDto>.Success(await PageCommentMapper.ToDtoAsync(_db, comment, ct));

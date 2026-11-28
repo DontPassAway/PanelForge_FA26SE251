@@ -353,11 +353,16 @@ public sealed class RefreezeScriptCommandHandler
                                     t.Status != StageTaskStatus.Cancelled)
                         .ToListAsync(tct);
 
+                    // Panel bị ảnh hưởng theo trang, để ô khoanh đúng khung cần xem lại (không khớp → cả trang)
+                    var impactedPanels = await _db.Panels.AsNoTracking()
+                        .Where(p => diff.VisuallyImpactedPanelIds.Contains(p.Id))
+                        .Select(p => new { p.Id, p.PageId }).ToListAsync(tct);
                     foreach (var task in artistTasksOnImpactedPages)
                     {
                         if (stageRoleById.TryGetValue(task.PipelineStageId, out var role) && role == WorkspaceRole.Letterer)
                             continue;
-                        task.MarkInputOutdated(StageTask.ScriptChangedReason);
+                        task.MarkInputOutdated(StageTask.ScriptChangedReason,
+                            impactedPanels.Where(p => p.PageId == task.PageId).Select(p => p.Id));
                     }
 
                     var targetEntityIds = diff.VisuallyImpactedPanelIds

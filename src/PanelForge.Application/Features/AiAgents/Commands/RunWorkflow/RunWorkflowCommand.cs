@@ -198,6 +198,7 @@ public sealed class RunWorkflowCommandHandler : IRequestHandler<RunWorkflowComma
         AiWorkflowRun run, Guid workspaceId, Guid userId, string message, CancellationToken ct)
     {
         run.MarkFailed(ResultErrorCodes.AiUnavailable, message);
+        AiRunHelpers.NotifyRequesterOfFinish(_db, run);
         await _db.SaveChangesAsync(ct);
         await _usage.RecordAsync(new AiUsageEntry(
             workspaceId, "AiAgents.RunWorkflow", AiUsageStatus.ProviderUnavailable,

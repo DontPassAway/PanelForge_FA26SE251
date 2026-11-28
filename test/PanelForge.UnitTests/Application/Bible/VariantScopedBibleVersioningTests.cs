@@ -43,7 +43,7 @@ public class VariantScopedBibleVersioningTests
     [Fact]
     public async Task AddBibleEntryRevision_WhenNewVariantCreated_StartsAtVersion1()
     {
-        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var command = new AddBibleEntryRevisionCommand(
             _seriesId,
             _characterEntry.Id,
@@ -70,7 +70,7 @@ public class VariantScopedBibleVersioningTests
     [Fact]
     public async Task AddBibleEntryRevision_WhenDuplicateStageName_ReturnsConflict()
     {
-        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var command = new AddBibleEntryRevisionCommand(
             _seriesId,
             _characterEntry.Id,
@@ -98,7 +98,7 @@ public class VariantScopedBibleVersioningTests
         // Khóa Canon cho bản "Mặc định" v1
         _defaultV1.Lock(_editorId);
 
-        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
 
         // 2. Supersede bản "Mặc định" v1 -> Phải ra "Mặc định" v2
         var supersedeDefaultCmd = new AddBibleEntryRevisionCommand(
@@ -139,7 +139,7 @@ public class VariantScopedBibleVersioningTests
         _defaultV1.ReviewStatus.Should().Be(BibleRevisionStatus.ReworkRequired);
 
         // Artist nộp lại sau ReworkRequired
-        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object);
+        var handler = new SubmitBibleConceptCommandHandler(_db.Object, _sender.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var reworkSubmitCmd = new SubmitBibleConceptCommand(
             _seriesId,
             _characterEntry.Id,
@@ -166,7 +166,7 @@ public class VariantScopedBibleVersioningTests
         // _defaultV1 đang ở trạng thái Draft
         _defaultV1.ReviewStatus.Should().Be(BibleRevisionStatus.Draft);
 
-        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var editDraftCmd = new AddBibleEntryRevisionCommand(
             _seriesId,
             _characterEntry.Id,

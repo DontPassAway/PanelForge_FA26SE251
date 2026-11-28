@@ -19,8 +19,10 @@ namespace PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChan
 /// thoa ≥ 15% (chung GroupId), gửi tới ô đúng lớp lỗi của trang: lớp Tranh → ô vẽ cuối nhánh tranh, lớp Chữ → ô làm chữ. Ô nhận đang chờ
 /// duyệt (hoặc đã tự duyệt) cũng bị trả về. Lỗi lớp Tranh trên khung có bóng thoại bật cờ Check Balloon Fit (REV-03).
 /// </summary>
+/// <param name="PanelIds">Panel cần sửa (góp ý ghim trên Panel); null = cả trang.</param>
 public sealed record RequestStageTaskChangesCommand(
-    Guid ChapterId, Guid TaskId, Guid UserId, string Comment, IReadOnlyList<ChangeRequestItemRequest>? Changes = null)
+    Guid ChapterId, Guid TaskId, Guid UserId, string Comment, IReadOnlyList<ChangeRequestItemRequest>? Changes = null,
+    IReadOnlyList<Guid>? PanelIds = null)
     : IRequest<Result<StageTaskDto>>, ITransactionalCommand;
 
 public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<RequestStageTaskChangesCommand, Result<StageTaskDto>>
@@ -123,7 +125,7 @@ public sealed class RequestStageTaskChangesCommandHandler : IRequestHandler<Requ
             try
             {
                 if (cell.Status == StageTaskStatus.Submitted) cell.OpenReview(cmd.UserId);
-                cell.RequestChanges(TaskGridRules.PrerequisitesApproved(cell, stages, chapterTasks));
+                cell.RequestChanges(TaskGridRules.PrerequisitesApproved(cell, stages, chapterTasks), isMain ? cmd.PanelIds : null);
             }
             catch (InvalidOperationException ex) { return Fail(ex.Message, ResultErrorCodes.Conflict); }
 

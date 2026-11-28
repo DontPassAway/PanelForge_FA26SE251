@@ -2,7 +2,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Bible.Commands.AddBibleEntryRevision;
+using PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Common;
 using PanelForge.Domain.Entities.Bible;
@@ -25,11 +27,13 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
 {
     private readonly IPanelForgeDbContext _db;
     private readonly ISender _sender;
+    private readonly IAssetStorage _storage;
 
-    public SubmitBibleConceptCommandHandler(IPanelForgeDbContext db, ISender sender)
+    public SubmitBibleConceptCommandHandler(IPanelForgeDbContext db, ISender sender, IAssetStorage storage)
     {
         _db = db;
         _sender = sender;
+        _storage = storage;
     }
 
     public async Task<Result<BibleEntryRevisionDto>> Handle(SubmitBibleConceptCommand cmd, CancellationToken ct)
@@ -113,7 +117,14 @@ public sealed class SubmitBibleConceptCommandHandler : IRequestHandler<SubmitBib
                 $"Phiên bản v{target.VersionNumber} đã khoá Canon. Muốn đổi thiết kế, Producer phải dùng Thay thế (supersede).",
                 ResultErrorCodes.Conflict);
 
-        target.SubmitConcept(cmd.ArtistUserId, body.EffectiveImageUrl, body.EffectiveSummary, body.AssetSha256);
+        // Q20: SHA của ảnh do server lấy từ kho Bible, bỏ qua body.AssetSha256 client gửi
+        var (found, sha) = await UploadBibleReferenceImageCommandHandler.ResolveShaAsync(
+            _storage, cmd.SeriesId, body.EffectiveImageUrl, ct);
+        if (!found)
+            return Result<BibleEntryRevisionDto>.Failure(
+                UploadBibleReferenceImageCommandHandler.ConceptImageNotFound, ResultErrorCodes.Validation);
+
+        target.SubmitConcept(cmd.ArtistUserId, body.EffectiveImageUrl, body.EffectiveSummary, sha);
         entry.UpdatedBy = cmd.ArtistUserId.ToString();
         await _db.SaveChangesAsync(ct);
 

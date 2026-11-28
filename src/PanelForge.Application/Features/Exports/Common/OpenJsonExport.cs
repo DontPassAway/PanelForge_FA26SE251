@@ -9,6 +9,7 @@ using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.AiAgents.Queries.GetProvenanceReport;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Publishing;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Exports.Common;
 
@@ -26,15 +27,19 @@ internal static class OpenJsonExport
 
     private static readonly JsonSerializerOptions Indented = new(AiJson.Options) { WriteIndented = true };
 
-    /// <summary>Snapshot của đúng bản đã duyệt mà job chụp (cùng Chapter.VersionVector); chương duyệt trước CF4 thì lấy bản mới nhất.</summary>
+    /// <summary>
+    /// Snapshot bản gốc đã duyệt mà job chụp (cùng Chapter.VersionVector); không có thì lấy bản gốc mới nhất. Bỏ qua snapshot
+    /// của ấn bản dịch (ApproveEdition, BR-34): cùng ChapterVersion nhưng không phải bản Producer duyệt ở Gate 3.
+    /// </summary>
     public static async Task<ChapterSnapshot?> SnapshotOfAsync(
-        IPanelForgeDbContext db, Guid chapterId, long chapterVersion, CancellationToken ct) =>
-        await db.ChapterSnapshots.AsNoTracking()
-            .Where(s => s.ChapterId == chapterId && s.ChapterVersion == chapterVersion)
-            .OrderByDescending(s => s.SnapshotNumber).FirstOrDefaultAsync(ct)
-        ?? await db.ChapterSnapshots.AsNoTracking()
-            .Where(s => s.ChapterId == chapterId)
-            .OrderByDescending(s => s.SnapshotNumber).FirstOrDefaultAsync(ct);
+        IPanelForgeDbContext db, Guid chapterId, long chapterVersion, CancellationToken ct)
+    {
+        var original = db.ChapterSnapshots.AsNoTracking()
+            .Where(s => s.ChapterId == chapterId && s.LanguageCode == ContentLanguages.Original);
+        return await original.Where(s => s.ChapterVersion == chapterVersion)
+                   .OrderByDescending(s => s.SnapshotNumber).FirstOrDefaultAsync(ct)
+               ?? await original.OrderByDescending(s => s.SnapshotNumber).FirstOrDefaultAsync(ct);
+    }
 
     /// <summary>Lỗi dữ liệu ném <see cref="InvalidOperationException"/> để worker đánh dấu job Failed kèm lý do.</summary>
     public static async Task<(string FileName, ExportFile File)> BuildAsync(

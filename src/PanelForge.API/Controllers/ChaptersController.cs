@@ -39,6 +39,7 @@ using PanelForge.Application.Features.Chapters.Commands.SubmitChapterManuscript;
 using PanelForge.Application.Features.Assignments.Models;
 using PanelForge.Application.Features.Assignments.Commands.StartChapterProduction;
 using PanelForge.Application.Features.Bible.Models;
+using PanelForge.Application.Features.ScriptLines.Commands.RestoreScriptVersion;
 using PanelForge.Application.Features.ScriptLines.Commands.SaveChapterScript;
 using PanelForge.Application.Features.ScriptLines.Models;
 using PanelForge.Domain.Enums;
@@ -348,6 +349,21 @@ public sealed class ChaptersController : ControllerBase
         ToActionResult(await _mediator.Send(new GetScriptVersionQuery(chapterId, versionId, GetCurrentUserId()), cancellationToken));
 
     /// <summary>
+    /// POST /api/chapters/{chapterId}/script-versions/{versionId}/restore — SCR-23: Writer khôi phục cả kịch bản về một phiên bản cũ.
+    /// Tạo phiên bản mới ở đầu lịch sử (không sửa bản cũ); cùng luật với PUT script (Frozen, expectedRevisionId lệch → 409).
+    /// </summary>
+    [HttpPost("api/chapters/{chapterId:guid}/script-versions/{versionId:guid}/restore")]
+    [RequireWorkspaceRole(WorkspaceRole.Writer)]
+    [ProducesResponseType(typeof(SaveChapterScriptResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestoreScriptVersion(
+        [FromRoute] Guid chapterId, [FromRoute] Guid versionId, [FromBody] RestoreScriptVersionRequest body,
+        CancellationToken cancellationToken) =>
+        ToActionResult(await _mediator.Send(
+            new RestoreScriptVersionCommand(chapterId, versionId, GetCurrentUserId(), body.ExpectedRevisionId), cancellationToken));
+
+    /// <summary>
     /// POST /api/chapters/{chapterId}/recall-script — D12: chỉ Writer rút kịch bản về sửa (InReview → Draft).
     /// </summary>
     [HttpPost("api/chapters/{chapterId:guid}/recall-script")]
@@ -399,7 +415,8 @@ public sealed class ChaptersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new StartChapterProductionCommand(
-            chapterId, GetCurrentUserId(), body.PageAssignments, body.LettererAssignments, body.FirstStageOnly), cancellationToken);
+            chapterId, GetCurrentUserId(), body.PageAssignments, body.LettererAssignments, body.FirstStageOnly,
+            body.ExpectedSubmittedVersionId), cancellationToken);
         if (!result.IsSuccess && result.ErrorCode == ResultErrorCodes.Conflict &&
             result.ErrorDetails is IReadOnlyList<ChapterCastBlockerDto> blockers)
             return Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, blockers });
@@ -642,6 +659,7 @@ public sealed class ChaptersController : ControllerBase
             or ResultErrorCodes.BibleGateBlocked
             or ResultErrorCodes.ActiveArtworkOnRemovedPage
             or ResultErrorCodes.CannotDeleteActiveProductionPage
+            or ResultErrorCodes.ScriptVersionOutdated
             => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails }),
         _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails })
     };
@@ -649,6 +667,9 @@ public sealed class ChaptersController : ControllerBase
 
 public sealed record UnfreezeScriptRequest(string? Reason);
 public sealed record SubmitScriptRequest(string? Message);
+
+/// <param name="ExpectedRevisionId">Phiên bản kịch bản mới nhất client đang thấy (null khi chương chưa có phiên bản).</param>
+public sealed record RestoreScriptVersionRequest(Guid? ExpectedRevisionId);
 public sealed record AddScriptCommentRequest(Guid? SceneId, Guid? ScriptLineId, string? QuotedText, string Body);
 
 public sealed record SetChapterOutlineRequest(string? Outline, long? ExpectedChapterVersion = null);

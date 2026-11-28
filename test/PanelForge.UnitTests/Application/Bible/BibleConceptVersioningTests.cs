@@ -37,7 +37,7 @@ public class BibleConceptVersioningTests
     }
 
     private Task<Result<BibleEntryRevisionDto>> Submit(string image = "/assets/concept-1.png", string? description = null) =>
-        new SubmitBibleConceptCommandHandler(_db, _sender.Object).Handle(
+        new SubmitBibleConceptCommandHandler(_db, _sender.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>()).Handle(
             new SubmitBibleConceptCommand(_seriesId, _entry.Id, _artistId,
                 new SubmitConceptArtRequest(ReferenceImageUrl: image, Note: "Nộp bản vẽ", Description: description)),
             default);
