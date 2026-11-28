@@ -17,7 +17,11 @@ public sealed record ChapterReviewStatsDto(
     int WaitingReview, int InReview,
     int OpenChangeRequests, int ResolvedChangeRequests, int VerifiedChangeRequests, int OverdueChangeRequests,
     int OpenFindings, int BlockingFindings,
-    int Approved, int Rejected, int FirstPassApproved);
+    int Approved, int Rejected, int FirstPassApproved,
+    int TasksTotal = 0, int TasksApproved = 0, int TasksInProgress = 0, int TasksRework = 0, int TasksOverdue = 0);
+
+/// <summary>Trạng thái thiết kế Series Bible theo revision mới nhất của mỗi mục (bỏ mục stub).</summary>
+public sealed record BibleReviewSummaryDto(int Entries, int Draft, int ConceptSubmitted, int ReworkRequired, int CanonLocked);
 
 public sealed record ReviewDecisionPointDto(DateOnly Date, int Approved, int Rejected);
 
@@ -25,10 +29,12 @@ public sealed record ReviewDecisionPointDto(DateOnly Date, int Approved, int Rej
 /// <param name="AvgReviewHours">Thời gian trung bình từ lúc nộp tới lúc có quyết định, trong cùng khoảng; null khi chưa có quyết định.</param>
 public sealed record SeriesReviewStatsDto(
     Guid SeriesId, DateTime GeneratedAt, IReadOnlyList<ChapterReviewStatsDto> Chapters,
-    IReadOnlyList<ReviewDecisionPointDto> Decisions, double? AvgReviewHours);
+    IReadOnlyList<ReviewDecisionPointDto> Decisions, double? AvgReviewHours,
+    BibleReviewSummaryDto? Bible = null);
 
 /// <summary>
-/// Tổng quan duyệt của Series cho Editor (CF3): hàng chờ, yêu cầu sửa, phát hiện nhất quán và kết quả duyệt theo chương.
+/// Tổng quan Series cho Editor (CF3): kịch bản, việc sản xuất, hàng chờ duyệt, yêu cầu sửa, phát hiện nhất quán
+/// và kết quả duyệt theo chương, cùng trạng thái thiết kế Series Bible.
 /// Gộp việc V2 (Assignment/Submission) và ô lưới V3 (StageTask/StageTaskSubmission). Chỉ đọc.
 /// </summary>
 public sealed record GetSeriesReviewStatsQuery(Guid SeriesId) : IRequest<Result<SeriesReviewStatsDto>>;
@@ -67,6 +73,17 @@ public sealed class GetSeriesReviewStatsQueryHandler : IRequestHandler<GetSeries
             .ToListAsync(ct);
         var queue = taskStatuses.Concat(assignmentStatuses).ToList();
 
+        // Mọi việc đã giao (ô lưới V3 qua lô + Assignment V2) để tính tiến độ sản xuất của chương
+        var gridTasks = await (from t in _db.StageTasks.AsNoTracking()
+                               join l in _db.StageTaskLots.AsNoTracking() on t.LotId equals (Guid?)l.Id
+                               where t.SeriesId == q.SeriesId && t.Status != StageTaskStatus.Unassigned && t.Status != StageTaskStatus.Cancelled
+                               select new { t.ChapterId, Status = t.Status.ToString(), l.DueDate })
+                              .ToListAsync(ct);
+        var legacyTasks = await _db.Assignments.AsNoTracking().Where(a => a.SeriesId == q.SeriesId)
+            .Select(a => new { a.ChapterId, Status = a.Status.ToString(), a.DueDate })
+            .ToListAsync(ct);
+        var work = gridTasks.Concat(legacyTasks).ToList();
+
         var changeRequests = await _db.ChangeRequests.AsNoTracking()
             .Where(cr => chapterIds.Contains(cr.ChapterId))
             .Select(cr => new { cr.ChapterId, cr.Status, cr.DueDate })
@@ -97,6 +114,8 @@ public sealed class GetSeriesReviewStatsQueryHandler : IRequestHandler<GetSeries
             var fs = findings.Where(f => f.ChapterId == c.Id).ToList();
             var ds = decisions.Where(d => d.ChapterId == c.Id).ToList();
             var qs = queue.Where(x => x.ChapterId == c.Id).ToList();
+            var ws = work.Where(w => w.ChapterId == c.Id).ToList();
+            static bool Is(string status, string name) => status == name;
             return new ChapterReviewStatsDto(
                 c.Id, c.ChapterNumber, c.Title, c.Status, c.ScriptStatus,
                 WaitingReview: qs.Count(x => !x.InReview),
@@ -109,7 +128,12 @@ public sealed class GetSeriesReviewStatsQueryHandler : IRequestHandler<GetSeries
                 BlockingFindings: fs.Count(f => f.Severity == ConsistencyFindingSeverity.Blocking),
                 Approved: ds.Count(d => d.Status == SubmissionStatus.Approved),
                 Rejected: ds.Count(d => d.Status == SubmissionStatus.Rejected),
-                FirstPassApproved: ds.Count(d => d.Status == SubmissionStatus.Approved && d.Attempt == 1));
+                FirstPassApproved: ds.Count(d => d.Status == SubmissionStatus.Approved && d.Attempt == 1),
+                TasksTotal: ws.Count,
+                TasksApproved: ws.Count(w => Is(w.Status, "Approved")),
+                TasksInProgress: ws.Count(w => Is(w.Status, "Assigned") || Is(w.Status, "InProgress")),
+                TasksRework: ws.Count(w => Is(w.Status, "ReworkRequired")),
+                TasksOverdue: ws.Count(w => w.DueDate is { } due && due < now && !Is(w.Status, "Approved")));
         }).ToList();
 
         var today = DateOnly.FromDateTime(now);
@@ -127,6 +151,18 @@ public sealed class GetSeriesReviewStatsQueryHandler : IRequestHandler<GetSeries
             ? null
             : Math.Round(recent.Average(d => (d.DecidedAt - d.SubmittedAt).TotalHours), 1);
 
-        return Result<SeriesReviewStatsDto>.Success(new SeriesReviewStatsDto(q.SeriesId, now, chapterDtos, points, avgHours));
+        // Revision mới nhất của mỗi mục Bible quyết định trạng thái thiết kế hiện tại
+        var bibleStatuses = await _db.BibleEntries.AsNoTracking()
+            .Where(e => !e.IsStub && _db.SeriesBibles.Any(b => b.Id == e.SeriesBibleId && b.SeriesId == q.SeriesId))
+            .Select(e => e.Revisions.OrderByDescending(r => r.VersionNumber).Select(r => (BibleRevisionStatus?)r.ReviewStatus).FirstOrDefault())
+            .ToListAsync(ct);
+        var bible = new BibleReviewSummaryDto(
+            bibleStatuses.Count,
+            bibleStatuses.Count(s => s is null or BibleRevisionStatus.Draft),
+            bibleStatuses.Count(s => s == BibleRevisionStatus.ConceptSubmitted),
+            bibleStatuses.Count(s => s == BibleRevisionStatus.ReworkRequired),
+            bibleStatuses.Count(s => s == BibleRevisionStatus.CanonLocked));
+
+        return Result<SeriesReviewStatsDto>.Success(new SeriesReviewStatsDto(q.SeriesId, now, chapterDtos, points, avgHours, bible));
     }
 }

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesReviewStats;
+using PanelForge.Domain.Entities.Bible;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Workspaces;
@@ -70,6 +71,26 @@ public class SeriesReviewStatsTests
         result.Value.Decisions.Should().HaveCount(GetSeriesReviewStatsQueryHandler.WindowDays);
         result.Value.Decisions.Last().Should().Be(new ReviewDecisionPointDto(DateOnly.FromDateTime(DateTime.UtcNow), 1, 1));
         result.Value.AvgReviewHours.Should().NotBeNull();
+        (c.TasksTotal, c.TasksApproved, c.TasksInProgress).Should().Be((2, 0, 0), "2 việc đã nộp, chưa duyệt");
+    }
+
+    [Fact]
+    public async Task ReviewStats_SummarizesBibleByLatestRevision()
+    {
+        var bible = SeriesBible.Create(_series.Id, _series.WorkspaceId, "Bible");
+        var locked = BibleEntry.Create(bible.Id, BibleEntryCategory.Character, "Goku", "Saiyan");
+        var submitted = BibleEntry.Create(bible.Id, BibleEntryCategory.Character, "Vegeta", "Hoàng tử");
+        _db.SeriesBibles.Add(bible);
+        _db.BibleEntries.AddRange(locked, submitted);
+        _db.BibleEntryRevisions.AddRange(
+            BibleEntryRevision.Create(locked.Id, 1, "v1", "{}", "h1", reviewStatus: BibleRevisionStatus.ConceptSubmitted),
+            BibleEntryRevision.Create(locked.Id, 2, "v2", "{}", "h2", reviewStatus: BibleRevisionStatus.CanonLocked),
+            BibleEntryRevision.Create(submitted.Id, 1, "v1", "{}", "h3", reviewStatus: BibleRevisionStatus.ConceptSubmitted));
+        await _db.SaveChangesAsync();
+
+        var result = await new GetSeriesReviewStatsQueryHandler(_db).Handle(new GetSeriesReviewStatsQuery(_series.Id), default);
+
+        result.Value!.Bible.Should().Be(new BibleReviewSummaryDto(2, 0, 1, 0, 1));
     }
 
     [Fact]
