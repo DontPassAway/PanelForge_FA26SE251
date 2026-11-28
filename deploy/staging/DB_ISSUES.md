@@ -1,0 +1,79 @@
+# Vấn đề DB cần xử lý trước khi deploy
+
+Ghi ngày 2026-11-28. File này **chỉ ghi lại** các vấn đề, chưa sửa gì trên DB (không tạo hay chạy migration nào).
+Số liệu lấy từ thư mục `src/PanelForge.Infrastructure/Persistence/Migrations` trên các nhánh remote cùng ngày.
+
+| Nhánh | Số migration |
+|---|---|
+| `main` | 98 |
+| `dev` | 112 |
+| `feature/workflow-fix` | 123 |
+
+API chạy `db.Database.MigrateAsync()` khi khởi động (`Program.cs`), nên **bất kỳ image mới nào được deploy đều tự áp migration còn thiếu vào DB thật** của môi trường đó.
+
+---
+
+## 1. `dev` và `feature/workflow-fix` lệch migration hai chiều
+
+- **Vấn đề:**
+  - `dev` có 3 migration mà `feature/workflow-fix` chưa có: `20261128050000_MoveMangaColorGateToInk`, `20261128051000_AddPanelBalloonCheck`, `20261128063022_BackfillBibleConceptEventPointers`.
+  - `feature/workflow-fix` có 14 migration mà `dev` chưa có: `AddWorkspaceAiConfigConcurrencyToken`, `ReclassifyAdminRefundTransactions`, `AddPaymentProviderReference`, `AddPlatformBankAccounts`, `AddQuotaPoliciesAndIncreaseRequests`, `DropStudioBankColumns`, `AddQuotaPolicyAiDefaultAndWarning`, `AddAiWorkflowRunReservedTokens`, `AddAiRequestLimits`, `AddUploadLimitPolicies`, `AddStudioPackagePrices`, `AddPlatformEmailSettings`, `AddPlatformEmailTemplates`, `SplitEmailTemplateIntoPlainTextParts`.
+- **Rủi ro:**
+  - Khi gộp, `PanelForgeDbContextModelSnapshot.cs` chắc chắn xung đột. Gộp sai thì migration sau sinh ra thay đổi lạ, có thể xoá hoặc tạo lại bảng.
+  - Thứ tự timestamp xen kẽ: 3 migration của `dev` (05:00 đến 06:30) nằm giữa các migration của `feature/workflow-fix`. DB đã chạy bản `feature/workflow-fix` sẽ áp 3 migration này "lùi thời gian". EF vẫn chạy được, nhưng cần chắc hai bên không sửa cùng bảng hoặc cột.
+- **Đề xuất:**
+  - Gộp `dev` vào `feature/workflow-fix` (hoặc ngược lại) qua PR, giữ thay đổi của cả hai bên trong snapshot.
+  - Sau khi gộp, chạy thử `dotnet ef migrations add CheckEmpty` trên máy dev: phải ra **migration rỗng**, rồi xoá migration thử đó đi.
+  - Chạy `dotnet test` và khởi động API trên một bản sao DB `dev`.
+- **Ai quyết:** người merge PR `feature/workflow-fix` → `dev`.
+
+## 2. `DropStudioBankColumns` xoá dữ liệu
+
+- **Vấn đề:** migration `20261128042048_DropStudioBankColumns` xoá các cột `bank_account_name`, `bank_account_no`, `bank_bin`, … khỏi `studio_workspaces`. Dữ liệu ngân hàng của Studio được thay bằng `platform_bank_accounts`.
+- **Rủi ro:** khi lên DB thật, các cột và dữ liệu trong đó mất hẳn. Rollback image không lấy lại được. Bản cũ nếu chạy lại sẽ lỗi vì thiếu cột.
+- **Đề xuất:**
+  - Trước khi deploy bản có migration này, kiểm tra trên DB thật xem còn Studio nào có dữ liệu ngân hàng. Nếu còn, export ra (CSV) hoặc chuyển sang `platform_bank_accounts`.
+  - Nhờ `deploy.sh` mới (PR #40), luôn có bản `pg_dump` trước khi deploy.
+- **Ai quyết:** chủ nghiệp vụ thanh toán / người duyệt deploy `main`.
+
+## 3. `dev` → `main` mang 14 migration lên DB thật
+
+- **Vấn đề:** `main` (bản chính thức) đang thiếu 14 migration mà `dev` có. Lần promote `dev` → `main` tiếp theo sẽ áp cả 14 migration này vào DB chính thức ngay khi API khởi động. Khi `feature/workflow-fix` vào `dev`, con số này tăng thêm 14 nữa, trong đó có mục 2.
+- **Rủi ro:** migration lỗi giữa chừng hoặc chạy lâu làm API không lên. Migration có xoá dữ liệu thì không quay lại được.
+- **Đề xuất:**
+  - Deploy bằng `deploy.sh` mới (PR #40): có `pg_dump` trước khi deploy và rollback image khi health check hỏng.
+  - Chạy thử trước trên bản sao DB chính thức: restore bản dump mới nhất vào một Postgres tạm, chạy API bản mới trỏ vào đó, xem log migration.
+  - Chọn giờ ít người dùng.
+- **Ai quyết:** người duyệt promote `dev` → `main`.
+
+## 4. Rollback image không hoàn tác migration
+
+- **Vấn đề:** `deploy.sh` (PR #40) rollback về image `:<env>-previous` khi API bản mới không lên, nhưng DB có thể đã được bản mới migrate.
+- **Rủi ro:** image cũ chạy trên schema mới có thể lỗi, ví dụ thiếu cột đã bị xoá hoặc gặp bảng lạ. Khi đó API vẫn không lên dù đã rollback.
+- **Đề xuất:** làm theo mục "Backup và rollback" trong `README.md`: dừng API, `pg_restore` bản dump mà log in ra, chạy lại. Không tự động hoá bước này, vì restore làm mất dữ liệu ghi sau thời điểm dump.
+- **Ai quyết:** người trực deploy.
+
+## 5. Migration trùng giữa bản local và PR đang mở
+
+- **Vấn đề:**
+  - Trên máy dev có nhánh local `THBMinh-task-24` … `THBMinh-task-28`, chưa push, với các migration `AddEmailDeliveryLogs` (09:52) và `AddEmailTemplateOverrides` (13:13).
+  - Chức năng tương ứng đã có trên remote bằng migration khác: `AddPlatformEmailTemplates` và `SplitEmailTemplateIntoPlainTextParts` trên `feature/workflow-fix`, và `20261128095114_AddEmailDeliveryLogs` trong PR BE #39.
+- **Rủi ro:** nếu ai gộp nhánh local vào sẽ có hai bảng mẫu email, hai migration `AddEmailDeliveryLogs` trùng tên lớp, và snapshot lệch.
+- **Đề xuất:**
+  - **Không** push hay gộp các nhánh local đó.
+  - Phần chức năng còn thiếu (lọc theo ngày, email-health) được đưa lên PR #39 mà không thêm migration nào.
+- **Ai quyết:** đã quyết: giữ bản remote.
+
+## 6. Test tích hợp Postgres không chạy được trên máy dev
+
+- **Vấn đề:** 8 test `*PostgresIntegrationTests` (`BibleWorkflowPostgresIntegrationTests`, `RefreezeScriptPostgresIntegrationTests`) lỗi `28P01: password authentication failed for user "postgres"` trên máy dev Windows.
+- **Rủi ro:** các test kiểm tra migration chạy sạch trên Postgres thật (`EndToEnd_MigrationsClean...`) không được chạy, nên lỗi migration chỉ lộ ra khi deploy.
+- **Đề xuất:** cấu hình connection string hoặc mật khẩu Postgres cho test trên máy dev (theo hướng dẫn test của repo), hoặc bảo đảm CI có Postgres service và chạy các test này trước khi merge vào `dev`.
+- **Ai quyết:** người phụ trách CI / môi trường dev.
+
+---
+
+## Ghi chú deploy
+
+- PR #41 (Caddyfile: bỏ rewrite `/api/hubs/` → `/hubs/`, chặn `/internal/*`) **không** có trong nhánh `deploy` này. Nó phải đi cùng PR #35 (`feature/assign-automation`), nơi hub đã chuyển sang `/api/hubs/ai-stream`. Trên `dev`, hub vẫn ở `/hubs/ai-stream`; bỏ rewrite lúc này sẽ làm hỏng SignalR.
+- Phần chặn `/internal/*` có thể tách ra làm sớm hơn nếu cần, vì nó không phụ thuộc đường dẫn hub.
