@@ -57,7 +57,7 @@ public class WorkspacesController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(
-            new CreateWorkspaceCommand(userId, request.Name, request.StorageQuotaBytes), cancellationToken);
+            new CreateWorkspaceCommand(userId, request.Name), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Value!.Id }, result.Value)
             : ToError(result);

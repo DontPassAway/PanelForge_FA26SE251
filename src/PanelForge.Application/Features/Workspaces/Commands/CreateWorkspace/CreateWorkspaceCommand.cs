@@ -11,16 +11,22 @@ namespace PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
 
 /// <summary>
 /// POST /api/workspaces — tạo Studio. Chỉ User có CanCreateStudio (BR-22), không phải Admin (BR-07).
-/// Người tạo tự động là Producer trong workspace_members.
+/// Người tạo tự động là Producer trong workspace_members. Dung lượng lấy từ <see cref="WorkspaceDefaultsSettings"/>,
+/// không nhận từ client (OPS-01).
 /// </summary>
-public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name, long StorageQuotaBytes)
+public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name)
     : IRequest<Result<WorkspaceDto>>;
 
 public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorkspaceCommand, Result<WorkspaceDto>>
 {
     private readonly IPanelForgeDbContext _dbContext;
+    private readonly WorkspaceDefaultsSettings _defaults;
 
-    public CreateWorkspaceCommandHandler(IPanelForgeDbContext dbContext) => _dbContext = dbContext;
+    public CreateWorkspaceCommandHandler(IPanelForgeDbContext dbContext, WorkspaceDefaultsSettings defaults)
+    {
+        _dbContext = dbContext;
+        _defaults = defaults;
+    }
 
     public async Task<Result<WorkspaceDto>> Handle(CreateWorkspaceCommand command, CancellationToken cancellationToken)
     {
@@ -37,7 +43,7 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
         StudioWorkspace workspace;
         try
         {
-            workspace = StudioWorkspace.Create(command.Name, owner.Id, command.StorageQuotaBytes);
+            workspace = StudioWorkspace.Create(command.Name, owner.Id, _defaults.StorageQuotaBytes);
         }
         catch (ArgumentException ex)
         {
