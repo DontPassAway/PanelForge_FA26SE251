@@ -18,14 +18,17 @@ public static class QuotaPolicies
                 p.StorageQuotaBytes,
                 p.MonthlyTokenQuota,
                 p.MonthlyImageQuota,
+                p.AiEnabledByDefault,
+                p.WarningThresholdPercent,
                 p.CreatedAt,
                 UpdatedByName = db.Users.Where(u => u.Id == p.ChangedByUserId).Select(u => u.FullName).FirstOrDefault()
             })
             .FirstOrDefaultAsync(ct);
 
         return latest is null
-            ? new QuotaPolicyDto(defaults.StorageQuotaBytes, defaults.MonthlyTokenQuota, defaults.MonthlyImageQuota, true, null, null)
-            : new QuotaPolicyDto(latest.StorageQuotaBytes, latest.MonthlyTokenQuota, latest.MonthlyImageQuota, false,
-                latest.CreatedAt, latest.UpdatedByName);
+            ? new QuotaPolicyDto(defaults.StorageQuotaBytes, defaults.MonthlyTokenQuota, defaults.MonthlyImageQuota,
+                defaults.AiEnabled, defaults.WarningThresholdPercent, true, null, null)
+            : new QuotaPolicyDto(latest.StorageQuotaBytes, latest.MonthlyTokenQuota, latest.MonthlyImageQuota,
+                latest.AiEnabledByDefault, latest.WarningThresholdPercent, false, latest.CreatedAt, latest.UpdatedByName);
     }
 }

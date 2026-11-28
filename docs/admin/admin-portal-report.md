@@ -3,6 +3,14 @@
 Phạm vi: Admin Portal, Resource Allocation (Storage + AI Quota), Resource Request. Một file thay cho 5 file đề xuất
 (audit, implementation, UI test, permission matrix, resource management) để tránh lặp nội dung.
 
+
+> **Gộp vào `feature/admin-b2b` (28/11):** phần tài nguyên chạy trên model của OPS-20..23 (`quota_policies` append-only,
+> `quota_increase_requests`), không dùng bảng `resource_policies` / `resource_requests` và migration `AdminResourceManagement`.
+> Endpoint thật: `GET/PUT /api/admin/quota-policy`, `GET /api/admin/resources`, `PUT /api/admin/workspaces/{id}/resources`,
+> `GET /api/admin/quota-requests`, `POST .../quota-requests/{id}/approve|reject`, Producer `GET/POST /api/workspaces/{id}/quota-requests`.
+> Màn "Thanh toán" của Admin bị bỏ vì tài khoản nhận tiền là của nền tảng và do Publisher cấu hình (OPS-10, quyết định C1).
+> Chi tiết: hub `docs/note/plans/10_PLATFORM_OPS_PLAN.md`.
+
 ## 1. Tóm tắt
 
 - **Đã sửa P0:** Producer tự chọn Storage Quota khi tạo Studio (`POST /api/workspaces` nhận `storageQuotaBytes`, gửi `0` = không giới hạn;

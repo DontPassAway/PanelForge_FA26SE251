@@ -773,16 +773,20 @@ public class AdminController : ControllerBase
     {
         if (CurrentUserId() is not { } adminId) return Unauthorized();
         var result = await _mediator.Send(new UpdateQuotaPolicyCommand(
-            adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota), cancellationToken);
+            adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
+            request.AiEnabledByDefault, request.WarningThresholdPercent), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     /// <summary>GET /api/admin/quota-requests?status=Pending — yêu cầu tăng hạn mức của mọi Studio (OPS-21).</summary>
     [HttpGet("quota-requests")]
     [ProducesResponseType(typeof(IReadOnlyList<QuotaIncreaseRequestDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetQuotaRequests([FromQuery] QuotaIncreaseRequestStatus? status, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetQuotaRequests(
+        [FromQuery] QuotaIncreaseRequestStatus? status, [FromQuery] QuotaResourceType? resourceType, [FromQuery] string? search,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetQuotaIncreaseRequestsQuery(null, status), cancellationToken);
+        var result = await _mediator.Send(
+            new GetQuotaIncreaseRequestsQuery(null, status, ResourceType: resourceType, Search: search), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -811,21 +815,26 @@ public class AdminController : ControllerBase
 
     /// <summary>GET /api/admin/resources — mức dùng và mức cấp của mọi Studio (OPS-23).</summary>
     [HttpGet("resources")]
-    [ProducesResponseType(typeof(IReadOnlyList<AdminWorkspaceResourceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AdminResourceOverviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetResources(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetAdminResourcesQuery(), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
-    /// <summary>PUT /api/admin/workspaces/{id}/resources — sửa nhanh hạn mức một Studio; null = giữ, 0 = không giới hạn (OPS-23).</summary>
+    /// <summary>
+    /// PUT /api/admin/workspaces/{id}/resources — chỉnh cấp phát một Studio (OPS-23); null = giữ, 0 = không giới hạn.
+    /// Bắt buộc lý do; Nhật ký hệ thống ghi giá trị cũ, mới và lý do.
+    /// </summary>
     [HttpPut("workspaces/{id:guid}/resources")]
     [ProducesResponseType(typeof(AdminWorkspaceResourceDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateWorkspaceResources(
         Guid id, [FromBody] UpdateWorkspaceResourcesRequest request, CancellationToken cancellationToken)
     {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
         var result = await _mediator.Send(new UpdateWorkspaceResourcesCommand(
-            id, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota), cancellationToken);
+            id, adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
+            request.AiEnabled, request.Reason ?? string.Empty), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

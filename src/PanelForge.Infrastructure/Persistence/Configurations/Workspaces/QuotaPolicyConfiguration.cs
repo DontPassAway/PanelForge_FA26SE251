@@ -14,6 +14,7 @@ internal sealed class QuotaPolicyConfiguration : IEntityTypeConfiguration<QuotaP
             t.HasCheckConstraint("ck_quota_policies_storage_positive", "storage_quota_bytes > 0");
             t.HasCheckConstraint("ck_quota_policies_tokens_positive", "monthly_token_quota > 0");
             t.HasCheckConstraint("ck_quota_policies_images_positive", "monthly_image_quota > 0");
+            t.HasCheckConstraint("ck_quota_policies_warning_threshold", "warning_threshold_percent BETWEEN 1 AND 99");
         });
 
         builder.HasKey(p => p.Id);
@@ -21,6 +22,9 @@ internal sealed class QuotaPolicyConfiguration : IEntityTypeConfiguration<QuotaP
         builder.Property(p => p.StorageQuotaBytes).HasColumnName("storage_quota_bytes").HasColumnType("bigint").IsRequired();
         builder.Property(p => p.MonthlyTokenQuota).HasColumnName("monthly_token_quota").HasColumnType("bigint").IsRequired();
         builder.Property(p => p.MonthlyImageQuota).HasColumnName("monthly_image_quota").HasColumnType("bigint").IsRequired();
+        builder.Property(p => p.AiEnabledByDefault).HasColumnName("ai_enabled_by_default").HasDefaultValue(true).IsRequired();
+        builder.Property(p => p.WarningThresholdPercent).HasColumnName("warning_threshold_percent")
+            .HasDefaultValue(QuotaPolicy.DefaultWarningThresholdPercent).IsRequired();
         builder.Property(p => p.ChangedByUserId).HasColumnName("changed_by_user_id").HasColumnType("uuid").IsRequired();
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").HasColumnType("timestamptz").IsRequired();
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamptz");

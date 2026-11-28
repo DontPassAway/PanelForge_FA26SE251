@@ -6264,6 +6264,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AiEnabledByDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("ai_enabled_by_default");
+
                     b.Property<Guid>("ChangedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by_user_id");
@@ -6308,6 +6314,12 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
 
+                    b.Property<int>("WarningThresholdPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(80)
+                        .HasColumnName("warning_threshold_percent");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ChangedByUserId");
@@ -6322,6 +6334,8 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_quota_policies_storage_positive", "storage_quota_bytes > 0");
 
                             t.HasCheckConstraint("ck_quota_policies_tokens_positive", "monthly_token_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_warning_threshold", "warning_threshold_percent BETWEEN 1 AND 99");
                         });
                 });
 

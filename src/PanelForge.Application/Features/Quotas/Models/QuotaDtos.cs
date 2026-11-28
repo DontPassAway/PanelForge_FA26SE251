@@ -1,3 +1,4 @@
+using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Quotas.Models;
@@ -7,11 +8,18 @@ public sealed record QuotaPolicyDto(
     long StorageQuotaBytes,
     long MonthlyTokenQuota,
     long MonthlyImageQuota,
+    bool AiEnabledByDefault,
+    int WarningThresholdPercent,
     bool IsFromSettings,
     DateTime? UpdatedAt,
     string? UpdatedByName);
 
-public sealed record UpdateQuotaPolicyRequest(long StorageQuotaBytes, long MonthlyTokenQuota, long MonthlyImageQuota);
+public sealed record UpdateQuotaPolicyRequest(
+    long StorageQuotaBytes,
+    long MonthlyTokenQuota,
+    long MonthlyImageQuota,
+    bool AiEnabledByDefault = true,
+    int WarningThresholdPercent = 80);
 
 /// <param name="RequestedQuota">Mức mới muốn có (giá trị tuyệt đối).</param>
 public sealed record SubmitQuotaIncreaseRequestBody(QuotaResourceType ResourceType, long RequestedQuota, string Reason);
@@ -39,24 +47,52 @@ public sealed record QuotaIncreaseRequestDto(
     string? ReviewNote,
     long? GrantedQuota);
 
-/// <summary>Một dòng ở màn Tài nguyên của Admin (OPS-23). Quota 0 = không giới hạn.</summary>
+/// <summary>Trạng thái tài nguyên của Studio: Ok / NearLimit (≥ ngưỡng cảnh báo) / Exhausted (≥ 100%).</summary>
+public enum ResourceHealth { Ok = 0, NearLimit = 1, Exhausted = 2 }
+
+/// <summary>
+/// Một dòng ở màn Tài nguyên của Admin (OPS-23). Quota 0 = không giới hạn. AiTokens/AiImages null = Studio chưa có cấu hình AI.
+/// AiNextResetAt: đầu tháng UTC kế tiếp (AiUsageService đặt lại bộ đếm theo tháng UTC).
+/// </summary>
 public sealed record AdminWorkspaceResourceDto(
     Guid WorkspaceId,
     string Name,
     string OwnerName,
     string OwnerEmail,
-    long StorageQuotaBytes,
-    long UsedStorageBytes,
-    bool HasAiConfig,
+    int MemberCount,
+    int SeriesCount,
+    DateTime CreatedAt,
+    UsageMeterDto Storage,
     bool AiEnabled,
-    long MonthlyTokenQuota,
-    long UsedTokensCurrentMonth,
-    long MonthlyImageQuota,
-    long UsedImagesCurrentMonth,
-    int PendingRequestCount);
+    UsageMeterDto? AiTokens,
+    UsageMeterDto? AiImages,
+    DateTime AiNextResetAt,
+    int PendingRequestCount,
+    ResourceHealth Health);
 
-/// <summary>Admin sửa nhanh hạn mức một Studio. null = giữ nguyên; 0 = không giới hạn.</summary>
-public sealed record UpdateWorkspaceResourcesRequest(long? StorageQuotaBytes, long? MonthlyTokenQuota, long? MonthlyImageQuota);
+/// <summary>GET /api/admin/resources: số liệu tổng cho Overview + từng Studio. Đọc thẳng bộ đếm, không ước tính.</summary>
+public sealed record AdminResourceOverviewDto(
+    int TotalStudios,
+    long TotalStorageUsedBytes,
+    long TotalTokensUsedThisMonth,
+    long TotalImagesThisMonth,
+    int AiEnabledStudios,
+    int NearLimitStudios,
+    int ExhaustedStudios,
+    int PendingRequests,
+    int WarningThresholdPercent,
+    IReadOnlyList<AdminWorkspaceResourceDto> Studios);
+
+/// <summary>
+/// Admin chỉnh cấp phát một Studio. null = giữ nguyên; 0 = không giới hạn. Reason bắt buộc, ghi vào Nhật ký hệ thống.
+/// Hạ hạn mức dưới mức đang dùng không xoá file, chỉ chặn ghi thêm.
+/// </summary>
+public sealed record UpdateWorkspaceResourcesRequest(
+    long? StorageQuotaBytes,
+    long? MonthlyTokenQuota,
+    long? MonthlyImageQuota,
+    bool? AiEnabled,
+    string? Reason);
 
 /// <summary>
 /// Kết quả đối soát kho file (OPS-22). Không xoá file nào: chỉ so dung lượng đang ghi với dung lượng file còn được dùng,

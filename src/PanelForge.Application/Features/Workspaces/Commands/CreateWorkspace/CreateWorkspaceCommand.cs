@@ -58,6 +58,8 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
         // TASK-355: Studio mới có sẵn cấu hình AI mặc định → dùng ngay API mặc định Admin đã đặt
         var aiConfig = WorkspaceAiConfig.Create(workspace.Id, monthlyTokenQuota: policy.MonthlyTokenQuota);
         aiConfig.SetMonthlyImageQuota(policy.MonthlyImageQuota);
+        if (!policy.AiEnabledByDefault)
+            aiConfig.UpdateSettings(aiConfig.Provider, null, false, policy.MonthlyTokenQuota, string.Empty);
         _dbContext.WorkspaceAiConfigs.Add(aiConfig);
         await _dbContext.SaveChangesAsync(cancellationToken);
 

@@ -13,7 +13,10 @@ namespace PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequest
 /// WorkspaceId có giá trị: Producer xem của Studio mình (<c>GET /api/workspaces/{id}/quota-requests</c>).
 /// WorkspaceId null: Admin xem toàn nền tảng (<c>GET /api/admin/quota-requests</c>).
 /// </summary>
-public sealed record GetQuotaIncreaseRequestsQuery(Guid? WorkspaceId, QuotaIncreaseRequestStatus? Status, int Limit = 200)
+/// Search lọc theo tên Studio hoặc tên người gửi.
+public sealed record GetQuotaIncreaseRequestsQuery(
+    Guid? WorkspaceId, QuotaIncreaseRequestStatus? Status, int Limit = 200,
+    QuotaResourceType? ResourceType = null, string? Search = null)
     : IRequest<Result<IReadOnlyList<QuotaIncreaseRequestDto>>>;
 
 public sealed class GetQuotaIncreaseRequestsQueryHandler(IPanelForgeDbContext db)
@@ -24,6 +27,13 @@ public sealed class GetQuotaIncreaseRequestsQueryHandler(IPanelForgeDbContext db
         var query = db.QuotaIncreaseRequests.AsNoTracking();
         if (q.WorkspaceId is { } wsId) query = query.Where(r => r.WorkspaceId == wsId);
         if (q.Status is { } status) query = query.Where(r => r.Status == status);
+        if (q.ResourceType is { } type) query = query.Where(r => r.ResourceType == type);
+        if (!string.IsNullOrWhiteSpace(q.Search))
+        {
+            var term = q.Search.Trim().ToLower();
+            query = query.Where(r => r.Workspace.Name.ToLower().Contains(term)
+                || db.Users.Any(u => u.Id == r.RequestedByUserId && u.FullName.ToLower().Contains(term)));
+        }
 
         var rows = await ToDtos(db, query.OrderByDescending(r => r.CreatedAt).Take(Math.Clamp(q.Limit, 1, 500)))
             .ToListAsync(ct);

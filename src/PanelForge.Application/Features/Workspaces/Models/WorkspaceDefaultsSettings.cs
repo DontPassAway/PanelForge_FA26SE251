@@ -13,4 +13,6 @@ public sealed class WorkspaceDefaultsSettings
     public long MonthlyTokenQuota { get; set; } = 1_000_000;
     /// <summary>0 = không giới hạn (giữ hành vi cũ cho tới khi Admin lưu chính sách).</summary>
     public long MonthlyImageQuota { get; set; } = 0;
+    public bool AiEnabled { get; set; } = true;
+    public int WarningThresholdPercent { get; set; } = 80;
 }
