@@ -13,8 +13,7 @@ public sealed class AiStreamPublisher : IAiStreamPublisher
 
     public async Task PublishStepRecordedAsync(Guid runId, AgentStepReport report, string runStatus, CancellationToken ct = default)
     {
-        var group = $"run_{runId.ToString().ToLowerInvariant()}";
-        await _hub.Clients.Group(group).SendAsync("StepRecorded", new
+        await _hub.Clients.Group(AiStreamHub.RunGroup(runId)).SendAsync("StepRecorded", new
         {
             runId,
             stepIndex = report.StepIndex,
@@ -30,8 +29,7 @@ public sealed class AiStreamPublisher : IAiStreamPublisher
 
     public async Task PublishRunStatusChangedAsync(Guid runId, string status, string? errorCode = null, string? errorMessage = null, CancellationToken ct = default)
     {
-        var group = $"run_{runId.ToString().ToLowerInvariant()}";
-        await _hub.Clients.Group(group).SendAsync("RunStatusChanged", new
+        await _hub.Clients.Group(AiStreamHub.RunGroup(runId)).SendAsync("RunStatusChanged", new
         {
             runId,
             status,
