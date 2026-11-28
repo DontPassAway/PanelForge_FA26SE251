@@ -11,8 +11,10 @@ using PanelForge.Application.Features.Admin.Commands.RestoreEmailSettings;
 using PanelForge.Application.Features.Admin.Commands.SendTestEmail;
 using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
+using PanelForge.Application.Features.Admin.Commands.UpdateEmailTemplate;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettingsHistory;
+using PanelForge.Application.Features.Admin.Queries.GetEmailTemplates;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
@@ -674,6 +676,32 @@ public class AdminController : ControllerBase
             : result.ErrorCode == ResultErrorCodes.EmailDeliveryFailed
                 ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.ErrorMessage, code = result.ErrorCode })
                 : ToError(result);
+    }
+
+    // ─── Mẫu email hệ thống ─────────────────────────────────────────────────────
+
+    /// <summary>GET /api/admin/email-templates — mẫu đang dùng của từng loại email, kèm mẫu mặc định và biến dùng được.</summary>
+    [HttpGet("email-templates")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminEmailTemplateDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEmailTemplates(CancellationToken cancellationToken)
+        => Ok((await _mediator.Send(new GetEmailTemplatesQuery(), cancellationToken)).Value);
+
+    /// <summary>PUT /api/admin/email-templates/{key} — lưu mẫu một loại email (append-only, có audit).</summary>
+    [HttpPut("email-templates/{key}")]
+    [ProducesResponseType(typeof(AdminEmailTemplateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateEmailTemplate(
+        string key,
+        [FromBody] UpdateEmailTemplateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new UpdateEmailTemplateCommand(adminId.Value, key, request.Subject, request.BodyHtml), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
     // ─── D11: Gói mở Studio ────────────────────────────────────────────────────

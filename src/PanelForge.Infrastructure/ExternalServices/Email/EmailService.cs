@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using PanelForge.Application.Common.Email;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 
@@ -102,46 +103,16 @@ public class EmailService : IEmailService
     }
 
     public Task<bool> SendEmailVerificationAsync(string toEmail, string token, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
-    {
-        var subject = "[PanelForge] Xác nhận tài khoản email của bạn";
-        var body = $@"
-            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
-            <p>Cảm ơn bạn đã đăng ký tài khoản tại PanelForge!</p>
-            <p>Mã OTP xác thực email của bạn là: <strong><span style='font-size: 24px; color: #007bff;'>{token}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
-            <br/>
-            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
-
-        return SendEmailAsync(toEmail, subject, body, cancellationToken);
-    }
+        => SendTemplateAsync(toEmail, EmailTemplateCatalog.EmailVerification,
+            new() { ["name"] = recipientName, ["code"] = token, ["validFor"] = ValidityText(validFor) }, cancellationToken);
 
     public Task<bool> SendPasswordResetEmailAsync(string toEmail, string token, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
-    {
-        var subject = "[PanelForge] Yêu cầu đặt lại mật khẩu";
-        var body = $@"
-            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
-            <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn tại PanelForge.</p>
-            <p>Mã OTP đặt lại mật khẩu của bạn là: <strong><span style='font-size: 24px; color: #dc3545;'>{token}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Nếu bạn không yêu cầu điều này, xin vui lòng bỏ qua email.</p>
-            <br/>
-            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
-
-        return SendEmailAsync(toEmail, subject, body, cancellationToken);
-    }
+        => SendTemplateAsync(toEmail, EmailTemplateCatalog.PasswordReset,
+            new() { ["name"] = recipientName, ["code"] = token, ["validFor"] = ValidityText(validFor) }, cancellationToken);
 
     public Task<bool> SendChangePasswordOtpAsync(string toEmail, string otp, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
-    {
-        var subject = "[PanelForge] Mã xác thực OTP thay đổi mật khẩu";
-        var body = $@"
-            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
-            <p>Chúng tôi nhận được yêu cầu thay đổi mật khẩu cho tài khoản PanelForge của bạn.</p>
-            <p>Mã OTP xác thực thay đổi mật khẩu là: <strong><span style='font-size: 24px; color: #F97316;'>{otp}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
-            <br/>
-            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
-
-        return SendEmailAsync(toEmail, subject, body, cancellationToken);
-    }
+        => SendTemplateAsync(toEmail, EmailTemplateCatalog.ChangePasswordOtp,
+            new() { ["name"] = recipientName, ["code"] = otp, ["validFor"] = ValidityText(validFor) }, cancellationToken);
 
     private static string ValidityText(TimeSpan validFor)
         => validFor.TotalMinutes >= 60 && validFor.TotalMinutes % 60 == 0
@@ -157,35 +128,40 @@ public class EmailService : IEmailService
         TimeSpan otpLifetime,
         CancellationToken cancellationToken = default)
     {
-        var safeName = WebUtility.HtmlEncode(recipientName);
-        var safeWorkspace = WebUtility.HtmlEncode(workspaceName);
-
-        string subject;
-        string body;
+        var values = new Dictionary<string, string>
+        {
+            ["name"] = recipientName,
+            ["studio"] = workspaceName,
+            ["role"] = role
+        };
         if (inviteOtp is not null)
         {
-            subject = $"[PanelForge] Bạn được mời tham gia Studio {workspaceName}";
-            body = $@"
-            <h3>Xin chào {safeName},</h3>
-            <p>Bạn được mời tham gia Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
-            <p>Một tài khoản đã được tạo cho email này. Để kích hoạt, hãy mở trang <em>Đặt lại mật khẩu</em> và nhập mã OTP:</p>
-            <p><strong><span style='font-size: 24px; color: #007bff;'>{inviteOtp}</span></strong></p>
-            <p>Mã có hiệu lực trong {(int)otpLifetime.TotalMinutes} phút. Nếu mã hết hạn, hãy dùng chức năng <em>Quên mật khẩu</em> với email này để nhận mã mới.</p>
-            <p>Nếu bạn không mong đợi lời mời này, hãy bỏ qua email.</p>
-            <br/>
-            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
-        }
-        else
-        {
-            subject = $"[PanelForge] Bạn đã được thêm vào Studio {workspaceName}";
-            body = $@"
-            <h3>Xin chào {safeName},</h3>
-            <p>Bạn đã được thêm vào Studio <strong>{safeWorkspace}</strong> trên PanelForge với vai trò <strong>{role}</strong>.</p>
-            <p>Đăng nhập để xem Studio trong mục <em>Your Workspaces</em>.</p>
-            <br/>
-            <p>Trân trọng,<br/>PanelForge Studio Team</p>";
+            values["code"] = inviteOtp;
+            values["validFor"] = ValidityText(otpLifetime);
         }
 
-        return SendEmailAsync(toEmail, subject, body, cancellationToken);
+        return SendTemplateAsync(
+            toEmail,
+            inviteOtp is not null ? EmailTemplateCatalog.StudioInviteNewAccount : EmailTemplateCatalog.StudioInviteExistingAccount,
+            values,
+            cancellationToken);
+    }
+
+    /// <summary>Mẫu Admin sửa trong app (bản mới nhất của loại email) được ưu tiên; chưa sửa thì dùng mẫu mặc định.</summary>
+    private async Task<bool> SendTemplateAsync(
+        string toEmail, string templateKey, Dictionary<string, string> values, CancellationToken ct)
+    {
+        var definition = EmailTemplateCatalog.Find(templateKey)
+                         ?? throw new InvalidOperationException($"Chưa khai báo mẫu email '{templateKey}'.");
+
+        var saved = await _db.PlatformEmailTemplates.AsNoTracking()
+            .Where(t => t.TemplateKey == templateKey && !t.IsDeleted)
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new { t.Subject, t.BodyHtml })
+            .FirstOrDefaultAsync(ct);
+
+        var (subject, body) = EmailTemplateCatalog.Render(
+            saved?.Subject ?? definition.DefaultSubject, saved?.BodyHtml ?? definition.DefaultBodyHtml, values);
+        return await SendEmailAsync(toEmail, subject, body, ct);
     }
 }
