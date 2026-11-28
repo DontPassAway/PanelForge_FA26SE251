@@ -46,10 +46,13 @@ public static class LetteringWarningRules
                 text = (e.RenderedText ?? e.Content)?.Trim();
             }
 
-            var limit = LetteringLimits.ForElement(e.Width, e.Height);
+            // Chữ tự thu nhỏ tới cỡ tối thiểu, nên chỉ tính tràn ở cỡ đó
+            var shape = e.Style?.BalloonShape ?? LetteringLimits.DefaultShape(e.ElementType);
+            var limit = LetteringLimits.ForElement(
+                e.Width, e.Height, shape, LetteringLimits.MinFontPx, e.Style?.LineHeight ?? LetteringLimits.LineHeightEm);
             if (!string.IsNullOrEmpty(text) && text.Length > limit)
                 warnings.Add(new(e.ElementId, TextOverflow,
-                    $"Chữ {(string.IsNullOrEmpty(lang) ? "" : $"[{lang}] ")}dài {text.Length} ký tự, ước lượng hộp chỉ chứa khoảng {limit}. Hãy phóng to hộp hoặc rút gọn thoại.",
+                    $"Chữ {(string.IsNullOrEmpty(lang) ? "" : $"[{lang}] ")}dài {text.Length} ký tự, kể cả thu nhỏ tới {LetteringLimits.MinFontPx}px bóng chỉ chứa khoảng {limit}. Hãy phóng to bóng hoặc rút gọn thoại.",
                     Acknowledged: e.OverflowAckReason is not null, AcknowledgedReason: e.OverflowAckReason));
 
             foreach (var r in regions.Where(r => Intersects(e, r)))
