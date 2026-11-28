@@ -19,6 +19,7 @@ using PanelForge.Application.Features.TaskGrid.Commands.ResolveStageTaskImpact;
 using PanelForge.Application.Features.TaskGrid.Commands.StartStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.UnassignStageTasks;
 using PanelForge.Application.Features.TaskGrid.Commands.RollbackToPencil;
+using PanelForge.Application.Features.TaskGrid.Commands.AcknowledgeBalloonCheck;
 using PanelForge.Application.Features.TaskGrid.Commands.SubmitStageTasks;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -890,7 +891,7 @@ public class TaskGridHandlerTests
     // ---- BR-27.1 Self-Rollback Ink → Pencil ----
 
     private static Task<Result<ReopenStageTaskResultDto>> Rollback(Fixture f, StageTask cell, Guid userId, string reason = "Sai phối cảnh") =>
-        new RollbackToPencilCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, cell.Id, userId, reason), default);
+        new RollbackToPencilCommandHandler(f.Db.Object, f.PageRepo.Object).Handle(new(f.Chapter.Id, cell.Id, userId, reason), default);
 
     [Fact]
     public async Task RollbackToPencil_ArtistReopensOwnPencil_InkWaitsAgain_LetteringKeepsWorking_LettererIsReminded()
@@ -941,6 +942,46 @@ public class TaskGridHandlerTests
 
         (await Rollback(f, f.Cell(f.Pencil, 0), f.ArtistId)).ErrorCode.Should().Be(ResultErrorCodes.Conflict);
         f.Cell(f.Pencil, 0).Status.Should().Be(StageTaskStatus.Approved);
+    }
+
+    private static Task<Result<BalloonCheckAckDto>> AckBalloons(Fixture f, int pageIndex, Guid userId) =>
+        new AcknowledgeBalloonCheckCommandHandler(f.Db.Object).Handle(new(f.Chapter.Id, f.Pages[pageIndex].Id, userId), default);
+
+    /// <summary>ART-06: quay lại Pencil bật cờ Check Balloon Fit trên khung có bóng; người làm chữ phải xác nhận trước khi nộp.</summary>
+    [Fact]
+    public async Task RollbackToPencil_FlagsPanelsWithBalloons_BlocksLetteringSubmitUntilAcknowledged()
+    {
+        var f = new Fixture();
+        var (pencil, _, lettering) = await PencilDoneInkAndLetteringStarted(f);
+        var page = f.Pages[0];
+        var panel = f.Panels.Single(p => p.PageId == page.Id);
+        page.AddElement("SPEECH_BALLOON", 10, 10, 100, 60, 1, f.LettererId, content: "Hi", panelId: panel.Id);
+        f.PageRepo.Setup(r => r.GetAsync(page.Id, It.IsAny<CancellationToken>())).ReturnsAsync(page);
+
+        (await Rollback(f, pencil, f.ArtistId)).IsSuccess.Should().BeTrue();
+        panel.BalloonCheckRequestedAt.Should().NotBeNull();
+        f.Panels.Single(p => p.PageId == f.Pages[1].Id).BalloonCheckRequestedAt.Should().BeNull("trang khác không đổi");
+
+        (await f.Submit(f.LettererId, lettering)).ErrorMessage.Should().Contain("Check Balloon Fit");
+        (await AckBalloons(f, 0, f.EditorId)).ErrorCode.Should().Be(ResultErrorCodes.Forbidden);
+        (await AckBalloons(f, 0, f.LettererId)).Value!.Cleared.Should().Be(1);
+        panel.BalloonCheckRequestedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Approve_PageWithPendingBalloonCheck_IsConflict_UntilAcknowledged()
+    {
+        var f = new Fixture();
+        var color = await f.SubmitColorBothPages();
+        f.Panels.Single(p => p.PageId == f.Pages[0].Id).RequestBalloonCheck();
+        var approve = new ApproveStageTaskCommandHandler(f.Db.Object);
+
+        var blocked = await approve.Handle(new(f.Chapter.Id, color[0].Id, f.EditorId), default);
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("Check Balloon Fit");
+
+        (await AckBalloons(f, 0, f.ArtistId)).IsSuccess.Should().BeTrue();
+        (await approve.Handle(new(f.Chapter.Id, color[0].Id, f.EditorId), default)).IsSuccess.Should().BeTrue();
     }
 
     [Fact]

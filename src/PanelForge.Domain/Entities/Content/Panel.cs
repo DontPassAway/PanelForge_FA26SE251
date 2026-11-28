@@ -22,6 +22,13 @@ public class Panel : BaseEntity
     /// </summary>
     public int Version { get; private set; }
 
+    /// <summary>
+    /// ART-06 / BR-27.2 ⚠️ Check Balloon Fit: tranh dưới bóng thoại của khung vừa đổi (Ink/Color mới, Artist quay lại Pencil,
+    /// Editor trả lỗi lớp tranh) nên người làm chữ phải xem lại vị trí bóng. null = không cần kiểm tra.
+    /// Không tăng <see cref="Version"/>: cờ không phải sửa bố cục, không được làm lần sửa khung của người khác thành xung đột.
+    /// </summary>
+    public DateTime? BalloonCheckRequestedAt { get; private set; }
+
     public Page Page { get; private set; } = default!;
     public Scene? Scene { get; private set; }
     public PipelineStage? CurrentStage { get; private set; }
@@ -54,6 +61,10 @@ public class Panel : BaseEntity
             Direction = trimmedDirection
         };
     }
+
+    public void RequestBalloonCheck() => BalloonCheckRequestedAt = DateTime.UtcNow;
+
+    public void AcknowledgeBalloonCheck() => BalloonCheckRequestedAt = null;
 
     public void UpdateDirection(string? direction)
     {

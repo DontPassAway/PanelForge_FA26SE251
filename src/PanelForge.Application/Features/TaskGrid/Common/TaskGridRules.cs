@@ -9,6 +9,12 @@ namespace PanelForge.Application.Features.TaskGrid.Common;
 internal static class TaskGridRules
 {
     /// <summary>Công đoạn (đang bật và đã tắt) của pipeline Series, theo thứ tự.</summary>
+    /// <summary>Công đoạn vẽ sau công đoạn vẽ đầu tiên (Ink, Color…): trước nó đã có công đoạn Artist đang bật cùng quy trình.</summary>
+    public static bool IsLaterArtStage(PipelineStage stage, IEnumerable<PipelineStage> stages) =>
+        stage.AllowedRole == WorkspaceRole.Artist && stages.Any(s =>
+            s.IsEnabled && s.AllowedRole == WorkspaceRole.Artist && s.Id != stage.Id &&
+            s.PipelineDefinitionId == stage.PipelineDefinitionId && s.StageOrder < stage.StageOrder);
+
     public static async Task<List<PipelineStage>> LoadStagesAsync(IPanelForgeDbContext db, Guid seriesId, CancellationToken ct)
     {
         var pipelineIds = await db.PipelineDefinitions.AsNoTracking()

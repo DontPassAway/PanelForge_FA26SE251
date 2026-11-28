@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Application.Features.TaskGrid.Models;
 using PanelForge.Domain.Entities.Workflow;
@@ -22,8 +23,13 @@ public sealed record RollbackToPencilCommand(Guid ChapterId, Guid TaskId, Guid U
 public sealed class RollbackToPencilCommandHandler : IRequestHandler<RollbackToPencilCommand, Result<ReopenStageTaskResultDto>>
 {
     private readonly IPanelForgeDbContext _db;
+    private readonly IPageRepository _pages;
 
-    public RollbackToPencilCommandHandler(IPanelForgeDbContext db) => _db = db;
+    public RollbackToPencilCommandHandler(IPanelForgeDbContext db, IPageRepository pages)
+    {
+        _db = db;
+        _pages = pages;
+    }
 
     public async Task<Result<ReopenStageTaskResultDto>> Handle(RollbackToPencilCommand cmd, CancellationToken ct)
     {
@@ -45,7 +51,7 @@ public sealed class RollbackToPencilCommandHandler : IRequestHandler<RollbackToP
         var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
         var stage = stages.FirstOrDefault(s => s.Id == pencil.PipelineStageId);
         if (stage is null || pencil.PageId is null || stage.AllowedRole != WorkspaceRole.Artist
-            || StageDependencies.DirectPrerequisites(stage, stages).Count > 0)
+            || TaskGridRules.IsLaterArtStage(stage, stages))
             return Fail("Chỉ quay lại được công đoạn vẽ đầu tiên (Pencil) của một trang.", ResultErrorCodes.Conflict);
 
         var lots = await _db.StageTaskLots.AsNoTracking().Where(l => l.ChapterId == chapter.Id)
@@ -96,6 +102,9 @@ public sealed class RollbackToPencilCommandHandler : IRequestHandler<RollbackToP
         foreach (var letterer in letterers)
             _db.Notifications.Add(Notification.Create(letterer, NotificationType.AssignmentUpdated,
                 "Kiểm tra lại vị trí bóng thoại", message, pencil.Id, chapter.Id));
+
+        // ART-06: Pencil sẽ đổi nên bóng thoại đã đặt trên trang cần được kiểm tra lại
+        await BalloonFitRules.FlagAsync(_db, _pages, pencil.PageId.Value, null, ct);
 
         await TaskGridRules.RefreshLotsAsync(_db, chapterTasks.Where(t => t.Id == pencil.Id || downstream.Contains(t)).Select(t => t.LotId),
             [pencil, .. downstream], ct);

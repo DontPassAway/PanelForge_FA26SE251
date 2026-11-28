@@ -12,7 +12,8 @@ public sealed record PanelDto(
     string? CreatedBy,
     Guid? SceneId = null,
     int Version = 0,   // BR-11: gửi lại làm expectedVersion khi sửa
-    string? Direction = null
+    string? Direction = null,
+    bool BalloonCheckRequired = false   // ART-06: tranh dưới bóng thoại vừa đổi, cần kiểm tra lại vị trí bóng
 );
 
 public sealed record PageLayoutDto(

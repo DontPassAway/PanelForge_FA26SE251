@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.API.Common.Attributes;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.TaskGrid.Commands.AcknowledgeBalloonCheck;
 using PanelForge.Application.Features.TaskGrid.Commands.ApproveStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.AssignStageTaskLots;
 using PanelForge.Application.Features.TaskGrid.Commands.GenerateStageTasks;
@@ -128,6 +129,13 @@ public sealed class TaskGridController : ControllerBase
     [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> RollbackToPencil(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
         ToResult(await _mediator.Send(new RollbackToPencilCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
+
+    /// <summary>POST /pages/{pageId}/balloon-check/ack — người làm tranh/chữ của trang hoặc Producer gỡ cờ Check Balloon Fit (ART-06).</summary>
+    [HttpPost("pages/{pageId:guid}/balloon-check/ack")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Artist, WorkspaceRole.Letterer)]
+    [ProducesResponseType(typeof(BalloonCheckAckDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AcknowledgeBalloonCheck(Guid chapterId, Guid pageId, [FromBody] AcknowledgeBalloonCheckRequest? body, CancellationToken ct) =>
+        ToResult(await _mediator.Send(new AcknowledgeBalloonCheckCommand(chapterId, pageId, CurrentUserId, body?.PanelId), ct));
 
     /// <summary>POST /tasks/{taskId}/resolve-impact — Producer/Editor xử lý Impact Review (keep / rework).</summary>
     [HttpPost("tasks/{taskId:guid}/resolve-impact")]

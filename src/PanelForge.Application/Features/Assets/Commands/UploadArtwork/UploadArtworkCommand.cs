@@ -6,6 +6,8 @@ using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
 using PanelForge.Application.Features.Assets.Models;
 using PanelForge.Application.Features.Assignments.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
+using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
@@ -33,11 +35,13 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
 {
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
+    private readonly IPageRepository _pages;
 
-    public UploadArtworkCommandHandler(IPanelForgeDbContext db, IAssetStorage storage)
+    public UploadArtworkCommandHandler(IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pages)
     {
         _db = db;
         _storage = storage;
+        _pages = pages;
     }
 
     public async Task<Result<AssetReferenceDto>> Handle(UploadArtworkCommand cmd, CancellationToken ct)
@@ -228,6 +232,9 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         reference.CreatedBy = cmd.UserId.ToString();
 
         _db.AssetReferences.Add(reference);
+        // ART-06: tranh nét/màu mới (công đoạn vẽ sau Pencil) có thể làm lệch bóng thoại đã đặt → cờ Check Balloon Fit
+        if (await IsLaterArtStageAsync(chapter.SeriesId, stageId, ct))
+            await BalloonFitRules.FlagAsync(_db, _pages, cmd.PageId, cmd.PanelId, ct);
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -240,6 +247,14 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         }
 
         return Result<AssetReferenceDto>.Success(AssetReferenceDto.From(reference, asset, reused));
+    }
+
+    private async Task<bool> IsLaterArtStageAsync(Guid seriesId, Guid stageId, CancellationToken ct)
+    {
+        if (stageId == Guid.Empty) return false;
+        var stages = await TaskGridRules.LoadStagesAsync(_db, seriesId, ct);
+        var stage = stages.FirstOrDefault(s => s.Id == stageId);
+        return stage is not null && TaskGridRules.IsLaterArtStage(stage, stages);
     }
 
     /// <summary>

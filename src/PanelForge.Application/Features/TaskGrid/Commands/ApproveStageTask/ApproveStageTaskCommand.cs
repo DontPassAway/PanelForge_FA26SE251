@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.CanvasElements.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Application.Features.TaskGrid.Common;
@@ -46,6 +47,8 @@ public sealed class ApproveStageTaskCommandHandler : IRequestHandler<ApproveStag
         var stages = await TaskGridRules.LoadStagesAsync(_db, chapter.SeriesId, ct);
         if (TaskGridRules.AwaitingSiblingBranch(task, stages, chapterTasks) is { } waiting)
             return Fail($"Gate 2 duyệt trang ghép: chờ công đoạn '{waiting}' của trang này nộp xong.", ResultErrorCodes.Conflict);
+        if (task.PageId is { } pageId && await BalloonFitRules.PendingReasonAsync(_db, pageId, ct) is { } balloon)
+            return Fail(balloon, ResultErrorCodes.Conflict);
 
         try
         {

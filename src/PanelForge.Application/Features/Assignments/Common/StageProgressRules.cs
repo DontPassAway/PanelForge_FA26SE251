@@ -237,6 +237,9 @@ internal static class StageProgressRules
             var page = await pages.GetAsync(pageId, ct);
             if (page is null) continue;
 
+            // ART-06: tranh dưới bóng vừa đổi thì người làm chữ phải xác nhận đã kiểm tra lại vị trí bóng trước khi nộp
+            if (await BalloonFitRules.PendingReasonAsync(db, pageId, ct) is { } balloon) return balloon;
+
             var analysis = await LetteringPageAnalysis.AnalyzeAsync(db, page, ct);
             if (analysis.SubmissionBlockReason(page.PageNumber) is { } reason) return reason;
 
