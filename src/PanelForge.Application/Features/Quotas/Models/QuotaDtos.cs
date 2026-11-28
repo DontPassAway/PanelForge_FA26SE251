@@ -87,5 +87,18 @@ public sealed record StorageReconcileWorkspaceDto(
     long DerivedBytes,
     int MissingFiles);
 
-/// <summary>File không còn bản ghi nào tham chiếu. WorkspaceId null = không xác định được Studio từ khoá.</summary>
-public sealed record StorageOrphanFileDto(string Key, long SizeBytes, Guid? WorkspaceId);
+/// <summary>File không còn bản ghi nào tham chiếu. WorkspaceId null = không xác định được Studio từ khoá hoặc Studio đã xoá.</summary>
+public sealed record StorageOrphanFileDto(string Key, long SizeBytes, Guid? WorkspaceId, DateTime LastModifiedUtc);
+
+/// <summary>
+/// Kết quả xoá file mồ côi (OPS-22). Chỉ xoá file thuộc Studio đang hoạt động và cũ hơn <see cref="MinAgeDays"/> ngày;
+/// file chưa xác định Studio và file vừa được dùng lại trong lúc quét thì giữ. FailedFiles = kho báo lỗi khi xoá.
+/// </summary>
+public sealed record DeleteOrphanFilesResultDto(
+    int DeletedFiles,
+    long DeletedBytes,
+    int SkippedRecentFiles,
+    int SkippedUnattributedFiles,
+    int SkippedReferencedFiles,
+    int FailedFiles,
+    int MinAgeDays);

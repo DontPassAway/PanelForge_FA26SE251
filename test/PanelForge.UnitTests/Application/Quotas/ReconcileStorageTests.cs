@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Quotas.Commands.DeleteOrphanFiles;
 using PanelForge.Application.Features.Quotas.Commands.ReconcileStorage;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Bible;
@@ -19,13 +20,22 @@ public class ReconcileStorageTests
 {
     private sealed class ListOnlyStorage(Dictionary<string, long> files) : IAssetStorage
     {
+        /// <summary>Ngày sửa của từng file; mặc định 30 ngày trước (đủ cũ để được xoá).</summary>
+        public Dictionary<string, DateTime> Modified { get; } = [];
+        public List<string> Deleted { get; } = [];
+        public Task DeleteAsync(string key, CancellationToken ct = default)
+        {
+            Deleted.Add(key);
+            files.Remove(key);
+            return Task.CompletedTask;
+        }
         public Task SaveAsync(string key, byte[] content, AssetObjectInfo? info, CancellationToken ct = default)
             => throw new InvalidOperationException("Đối soát không được ghi file.");
         public Task<Stream?> OpenReadAsync(string key, CancellationToken ct = default) => Task.FromResult<Stream?>(null);
         public async IAsyncEnumerable<StoredObject> ListAsync(string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            foreach (var (key, size) in files.Where(f => f.Key.StartsWith(prefix, StringComparison.Ordinal)))
-                yield return new StoredObject(key, size);
+            foreach (var (key, size) in files.Where(f => f.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+                yield return new StoredObject(key, size, Modified.GetValueOrDefault(key, DateTime.UtcNow.AddDays(-30)));
             await Task.CompletedTask;
         }
     }
@@ -125,5 +135,49 @@ public class ReconcileStorageTests
         var row = result.Value!.Workspaces.Single();
         row.ComputedBytes.Should().Be(135);
         row.OrphanFiles.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task DeleteOrphans_RemovesOnlyOldFilesOfActiveStudios_AndAudits_OPS22()
+    {
+        var (db, ws, files) = await SeedAsync();
+        await using var _ = db;
+        var storage = new ListOnlyStorage(files);
+        var failedUpload = $"{ws.Id:N}/ee/{Sha('e')}";
+        storage.Modified[failedUpload] = DateTime.UtcNow.AddHours(-1); // upload có thể đang chờ ghi DB
+        var admin = User.Create("admin@test.com", "Admin", role: SystemRole.Admin);
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+
+        var result = await new DeleteOrphanFilesCommandHandler(db, storage)
+            .Handle(new DeleteOrphanFilesCommand(admin.Id), CancellationToken.None);
+
+        var series = await db.Series.SingleAsync();
+        storage.Deleted.Should().Equal($"covers/{series.Id:N}/{Sha('d')}");
+        result.Value!.DeletedFiles.Should().Be(1);
+        result.Value.DeletedBytes.Should().Be(30);
+        result.Value.SkippedRecentFiles.Should().Be(1);
+        result.Value.SkippedUnattributedFiles.Should().Be(1, "file không rõ Studio có thể của môi trường khác");
+        files.Should().ContainKey(failedUpload);
+        files.Should().ContainKey($"covers/{series.Id:N}/{Sha('c')}");
+        var audit = await db.AuditLogs.SingleAsync(a => a.Action == "DELETE_ORPHAN_FILES");
+        audit.WorkspaceId.Should().Be(ws.Id);
+        audit.UserId.Should().Be(admin.Id);
+    }
+
+    [Fact]
+    public async Task DeleteOrphans_KeepsFilesOfSoftDeletedStudio_OPS22()
+    {
+        var (db, ws, files) = await SeedAsync();
+        await using var _ = db;
+        ws.IsDeleted = true;
+        await db.SaveChangesAsync();
+        var storage = new ListOnlyStorage(files);
+
+        var result = await new DeleteOrphanFilesCommandHandler(db, storage)
+            .Handle(new DeleteOrphanFilesCommand(Guid.NewGuid()), CancellationToken.None);
+
+        result.Value!.DeletedFiles.Should().Be(0);
+        storage.Deleted.Should().BeEmpty();
     }
 }

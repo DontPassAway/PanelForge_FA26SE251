@@ -21,8 +21,13 @@ public class AssetStorageMigratorTests : IDisposable
         public async IAsyncEnumerable<StoredObject> ListAsync(string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             foreach (var (key, bytes) in Items.Where(i => i.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
-                yield return new StoredObject(key, bytes.Length);
+                yield return new StoredObject(key, bytes.Length, DateTime.UtcNow);
             await Task.CompletedTask;
+        }
+        public Task DeleteAsync(string key, CancellationToken ct = default)
+        {
+            Items.Remove(key);
+            return Task.CompletedTask;
         }
     }
 

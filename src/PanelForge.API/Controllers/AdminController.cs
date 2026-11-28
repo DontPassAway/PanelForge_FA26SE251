@@ -64,6 +64,7 @@ using PanelForge.Application.Features.Quotas.Commands.RejectQuotaIncreaseRequest
 using PanelForge.Application.Features.Quotas.Queries.GetAdminResources;
 using PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResources;
 using PanelForge.Application.Features.Quotas.Commands.ReconcileStorage;
+using PanelForge.Application.Features.Quotas.Commands.DeleteOrphanFiles;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.AiUsage.Models;
 using PanelForge.Application.Features.Audit.Models;
@@ -840,6 +841,19 @@ public class AdminController : ControllerBase
         var result = await _mediator.Send(new ReconcileStorageCommand(apply), cancellationToken);
         // 409 chỉ trả message: lời nhắc "chạy lại" cụ thể hơn câu dịch chung của mã CONFLICT ở FE.
         if (result.ErrorCode == ResultErrorCodes.Conflict) return Conflict(new { message = result.ErrorMessage });
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/admin/storage/orphans/delete — xoá file mồ côi đã cũ hơn 7 ngày của Studio đang hoạt động (OPS-22).
+    /// Không khôi phục được; FE bắt Admin xác nhận. File không rõ chủ và bản ghi lịch sử không bị đụng.
+    /// </summary>
+    [HttpPost("storage/orphans/delete")]
+    [ProducesResponseType(typeof(DeleteOrphanFilesResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DeleteOrphanFiles(CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new DeleteOrphanFilesCommand(adminId), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

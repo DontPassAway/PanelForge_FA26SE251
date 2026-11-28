@@ -112,10 +112,13 @@ public sealed class R2AssetStorage : IAssetStorage
         {
             response = await _s3.ListObjectsV2Async(request, cancellationToken);
             foreach (var obj in response.S3Objects ?? [])
-                yield return new StoredObject(obj.Key, obj.Size ?? 0);
+                yield return new StoredObject(obj.Key, obj.Size ?? 0, (obj.LastModified ?? DateTime.UtcNow).ToUniversalTime());
             request.ContinuationToken = response.NextContinuationToken;
         } while (response.IsTruncated == true);
     }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
+        => _s3.DeleteObjectAsync(_bucket, key, cancellationToken);
 
     private async Task<bool> ExistsAsync(string key, CancellationToken cancellationToken)
     {

@@ -59,9 +59,17 @@ public sealed class LocalAssetStorage : IAssetStorage
             if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) continue; // file đang ghi dở
             var key = Path.GetRelativePath(_root, path).Replace('\\', '/');
             if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
-            yield return new StoredObject(key, new FileInfo(path).Length);
+            var info = new FileInfo(path);
+            yield return new StoredObject(key, info.Length, info.LastWriteTimeUtc);
         }
         await Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
+    {
+        var path = Resolve(key);
+        if (File.Exists(path)) File.Delete(path);
+        return Task.CompletedTask;
     }
 
     private string Resolve(string key)
