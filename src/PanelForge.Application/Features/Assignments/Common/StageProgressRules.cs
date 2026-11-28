@@ -209,6 +209,22 @@ internal static class StageProgressRules
     }
 
     /// <summary>
+    /// ART-03: nộp công đoạn vẽ đầu tiên (Pencil) khi mọi dòng thoại của các phân cảnh có mặt trên trang đã gắn vào một Panel.
+    /// Phân cảnh có mặt trên trang = phân cảnh của các Panel trang đó; dòng đã gắn Panel ở trang khác vẫn tính là đã phủ.
+    /// </summary>
+    public static async Task<string?> ScriptCoverageBlockReasonAsync(
+        IPanelForgeDbContext db, IReadOnlyList<Panel> pagePanels, CancellationToken ct)
+    {
+        var sceneIds = pagePanels.Where(p => p.SceneId != null).Select(p => p.SceneId!.Value).Distinct().ToList();
+        if (sceneIds.Count == 0) return null;
+        var uncovered = await db.ScriptLines.AsNoTracking().CountAsync(l =>
+            sceneIds.Contains(l.SceneId) && l.PanelId == null && l.DialogueText != null && l.DialogueText.Trim() != "", ct);
+        return uncovered > 0
+            ? $"Còn {uncovered} dòng thoại của phân cảnh trên trang chưa gắn vào khung nào (cần phủ 100% kịch bản trước khi nộp Pencil)."
+            : null;
+    }
+
+    /// <summary>
     /// Cổng nộp Lettering (BR-05, BR-20): mọi Page việc bao phủ không được còn chữ lỗi thời so với script, và mọi cảnh báo
     /// tràn chữ phải đã xác nhận kèm lý do. Thứ tự đọc / đè Key Artwork Region chỉ cảnh báo, không chặn. Trả lỗi hoặc null.
     /// </summary>

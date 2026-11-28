@@ -687,6 +687,28 @@ public class TaskGridHandlerTests
         pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
+    /// <summary>ART-03: nộp Pencil cần mọi dòng thoại của phân cảnh trên trang đã gắn khung; Ink thì không xét lại.</summary>
+    [Fact]
+    public async Task Submit_Pencil_WithUnanchoredDialogueOfSceneOnPage_IsBlocked()
+    {
+        var f = new Fixture();
+        await f.AssignPageOne();
+        var sceneId = Guid.NewGuid();
+        var panel = f.Panels.Single(p => p.PageId == f.Pages[0].Id);
+        panel.AssignToScene(sceneId);
+        var line = ScriptLine.Create(sceneId, 1, dialogueText: "Chạy đi!");
+        f.Db.Setup(d => d.ScriptLines).Returns(DbSetMockHelper.CreateDbSetMock(new List<ScriptLine> { line }));
+        var pencil = f.Cell(f.Pencil, 0);
+        await f.Start(pencil, f.ArtistId);
+
+        var blocked = await f.Submit(f.ArtistId, pencil);
+        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
+        blocked.ErrorMessage.Should().Contain("dòng thoại");
+
+        line.AssignToPanel(panel.Id);
+        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue();
+    }
+
     /// <summary>BR-31: Artist tự đặt chữ thì công đoạn Lettering là lớp chữ vector, không bắt tải ảnh như Pencil/Ink.</summary>
     [Fact]
     public async Task Submit_ArtistLetteringCell_DoesNotRequireArtwork_BR31()
