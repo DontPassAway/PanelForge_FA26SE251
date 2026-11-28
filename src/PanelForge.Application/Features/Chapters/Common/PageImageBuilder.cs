@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Chapters.Common;
 
@@ -17,7 +18,7 @@ internal static class PageImageBuilder
     public static async Task<ExportPageImage?> BuildAsync(
         IPanelForgeDbContext db, IAssetStorage storage, IPageRepository pageRepository, IPageLetteringCompositor compositor,
         Guid pageId, IReadOnlyCollection<Guid> assetReferenceIds, CancellationToken ct, string? languageCode = null,
-        long? canvasStreamVersion = null)
+        long? canvasStreamVersion = null, SnapshotPage? pinned = null)
     {
         // Snapshot có thể trỏ tới trang/Panel đã xoá sau khi duyệt: bỏ bộ lọc xoá mềm để dựng lại đúng bản đã duyệt
         var page = await db.Pages.IgnoreQueryFilters().AsNoTracking().Where(p => p.Id == pageId)
@@ -34,7 +35,10 @@ internal static class PageImageBuilder
         // BR-01/BR-12/BR-17: dựng đúng bản đã duyệt. ChapterSnapshot nào chứa đúng bộ artwork này của trang thì lấy khổ trang,
         // toạ độ khung và version canvas đã ghim trong đó — mở lại chương rồi sửa bố cục / lớp chữ không lọt vào link xem
         // thử, job xuất hay Reader của bản cũ. Không có snapshot (dữ liệu cũ / chương chưa duyệt) thì dùng dữ liệu sống.
-        var pin = await FindPinAsync(db, page.ChapterId, pageId, refs.Select(r => r.Id).ToHashSet(), ct);
+        // REL-08: người gọi đã có trang trong snapshot của đúng ấn bản (Reader) thì ghim theo nó; còn lại tìm trong snapshot bản gốc
+        var pin = pinned is { WidthPx: not null, HeightPx: not null }
+            ? pinned
+            : await FindPinAsync(db, page.ChapterId, pageId, refs.Select(r => r.Id).ToHashSet(), ct);
         int width = pin?.WidthPx ?? (page.WidthPx > 0 ? page.WidthPx : 1200);
         int height = pin?.HeightPx ?? (page.HeightPx > 0 ? page.HeightPx : 1800);
 
@@ -81,14 +85,17 @@ internal static class PageImageBuilder
     }
 
     /// <summary>
-    /// Trang trong ChapterSnapshot mới nhất có đúng bộ artwork <paramref name="pageRefIds"/> và đủ dữ liệu ghim (khổ trang,
-    /// toạ độ khung). Null nếu không có — snapshot cũ chưa chụp toạ độ cũng trả null để dùng dữ liệu sống.
+    /// Trang trong ChapterSnapshot BẢN GỐC mới nhất có đúng bộ artwork <paramref name="pageRefIds"/> và đủ dữ liệu ghim (khổ trang,
+    /// toạ độ khung). Null nếu không có — snapshot cũ chưa chụp toạ độ cũng trả null để dùng dữ liệu sống. REL-08: ấn bản dịch dùng
+    /// chung artwork với bản gốc, nên tính cả snapshot ấn bản thì xuất file / xem thử bản gốc ghim nhầm version canvas của ấn bản
+    /// duyệt sau (lớp chữ sửa sau lần duyệt gốc lọt vào). Snapshot cấp chương luôn mang <see cref="ContentLanguages.Original"/>.
     /// </summary>
     // ponytail: đọc và giải mã manifest của mọi snapshot chương cho mỗi trang; chương có nhiều lần duyệt lại thì cache theo chapterId.
     internal static async Task<SnapshotPage?> FindPinAsync(
         IPanelForgeDbContext db, Guid chapterId, Guid pageId, IReadOnlySet<Guid> pageRefIds, CancellationToken ct)
     {
-        var manifests = await db.ChapterSnapshots.AsNoTracking().Where(s => s.ChapterId == chapterId)
+        var manifests = await db.ChapterSnapshots.AsNoTracking()
+            .Where(s => s.ChapterId == chapterId && s.LanguageCode == ContentLanguages.Original)
             .OrderByDescending(s => s.SnapshotNumber).Select(s => s.ManifestJson).ToListAsync(ct);
         foreach (var json in manifests)
         {
