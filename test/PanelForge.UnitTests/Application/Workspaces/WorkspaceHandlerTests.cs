@@ -214,7 +214,7 @@ public class WorkspaceHandlerTests
         await db.SaveChangesAsync();
 
         var result = await new CreateWorkspaceCommandHandler(db)
-            .Handle(new CreateWorkspaceCommand(user.Id, "Studio", 0), CancellationToken.None);
+            .Handle(new CreateWorkspaceCommand(user.Id, "Studio"), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ResultErrorCodes.Unauthorized);
     }
@@ -229,7 +229,7 @@ public class WorkspaceHandlerTests
         await db.SaveChangesAsync();
 
         var result = await new CreateWorkspaceCommandHandler(db)
-            .Handle(new CreateWorkspaceCommand(user.Id, "  My Studio ", 0), CancellationToken.None);
+            .Handle(new CreateWorkspaceCommand(user.Id, "  My Studio "), CancellationToken.None);
 
         result.Value!.IsOwner.Should().BeTrue();
         result.Value.CurrentUserRole.Should().Be(WorkspaceRole.Producer);

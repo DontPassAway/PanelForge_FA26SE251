@@ -34,6 +34,9 @@ using PanelForge.API.Common;
 using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceReaderStats;
+using PanelForge.Application.Features.Resources.Commands.SubmitResourceRequest;
+using PanelForge.Application.Features.Resources.Models;
+using PanelForge.Application.Features.Resources.Queries.GetResourceRequests;
 
 namespace PanelForge.API.Controllers;
 
@@ -57,7 +60,7 @@ public class WorkspacesController : ControllerBase
             return UnknownUser();
 
         var result = await _mediator.Send(
-            new CreateWorkspaceCommand(userId, request.Name, request.StorageQuotaBytes), cancellationToken);
+            new CreateWorkspaceCommand(userId, request.Name), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetWorkspaceById), new { id = result.Value!.Id }, result.Value)
             : ToError(result);
@@ -335,6 +338,7 @@ public class WorkspacesController : ControllerBase
     /// Producer xem lượt đọc / số người đọc theo bộ truyện và chương (không kèm doanh thu — thuộc Publisher).
     /// </summary>
     [HttpGet("{id:guid}/reader-stats")]
+    [AllowAdminOversight]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [ProducesResponseType(typeof(WorkspaceReaderStatsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReaderStats(Guid id, CancellationToken cancellationToken)
@@ -458,6 +462,36 @@ public class WorkspacesController : ControllerBase
     /// UNAUTHORIZED → 401, FORBIDDEN → 403, NOT_FOUND → <paramref name="notFoundStatus"/>, còn lại → 400.
     /// Các endpoint thành viên trả 400 cho "không tồn tại" như hành vi trước đây.
     /// </summary>
+    /// <summary>
+    /// GET /api/workspaces/{id}/resource-requests — Producer xem yêu cầu tăng tài nguyên của Studio mình.
+    /// </summary>
+    [HttpGet("{id:guid}/resource-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<ResourceRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetResourceRequests(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetResourceRequestsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// POST /api/workspaces/{id}/resource-requests — Producer xin Admin tăng Storage/AI Quota (cấp phát, không thanh toán).
+    /// </summary>
+    [HttpPost("{id:guid}/resource-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    public async Task<IActionResult> SubmitResourceRequest(
+        Guid id, [FromBody] SubmitResourceRequestRequest request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } userId)
+            return UnknownUser();
+        var result = await _mediator.Send(new SubmitResourceRequestCommand(id, userId, request), cancellationToken);
+        if (result.IsSuccess) return StatusCode(StatusCodes.Status201Created, new { id = result.Value });
+        return result.ErrorCode == ResultErrorCodes.Conflict
+            ? Conflict(new { message = result.ErrorMessage, code = result.ErrorCode })
+            : ToError(result);
+    }
+
     private IActionResult ToError<T>(Result<T> result, int notFoundStatus = StatusCodes.Status404NotFound)
     {
         var body = new { message = result.ErrorMessage };

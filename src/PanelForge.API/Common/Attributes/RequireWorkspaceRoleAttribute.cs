@@ -143,9 +143,17 @@ public class RequireWorkspaceRoleFilter : IAsyncActionFilter
         bool isAdmin = user.IsInRole("Admin") ||
             user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && (c.Value == "Admin" || c.Value == "Administrator"));
 
+        // BR-07: Administrator không có quyền cấp Workspace (không sửa nội dung, không duyệt Gate, không phát hành).
+        // Chỉ được đọc các endpoint giám sát khai báo rõ [AllowAdminOversight].
         if (isAdmin)
         {
-            await next();
+            var oversight = HttpMethods.IsGet(context.HttpContext.Request.Method)
+                && context.ActionDescriptor.EndpointMetadata.OfType<AllowAdminOversightAttribute>().Any();
+            if (oversight)
+                await next();
+            else
+                context.Result = new ObjectResult(new { message = "Administrator không thao tác trên dữ liệu sản xuất của Studio (BR-07)." })
+                    { StatusCode = StatusCodes.Status403Forbidden };
             return;
         }
 

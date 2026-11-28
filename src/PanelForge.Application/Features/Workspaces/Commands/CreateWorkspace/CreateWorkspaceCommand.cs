@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
+using PanelForge.Application.Features.Resources.Common;
 using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Domain.Entities.Identity;
@@ -11,9 +12,10 @@ namespace PanelForge.Application.Features.Workspaces.Commands.CreateWorkspace;
 
 /// <summary>
 /// POST /api/workspaces — tạo Studio. Chỉ User có CanCreateStudio (BR-22), không phải Admin (BR-07).
-/// Người tạo tự động là Producer trong workspace_members.
+/// Người tạo tự động là Producer trong workspace_members. Quota Storage/AI lấy từ ResourcePolicy do Admin đặt;
+/// người tạo không tự chọn quota (trước đây client gửi StorageQuotaBytes, 0 = không giới hạn).
 /// </summary>
-public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name, long StorageQuotaBytes)
+public sealed record CreateWorkspaceCommand(Guid OwnerId, string Name)
     : IRequest<Result<WorkspaceDto>>;
 
 public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorkspaceCommand, Result<WorkspaceDto>>
@@ -34,10 +36,11 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
         if (!owner.CanCreateStudio)
             return Unauthorized("Bạn không có quyền tạo Studio. Vui lòng yêu cầu Administrator cấp quyền CanCreateStudio.");
 
+        var policy = await ResourceAllocation.GetPolicyAsync(_dbContext, cancellationToken);
         StudioWorkspace workspace;
         try
         {
-            workspace = StudioWorkspace.Create(command.Name, owner.Id, command.StorageQuotaBytes);
+            workspace = StudioWorkspace.Create(command.Name, owner.Id, policy.DefaultStorageQuotaBytes);
         }
         catch (ArgumentException ex)
         {
@@ -47,7 +50,7 @@ public sealed class CreateWorkspaceCommandHandler : IRequestHandler<CreateWorksp
         _dbContext.StudioWorkspaces.Add(workspace);
         _dbContext.WorkspaceMembers.Add(WorkspaceMember.Create(workspace.Id, owner.Id, WorkspaceRole.Producer));
         // TASK-355: Studio mới có sẵn cấu hình AI mặc định → dùng ngay API mặc định Admin đã đặt
-        _dbContext.WorkspaceAiConfigs.Add(WorkspaceAiConfig.Create(workspace.Id));
+        _dbContext.WorkspaceAiConfigs.Add(ResourceAllocation.NewAiConfig(workspace.Id, policy));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Result<WorkspaceDto>.Success(new WorkspaceDto(

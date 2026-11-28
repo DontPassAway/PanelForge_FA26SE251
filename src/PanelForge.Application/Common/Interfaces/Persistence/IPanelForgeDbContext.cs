@@ -19,6 +19,8 @@ public interface IPanelForgeDbContext
     DbSet<StudioWorkspace> StudioWorkspaces { get; }
     DbSet<WorkspaceMember> WorkspaceMembers { get; }
     DbSet<WorkspaceAutomationSettings> WorkspaceAutomationSettings { get; }
+    DbSet<ResourcePolicy> ResourcePolicies { get; }
+    DbSet<ResourceRequest> ResourceRequests { get; }
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }

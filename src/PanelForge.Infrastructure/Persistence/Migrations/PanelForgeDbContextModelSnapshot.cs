@@ -5956,6 +5956,163 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("submissions", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.ResourcePolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("DefaultAiEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("default_ai_enabled");
+
+                    b.Property<long>("DefaultMonthlyImageQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_monthly_image_quota");
+
+                    b.Property<long>("DefaultMonthlyTokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_monthly_token_quota");
+
+                    b.Property<long>("DefaultStorageQuotaBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_storage_quota_bytes");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("WarningThresholdPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("warning_threshold_percent");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("resource_policies", (string)null);
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.ResourceRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<long>("CurrentLimit")
+                        .HasColumnType("bigint")
+                        .HasColumnName("current_limit");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long>("RequestedLimit")
+                        .HasColumnType("bigint")
+                        .HasColumnName("requested_limit");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("resource_type");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "Status");
+
+                    b.ToTable("resource_requests", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7249,6 +7406,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.HasOne("PanelForge.Domain.Entities.Workflow.Assignment", null)
                         .WithMany()
                         .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.ResourceRequest", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
