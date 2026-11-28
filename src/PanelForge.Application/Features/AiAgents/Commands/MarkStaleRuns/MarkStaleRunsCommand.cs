@@ -43,7 +43,7 @@ public sealed class MarkStaleRunsCommandHandler : IRequestHandler<MarkStaleRunsC
             {
                 var tokens = run.TakeReservation();
                 var config = configs.FirstOrDefault(c => c.WorkspaceId == run.WorkspaceId);
-                if (config is not null && WorkspaceAiConfig.IsCountedThisMonth(config.LastResetAt, config.CreatedAt, DateTime.UtcNow))
+                if (config is not null && WorkspaceAiConfig.AreTokensCounted(config.IsPrepaidTokenBudget, config.LastResetAt, config.CreatedAt, DateTime.UtcNow))
                     config.SettleReservedTokens(tokens, 0);
             }
         }

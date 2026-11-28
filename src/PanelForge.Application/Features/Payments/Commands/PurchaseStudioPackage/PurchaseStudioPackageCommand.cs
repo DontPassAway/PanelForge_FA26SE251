@@ -4,6 +4,9 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Payments.Common;
 using PanelForge.Application.Features.Payments.Models;
+using PanelForge.Application.Features.Quotas.Common;
+using PanelForge.Application.Features.StudioResources.Common;
+using PanelForge.Application.Features.Workspaces.Models;
 using PanelForge.Domain.Entities.Audit;
 using PanelForge.Domain.Entities.Payments;
 using PanelForge.Domain.Enums;
@@ -14,6 +17,8 @@ namespace PanelForge.Application.Features.Payments.Commands.PurchaseStudioPackag
 /// D11: độc giả mua gói mở Studio một lần bằng số dư Ví → được <c>CanCreateStudio</c> vĩnh viễn (BR-22).
 /// Trừ đúng giá hiện hành do Admin đặt, không tin giá client; giá client thấy khác giá hiện hành → 409.
 /// Giao dịch <see cref="PaymentTransactionType.StudioPackage"/> là doanh thu nền tảng nên không gắn Workspace/Series.
+/// D12: gói kèm kho tài nguyên đủ cho một Studio theo hạn mức mặc định Admin đang đặt; gói cho tạo nhiều Studio,
+/// tài nguyên thêm thì mua riêng (<c>PurchaseStudioResourcesCommand</c>).
 /// </summary>
 public sealed record PurchaseStudioPackageCommand(Guid UserId, int ExpectedPriceVnd)
     : IRequest<Result<PurchaseStudioPackageResponse>>;
@@ -23,11 +28,14 @@ public sealed class PurchaseStudioPackageCommandHandler
 {
     private readonly IPanelForgeDbContext _db;
     private readonly DefaultBankSettings _defaultBank;
+    private readonly WorkspaceDefaultsSettings _defaults;
 
-    public PurchaseStudioPackageCommandHandler(IPanelForgeDbContext db, DefaultBankSettings defaultBank)
+    public PurchaseStudioPackageCommandHandler(
+        IPanelForgeDbContext db, DefaultBankSettings defaultBank, WorkspaceDefaultsSettings defaults)
     {
         _db = db;
         _defaultBank = defaultBank;
+        _defaults = defaults;
     }
 
     public async Task<Result<PurchaseStudioPackageResponse>> Handle(PurchaseStudioPackageCommand command, CancellationToken ct)
@@ -76,6 +84,9 @@ public sealed class PurchaseStudioPackageCommandHandler
         _db.PaymentTransactions.Add(transaction);
 
         user.GrantStudioCreation();
+        var policy = await QuotaPolicies.GetEffectiveAsync(_db, _defaults, ct);
+        var pool = await StudioResourceLedger.EnsurePoolAsync(_db, user.Id, ct);
+        pool.Add(policy.StorageQuotaBytes, policy.MonthlyTokenQuota);
         _db.AuditLogs.Add(AuditLog.Create(
             action: "STUDIO_PACKAGE_PURCHASED",
             entityName: nameof(PaymentTransaction),

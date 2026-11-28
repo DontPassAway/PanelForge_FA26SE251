@@ -211,6 +211,6 @@ public sealed class CreateTopupCommandHandler : IRequestHandler<CreateTopupComma
         // độc giả không tạo được đơn VietQR ba loại này
         return Enum.TryParse(purpose.Trim(), ignoreCase: true, out type) && Enum.IsDefined(type)
             && type is not (PaymentTransactionType.Refund or PaymentTransactionType.VipSubscription
-                or PaymentTransactionType.StudioPackage);
+                or PaymentTransactionType.StudioPackage or PaymentTransactionType.StudioResources);
     }
 }

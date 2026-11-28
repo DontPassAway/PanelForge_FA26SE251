@@ -13,6 +13,10 @@ using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
 using PanelForge.Application.Features.Admin.Queries.GetAdminStudioPackage;
+using PanelForge.Application.Features.StudioResources.Commands.GrantStudioResources;
+using PanelForge.Application.Features.StudioResources.Commands.SetStudioResourcePrice;
+using PanelForge.Application.Features.StudioResources.Models;
+using PanelForge.Application.Features.StudioResources.Queries.GetAdminStudioResourcePrice;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
 using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
@@ -633,6 +637,58 @@ public class AdminController : ControllerBase
 
         var result = await _mediator.Send(new SetStudioPackagePriceCommand(adminId.Value, request.PriceVnd), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+    }
+
+    // ─── D12: Tài nguyên Studio bán cho Producer ───────────────────────────────
+
+    /// <summary>GET /api/admin/studio-resources/price — đơn giá mỗi GB và mỗi 1 triệu token đang bán.</summary>
+    [HttpGet("studio-resources/price")]
+    [ProducesResponseType(typeof(AdminStudioResourcePriceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStudioResourcePrice(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminStudioResourcePriceQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>PUT /api/admin/studio-resources/price — đặt đơn giá tài nguyên Studio (append-only, có audit).</summary>
+    [HttpPut("studio-resources/price")]
+    [ProducesResponseType(typeof(AdminStudioResourcePriceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetStudioResourcePrice(
+        [FromBody] SetStudioResourcePriceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new SetStudioResourcePriceCommand(adminId.Value, request.PricePerGbVnd, request.PricePerMillionTokensVnd),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
+    }
+
+    /// <summary>
+    /// POST /api/admin/users/{id}/studio-resources — Admin cộng dung lượng / token vào kho của Producer
+    /// (bán ngoài hệ thống, tặng, bù). Chỉ cộng; audit ghi người cộng.
+    /// </summary>
+    [HttpPost("users/{id:guid}/studio-resources")]
+    [ProducesResponseType(typeof(StudioResourcesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GrantStudioResources(
+        Guid id,
+        [FromBody] GrantStudioResourcesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(
+            new GrantStudioResourcesCommand(adminId.Value, id, request.StorageBytes, request.Tokens), cancellationToken);
+        if (result.IsSuccess) return Ok(result.Value);
+        return result.ErrorCode == ResultErrorCodes.NotFound
+            ? NotFound(new { message = result.ErrorMessage })
+            : BadRequest(new { message = result.ErrorMessage });
     }
 
     // ─── Element Type Master Data ──────────────────────────────────────────────

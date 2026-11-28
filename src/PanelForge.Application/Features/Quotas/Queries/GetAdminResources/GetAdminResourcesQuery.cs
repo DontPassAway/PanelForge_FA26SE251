@@ -61,7 +61,7 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db, Works
                 w.UsedStorageBytes,
                 Ai = db.WorkspaceAiConfigs.Where(c => c.WorkspaceId == w.Id)
                     .Select(c => new { c.IsEnabled, c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.MonthlyImageQuota, c.UsedImagesCurrentMonth,
-                        c.MonthlyRequestQuota, c.UsedRequestsCurrentMonth, c.RequestsPerMinuteLimit, c.LastResetAt, c.CreatedAt })
+                        c.MonthlyRequestQuota, c.UsedRequestsCurrentMonth, c.RequestsPerMinuteLimit, c.LastResetAt, c.CreatedAt, c.IsPrepaidTokenBudget })
                     .FirstOrDefault(),
                 Pending = db.QuotaIncreaseRequests.Count(r => r.WorkspaceId == w.Id && r.Status == QuotaIncreaseRequestStatus.Pending)
             })
@@ -74,7 +74,7 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db, Works
             // OPS-22: bộ đếm của tháng trước (chưa có lượt gọi AI nào trong tháng này) hiện là 0
             var counted = r.Ai is not null && WorkspaceAiConfig.IsCountedThisMonth(r.Ai.LastResetAt, r.Ai.CreatedAt, now);
             var storage = Meter(r.UsedStorageBytes, r.StorageQuotaBytes);
-            var tokens = r.Ai is null ? null : Meter(counted ? r.Ai.UsedTokensCurrentMonth : 0, r.Ai.MonthlyTokenQuota);
+            var tokens = r.Ai is null ? null : Meter(counted || r.Ai.IsPrepaidTokenBudget ? r.Ai.UsedTokensCurrentMonth : 0, r.Ai.MonthlyTokenQuota);
             var images = r.Ai is null ? null : Meter(counted ? r.Ai.UsedImagesCurrentMonth : 0, r.Ai.MonthlyImageQuota);
             var requests = r.Ai is null ? null : Meter(counted ? r.Ai.UsedRequestsCurrentMonth : 0, r.Ai.MonthlyRequestQuota);
             return new AdminWorkspaceResourceDto(
