@@ -16,12 +16,41 @@ public static class LetteringLimits
     public const double PanelBalloonShare = 0.12;  // bubble thường chiếm ≲ 12% diện tích panel
     public const int MinChars = 8;
 
-    public static int ForElement(double widthPx, double heightPx)
+    /// <summary>Cỡ nhỏ nhất khi tự thu nhỏ (= TextStyle.MinFontSize).</summary>
+    public const double MinFontPx = 14;
+
+    /// <summary>Phần lòng elip chữ thực sự lấp được khi xếp dòng (dòng trên/dưới ngắn).</summary>
+    private const double EllipseFill = 0.8;
+
+    /// <summary>Hình bóng mặc định theo loại element (FE defaultAppearance).</summary>
+    public static string DefaultShape(string elementType)
     {
+        var t = elementType.ToUpperInvariant();
+        return t.Contains("NARRATION") || t.Contains("CAPTION") ? "box"
+            : t.Contains("SFX") || t.Contains("SOUND") ? "spiky"
+            : t.Contains("THOUGHT") ? "cloud"
+            : "oval";
+    }
+
+    /// <summary>Số ký tự ước lượng vừa bóng; shape cong dùng lòng elip như FE innerEllipse.</summary>
+    public static int ForElement(
+        double widthPx, double heightPx, string? shape = null, double fontPx = FontPx, double lineHeightEm = LineHeightEm)
+    {
+        var charW = fontPx * CharWidthEm;
+        var lineH = fontPx * lineHeightEm;
+        if (shape is "oval" or "cloud" or "spiky")
+        {
+            var k = shape == "spiky" ? 0.74 : 0.9;
+            var rx = Math.Max(0, widthPx / 2 * k - 4);
+            var ry = Math.Max(0, heightPx / 2 * k - 4);
+            var chars = Math.PI * rx * ry * EllipseFill / (charW * lineH);
+            return Math.Max(MinChars, (int)Math.Floor(chars));
+        }
+
         var w = Math.Max(0, widthPx - 2 * PaddingPx);
         var h = Math.Max(0, heightPx - 2 * PaddingPx);
-        var perLine = (int)Math.Floor(w / (FontPx * CharWidthEm));
-        var lines = (int)Math.Floor(h / (FontPx * LineHeightEm));
+        var perLine = (int)Math.Floor(w / charW);
+        var lines = (int)Math.Floor(h / lineH);
         return Math.Max(MinChars, perLine * lines);
     }
 
