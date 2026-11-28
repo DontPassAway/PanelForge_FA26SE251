@@ -69,7 +69,7 @@ public sealed class SendAssignmentRemindersCommandHandler : IRequestHandler<Send
             var note = cr.DueDate < now ? AssignmentNotifications.ChangeRequestOverdue(cr) : AssignmentNotifications.ChangeRequestDueSoon(cr);
 
             var alreadySent = await _db.Notifications.AnyAsync(n =>
-                n.AssignmentId == cr.AssignmentId && n.UserId == cr.ResponsibleUserId && n.Type == note.Type && n.Message == note.Message, ct);
+                n.AssignmentId == cr.WorkItemId && n.UserId == cr.ResponsibleUserId && n.Type == note.Type && n.Message == note.Message, ct);
             if (alreadySent) continue;
 
             _db.Notifications.Add(note);

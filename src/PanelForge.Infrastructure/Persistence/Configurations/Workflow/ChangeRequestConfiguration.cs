@@ -19,10 +19,18 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
 
         builder.Property(c => c.AssignmentId)
                .HasColumnName("assignment_id")
-               .HasColumnType("uuid")
-               .IsRequired();
+               .HasColumnType("uuid");
         builder.HasIndex(c => c.AssignmentId)
                .HasDatabaseName("ix_change_requests_assignment_id");
+
+        // REV-01 lưới V3: yêu cầu sửa gắn ô (công đoạn × trang); đúng một trong assignment_id / stage_task_id
+        builder.Property(c => c.StageTaskId)
+               .HasColumnName("stage_task_id")
+               .HasColumnType("uuid");
+        builder.HasIndex(c => new { c.StageTaskId, c.Status })
+               .HasDatabaseName("ix_change_requests_stage_task_status");
+        builder.ToTable(t => t.HasCheckConstraint("ck_change_requests_one_work_item",
+            "num_nonnulls(assignment_id, stage_task_id) = 1"));
 
         builder.Property(c => c.ChapterId)
                .HasColumnName("chapter_id")
@@ -144,6 +152,11 @@ internal sealed class ChangeRequestConfiguration : IEntityTypeConfiguration<Chan
         builder.HasOne<Assignment>()
                .WithMany()
                .HasForeignKey(c => c.AssignmentId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<StageTask>()
+               .WithMany()
+               .HasForeignKey(c => c.StageTaskId)
                .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne<Submission>()

@@ -124,6 +124,8 @@ public sealed class SubmitStageTasksCommandHandler : IRequestHandler<SubmitStage
             if (!gated) autoApproved.Add(task);
         }
 
+        await TaskGridRules.ResolveOpenChangeRequestsAsync(_db, tasks.Select(t => t.Id).ToList(), ct);
+
         if (autoApproved.Count > 0)
         {
             await TaskGridNotifications.AddReadyAsync(_db, autoApproved, stages, chapterTasks, chapter.Id, ct);

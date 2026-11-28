@@ -30,6 +30,7 @@ using PanelForge.Application.Features.Assignments.Queries.GetAssignmentsByChapte
 using PanelForge.Application.Features.Assignments.Queries.GetEditorReviewQueue;
 using PanelForge.Application.Features.Assignments.Queries.GetMyWorkspaceAssignments;
 using PanelForge.Application.Features.Progress.Queries.GetSeriesProgress;
+using PanelForge.Application.Features.Progress.Queries.GetSeriesReviewStats;
 using PanelForge.Application.Features.Progress.Queries.GetStageProgressByChapter;
 using PanelForge.Domain.Enums;
 
@@ -147,6 +148,16 @@ public sealed class AssignmentsController : ControllerBase
     {
         var result = await _mediator.Send(
             new GetEditorReviewQueueQuery(seriesId, GetCurrentUserId(), gate, status), ct);
+        return result.IsSuccess ? Ok(result.Value) : Error(result);
+    }
+
+    /// <summary>GET /api/series/{seriesId}/editor/review-stats — tổng quan duyệt theo chương cho Editor (CF3): hàng chờ, yêu cầu sửa, phát hiện nhất quán, quyết định 30 ngày.</summary>
+    [HttpGet("api/series/{seriesId:guid}/editor/review-stats")]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(SeriesReviewStatsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSeriesReviewStats(Guid seriesId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetSeriesReviewStatsQuery(seriesId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
@@ -282,15 +293,16 @@ public sealed class AssignmentsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 
-    /// <summary>GET /api/chapters/{chapterId}/change-requests?assignmentId=&amp;status=&amp;responsibleUserId= (mọi thành viên Workspace).</summary>
+    /// <summary>GET /api/chapters/{chapterId}/change-requests?assignmentId=&amp;stageTaskId=&amp;status=&amp;responsibleUserId= (mọi thành viên Workspace).</summary>
     [HttpGet("api/chapters/{chapterId:guid}/change-requests")]
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(IReadOnlyList<ChangeRequestDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetChangeRequests(
         Guid chapterId, [FromQuery] Guid? assignmentId, [FromQuery] ChangeRequestStatus? status,
-        [FromQuery] Guid? responsibleUserId, CancellationToken ct)
+        [FromQuery] Guid? responsibleUserId, CancellationToken ct, [FromQuery] Guid? stageTaskId = null)
     {
-        var result = await _mediator.Send(new GetChangeRequestsByChapterQuery(chapterId, assignmentId, status, responsibleUserId), ct);
+        var result = await _mediator.Send(
+            new GetChangeRequestsByChapterQuery(chapterId, assignmentId, status, responsibleUserId, stageTaskId), ct);
         return result.IsSuccess ? Ok(result.Value) : Error(result);
     }
 

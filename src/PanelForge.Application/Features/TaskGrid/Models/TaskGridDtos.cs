@@ -67,7 +67,9 @@ public sealed record SubmitStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 public sealed record ApproveStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
 /// <summary>Nhận xét bắt buộc (BR-06), lưu vào lần nộp bị từ chối và gửi người làm.</summary>
-public sealed record RequestStageTaskChangesRequest(string Comment);
+/// <summary>Comment bắt buộc (BR-06); Changes = vùng khoanh trên trang (REV-01), tuỳ chọn.</summary>
+public sealed record RequestStageTaskChangesRequest(
+    string Comment, IReadOnlyList<PanelForge.Application.Features.Assignments.Models.ChangeRequestItemRequest>? Changes = null);
 
 public sealed record StageTaskSubmissionDto(Guid Id, int AttemptNumber, string Status, Guid SubmittedByUserId, DateTime SubmittedAt,
     IReadOnlyList<Guid> ArtworkReferenceIds, Guid? DecidedByUserId, DateTime? DecidedAt, string? DecisionComment,

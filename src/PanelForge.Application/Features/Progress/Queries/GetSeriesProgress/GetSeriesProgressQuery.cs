@@ -149,7 +149,7 @@ public sealed class GetSeriesProgressQueryHandler : IRequestHandler<GetSeriesPro
 
         var overdueCrs = changeRequests.Where(IsCrOverdue).OrderBy(cr => cr.DueDate)
             .Select(cr => new OverdueChangeRequestDto(
-                cr.Id, cr.AssignmentId, cr.ChapterId, cr.ResponsibleUserId,
+                cr.Id, cr.WorkItemId, cr.ChapterId, cr.ResponsibleUserId,
                 names.GetValueOrDefault(cr.ResponsibleUserId, "?"), cr.Status, cr.DueDate!.Value, cr.Description)).ToList();
 
         // Burndown theo số việc: còn lại(ngày) = đã tạo đến ngày đó - đã Approved đến ngày đó (ngày UTC, tối đa 90 ngày gần nhất)
