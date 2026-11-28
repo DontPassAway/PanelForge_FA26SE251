@@ -121,9 +121,7 @@ public sealed class AiUsageService : IAiUsageService
     /// <summary>Hạn mức là theo tháng (UC-02): sang tháng mới (UTC) thì đưa UsedTokensCurrentMonth về 0.</summary>
     private static bool ResetIfNewMonth(WorkspaceAiConfig config)
     {
-        var now = DateTime.UtcNow;
-        var last = config.LastResetAt ?? config.CreatedAt;
-        if (last.Year == now.Year && last.Month == now.Month) return false;
+        if (WorkspaceAiConfig.IsCountedThisMonth(config.LastResetAt, config.CreatedAt, DateTime.UtcNow)) return false;
 
         config.ResetMonthlyUsage();
         return true;

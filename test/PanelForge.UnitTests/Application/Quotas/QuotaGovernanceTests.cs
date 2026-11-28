@@ -262,4 +262,28 @@ public class QuotaGovernanceTests
         result.Value!.HasAiConfig.Should().BeTrue();
         result.Value.MonthlyTokenQuota.Should().Be(2_000);
     }
+    [Fact]
+    public async Task AdminResources_LastMonthCounterWithoutAiCallThisMonth_ShowsZero_OPS22()
+    {
+        var (db, _, _, _, ai) = await SeedAsync();
+        await using var _db = db;
+        ai.RecordUsage(400_000);
+        ai.RecordImages(30);
+        db.Entry(ai).Property(nameof(WorkspaceAiConfig.LastResetAt)).CurrentValue = DateTime.UtcNow.AddMonths(-1);
+        await db.SaveChangesAsync();
+
+        var row = (await new GetAdminResourcesQueryHandler(db).Handle(new GetAdminResourcesQuery(), CancellationToken.None)).Value!.Single();
+
+        row.UsedTokensCurrentMonth.Should().Be(0);
+        row.UsedImagesCurrentMonth.Should().Be(0);
+    }
+
+    [Fact]
+    public void IsCountedThisMonth_ComparesUtcYearAndMonth_OPS22()
+    {
+        var now = new DateTime(2026, 12, 1, 0, 5, 0, DateTimeKind.Utc);
+        WorkspaceAiConfig.IsCountedThisMonth(new DateTime(2026, 11, 30, 23, 59, 0, DateTimeKind.Utc), now, now).Should().BeFalse();
+        WorkspaceAiConfig.IsCountedThisMonth(null, new DateTime(2026, 12, 1, 0, 1, 0, DateTimeKind.Utc), now).Should().BeTrue();
+        WorkspaceAiConfig.IsCountedThisMonth(new DateTime(2025, 12, 15, 0, 0, 0, DateTimeKind.Utc), now, now).Should().BeFalse();
+    }
 }

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Domain.Entities.Workspaces;
 
 namespace PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceUsage;
 
@@ -42,8 +43,10 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
 
         var ai = await _db.WorkspaceAiConfigs.AsNoTracking()
             .Where(c => c.WorkspaceId == q.WorkspaceId)
-            .Select(c => new { c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.IsEnabled, c.MonthlyImageQuota, c.UsedImagesCurrentMonth })
+            .Select(c => new { c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.IsEnabled, c.MonthlyImageQuota, c.UsedImagesCurrentMonth, c.LastResetAt, c.CreatedAt })
             .FirstOrDefaultAsync(ct);
+        // OPS-22: tháng mới mà chưa gọi AI lần nào thì bộ đếm còn số tháng trước; hiện 0
+        var aiCounted = ai is not null && WorkspaceAiConfig.IsCountedThisMonth(ai.LastResetAt, ai.CreatedAt, DateTime.UtcNow);
 
         var memberUserIds = await _db.WorkspaceMembers.AsNoTracking()
             .Where(m => m.WorkspaceId == q.WorkspaceId)
@@ -70,9 +73,9 @@ public sealed class GetWorkspaceUsageQueryHandler : IRequestHandler<GetWorkspace
         return Result<WorkspaceUsageDto>.Success(new WorkspaceUsageDto(
             q.WorkspaceId,
             Meter(workspace.UsedStorageBytes, workspace.StorageQuotaBytes),
-            ai is null ? null : Meter(ai.UsedTokensCurrentMonth, ai.MonthlyTokenQuota),
+            ai is null ? null : Meter(aiCounted ? ai.UsedTokensCurrentMonth : 0, ai.MonthlyTokenQuota),
             ai?.IsEnabled,
-            ai is null ? null : Meter(ai.UsedImagesCurrentMonth, ai.MonthlyImageQuota),
+            ai is null ? null : Meter(aiCounted ? ai.UsedImagesCurrentMonth : 0, ai.MonthlyImageQuota),
             Meter(activeSessionsCount, sessionQuota),
             activeMembersCount,
             workspace.MaxConcurrentSessions));

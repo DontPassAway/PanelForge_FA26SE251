@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.Quotas.Queries.GetAdminResources;
@@ -35,13 +36,18 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db)
                 w.StorageQuotaBytes,
                 w.UsedStorageBytes,
                 Ai = db.WorkspaceAiConfigs.Where(c => c.WorkspaceId == w.Id)
-                    .Select(c => new { c.IsEnabled, c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.MonthlyImageQuota, c.UsedImagesCurrentMonth })
+                    .Select(c => new { c.IsEnabled, c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.MonthlyImageQuota, c.UsedImagesCurrentMonth, c.LastResetAt, c.CreatedAt })
                     .FirstOrDefault(),
                 Pending = db.QuotaIncreaseRequests.Count(r => r.WorkspaceId == w.Id && r.Status == QuotaIncreaseRequestStatus.Pending)
             })
             .ToListAsync(ct);
 
-        return rows.Select(r => new AdminWorkspaceResourceDto(
+        var now = DateTime.UtcNow;
+        return rows.Select(r =>
+        {
+            // OPS-22: bộ đếm của tháng trước (chưa có lượt gọi AI nào trong tháng này) hiện là 0
+            var counted = r.Ai is not null && WorkspaceAiConfig.IsCountedThisMonth(r.Ai.LastResetAt, r.Ai.CreatedAt, now);
+            return new AdminWorkspaceResourceDto(
             r.Id,
             r.Name,
             r.OwnerName,
@@ -51,9 +57,10 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db)
             HasAiConfig: r.Ai is not null,
             AiEnabled: r.Ai?.IsEnabled ?? false,
             MonthlyTokenQuota: r.Ai?.MonthlyTokenQuota ?? 0,
-            UsedTokensCurrentMonth: r.Ai?.UsedTokensCurrentMonth ?? 0,
+            UsedTokensCurrentMonth: counted ? r.Ai!.UsedTokensCurrentMonth : 0,
             MonthlyImageQuota: r.Ai?.MonthlyImageQuota ?? 0,
-            UsedImagesCurrentMonth: r.Ai?.UsedImagesCurrentMonth ?? 0,
-            PendingRequestCount: r.Pending)).ToList();
+            UsedImagesCurrentMonth: counted ? r.Ai!.UsedImagesCurrentMonth : 0,
+            PendingRequestCount: r.Pending);
+        }).ToList();
     }
 }

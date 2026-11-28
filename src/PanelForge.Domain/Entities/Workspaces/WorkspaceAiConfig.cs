@@ -160,6 +160,16 @@ public class WorkspaceAiConfig : BaseEntity
         }
     }
 
+    /// <summary>
+    /// Bộ đếm tháng chỉ được đưa về 0 khi có lượt gọi AI (OPS-22). Màn đọc mức dùng gọi hàm này để
+    /// không hiện số của tháng trước khi Studio chưa gọi AI lần nào trong tháng mới (UTC).
+    /// </summary>
+    public static bool IsCountedThisMonth(DateTime? lastResetAt, DateTime createdAt, DateTime utcNow)
+    {
+        var last = lastResetAt ?? createdAt;
+        return last.Year == utcNow.Year && last.Month == utcNow.Month;
+    }
+
     public void ResetMonthlyUsage()
     {
         UsedTokensCurrentMonth = 0;
