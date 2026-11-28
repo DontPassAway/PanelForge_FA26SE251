@@ -8,6 +8,8 @@ namespace PanelForge.Domain.Entities.Workspaces;
 public class WorkspaceAiConfig : BaseEntity
 {
     public Guid WorkspaceId { get; private set; }
+    /// <summary>xmin: hai lần giữ chỗ/ghi token cùng lúc không ghi đè nhau (OPS-03).</summary>
+    public uint RowVersion { get; private set; }
     public string Provider { get; private set; } = "Google Gemini";
     public string? ApiKeyEncrypted { get; private set; }
     /// <summary>API do Admin khai báo trong bảng ai_provider_credentials. Có giá trị thì thay cho Provider/ApiKeyEncrypted ở trên.</summary>
@@ -103,6 +105,27 @@ public class WorkspaceAiConfig : BaseEntity
             UsedTokensCurrentMonth += tokensUsed;
             UpdatedAt = DateTime.UtcNow;
         }
+    }
+
+    /// <summary>
+    /// OPS-03: giữ chỗ token ước lượng TRƯỚC khi gọi AI, để các yêu cầu chạy cùng lúc không cùng lọt qua ngưỡng.
+    /// Phần giữ chỗ được trả lại/chốt bằng <see cref="SettleReservedTokens"/> khi biết số token thật.
+    /// </summary>
+    public bool TryReserveTokens(long tokens)
+    {
+        if (!HasQuotaRemaining()) return false;
+        if (tokens <= 0) return true;
+        if (MonthlyTokenQuota > 0 && UsedTokensCurrentMonth + tokens > MonthlyTokenQuota) return false;
+        UsedTokensCurrentMonth += tokens;
+        UpdatedAt = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>Chốt lần gọi đã giữ chỗ: trừ phần đã giữ, cộng số token thật (0 nếu gọi lỗi).</summary>
+    public void SettleReservedTokens(long reserved, long actualUsed)
+    {
+        UsedTokensCurrentMonth = Math.Max(0, UsedTokensCurrentMonth - Math.Max(0, reserved) + Math.Max(0, actualUsed));
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void SetMonthlyImageQuota(long quota)

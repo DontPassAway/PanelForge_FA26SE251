@@ -148,4 +148,41 @@ public class AiUsageServiceTests
 
         record.Provider.Should().Be("Cloudflare");
     }
+
+    [Fact]
+    public async Task ReserveTokens_ThenSettle_ChargesOnlyActualTokens_OPS03()
+    {
+        var config = await AddConfigAsync(quota: 10_000);
+
+        (await _service.TryReserveTokensAsync(_workspaceId, 4_000)).Should().BeTrue();
+        config.UsedTokensCurrentMonth.Should().Be(4_000);
+
+        await _service.RecordAsync(new AiUsageEntry(_workspaceId, "AiAgents.Copilot.test", AiUsageStatus.Succeeded,
+            PromptTokens: 700, CompletionTokens: 300, ReservedTokens: 4_000));
+
+        config.UsedTokensCurrentMonth.Should().Be(1_000);
+    }
+
+    [Fact]
+    public async Task ReserveTokens_WhenReservationWouldPassQuota_ShouldRefuse_OPS03()
+    {
+        var config = await AddConfigAsync(quota: 5_000);
+        config.RecordUsage(2_000);
+        await _db.SaveChangesAsync();
+
+        (await _service.TryReserveTokensAsync(_workspaceId, 4_000)).Should().BeFalse();
+        config.UsedTokensCurrentMonth.Should().Be(2_000);
+    }
+
+    [Fact]
+    public async Task FailedCall_ShouldReleaseReservation_OPS03()
+    {
+        var config = await AddConfigAsync(quota: 10_000);
+        await _service.TryReserveTokensAsync(_workspaceId, 4_000);
+
+        await _service.RecordAsync(new AiUsageEntry(_workspaceId, "AiAgents.Copilot.test", AiUsageStatus.Failed,
+            PromptTokens: 700, ReservedTokens: 4_000));
+
+        config.UsedTokensCurrentMonth.Should().Be(0);
+    }
 }

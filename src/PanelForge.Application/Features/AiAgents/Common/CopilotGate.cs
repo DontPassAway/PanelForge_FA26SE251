@@ -13,7 +13,8 @@ using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Common;
 
-internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config, string? ApiKey = null, string? AccountId = null)
+internal sealed record CopilotProvider(string Provider, string Model, WorkspaceAiConfig Config, string? ApiKey = null, string? AccountId = null,
+    long ReservedTokens = 0)
 {
     private bool PrintMembers(StringBuilder builder)
     {
@@ -61,7 +62,17 @@ internal static class CopilotGate
                 $"Series đã dùng {recent} lượt Copilot trong 1 phút qua (giới hạn {settings.CopilotCallsPerMinutePerSeries}). Thử lại sau ít giây.",
                 ResultErrorCodes.AiQuotaExceeded);
 
-        return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config, cred.ApiKey, cred.AccountId));
+        // OPS-03: giữ chỗ sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không giữ token
+        var reserved = settings.CopilotReservedTokens;
+        if (!await usage.TryReserveTokensAsync(workspaceId, reserved, ct))
+        {
+            const string message = "Workspace không còn đủ hạn mức token AI cho lượt này. Vui lòng tiếp tục bằng thao tác thủ công.";
+            await usage.RecordAsync(new AiUsageEntry(workspaceId, feature, AiUsageStatus.QuotaExceeded,
+                ErrorMessage: message, UserId: userId), ct);
+            return Result<CopilotProvider>.Failure(message, ResultErrorCodes.AiQuotaExceeded);
+        }
+
+        return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config, cred.ApiKey, cred.AccountId, reserved));
     }
 
     /// <summary>Key chỉ giải mã trong bộ nhớ cho lần gọi này; rỗng = Studio chưa có key dùng được.</summary>
@@ -85,7 +96,8 @@ internal static class CopilotGate
             response.Succeeded ? AiUsageStatus.Succeeded
                 : response.ErrorCode == ResultErrorCodes.AiUnavailable ? AiUsageStatus.ProviderUnavailable : AiUsageStatus.Failed,
             Model: p.Model, PromptTokens: response.PromptTokens ?? 0, CompletionTokens: response.CompletionTokens ?? 0,
-            ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId, Provider: p.Provider), ct);
+            ErrorMessage: response.ErrorMessage, DurationMs: step.DurationMs, UserId: userId, Provider: p.Provider,
+            ReservedTokens: p.ReservedTokens), ct);
         step.LinkUsageRecord(record.Id);
         return step;
     }

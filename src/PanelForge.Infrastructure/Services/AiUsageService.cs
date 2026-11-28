@@ -43,6 +43,28 @@ public sealed class AiUsageService : IAiUsageService
         return AiAvailability.Available();
     }
 
+    public async Task<bool> TryReserveTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var config = await _dbContext.WorkspaceAiConfigs
+                .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
+            if (config is null) return false;
+
+            ResetIfNewMonth(config);
+            if (!config.TryReserveTokens(tokens)) return false;
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < MaxConcurrencyRetries)
+            {
+                await ReloadAsync(ex);
+            }
+        }
+    }
+
     public async Task<AiUsageRecord> RecordAsync(AiUsageEntry entry, CancellationToken cancellationToken = default)
     {
         var config = await _dbContext.WorkspaceAiConfigs
@@ -63,15 +85,37 @@ public sealed class AiUsageService : IAiUsageService
 
         _dbContext.AiUsageRecords.Add(record);
 
-        if (config is not null)
+        // OPS-03: hai lượt AI xong cùng lúc không làm mất token của nhau (xmin): đụng nhau thì đọc lại rồi cộng lại
+        for (var attempt = 0; ; attempt++)
         {
-            ResetIfNewMonth(config);
-            if (entry.Status == AiUsageStatus.Succeeded)
-                config.RecordUsage(record.TotalTokens);
-        }
+            if (config is not null)
+            {
+                ResetIfNewMonth(config);
+                var used = entry.Status == AiUsageStatus.Succeeded ? record.TotalTokens : 0;
+                if (entry.ReservedTokens > 0)
+                    config.SettleReservedTokens(entry.ReservedTokens, used);
+                else
+                    config.RecordUsage(used);
+            }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return record;
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return record;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < MaxConcurrencyRetries)
+            {
+                await ReloadAsync(ex);
+            }
+        }
+    }
+
+    private const int MaxConcurrencyRetries = 3;
+
+    private static async Task ReloadAsync(DbUpdateConcurrencyException ex)
+    {
+        foreach (var entry in ex.Entries)
+            await entry.ReloadAsync();
     }
 
     /// <summary>Hạn mức là theo tháng (UC-02): sang tháng mới (UTC) thì đưa UsedTokensCurrentMonth về 0.</summary>

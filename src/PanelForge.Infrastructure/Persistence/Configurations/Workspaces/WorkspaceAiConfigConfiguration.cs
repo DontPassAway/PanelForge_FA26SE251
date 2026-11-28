@@ -9,6 +9,8 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<WorkspaceAiConfig> builder)
     {
         builder.ToTable("workspace_ai_configs");
+        builder.Property(c => c.RowVersion)
+               .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
 
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id)
