@@ -124,13 +124,13 @@ public class WorkspacesController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/workspaces/{id}/cover (multipart/form-data: file) — Producer đặt ảnh bìa Studio (PNG/JPEG/WebP, ≤ 5 MB).
+    /// PUT /api/workspaces/{id}/cover (multipart/form-data: file) — Producer đặt ảnh bìa Studio (PNG/JPEG/WebP, giới hạn theo upload-limits).
     /// </summary>
     [HttpPut("{id:guid}/cover")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetWorkspaceCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -499,6 +499,7 @@ public class WorkspacesController : ControllerBase
             ResultErrorCodes.Unauthorized => Unauthorized(body),
             ResultErrorCodes.Forbidden => StatusCode(StatusCodes.Status403Forbidden, body),
             ResultErrorCodes.NotFound => StatusCode(notFoundStatus, body),
+            ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = result.ErrorMessage, code = result.ErrorCode }),
             _ => BadRequest(body)
         };
     }

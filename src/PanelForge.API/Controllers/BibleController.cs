@@ -615,14 +615,14 @@ public sealed class BibleController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Artist tải ảnh reference sheet (PNG/JPEG/WebP, ≤ 10 MB).
+    /// POST /api/series/{seriesId}/bible/assets (multipart/form-data: file) — Artist tải ảnh reference sheet (PNG/JPEG/WebP, giới hạn theo upload-limits).
     /// Trả về <c>url</c> để gửi vào <c>referenceImageUrl</c> khi tạo mục hoặc thêm revision.
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/bible/assets")]
     [RequireWorkspaceRole(WorkspaceRole.Artist)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadBibleReferenceImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(BibleReferenceImageDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UploadReferenceImage(
@@ -635,9 +635,10 @@ public sealed class BibleController : ControllerBase
         await file.CopyToAsync(buffer, cancellationToken);
 
         var result = await _mediator.Send(new UploadBibleReferenceImageCommand(seriesId, buffer.ToArray()), cancellationToken);
-        return result.IsSuccess
-            ? Created(result.Value!.Url, result.Value)
-            : BadRequest(new { error = result.ErrorMessage });
+        if (result.IsSuccess) return Created(result.Value!.Url, result.Value);
+        return result.ErrorCode == ResultErrorCodes.FileTooLarge
+            ? StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = result.ErrorMessage, code = result.ErrorCode })
+            : BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode });
     }
 
     /// <summary>

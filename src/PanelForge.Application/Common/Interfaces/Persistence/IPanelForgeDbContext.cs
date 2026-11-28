@@ -24,6 +24,7 @@ public interface IPanelForgeDbContext
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
     DbSet<QuotaPolicy> QuotaPolicies { get; }
     DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests { get; }
+    DbSet<UploadLimitPolicy> UploadLimitPolicies { get; }
     DbSet<AiProviderCredential> AiProviderCredentials { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiUsageRecord> AiUsageRecords { get; }

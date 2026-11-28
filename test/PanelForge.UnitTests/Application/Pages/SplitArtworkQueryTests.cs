@@ -5,6 +5,7 @@ using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 using PanelForge.Domain.Entities.Content;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.UnitTests.Common;
 using Xunit;
 
@@ -16,8 +17,11 @@ public class SplitArtworkQueryTests
     private readonly Mock<IPanelForgeDbContext> _db = new();
     private readonly Mock<IPanelSplitter> _splitter = new();
 
-    public SplitArtworkQueryTests() =>
+    public SplitArtworkQueryTests()
+    {
         _db.Setup(d => d.Pages).Returns(DbSetMockHelper.CreateDbSetMock(new List<Page> { _page }));
+        _db.Setup(d => d.UploadLimitPolicies).Returns(DbSetMockHelper.CreateDbSetMock(new List<UploadLimitPolicy>()));
+    }
 
     private Task<Result<PanelSplitResult>> Handle(Guid pageId) =>
         new SplitArtworkQueryHandler(_db.Object, _splitter.Object)
@@ -29,6 +33,17 @@ public class SplitArtworkQueryTests
         var result = await Handle(Guid.NewGuid());
 
         result.ErrorCode.Should().Be(ResultErrorCodes.NotFound);
+        _splitter.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task OverArtworkLimit_ReturnsFileTooLarge_WithoutCallingSplitter()
+    {
+        var result = await new SplitArtworkQueryHandler(_db.Object, _splitter.Object).Handle(
+            new SplitArtworkQuery(_page.Id, new MemoryStream([1]), "p.png", true, UploadLimitPolicy.DefaultArtworkMaxBytes + 1),
+            CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ResultErrorCodes.FileTooLarge);
         _splitter.VerifyNoOtherCalls();
     }
 

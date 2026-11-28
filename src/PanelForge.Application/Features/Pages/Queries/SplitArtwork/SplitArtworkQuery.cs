@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 
@@ -10,7 +11,7 @@ namespace PanelForge.Application.Features.Pages.Queries.SplitArtwork;
 /// Gợi ý tách panel + bong bóng từ ảnh vẽ cả trang. Chỉ trả toạ độ, không lưu gì.
 /// Quyền Workspace/Series (Producer, Artist) kiểm ở controller qua RequireWorkspaceRole theo pageId.
 /// </summary>
-public sealed record SplitArtworkQuery(Guid PageId, Stream ImageStream, string FileName, bool RightToLeft)
+public sealed record SplitArtworkQuery(Guid PageId, Stream ImageStream, string FileName, bool RightToLeft, long? SizeBytes = null)
     : IRequest<Result<PanelSplitResult>>;
 
 public sealed class SplitArtworkQueryHandler : IRequestHandler<SplitArtworkQuery, Result<PanelSplitResult>>
@@ -29,6 +30,11 @@ public sealed class SplitArtworkQueryHandler : IRequestHandler<SplitArtworkQuery
         // Bảng quan hệ đủ để biết Page tồn tại; không dựng lại event stream Marten chỉ để kiểm
         if (!await _db.Pages.AsNoTracking().AnyAsync(p => p.Id == query.PageId, ct))
             return Result<PanelSplitResult>.Failure($"Page {query.PageId} không tồn tại.", ResultErrorCodes.NotFound);
+
+        // Cùng giới hạn với artwork: đây là ảnh trang Artist sắp tải lên
+        var size = query.SizeBytes ?? (query.ImageStream.CanSeek ? query.ImageStream.Length : 0);
+        if (await UploadLimits.CheckAsync(_db, UploadKind.Artwork, size, ct) is { } tooLarge)
+            return Result<PanelSplitResult>.Failure(tooLarge, ResultErrorCodes.FileTooLarge);
 
         try
         {

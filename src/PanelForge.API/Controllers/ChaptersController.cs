@@ -137,14 +137,14 @@ public sealed class ChaptersController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/chapters/{chapterId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa chương (PNG/JPEG/WebP, ≤ 5 MB).
+    /// PUT /api/chapters/{chapterId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa chương (PNG/JPEG/WebP, giới hạn theo upload-limits).
     /// Trả <c>value</c> = coverUrl mới (cũng có trong ChapterDto.coverUrl).
     /// </summary>
     [HttpPut("api/chapters/{chapterId:guid}/cover")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetChapterCoverCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetChapterCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -188,9 +188,13 @@ public sealed class ChaptersController : ControllerBase
     private IActionResult CoverResult(Result<string?> result)
         => result.IsSuccess
             ? Ok(new TextValueResponse(result.Value))
-            : result.ErrorCode == ResultErrorCodes.NotFound
-                ? NotFound(new { error = result.ErrorMessage })
-                : BadRequest(new { error = result.ErrorMessage });
+            : result.ErrorCode switch
+            {
+                ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                ResultErrorCodes.FileTooLarge => StatusCode(
+                    StatusCodes.Status413PayloadTooLarge, new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+            };
 
     /// <summary>
     /// PUT /api/chapters/{chapterId}

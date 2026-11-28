@@ -4,19 +4,18 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Series.Commands.SetSeriesCover;
 
 /// <summary>
-/// Producer đặt ảnh bìa Series (PNG/JPEG/WebP, ≤ 5 MB) hoặc xoá bìa (<see cref="Content"/> = null).
+/// Producer đặt ảnh bìa Series (PNG/JPEG/WebP, tối đa theo giới hạn upload của Admin) hoặc xoá bìa (<see cref="Content"/> = null).
 /// Ảnh lưu theo SHA-256 nội dung nên không bao giờ ghi đè file cũ; Series chỉ giữ hash của bìa hiện tại.
 /// </summary>
 public sealed record SetSeriesCoverCommand(Guid SeriesId, Guid UserId, byte[]? Content) : IRequest<Result<string?>>;
 
 public sealed class SetSeriesCoverCommandHandler : IRequestHandler<SetSeriesCoverCommand, Result<string?>>
 {
-    public const long MaxBytes = 5 * 1024 * 1024;
-
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
 
@@ -41,8 +40,10 @@ public sealed class SetSeriesCoverCommandHandler : IRequestHandler<SetSeriesCove
         string? sha = null;
         if (cmd.Content is not null)
         {
-            if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)
-                return Result<string?>.Failure("Ảnh bìa phải từ 1 byte đến 5 MB.", ResultErrorCodes.Validation);
+            if (cmd.Content.Length == 0)
+                return Result<string?>.Failure("File ảnh rỗng.", ResultErrorCodes.Validation);
+            if (await UploadLimits.CheckAsync(_db, UploadKind.CoverImage, cmd.Content.Length, ct) is { } tooLarge)
+                return Result<string?>.Failure(tooLarge, ResultErrorCodes.FileTooLarge);
 
             var contentType = AssetRules.DetectImageContentType(cmd.Content);
             if (contentType is null)

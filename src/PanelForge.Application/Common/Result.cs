@@ -57,4 +57,6 @@ public static class ResultErrorCodes
     public const string AiInvalidOutput = "AI_INVALID_OUTPUT";
     public const string AiDisabled = "AI_DISABLED";
     public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";
+    /// <summary>File rỗng hoặc vượt giới hạn kích thước Admin đặt (<c>upload_limit_policies</c>) → HTTP 413.</summary>
+    public const string FileTooLarge = "FILE_TOO_LARGE";
 }

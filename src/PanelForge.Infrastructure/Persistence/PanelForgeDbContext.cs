@@ -39,6 +39,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
     public DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests => Set<QuotaIncreaseRequest>();
+    public DbSet<UploadLimitPolicy> UploadLimitPolicies => Set<UploadLimitPolicy>();
     public DbSet<AiProviderCredential> AiProviderCredentials => Set<AiProviderCredential>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();

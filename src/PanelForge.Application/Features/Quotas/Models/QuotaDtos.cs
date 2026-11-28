@@ -153,3 +153,16 @@ public sealed record DeleteOrphanFilesResultDto(
     int SkippedReferencedFiles,
     int FailedFiles,
     int MinAgeDays);
+
+/// <summary>Giới hạn kích thước một file tải lên (byte). <c>*CeilingBytes</c> là mức tối đa Admin được đặt.</summary>
+public sealed record UploadLimitsDto(
+    long ArtworkMaxBytes,
+    long ReferenceImageMaxBytes,
+    long CoverImageMaxBytes,
+    long ArtworkCeilingBytes,
+    long ImageCeilingBytes,
+    bool IsDefault,
+    DateTime? UpdatedAt,
+    string? UpdatedByName);
+
+public sealed record UpdateUploadLimitsRequest(long ArtworkMaxBytes, long ReferenceImageMaxBytes, long CoverImageMaxBytes);
