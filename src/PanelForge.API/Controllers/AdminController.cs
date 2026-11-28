@@ -12,6 +12,7 @@ using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.UpdateEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailSettings;
 using PanelForge.Application.Features.Admin.Queries.GetEmailDeliveryLogs;
+using PanelForge.Application.Features.Admin.Queries.GetEmailHealth;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
@@ -662,11 +663,25 @@ public class AdminController : ControllerBase
         [FromQuery] bool? succeeded,
         [FromQuery] string? mailType,
         [FromQuery] string? search,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 30,
         CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new GetEmailDeliveryLogsQuery(succeeded, mailType, search, page, pageSize), cancellationToken);
+        var result = await _mediator.Send(new GetEmailDeliveryLogsQuery(succeeded, mailType, search, page, pageSize, from, to), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// GET /api/admin/email-health — chỉ đọc, cho thẻ cảnh báo trên Tổng quan Admin:
+    /// OK | NOT_CONFIGURED (chưa có SMTP dùng được) | LAST_SEND_FAILED (lần gửi gần nhất lỗi), kèm số thư lỗi 24 giờ.
+    /// </summary>
+    [HttpGet("email-health")]
+    [ProducesResponseType(typeof(AdminEmailHealthDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEmailHealth(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetEmailHealthQuery(), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
