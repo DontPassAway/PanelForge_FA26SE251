@@ -211,14 +211,18 @@ internal static class StageProgressRules
     /// <summary>
     /// ART-03: nộp công đoạn vẽ đầu tiên (Pencil) khi mọi dòng thoại của các phân cảnh có mặt trên trang đã gắn vào một Panel.
     /// Phân cảnh có mặt trên trang = phân cảnh của các Panel trang đó; dòng đã gắn Panel ở trang khác vẫn tính là đã phủ.
+    /// Trang chưa có Panel nào gắn phân cảnh thì xét mọi phân cảnh của chương (không để trang "chưa gắn gì" lọt qua).
     /// </summary>
     public static async Task<string?> ScriptCoverageBlockReasonAsync(
-        IPanelForgeDbContext db, IReadOnlyList<Panel> pagePanels, CancellationToken ct)
+        IPanelForgeDbContext db, Guid chapterId, IReadOnlyList<Panel> pagePanels, CancellationToken ct)
     {
         var sceneIds = pagePanels.Where(p => p.SceneId != null).Select(p => p.SceneId!.Value).Distinct().ToList();
-        if (sceneIds.Count == 0) return null;
-        var uncovered = await db.ScriptLines.AsNoTracking().CountAsync(l =>
-            sceneIds.Contains(l.SceneId) && l.PanelId == null && l.DialogueText != null && l.DialogueText.Trim() != "", ct);
+        var lines = db.ScriptLines.AsNoTracking()
+            .Where(l => l.PanelId == null && l.DialogueText != null && l.DialogueText.Trim() != "");
+        lines = sceneIds.Count > 0
+            ? lines.Where(l => sceneIds.Contains(l.SceneId))
+            : lines.Where(l => db.Scenes.Any(sc => sc.Id == l.SceneId && sc.ChapterId == chapterId));
+        var uncovered = await lines.CountAsync(ct);
         return uncovered > 0
             ? $"Còn {uncovered} dòng thoại của phân cảnh trên trang chưa gắn vào khung nào (cần phủ 100% kịch bản trước khi nộp Pencil)."
             : null;

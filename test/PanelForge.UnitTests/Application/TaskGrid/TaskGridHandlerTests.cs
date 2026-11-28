@@ -54,6 +54,8 @@ public class TaskGridHandlerTests
         public readonly PipelineStage Pencil, Ink, Color, Lettering, Review;
         public readonly List<Page> Pages = [];
         public readonly List<Panel> Panels = [];
+        public readonly List<Scene> Scenes = [];
+        public readonly List<ScriptLine> ScriptLines = [];
         public readonly List<StageTask> Tasks = [];
         public readonly List<StageTaskLot> Lots = [];
         public readonly List<StageTaskSubmission> Submissions = [];
@@ -136,6 +138,8 @@ public class TaskGridHandlerTests
                 return r;
             })).ToList();
             Db.Setup(d => d.Panels).Returns(DbSetMockHelper.CreateDbSetMock(Panels));
+            Db.Setup(d => d.Scenes).Returns(DbSetMockHelper.CreateDbSetMock(Scenes));
+            Db.Setup(d => d.ScriptLines).Returns(DbSetMockHelper.CreateDbSetMock(ScriptLines));
             Db.Setup(d => d.AssetReferences).Returns(DbSetMockHelper.CreateDbSetMock(Artwork));
             Db.Setup(d => d.Assignments).Returns(DbSetMockHelper.CreateDbSetMock(Assignments));
             Db.Setup(d => d.StageProgresses).Returns(DbSetMockHelper.CreateDbSetMock(new List<StageProgress>()));
@@ -687,26 +691,32 @@ public class TaskGridHandlerTests
         pencil.Status.Should().Be(StageTaskStatus.InProgress);
     }
 
-    /// <summary>ART-03: nộp Pencil cần mọi dòng thoại của phân cảnh trên trang đã gắn khung; Ink thì không xét lại.</summary>
+    /// <summary>
+    /// ART-03: nộp Pencil cần mọi dòng thoại của phân cảnh trên trang đã gắn khung. Trang chưa gắn phân cảnh nào thì xét cả chương;
+    /// trang có phân cảnh thì không bị chặn vì dòng của phân cảnh khác (dành cho trang khác).
+    /// </summary>
     [Fact]
-    public async Task Submit_Pencil_WithUnanchoredDialogueOfSceneOnPage_IsBlocked()
+    public async Task Submit_Pencil_RequiresDialogueOfScenesOnPageAnchored()
     {
         var f = new Fixture();
         await f.AssignPageOne();
-        var sceneId = Guid.NewGuid();
+        var scene = Scene.Create(f.Chapter.Id, 1);
+        var other = Scene.Create(f.Chapter.Id, 2);
+        f.Scenes.AddRange([scene, other]);
+        var line = ScriptLine.Create(scene.Id, 1, dialogueText: "Chạy đi!");
+        var laterPage = ScriptLine.Create(other.Id, 1, dialogueText: "Để sau");
+        f.ScriptLines.AddRange([line, laterPage]);
         var panel = f.Panels.Single(p => p.PageId == f.Pages[0].Id);
-        panel.AssignToScene(sceneId);
-        var line = ScriptLine.Create(sceneId, 1, dialogueText: "Chạy đi!");
-        f.Db.Setup(d => d.ScriptLines).Returns(DbSetMockHelper.CreateDbSetMock(new List<ScriptLine> { line }));
         var pencil = f.Cell(f.Pencil, 0);
         await f.Start(pencil, f.ArtistId);
 
-        var blocked = await f.Submit(f.ArtistId, pencil);
-        blocked.ErrorCode.Should().Be(ResultErrorCodes.Conflict);
-        blocked.ErrorMessage.Should().Contain("dòng thoại");
+        (await f.Submit(f.ArtistId, pencil)).ErrorMessage.Should().Contain("dòng thoại", "trang chưa gắn phân cảnh: xét cả chương");
+
+        panel.AssignToScene(scene.Id);
+        (await f.Submit(f.ArtistId, pencil)).ErrorMessage.Should().Contain("1 dòng thoại");
 
         line.AssignToPanel(panel.Id);
-        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue();
+        (await f.Submit(f.ArtistId, pencil)).IsSuccess.Should().BeTrue("dòng của phân cảnh khác không chặn trang này");
     }
 
     /// <summary>BR-31: Artist tự đặt chữ thì công đoạn Lettering là lớp chữ vector, không bắt tải ảnh như Pencil/Ink.</summary>
