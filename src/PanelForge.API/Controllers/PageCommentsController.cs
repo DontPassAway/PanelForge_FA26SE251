@@ -30,7 +30,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>GET /api/series/{seriesId}/page-comments?chapterId=&amp;status=</summary>
     [HttpGet("api/series/{seriesId:guid}/page-comments")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(IReadOnlyList<PageCommentDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
         Guid seriesId,
@@ -44,7 +44,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/chapters/{chapterId}/page-comments</summary>
     [HttpPost("api/chapters/{chapterId:guid}/page-comments")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor)]
+    [RequireWorkspaceRole(WorkspaceRole.Producer, WorkspaceRole.Editor, WorkspaceRole.Writer)]
     [ProducesResponseType(typeof(PageCommentDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> Create(
         Guid chapterId,
