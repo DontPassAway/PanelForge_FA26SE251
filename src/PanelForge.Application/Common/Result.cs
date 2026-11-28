@@ -59,4 +59,6 @@ public static class ResultErrorCodes
     public const string AiQuotaExceeded = "AI_QUOTA_EXCEEDED";
     /// <summary>File rỗng hoặc vượt giới hạn kích thước Admin đặt (<c>upload_limit_policies</c>) → HTTP 413.</summary>
     public const string FileTooLarge = "FILE_TOO_LARGE";
+    /// <summary>Không gửi được email chứa mã OTP (SMTP chưa cấu hình / lỗi) → HTTP 503, người dùng thử lại sau.</summary>
+    public const string EmailDeliveryFailed = "EMAIL_DELIVERY_FAILED";
 }

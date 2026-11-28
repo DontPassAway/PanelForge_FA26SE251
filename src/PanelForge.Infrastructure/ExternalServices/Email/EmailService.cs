@@ -17,18 +17,22 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
+    public async Task<bool> SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(toEmail);
         ArgumentNullException.ThrowIfNull(subject);
 
-        // Lấy cấu hình từ appsettings.json
         var senderName = _config["EmailConfiguration:SenderName"] ?? "PanelForge Studio";
-        var senderEmail = _config["EmailConfiguration:SenderEmail"] ?? throw new ArgumentNullException("SenderEmail configuration is missing.");
-        var password = _config["EmailConfiguration:Password"] ?? throw new ArgumentNullException("Password configuration is missing.");
+        var senderEmail = _config["EmailConfiguration:SenderEmail"];
+        var password = _config["EmailConfiguration:Password"];
         var smtpServer = _config["EmailConfiguration:SmtpServer"] ?? "smtp.gmail.com";
-        var smtpPortString = _config["EmailConfiguration:SmtpPort"];
-        int smtpPort = int.TryParse(smtpPortString, out var port) ? port : 587;
+        int smtpPort = int.TryParse(_config["EmailConfiguration:SmtpPort"], out var port) ? port : 587;
+
+        if (string.IsNullOrWhiteSpace(senderEmail) || string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogError("Không gửi được email tới {ToEmail}: thiếu EmailConfiguration:SenderEmail hoặc EmailConfiguration:Password.", toEmail);
+            return false;
+        }
 
         try
         {
@@ -51,54 +55,62 @@ public class EmailService : IEmailService
             await client.SendMailAsync(mailMessage, cancellationToken);
 
             _logger.LogInformation("Đã gửi email thành công tới {ToEmail}", toEmail);
+            return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is SmtpException or InvalidOperationException or FormatException or IOException)
         {
+            // Trả false để handler báo lỗi cho người dùng (EMAIL_DELIVERY_FAILED) thay vì báo "đã gửi" sai sự thật.
             _logger.LogError(ex, "Exception xảy ra khi gửi email qua SMTP: {Message}", ex.Message);
+            return false;
         }
     }
 
-    public Task SendEmailVerificationAsync(string toEmail, string token, string recipientName, CancellationToken cancellationToken = default)
+    public Task<bool> SendEmailVerificationAsync(string toEmail, string token, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
     {
         var subject = "[PanelForge] Xác nhận tài khoản email của bạn";
         var body = $@"
-            <h3>Xin chào {recipientName},</h3>
+            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
             <p>Cảm ơn bạn đã đăng ký tài khoản tại PanelForge!</p>
             <p>Mã OTP xác thực email của bạn là: <strong><span style='font-size: 24px; color: #007bff;'>{token}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng 24 giờ. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
             <br/>
             <p>Trân trọng,<br/>PanelForge Studio Team</p>";
 
         return SendEmailAsync(toEmail, subject, body, cancellationToken);
     }
 
-    public Task SendPasswordResetEmailAsync(string toEmail, string token, string recipientName, CancellationToken cancellationToken = default)
+    public Task<bool> SendPasswordResetEmailAsync(string toEmail, string token, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
     {
         var subject = "[PanelForge] Yêu cầu đặt lại mật khẩu";
         var body = $@"
-            <h3>Xin chào {recipientName},</h3>
+            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
             <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn tại PanelForge.</p>
             <p>Mã OTP đặt lại mật khẩu của bạn là: <strong><span style='font-size: 24px; color: #dc3545;'>{token}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng 15 phút. Nếu bạn không yêu cầu điều này, xin vui lòng bỏ qua email.</p>
+            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Nếu bạn không yêu cầu điều này, xin vui lòng bỏ qua email.</p>
             <br/>
             <p>Trân trọng,<br/>PanelForge Studio Team</p>";
 
         return SendEmailAsync(toEmail, subject, body, cancellationToken);
     }
 
-    public Task SendChangePasswordOtpAsync(string toEmail, string otp, string recipientName, CancellationToken cancellationToken = default)
+    public Task<bool> SendChangePasswordOtpAsync(string toEmail, string otp, string recipientName, TimeSpan validFor, CancellationToken cancellationToken = default)
     {
         var subject = "[PanelForge] Mã xác thực OTP thay đổi mật khẩu";
         var body = $@"
-            <h3>Xin chào {recipientName},</h3>
+            <h3>Xin chào {WebUtility.HtmlEncode(recipientName)},</h3>
             <p>Chúng tôi nhận được yêu cầu thay đổi mật khẩu cho tài khoản PanelForge của bạn.</p>
             <p>Mã OTP xác thực thay đổi mật khẩu là: <strong><span style='font-size: 24px; color: #F97316;'>{otp}</span></strong></p>
-            <p>Mã này có hiệu lực trong vòng 15 phút. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
+            <p>Mã này có hiệu lực trong vòng {ValidityText(validFor)}. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
             <br/>
             <p>Trân trọng,<br/>PanelForge Studio Team</p>";
 
         return SendEmailAsync(toEmail, subject, body, cancellationToken);
     }
+
+    private static string ValidityText(TimeSpan validFor)
+        => validFor.TotalMinutes >= 60 && validFor.TotalMinutes % 60 == 0
+            ? $"{(int)validFor.TotalHours} giờ"
+            : $"{(int)validFor.TotalMinutes} phút";
 
     public Task SendWorkspaceInvitationAsync(
         string toEmail,

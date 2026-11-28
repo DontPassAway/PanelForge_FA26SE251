@@ -49,6 +49,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
@@ -178,6 +179,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [HttpPost("send-change-password-otp")]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> SendChangePasswordOtp(CancellationToken cancellationToken)
     {
         if (GetCurrentUserId() is not { } userId)
@@ -242,6 +244,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpPost("resend-verification")]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ResendVerificationEmailCommand(request.Email), cancellationToken);
@@ -436,9 +439,12 @@ public class AuthController : ControllerBase
         => Unauthorized(new { message = "Không xác định được danh tính người dùng." });
 
     // UNAUTHORIZED → 401, lỗi nghiệp vụ khác → 400; body { message } như trước
-    private IActionResult ToError<T>(Result<T> result)
-        => result.ErrorCode == ResultErrorCodes.Unauthorized
-            ? Unauthorized(new { message = result.ErrorMessage })
-            : BadRequest(new { message = result.ErrorMessage });
+    private IActionResult ToError<T>(Result<T> result) => result.ErrorCode switch
+    {
+        ResultErrorCodes.Unauthorized => Unauthorized(new { message = result.ErrorMessage }),
+        ResultErrorCodes.EmailDeliveryFailed => StatusCode(StatusCodes.Status503ServiceUnavailable,
+            new { code = result.ErrorCode, message = result.ErrorMessage }),
+        _ => BadRequest(new { message = result.ErrorMessage }),
+    };
 }
 

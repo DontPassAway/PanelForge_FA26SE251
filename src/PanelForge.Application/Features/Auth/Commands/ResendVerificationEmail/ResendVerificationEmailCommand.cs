@@ -37,7 +37,8 @@ public sealed class ResendVerificationEmailCommandHandler : IRequestHandler<Rese
         user.SetEmailVerificationToken(otp, DateTime.UtcNow.Add(AuthSecrets.OtpLifetime));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await _emailService.SendEmailVerificationAsync(user.Email, otp, user.FullName, cancellationToken);
-        return Result<bool>.Success(true);
+        return await _emailService.SendEmailVerificationAsync(user.Email, otp, user.FullName, AuthSecrets.OtpLifetime, cancellationToken)
+            ? Result<bool>.Success(true)
+            : Result<bool>.Failure(AuthSecrets.EmailDeliveryFailedMessage, ResultErrorCodes.EmailDeliveryFailed);
     }
 }

@@ -43,10 +43,13 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         var otp = AuthSecrets.NewEmailOtp();
         user.SetEmailVerificationToken(otp, DateTime.UtcNow.Add(AuthSecrets.OtpLifetime));
 
+        // Gửi mã trước khi lưu: SMTP lỗi thì không tạo tài khoản, người dùng đăng ký lại được ngay
+        // (nếu lưu trước, email đã bị chiếm mà người dùng không nhận được mã).
+        if (!await _emailService.SendEmailVerificationAsync(user.Email, otp, user.FullName, AuthSecrets.OtpLifetime, cancellationToken))
+            return Result<AuthResponse>.Failure(AuthSecrets.EmailDeliveryFailedMessage, ResultErrorCodes.EmailDeliveryFailed);
+
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        await _emailService.SendEmailVerificationAsync(user.Email, otp, user.FullName, cancellationToken);
 
         return Result<AuthResponse>.Success(AuthResponseFactory.WithoutToken(
             user, "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để lấy mã PIN xác thực."));

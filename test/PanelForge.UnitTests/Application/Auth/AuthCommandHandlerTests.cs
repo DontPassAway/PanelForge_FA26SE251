@@ -15,6 +15,7 @@ using PanelForge.Application.Features.Auth.Commands.Login;
 using PanelForge.Application.Features.Auth.Commands.Register;
 using PanelForge.Application.Features.Auth.Commands.ResendVerificationEmail;
 using PanelForge.Application.Features.Auth.Commands.ResetPassword;
+using PanelForge.Application.Features.Auth.Commands.SendChangePasswordOtp;
 using PanelForge.Application.Features.Auth.Commands.RefreshToken;
 using PanelForge.Application.Features.Auth.Commands.VerifyEmail;
 using PanelForge.Application.Features.Auth.Commands.VerifyTwoFactor;
@@ -50,6 +51,17 @@ public class AuthCommandHandlerTests
         // Session policy (V1.2): user chưa thuộc Workspace nào → không bị giới hạn thêm
         _dbContextMock.Setup(db => db.WorkspaceMembers)
             .Returns(DbSetMockHelper.CreateDbSetMock(new List<PanelForge.Domain.Entities.Workspaces.WorkspaceMember>()));
+        SetEmailDelivery(true);
+    }
+
+    private void SetEmailDelivery(bool delivered)
+    {
+        _emailServiceMock.Setup(e => e.SendEmailVerificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(delivered);
+        _emailServiceMock.Setup(e => e.SendPasswordResetEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(delivered);
+        _emailServiceMock.Setup(e => e.SendChangePasswordOtpAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(delivered);
     }
 
     private void SetupUsers(List<User> users)
@@ -107,7 +119,25 @@ public class AuthCommandHandlerTests
         usersList.Should().ContainSingle(u => u.Email == "tam@example.com");
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _emailServiceMock.Verify(e => e.SendEmailVerificationAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            "tam@example.com", It.IsAny<string>(), "Bui Ngoc Tam", AuthSecrets.OtpLifetime, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Register_WhenEmailCannotBeSent_ShouldFailWithoutCreatingUser()
+    {
+        var usersList = new List<User>();
+        SetupUsers(usersList);
+        SetEmailDelivery(false);
+        _passwordHasherMock.Setup(h => h.HashPassword(It.IsAny<string>())).Returns("hashed");
+
+        var result = await Register().Handle(
+            new RegisterCommand("tam@example.com", "Password123!", "Bui Ngoc Tam", null), CancellationToken.None);
+
+        // Không tạo tài khoản: người dùng đăng ký lại được thay vì kẹt ở "Email đã được đăng ký".
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed); // → 503
+        usersList.Should().BeEmpty();
+        _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -330,7 +360,7 @@ public class AuthCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -346,7 +376,7 @@ public class AuthCommandHandlerTests
         user.PasswordResetTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
         _dbContextMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _emailServiceMock.Verify(e => e.SendPasswordResetEmailAsync(
-            user.Email, It.IsAny<string>(), user.FullName, It.IsAny<CancellationToken>()), Times.Once);
+            user.Email, It.IsAny<string>(), user.FullName, AuthSecrets.OtpLifetime, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -529,6 +559,34 @@ public class AuthCommandHandlerTests
     // Include(t => t.User) không chạy trên mock → gán sẵn navigation qua reflection
     private static void SetupRefreshTokenUser(RefreshToken token, User user)
         => typeof(RefreshToken).GetProperty(nameof(RefreshToken.User))!.SetValue(token, user);
+
+    [Fact]
+    public async Task ResendVerification_WhenEmailCannotBeSent_ShouldFail()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        SetupUsers(new List<User> { user });
+        SetEmailDelivery(false);
+
+        var result = await new ResendVerificationEmailCommandHandler(_dbContextMock.Object, _emailServiceMock.Object)
+            .Handle(new ResendVerificationEmailCommand("user@example.com"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed);
+    }
+
+    [Fact]
+    public async Task SendChangePasswordOtp_WhenEmailCannotBeSent_ShouldFail()
+    {
+        var user = User.Create("user@example.com", "User", "hash");
+        SetupUsers(new List<User> { user });
+        SetEmailDelivery(false);
+
+        var result = await new SendChangePasswordOtpCommandHandler(_dbContextMock.Object, _emailServiceMock.Object)
+            .Handle(new SendChangePasswordOtpCommand(user.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.EmailDeliveryFailed);
+    }
 
     [Fact]
     public async Task ResendVerification_WhenAlreadyConfirmed_ShouldFail()

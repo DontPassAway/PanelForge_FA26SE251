@@ -7,6 +7,8 @@ namespace PanelForge.Application.Features.Auth.Common;
 internal static class AuthSecrets
 {
     public static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(15);
+
+    public const string EmailDeliveryFailedMessage = "Hệ thống chưa gửi được email chứa mã xác thực. Vui lòng thử lại sau ít phút.";
     public static readonly TimeSpan RememberDeviceLifetime = TimeSpan.FromDays(30);
     public static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30);
 

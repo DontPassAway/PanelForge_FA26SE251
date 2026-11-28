@@ -35,7 +35,7 @@ public sealed class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswor
         user.SetPasswordResetToken(otp, DateTime.UtcNow.Add(AuthSecrets.OtpLifetime));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await _emailService.SendPasswordResetEmailAsync(user.Email, otp, user.FullName, cancellationToken);
+        await _emailService.SendPasswordResetEmailAsync(user.Email, otp, user.FullName, AuthSecrets.OtpLifetime, cancellationToken);
         return Result<bool>.Success(true);
     }
 }
