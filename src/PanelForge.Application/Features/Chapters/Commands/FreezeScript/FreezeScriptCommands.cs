@@ -239,13 +239,9 @@ public sealed class ScriptLifecycleCommandHandler :
         if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
-        // Cho phép nộp kịch bản trước khi hoàn thành series bible (submitGate ghi nhận thông tin, không chặn)
-        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
-        if (!submitGate.CanSubmit)
-        {
-            var blockerSummary = string.Join("; ", submitGate.Blockers.Select(b => $"{b.EntryName}: {b.Reason}"));
-            // Ghi nhận cảnh báo nhưng cho phép nộp kịch bản sang Editor
-        }
+        // Nộp KHÔNG chặn theo cổng Bible (Gate 1 mới chặn, xem StartChapterProduction). Vẫn gọi EvaluateSubmitAsync
+        // vì nó cập nhật cast (RecomputeAsync) trước khi nộp; kết quả blocker không dùng để chặn.
+        await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
 
         if (await ScriptSubmitRules.ApplySubmitAsync(_db, chapter, version, cmd.UserId, workspaceId, ct) is { } submitError)
             return Result<ChapterDetailDto>.Failure(submitError, ResultErrorCodes.Conflict);
