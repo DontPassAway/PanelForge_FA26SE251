@@ -69,21 +69,32 @@ Cập nhật cấu hình server khi file trong `deploy/staging` đổi: chạy l
 | `MAIN_SITE`, `DEV_SITE` | Không có tên miền: `:80` và `:8443` (HTTP). Có tên miền: `ten.mien` và `ten.mien:8443` (HTTPS) |
 | `MAIN_*`, `DEV_*` (`POSTGRES_PASSWORD`, `JWT_SECRET`, `AI_SERVICE_KEY`) | Sinh tự động, riêng từng môi trường. Không đổi `*_POSTGRES_PASSWORD` sau khi DB đã tạo |
 | `MAIN_SEPAY_WEBHOOK_API_KEY` | Webhook SePay trỏ về bản chính thức, xem `docs/setup/SEPAY_SETUP.md` |
-| `SMTP_SENDER_EMAIL`, `SMTP_APP_PASSWORD` | Gmail App Password, cần để gửi OTP xác thực email (dùng chung 2 môi trường) |
+| `SMTP_SENDER_EMAIL`, `SMTP_APP_PASSWORD` | Tuỳ chọn: SMTP mặc định khi Admin chưa lưu cấu hình trong app (Gmail App Password, dùng chung 2 môi trường) |
 | `FIREBASE_PROJECT_ID` | Đăng nhập Google; file key chưa được mount |
 
 Sửa xong: `sudo docker compose up -d` (chỉ đổi biến) hoặc `sudo ./deploy.sh --force`.
 
 ### Tạo tài khoản Admin đầu tiên (mỗi môi trường làm riêng)
 
-Server không chạy `DevUserSeeder` (mật khẩu mặc định nằm trong repo public). Khi chưa có SMTP:
+Server không chạy `DevUserSeeder` (mật khẩu mặc định nằm trong repo public). Admin đầu tiên tạo thẳng trong DB
+(mật khẩu băm bằng bcrypt của `pgcrypto`, cùng định dạng Backend dùng), không qua `register` vì đăng ký cần gửi được email OTP:
 
 ```bash
-curl -X POST https://<MAIN_SITE hoặc DEV_SITE>/api/auth/register -H 'Content-Type: application/json' \
-  -d '{"email":"<email>","password":"<mật khẩu>","fullName":"<tên>"}'   # có thể báo lỗi gửi mail, tài khoản vẫn được tạo
-cd /opt/panelforge && sudo docker compose exec postgres-main psql -U panelforge -d panelforge \
-  -c "UPDATE users SET is_email_confirmed = true, role = 'Admin' WHERE email = '<email>';"   # postgres-dev cho bản test
+cd /opt/panelforge && sudo docker compose exec postgres-main psql -U panelforge -d panelforge -c "
+  CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  INSERT INTO users (id, email, full_name, password_hash, role, is_email_confirmed, created_at)
+  VALUES (gen_random_uuid(), '<email>', '<tên>', crypt('<mật khẩu>', gen_salt('bf', 11)), 'Admin', true, now());"
+# postgres-dev cho bản test
 ```
+
+### Cấu hình email hệ thống
+
+Admin đăng nhập → **Cấu hình email** (`/admin?tab=email-settings`): nhập máy chủ SMTP, cổng, email gửi đi và mật khẩu
+(Gmail: `smtp.gmail.com`, `587`, App Password), lưu rồi bấm **Gửi email thử**. Cấu hình lưu trong DB (bảng
+`platform_email_settings`, append-only, mật khẩu mã hoá bằng Data Protection) và được ưu tiên hơn `SMTP_SENDER_EMAIL` /
+`SMTP_APP_PASSWORD` trong `.env`. Khoá Data Protection nằm ở volume `dp_main` / `dp_dev`; xoá volume này thì Admin phải
+nhập lại mật khẩu SMTP. Chưa cấu hình email thì đăng ký tài khoản, gửi lại mã xác thực và OTP đổi mật khẩu báo lỗi
+503 `EMAIL_DELIVERY_FAILED`.
 
 ## Giới hạn đã biết
 

@@ -4532,6 +4532,80 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Platform.PlatformEmailSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("ProtectedPassword")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_password");
+
+                    b.Property<string>("SenderEmail")
+                        .IsRequired()
+                        .HasColumnType("varchar(254)")
+                        .HasColumnName("sender_email");
+
+                    b.Property<string>("SenderName")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("sender_name");
+
+                    b.Property<int>("SmtpPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("smtp_port");
+
+                    b.Property<string>("SmtpServer")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("smtp_server");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_platform_email_settings_created_at");
+
+                    b.ToTable("platform_email_settings", (string)null);
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Preview.PageComment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7578,6 +7652,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Payments.StudioPackagePrice", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Platform.PlatformEmailSettings", b =>
                 {
                     b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
                         .WithMany()

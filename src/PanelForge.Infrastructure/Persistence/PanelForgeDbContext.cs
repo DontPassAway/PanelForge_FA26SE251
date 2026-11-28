@@ -105,6 +105,7 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<ReaderWallet> ReaderWallets => Set<ReaderWallet>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<PlatformBankAccount> PlatformBankAccounts => Set<PlatformBankAccount>();
+    public DbSet<PanelForge.Domain.Entities.Platform.PlatformEmailSettings> PlatformEmailSettings => Set<PanelForge.Domain.Entities.Platform.PlatformEmailSettings>();
     public DbSet<StudioPackagePrice> StudioPackagePrices => Set<StudioPackagePrice>();
     public DbSet<ChapterEntitlement> ChapterEntitlements => Set<ChapterEntitlement>();
     public DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings => Set<PanelForge.Domain.Entities.Content.SeriesRating>();

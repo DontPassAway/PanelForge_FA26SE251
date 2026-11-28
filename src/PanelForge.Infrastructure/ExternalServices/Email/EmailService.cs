@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Mail;
+using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 
 namespace PanelForge.Infrastructure.ExternalServices.Email;
@@ -10,11 +13,48 @@ public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _logger;
+    private readonly IPanelForgeDbContext _db;
+    private readonly IAiKeyProtector _protector;
 
-    public EmailService(IConfiguration config, ILogger<EmailService> logger)
+    public EmailService(IConfiguration config, ILogger<EmailService> logger, IPanelForgeDbContext db, IAiKeyProtector protector)
     {
         _config = config;
         _logger = logger;
+        _db = db;
+        _protector = protector;
+    }
+
+    private sealed record SmtpSettings(string Server, int Port, string SenderName, string? SenderEmail, string? Password);
+
+    /// <summary>Cấu hình Admin lưu trong app (bản ghi mới nhất) được ưu tiên; chưa có thì dùng EmailConfiguration.</summary>
+    private async Task<SmtpSettings> ResolveSettingsAsync(CancellationToken ct)
+    {
+        var saved = await _db.PlatformEmailSettings.AsNoTracking()
+            .Where(s => !s.IsDeleted)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (saved is not null)
+        {
+            string? password = null;
+            try
+            {
+                password = _protector.Unprotect(saved.ProtectedPassword);
+            }
+            catch (CryptographicException ex)
+            {
+                // Khoá Data Protection đổi (container dựng lại không giữ DataProtection__KeysPath): Admin cần nhập lại mật khẩu.
+                _logger.LogError(ex, "Không giải mã được mật khẩu SMTP đã lưu; Admin cần nhập lại mật khẩu trong Cấu hình email.");
+            }
+            return new SmtpSettings(saved.SmtpServer, saved.SmtpPort, saved.SenderName, saved.SenderEmail, password);
+        }
+
+        return new SmtpSettings(
+            _config["EmailConfiguration:SmtpServer"] ?? "smtp.gmail.com",
+            int.TryParse(_config["EmailConfiguration:SmtpPort"], out var port) ? port : 587,
+            _config["EmailConfiguration:SenderName"] ?? "PanelForge Studio",
+            _config["EmailConfiguration:SenderEmail"],
+            _config["EmailConfiguration:Password"]);
     }
 
     public async Task<bool> SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
@@ -22,15 +62,11 @@ public class EmailService : IEmailService
         ArgumentNullException.ThrowIfNull(toEmail);
         ArgumentNullException.ThrowIfNull(subject);
 
-        var senderName = _config["EmailConfiguration:SenderName"] ?? "PanelForge Studio";
-        var senderEmail = _config["EmailConfiguration:SenderEmail"];
-        var password = _config["EmailConfiguration:Password"];
-        var smtpServer = _config["EmailConfiguration:SmtpServer"] ?? "smtp.gmail.com";
-        int smtpPort = int.TryParse(_config["EmailConfiguration:SmtpPort"], out var port) ? port : 587;
+        var (smtpServer, smtpPort, senderName, senderEmail, password) = await ResolveSettingsAsync(cancellationToken);
 
         if (string.IsNullOrWhiteSpace(senderEmail) || string.IsNullOrWhiteSpace(password))
         {
-            _logger.LogError("Không gửi được email tới {ToEmail}: thiếu EmailConfiguration:SenderEmail hoặc EmailConfiguration:Password.", toEmail);
+            _logger.LogError("Không gửi được email tới {ToEmail}: chưa cấu hình SMTP (Admin → Cấu hình email, hoặc EmailConfiguration).", toEmail);
             return false;
         }
 

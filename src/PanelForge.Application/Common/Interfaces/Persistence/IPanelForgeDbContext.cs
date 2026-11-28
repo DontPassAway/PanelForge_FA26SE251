@@ -90,6 +90,7 @@ public interface IPanelForgeDbContext
     DbSet<ReaderWallet> ReaderWallets { get; }
     DbSet<PaymentTransaction> PaymentTransactions { get; }
     DbSet<PlatformBankAccount> PlatformBankAccounts { get; }
+    DbSet<PanelForge.Domain.Entities.Platform.PlatformEmailSettings> PlatformEmailSettings { get; }
     DbSet<StudioPackagePrice> StudioPackagePrices { get; }
     DbSet<ChapterEntitlement> ChapterEntitlements { get; }
     DbSet<PanelForge.Domain.Entities.Content.SeriesRating> SeriesRatings { get; }
