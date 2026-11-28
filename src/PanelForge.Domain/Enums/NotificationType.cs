@@ -40,5 +40,11 @@ public enum NotificationType
     /// <summary>Gửi người nhận khi mọi việc tiền đề của việc họ giữ đã được duyệt: đến lượt bắt đầu.</summary>
     AssignmentReady = 18,
     /// <summary>Gửi Publisher khi Producer bàn giao chương để phát hành.</summary>
-    ChapterHandedOff = 19
+    ChapterHandedOff = 19,
+    /// <summary>Gửi mọi Admin khi Producer xin tăng hạn mức Studio (OPS-21).</summary>
+    QuotaIncreaseRequested = 20,
+    /// <summary>Gửi Producer đã xin khi Admin duyệt tăng hạn mức (OPS-21).</summary>
+    QuotaIncreaseApproved = 21,
+    /// <summary>Gửi Producer đã xin khi Admin từ chối tăng hạn mức, kèm lý do (OPS-21).</summary>
+    QuotaIncreaseRejected = 22
 }

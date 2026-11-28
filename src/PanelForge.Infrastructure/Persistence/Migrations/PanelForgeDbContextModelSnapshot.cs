@@ -6151,6 +6151,180 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("submissions", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaIncreaseRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<long>("CurrentQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("current_quota");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<long?>("GrantedQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("granted_quota");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<long>("RequestedQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("requested_quota");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("resource_type");
+
+                    b.Property<string>("ReviewNote")
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_quota_increase_requests_status_created");
+
+                    b.HasIndex("WorkspaceId", "ResourceType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quota_increase_requests_pending")
+                        .HasFilter("status = 'Pending' AND is_deleted = false");
+
+                    b.ToTable("quota_increase_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_increase_requests_requested_gt_current", "requested_quota > current_quota");
+                        });
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<long>("MonthlyImageQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("monthly_image_quota");
+
+                    b.Property<long>("MonthlyTokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("monthly_token_quota");
+
+                    b.Property<long>("StorageQuotaBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storage_quota_bytes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_quota_policies_created_at");
+
+                    b.ToTable("quota_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_policies_images_positive", "monthly_image_quota > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_storage_positive", "storage_quota_bytes > 0");
+
+                            t.HasCheckConstraint("ck_quota_policies_tokens_positive", "monthly_token_quota > 0");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7475,6 +7649,37 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AssignmentId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaIncreaseRequest", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PanelForge.Domain.Entities.Workspaces.StudioWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.QuotaPolicy", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

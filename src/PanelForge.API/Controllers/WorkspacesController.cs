@@ -34,6 +34,9 @@ using PanelForge.API.Common;
 using PanelForge.Application.Features.Workspaces.Commands.SetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceCover;
 using PanelForge.Application.Features.Workspaces.Queries.GetWorkspaceReaderStats;
+using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Application.Features.Quotas.Commands.SubmitQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
 
 namespace PanelForge.API.Controllers;
 
@@ -449,6 +452,35 @@ public class WorkspacesController : ControllerBase
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+    }
+
+    /// <summary>GET /api/workspaces/{id}/quota-requests — Producer xem các yêu cầu tăng hạn mức của Studio (OPS-21).</summary>
+    [HttpGet("{id:guid}/quota-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(IReadOnlyList<QuotaIncreaseRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaRequests(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotaIncreaseRequestsQuery(id, null, 50), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/workspaces/{id}/quota-requests — Producer xin Admin tăng hạn mức (OPS-21). 409 nếu đã có yêu cầu cùng loại đang chờ.</summary>
+    [HttpPost("{id:guid}/quota-requests")]
+    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> SubmitQuotaRequest(
+        Guid id, [FromBody] SubmitQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (GetCurrentUserId() is not { } producerId)
+            return UnknownUser();
+
+        var result = await _mediator.Send(new SubmitQuotaIncreaseRequestCommand(
+            id, producerId, request.ResourceType, request.RequestedQuota, request.Reason), cancellationToken);
+        if (result.IsSuccess)
+            return CreatedAtAction(nameof(GetQuotaRequests), new { id }, result.Value);
+        return result.ErrorCode == ResultErrorCodes.Conflict
+            ? Conflict(new { message = result.ErrorMessage, code = result.ErrorCode })
+            : ToError(result);
     }
 
     private IActionResult UnknownUser()

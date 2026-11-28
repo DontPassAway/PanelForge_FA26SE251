@@ -37,6 +37,8 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
     public DbSet<UserRememberedDevice> UserRememberedDevices => Set<UserRememberedDevice>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
+    public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
+    public DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests => Set<QuotaIncreaseRequest>();
     public DbSet<AiProviderCredential> AiProviderCredentials => Set<AiProviderCredential>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();

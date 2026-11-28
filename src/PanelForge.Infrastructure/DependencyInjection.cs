@@ -157,8 +157,8 @@ public static class DependencyInjection
         // ── Hạn mức cấp cho Studio mới (OPS-01, BR-22): server tự đặt, client không gửi ──
         var workspaceDefaults = new WorkspaceDefaultsSettings();
         configuration.GetSection(WorkspaceDefaultsSettings.SectionName).Bind(workspaceDefaults);
-        if (workspaceDefaults.StorageQuotaBytes < 0)
-            throw new InvalidOperationException($"{WorkspaceDefaultsSettings.SectionName}:StorageQuotaBytes không được âm.");
+        if (workspaceDefaults.StorageQuotaBytes < 0 || workspaceDefaults.MonthlyTokenQuota < 0 || workspaceDefaults.MonthlyImageQuota < 0)
+            throw new InvalidOperationException($"{WorkspaceDefaultsSettings.SectionName}: hạn mức mặc định không được âm.");
         services.AddSingleton(workspaceDefaults);
 
         // ── AI Multi-Agent: client mỏng sang service PanelForge.AI (cách ly lỗi: timeout + retry + circuit breaker) ──

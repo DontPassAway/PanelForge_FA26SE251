@@ -54,6 +54,15 @@ using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageReport;
 using PanelForge.Application.Features.AiUsage.Queries.GetAiUsageRecords;
 using PanelForge.Application.Features.AiUsage.Queries.ExportAiUsageRecords;
 using PanelForge.Domain.Enums;
+using System.Security.Claims;
+using PanelForge.Application.Features.Quotas.Models;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaPolicy;
+using PanelForge.Application.Features.Quotas.Commands.UpdateQuotaPolicy;
+using PanelForge.Application.Features.Quotas.Queries.GetQuotaIncreaseRequests;
+using PanelForge.Application.Features.Quotas.Commands.ApproveQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Commands.RejectQuotaIncreaseRequest;
+using PanelForge.Application.Features.Quotas.Queries.GetAdminResources;
+using PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResources;
 using PanelForge.API.Common;
 using PanelForge.Application.Features.AiUsage.Models;
 using PanelForge.Application.Features.Audit.Models;
@@ -744,4 +753,80 @@ public class AdminController : ControllerBase
         var result = await _mediator.Send(new UpdateWorkspaceQuotaCommand(id, request.StorageQuotaBytes), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
+    // ─── OPS-20..23: chính sách hạn mức, yêu cầu tăng hạn mức, màn Tài nguyên ───
+
+    /// <summary>GET /api/admin/quota-policy — hạn mức cấp cho Studio mới (OPS-20).</summary>
+    [HttpGet("quota-policy")]
+    [ProducesResponseType(typeof(QuotaPolicyDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaPolicy(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotaPolicyQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/admin/quota-policy — lưu chính sách mới, chỉ áp cho Studio tạo sau đó (OPS-20).</summary>
+    [HttpPut("quota-policy")]
+    [ProducesResponseType(typeof(QuotaPolicyDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateQuotaPolicy([FromBody] UpdateQuotaPolicyRequest request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new UpdateQuotaPolicyCommand(
+            adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/quota-requests?status=Pending — yêu cầu tăng hạn mức của mọi Studio (OPS-21).</summary>
+    [HttpGet("quota-requests")]
+    [ProducesResponseType(typeof(IReadOnlyList<QuotaIncreaseRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaRequests([FromQuery] QuotaIncreaseRequestStatus? status, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuotaIncreaseRequestsQuery(null, status), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/quota-requests/{id}/approve — duyệt, cấp mức xin hoặc mức Admin chọn (OPS-21).</summary>
+    [HttpPost("quota-requests/{id:guid}/approve")]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApproveQuotaRequest(
+        Guid id, [FromBody] ApproveQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(
+            new ApproveQuotaIncreaseRequestCommand(id, adminId, request.GrantedQuota, request.Note), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>POST /api/admin/quota-requests/{id}/reject — từ chối kèm lý do (OPS-21).</summary>
+    [HttpPost("quota-requests/{id:guid}/reject")]
+    [ProducesResponseType(typeof(QuotaIncreaseRequestDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RejectQuotaRequest(
+        Guid id, [FromBody] RejectQuotaIncreaseRequestBody request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new RejectQuotaIncreaseRequestCommand(id, adminId, request.Note), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>GET /api/admin/resources — mức dùng và mức cấp của mọi Studio (OPS-23).</summary>
+    [HttpGet("resources")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminWorkspaceResourceDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetResources(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminResourcesQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>PUT /api/admin/workspaces/{id}/resources — sửa nhanh hạn mức một Studio; null = giữ, 0 = không giới hạn (OPS-23).</summary>
+    [HttpPut("workspaces/{id:guid}/resources")]
+    [ProducesResponseType(typeof(AdminWorkspaceResourceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateWorkspaceResources(
+        Guid id, [FromBody] UpdateWorkspaceResourcesRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateWorkspaceResourcesCommand(
+            id, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    private Guid? CurrentUserId()
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var id) ? id : null;
 }

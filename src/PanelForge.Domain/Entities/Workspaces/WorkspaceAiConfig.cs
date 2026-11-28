@@ -128,6 +128,14 @@ public class WorkspaceAiConfig : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Admin cấp lại token/tháng (OPS-21, OPS-23). 0 = không giới hạn.</summary>
+    public void SetMonthlyTokenQuota(long quota)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(quota);
+        MonthlyTokenQuota = quota;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void SetMonthlyImageQuota(long quota)
     {
         MonthlyImageQuota = Math.Max(0, quota);

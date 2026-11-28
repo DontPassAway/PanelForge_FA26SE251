@@ -22,6 +22,8 @@ public interface IPanelForgeDbContext
     DbSet<UserRememberedDevice> UserRememberedDevices { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<WorkspaceAiConfig> WorkspaceAiConfigs { get; }
+    DbSet<QuotaPolicy> QuotaPolicies { get; }
+    DbSet<QuotaIncreaseRequest> QuotaIncreaseRequests { get; }
     DbSet<AiProviderCredential> AiProviderCredentials { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiUsageRecord> AiUsageRecords { get; }
