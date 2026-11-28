@@ -11,6 +11,7 @@ using PanelForge.Application.Features.Bible.Commands.ReviewBibleEntryRevision;
 using PanelForge.Application.Features.Bible.Commands.SubmitBibleConcept;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Entities.Bible;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
@@ -49,6 +50,7 @@ public class BibleConceptVersioningAndConfirmTests
         _db.Setup(d => d.BibleEntries).Returns(DbSetMockHelper.CreateDbSetMock(entries));
         _db.Setup(d => d.BibleEntryRevisions).Returns(DbSetMockHelper.CreateDbSetMock(revisions));
         _db.Setup(d => d.BibleConceptComments).Returns(DbSetMockHelper.CreateDbSetMock(comments));
+        _db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(new List<Notification>()));
         _db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
     }
 

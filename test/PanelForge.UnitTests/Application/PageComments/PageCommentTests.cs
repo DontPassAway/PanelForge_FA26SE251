@@ -11,6 +11,7 @@ using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.Identity;
 using PanelForge.Domain.Entities.Preview;
 using PanelForge.Domain.Entities.Workflow;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.UnitTests.Common;
 using Xunit;
@@ -157,6 +158,8 @@ public class PageCommentTests
             Db.Setup(d => d.StageTaskLots).Returns(DbSetMockHelper.CreateDbSetMock(Lots));
             Db.Setup(d => d.StageTaskSubmissions).Returns(DbSetMockHelper.CreateDbSetMock(Submissions));
             Db.Setup(d => d.Notifications).Returns(DbSetMockHelper.CreateDbSetMock(Notifications));
+            Db.Setup(d => d.SeriesMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<SeriesMember>()));
+            Db.Setup(d => d.WorkspaceMembers).Returns(DbSetMockHelper.CreateDbSetMock(new List<WorkspaceMember>()));
             Db.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
             Db.Setup(d => d.LockChapterAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         }

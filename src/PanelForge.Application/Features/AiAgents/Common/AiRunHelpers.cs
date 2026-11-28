@@ -5,6 +5,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Features.AiAgents.Models;
 using PanelForge.Domain.Entities.Ai;
+using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.AiAgents.Common;
@@ -12,6 +13,29 @@ namespace PanelForge.Application.Features.AiAgents.Common;
 internal static class AiRunHelpers
 {
     public static Result<T> Fail<T>(string message, string? code = null) => Result<T>.Failure(message, code);
+
+    /// <summary>
+    /// Báo người yêu cầu khi run vừa chuyển sang Completed, Failed hoặc WaitingForHuman (BR-02, UC-14).
+    /// Gọi đúng một lần ngay sau Mark*, trước SaveChanges để thông báo lưu cùng giao dịch. Không báo ở từng step;
+    /// Interrupted (không phải kết quả của người yêu cầu) bỏ qua.
+    /// </summary>
+    public static void NotifyRequesterOfFinish(IPanelForgeDbContext db, AiWorkflowRun run)
+    {
+        (NotificationType Type, string Title, string Message)? notice = run.Status switch
+        {
+            AiRunStatus.Completed => (Type: NotificationType.AiRunCompleted, Title: "Workflow AI đã hoàn tất",
+                Message: "Đề xuất đang chờ bạn quyết định."),
+            AiRunStatus.WaitingForHuman => (Type: NotificationType.AiRunWaitingForHuman, Title: "Workflow AI cần bạn quyết định",
+                Message: "AI dừng lại, cần con người xem xét các điểm còn tồn đọng."),
+            AiRunStatus.Failed => (Type: NotificationType.AiRunFailed, Title: "Workflow AI thất bại",
+                Message: run.ErrorMessage ?? "Vui lòng thử chạy lại."),
+            _ => null
+        };
+        if (notice is null) return;
+
+        db.Notifications.Add(Notification.Create(
+            run.RequestedByUserId, notice.Value.Type, notice.Value.Title, notice.Value.Message, chapterId: run.ChapterId));
+    }
 
     public static RunSnapshot? ReadSnapshot(AiWorkflowRun run) =>
         JsonSerializer.Deserialize<RunSnapshot>(run.ContextSnapshotJson, AiJson.Options);

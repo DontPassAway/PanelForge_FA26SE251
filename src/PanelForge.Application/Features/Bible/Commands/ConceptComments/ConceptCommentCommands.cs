@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
+using PanelForge.Application.Features.Bible.Common;
 using PanelForge.Application.Features.Bible.Models;
 using PanelForge.Domain.Entities.Bible;
 
@@ -73,6 +74,7 @@ public sealed class CreateBibleConceptCommentCommandHandler
         }
 
         _db.BibleConceptComments.Add(comment);
+        ConceptCommentNotifications.NotifyArtist(_db, revision.ArtistUserId, cmd.UserId, comment.Body);
         await _db.SaveChangesAsync(ct);
 
         return Result<BibleConceptCommentDto>.Success(BibleConceptCommentDto.From(comment));
@@ -141,6 +143,8 @@ public sealed class ReplyBibleConceptCommentCommandHandler
         }
 
         _db.BibleConceptComments.Add(reply);
+        var artistId = await ConceptCommentNotifications.ArtistOfRevisionAsync(_db, parent.RevisionId, ct);
+        await ConceptCommentNotifications.NotifyThreadAsync(_db, artistId, targetParentId, cmd.UserId, reply.Body, ct);
         await _db.SaveChangesAsync(ct);
 
         return Result<BibleConceptCommentDto>.Success(BibleConceptCommentDto.From(reply));

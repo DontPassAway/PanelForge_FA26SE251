@@ -14,7 +14,8 @@ namespace PanelForge.Application.Features.Chapters.Common;
 internal static class ScriptNotifications
 {
     public static async Task NotifyWritersAsync(
-        IPanelForgeDbContext db, Chapter chapter, Guid actorUserId, string title, string message, CancellationToken ct)
+        IPanelForgeDbContext db, Chapter chapter, Guid actorUserId, string title, string message, CancellationToken ct,
+        NotificationType type = NotificationType.AssignmentUpdated)
     {
         var workspaceId = await db.Series.AsNoTracking()
             .Where(s => s.Id == chapter.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(ct);
@@ -27,7 +28,7 @@ internal static class ScriptNotifications
         foreach (var userId in writers.Where(id => id != actorUserId).Distinct())
         {
             db.Notifications.Add(Notification.Create(
-                userId, NotificationType.AssignmentUpdated, title, message, chapterId: chapter.Id));
+                userId, type, title, message, chapterId: chapter.Id));
         }
     }
 }
