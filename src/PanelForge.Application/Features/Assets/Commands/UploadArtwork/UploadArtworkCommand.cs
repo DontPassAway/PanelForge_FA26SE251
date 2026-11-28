@@ -9,6 +9,7 @@ using PanelForge.Application.Features.Assignments.Common;
 using PanelForge.Domain.Entities.Assets;
 using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Enums;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Assets.Commands.UploadArtwork;
 
@@ -48,8 +49,8 @@ public sealed class UploadArtworkCommandHandler : IRequestHandler<UploadArtworkC
         // ── Kiểm nội dung (không cần DB) ──
         if (cmd.Content.Length == 0)
             return Fail("File rỗng.");
-        if (cmd.Content.Length > AssetRules.MaxArtworkBytes)
-            return Fail($"File vượt giới hạn {AssetRules.MaxArtworkBytes / (1024 * 1024)} MB.");
+        if (await UploadLimits.CheckAsync(_db, UploadKind.Artwork, cmd.Content.Length, ct) is { } tooLarge)
+            return Fail(tooLarge, ResultErrorCodes.FileTooLarge);
 
         var clientHash = AssetRules.NormalizeSha256(cmd.ClientSha256);
         if (clientHash is null)

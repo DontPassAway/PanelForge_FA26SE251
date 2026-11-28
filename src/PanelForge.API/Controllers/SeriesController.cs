@@ -218,14 +218,14 @@ public sealed class SeriesController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/series/{seriesId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa (PNG/JPEG/WebP, ≤ 5 MB).
+    /// PUT /api/series/{seriesId}/cover (multipart/form-data: file) — Producer đặt ảnh bìa (PNG/JPEG/WebP, giới hạn theo upload-limits).
     /// Trả <c>value</c> = coverUrl mới (cũng có trong SeriesDto.coverUrl).
     /// </summary>
     [HttpPut("api/series/{seriesId:guid}/cover")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetSeriesCoverCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -269,18 +269,22 @@ public sealed class SeriesController : ControllerBase
     private IActionResult CoverResult(PanelForge.Application.Common.Result<string?> result)
         => result.IsSuccess
             ? Ok(new TextValueResponse(result.Value))
-            : result.ErrorCode == PanelForge.Application.Common.ResultErrorCodes.NotFound
-                ? NotFound(new { error = result.ErrorMessage })
-                : BadRequest(new { error = result.ErrorMessage });
+            : result.ErrorCode switch
+            {
+                PanelForge.Application.Common.ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+                PanelForge.Application.Common.ResultErrorCodes.FileTooLarge => StatusCode(
+                    StatusCodes.Status413PayloadTooLarge, new { error = result.ErrorMessage, code = result.ErrorCode }),
+                _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+            };
 
     // ---- Avatar (vuông) & banner (ngang ~3:1) của Series: độc lập với bìa dọc; lưu qua IAssetStorage (R2) như bìa ----
 
-    /// <summary>PUT /api/series/{seriesId}/{avatar|banner} (multipart: file) — Producer tải ảnh riêng (PNG/JPEG/WebP, ≤ 5 MB).</summary>
+    /// <summary>PUT /api/series/{seriesId}/{avatar|banner} (multipart: file) — Producer tải ảnh riêng (PNG/JPEG/WebP, giới hạn theo upload-limits).</summary>
     [HttpPut("api/series/{seriesId:guid}/{kind:regex(^(avatar|banner)$)}")]
     [RequireWorkspaceRole(WorkspaceRole.Producer)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(SetSeriesImageCommandHandler.MaxBytes + 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = SetSeriesImageCommandHandler.MaxBytes + 1024 * 1024)]
+    [RequestSizeLimit(PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ImageCeilingBytes + 1024 * 1024)]
     [ProducesResponseType(typeof(TextValueResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

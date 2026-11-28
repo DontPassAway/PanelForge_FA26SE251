@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Assets.Common;
+using PanelForge.Application.Features.Quotas.Common;
 
 namespace PanelForge.Application.Features.Bible.Commands.UploadBibleReferenceImage;
 
@@ -18,8 +19,6 @@ public sealed record BibleReferenceImageDto(string Url, string Sha256, string Co
 
 public sealed class UploadBibleReferenceImageCommandHandler : IRequestHandler<UploadBibleReferenceImageCommand, Result<BibleReferenceImageDto>>
 {
-    public const long MaxBytes = 10 * 1024 * 1024;
-
     private readonly IPanelForgeDbContext _db;
     private readonly IAssetStorage _storage;
 
@@ -33,12 +32,13 @@ public sealed class UploadBibleReferenceImageCommandHandler : IRequestHandler<Up
 
     public async Task<Result<BibleReferenceImageDto>> Handle(UploadBibleReferenceImageCommand cmd, CancellationToken ct)
     {
-        if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)
-            return Result<BibleReferenceImageDto>.Failure("Ảnh reference sheet phải từ 1 byte đến 10 MB.", ResultErrorCodes.Validation);
-
+        if (cmd.Content.Length == 0)
+            return Result<BibleReferenceImageDto>.Failure("File ảnh rỗng.", ResultErrorCodes.Validation);
         var contentType = AssetRules.DetectImageContentType(cmd.Content);
         if (contentType is null)
             return Result<BibleReferenceImageDto>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
+        if (await UploadLimits.CheckAsync(_db, UploadKind.ReferenceImage, cmd.Content.Length, ct) is { } tooLarge)
+            return Result<BibleReferenceImageDto>.Failure(tooLarge, ResultErrorCodes.FileTooLarge);
 
         var workspaceId = await _db.Series.AsNoTracking()
             .Where(s => s.Id == cmd.SeriesId).Select(s => (Guid?)s.WorkspaceId).FirstOrDefaultAsync(ct);

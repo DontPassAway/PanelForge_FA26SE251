@@ -6446,6 +6446,73 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                     b.ToTable("studio_workspaces", (string)null);
                 });
 
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ArtworkMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("artwork_max_bytes");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<long>("CoverImageMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cover_image_max_bytes");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<long>("ReferenceImageMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reference_image_max_bytes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_upload_limit_policies_created_at");
+
+                    b.ToTable("upload_limit_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_upload_limit_policies_artwork", "artwork_max_bytes > 0 AND artwork_max_bytes <= 52428800");
+
+                            t.HasCheckConstraint("ck_upload_limit_policies_cover_image", "cover_image_max_bytes > 0 AND cover_image_max_bytes <= 20971520");
+
+                            t.HasCheckConstraint("ck_upload_limit_policies_reference_image", "reference_image_max_bytes > 0 AND reference_image_max_bytes <= 20971520");
+                        });
+                });
+
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7740,6 +7807,15 @@ namespace PanelForge.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy", b =>
+                {
+                    b.HasOne("PanelForge.Domain.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PanelForge.Domain.Entities.Workspaces.WorkspaceAiConfig", b =>

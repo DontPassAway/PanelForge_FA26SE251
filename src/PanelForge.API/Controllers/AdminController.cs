@@ -1,4 +1,5 @@
 using MediatR;
+using PanelForge.Application.Features.Quotas.Commands.UpdateUploadLimits;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PanelForge.Application.Common;
@@ -809,6 +810,21 @@ public class AdminController : ControllerBase
             adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
             request.AiEnabledByDefault, request.WarningThresholdPercent,
             request.MonthlyRequestQuota, request.RequestsPerMinute), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToError(result);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/upload-limits — giới hạn kích thước một file tải lên cho toàn nền tảng, áp ngay (đọc qua
+    /// <c>GET /api/assets/upload-limits</c>). Mỗi lần lưu là một bản ghi mới.
+    /// </summary>
+    [HttpPut("upload-limits")]
+    [ProducesResponseType(typeof(UploadLimitsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateUploadLimits([FromBody] UpdateUploadLimitsRequest request, CancellationToken cancellationToken)
+    {
+        if (CurrentUserId() is not { } adminId) return Unauthorized();
+        var result = await _mediator.Send(new UpdateUploadLimitsCommand(
+            adminId, request.ArtworkMaxBytes, request.ReferenceImageMaxBytes, request.CoverImageMaxBytes), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

@@ -234,7 +234,7 @@ public sealed class PagesController : ControllerBase
         return Ok(new { message = $"Trang {pageId} đã được xóa thành công." });
     }
 
-    private const long MaxSplitImageBytes = 20 * 1024 * 1024;
+    private const long MaxSplitImageBytes = PanelForge.Domain.Entities.Workspaces.UploadLimitPolicy.ArtworkCeilingBytes;
 
     /// <summary>
     /// POST /api/pages/{pageId}/split-artwork (multipart/form-data): file, rightToLeft?.
@@ -256,19 +256,20 @@ public sealed class PagesController : ControllerBase
     {
         if (form.File is null || form.File.Length == 0)
             return BadRequest(new { error = "Thiếu file ảnh trang." });
-        if (form.File.Length > MaxSplitImageBytes)
-            return BadRequest(new { error = "Ảnh vượt quá 20MB." });
         if (form.File.ContentType is not ("image/png" or "image/jpeg" or "image/webp"))
             return BadRequest(new { error = "Chỉ hỗ trợ PNG, JPEG, WEBP." });
 
         await using var stream = form.File.OpenReadStream();
         var result = await _mediator.Send(
-            new SplitArtworkQuery(pageId, stream, form.File.FileName, form.RightToLeft), cancellationToken);
+            new SplitArtworkQuery(pageId, stream, form.File.FileName, form.RightToLeft, form.File.Length), cancellationToken);
 
         if (result.IsSuccess) return Ok(result.Value);
-        return result.ErrorCode == ResultErrorCodes.NotFound
-            ? NotFound(new { error = result.ErrorMessage })
-            : BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode });
+        return result.ErrorCode switch
+        {
+            ResultErrorCodes.NotFound => NotFound(new { error = result.ErrorMessage }),
+            ResultErrorCodes.FileTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = result.ErrorMessage, code = result.ErrorCode }),
+            _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode })
+        };
     }
 
     // ── CF4 4.3: lịch sử, xem lại, so sánh và khôi phục canvas ────────────────
