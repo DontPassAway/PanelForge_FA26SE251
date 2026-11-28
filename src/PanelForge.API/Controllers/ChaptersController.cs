@@ -399,7 +399,8 @@ public sealed class ChaptersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new StartChapterProductionCommand(
-            chapterId, GetCurrentUserId(), body.PageAssignments, body.LettererAssignments, body.FirstStageOnly), cancellationToken);
+            chapterId, GetCurrentUserId(), body.PageAssignments, body.LettererAssignments, body.FirstStageOnly,
+            body.ExpectedSubmittedVersionId), cancellationToken);
         if (!result.IsSuccess && result.ErrorCode == ResultErrorCodes.Conflict &&
             result.ErrorDetails is IReadOnlyList<ChapterCastBlockerDto> blockers)
             return Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, blockers });
@@ -642,6 +643,7 @@ public sealed class ChaptersController : ControllerBase
             or ResultErrorCodes.BibleGateBlocked
             or ResultErrorCodes.ActiveArtworkOnRemovedPage
             or ResultErrorCodes.CannotDeleteActiveProductionPage
+            or ResultErrorCodes.ScriptVersionOutdated
             => Conflict(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails }),
         _ => BadRequest(new { error = result.ErrorMessage, code = result.ErrorCode, details = result.ErrorDetails })
     };

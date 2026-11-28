@@ -259,4 +259,48 @@ public sealed class StartChapterProductionTests
         f.Db.AuditLogs.Should().BeEmpty();
         f.UnitOfWork.ExecutionCount.Should().Be(1);
     }
+
+    [Fact]
+    public async Task ExpectedSubmittedVersionMatchesCurrent_ProceedsToStartProduction()
+    {
+        var f = new Fixture();
+
+        var result = await f.Handler.Handle(
+            f.Command() with { ExpectedSubmittedVersionId = f.Chapter.LastSubmittedVersionId }, default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        f.Chapter.Status.Should().Be(ChapterStatus.InProduction);
+    }
+
+    [Fact]
+    public async Task ExpectedSubmittedVersionOutdated_Returns409WithCurrentVersion_AndFreezesNothing()
+    {
+        var f = new Fixture();
+        var outdatedId = Guid.NewGuid();
+
+        var result = await f.Handler.Handle(
+            f.Command() with { ExpectedSubmittedVersionId = outdatedId }, default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ResultErrorCodes.ScriptVersionOutdated);
+        result.ErrorDetails.Should().BeEquivalentTo(new ScriptVersionOutdatedDto(
+            outdatedId, f.Chapter.LastSubmittedVersionId, 1));
+        f.Chapter.Status.Should().Be(ChapterStatus.PreProduction);
+        f.Chapter.ScriptStatus.Should().Be(ScriptStatus.InReview);
+        f.Db.StageTaskLots.Should().BeEmpty();
+        f.Db.StageTasks.Should().BeEmpty();
+        f.Db.AuditLogs.Should().BeEmpty();
+        f.UnitOfWork.ExecutionCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task NullExpectedVersion_KeepsLegacyBehaviour_WithoutVersionCheck()
+    {
+        var f = new Fixture();
+
+        var result = await f.Handler.Handle(f.Command(), default);
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        f.Chapter.Status.Should().Be(ChapterStatus.InProduction);
+    }
 }

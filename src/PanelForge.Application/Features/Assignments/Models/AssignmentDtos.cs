@@ -8,10 +8,23 @@ namespace PanelForge.Application.Features.Assignments.Models;
 
 public sealed record ProductionPageAssignmentRequest(Guid ArtistId, int PageFrom, int PageTo);
 
+/// <param name="ExpectedSubmittedVersionId">
+/// Q26 (tùy chọn): id bản kịch bản đã nộp mà Producer đang xem. Khác bản nộp hiện tại của chương → 409
+/// <c>SCRIPT_VERSION_OUTDATED</c>, không đóng băng/giao việc gì. Bỏ trống (client cũ) thì giữ hành vi cũ.
+/// </param>
 public sealed record StartChapterProductionRequest(
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
     IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
-    bool FirstStageOnly = false);
+    bool FirstStageOnly = false,
+    Guid? ExpectedSubmittedVersionId = null);
+
+/// <summary>Chi tiết đính kèm 409 <c>SCRIPT_VERSION_OUTDATED</c> để FE mở bản mới cho Producer xem lại.</summary>
+/// <param name="CurrentSubmittedVersionId">Bản nộp hiện tại của chương (null nếu chưa nộp bản nào).</param>
+/// <param name="CurrentVersionNumber">Số phiên bản của bản nộp hiện tại (v2, v3...).</param>
+public sealed record ScriptVersionOutdatedDto(
+    Guid ExpectedSubmittedVersionId,
+    Guid? CurrentSubmittedVersionId,
+    int? CurrentVersionNumber);
 
 /// <param name="Assignments">Luôn rỗng từ Gate 1 trên Lưới V3; giữ field để client cũ không vỡ.</param>
 /// <param name="Lots">Các lô lưới Gate 1 vừa giao (Pencil + Letterer theo dải trang).</param>
