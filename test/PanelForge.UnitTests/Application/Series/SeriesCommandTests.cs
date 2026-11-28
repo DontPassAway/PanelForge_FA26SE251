@@ -70,7 +70,10 @@ public class SeriesCommandTests
         result.Value.WorkspaceId.Should().Be(workspaceId);
     }
 
-    /// <summary>F-02 / RF-11: Manga là trắng đen, nên template chuẩn có Color vẫn tạo pipeline với Color tắt.</summary>
+    /// <summary>
+    /// F-02 / RF-11: Manga là trắng đen, nên template chuẩn có Color vẫn tạo pipeline với Color tắt. Gate 2 theo trang (BR-19):
+    /// cổng duyệt của Color chuyển sang Ink, để tranh vẫn qua Editor duyệt; Webtoon giữ cổng ở Color.
+    /// </summary>
     [Theory]
     [InlineData("MANGA", false)]
     [InlineData("WEBTOON", true)]
@@ -81,12 +84,12 @@ public class SeriesCommandTests
         var workspace = StudioWorkspace.Create("Test Studio", Guid.NewGuid());
         typeof(StudioWorkspace).GetProperty("Id")!.SetValue(workspace, workspaceId);
         var template = PanelForge.Domain.Entities.MasterData.PipelineTemplate.Create("STANDARD_MANGA", "Standard Manga", isDefault: true);
-        foreach (var (code, name, order, role) in new[]
+        foreach (var (code, name, order, role, gate) in new[]
                  {
-                     ("PENCIL", "Pencil", 1, WorkspaceRole.Artist), ("COLOR", "Color", 2, WorkspaceRole.Artist),
-                     ("LETTER", "Letter", 3, WorkspaceRole.Letterer)
+                     ("PENCIL", "Pencil", 1, WorkspaceRole.Artist, (string?)null), ("INK", "Ink", 2, WorkspaceRole.Artist, null),
+                     ("COLOR", "Color", 3, WorkspaceRole.Artist, "Approval"), ("LETTER", "Letter", 4, WorkspaceRole.Letterer, "Approval")
                  })
-            template.Stages.Add(PanelForge.Domain.Entities.MasterData.PipelineTemplateStage.Create(template.Id, code, name, order, role));
+            template.Stages.Add(PanelForge.Domain.Entities.MasterData.PipelineTemplateStage.Create(template.Id, code, name, order, role, gate));
         var pipelines = new List<PanelForge.Domain.Entities.Workflow.PipelineDefinition>();
 
         _dbContextMock.Setup(db => db.StudioWorkspaces).Returns(DbSetMockHelper.CreateDbSetMock(new List<StudioWorkspace> { workspace }));
@@ -103,7 +106,10 @@ public class SeriesCommandTests
             new CreateSeriesCommand(WorkspaceId: workspaceId, UserId: userId, Title: "Series", Format: format), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        pipelines.Should().ContainSingle().Which.Stages.Single(s => s.Slug == "color").IsEnabled.Should().Be(colorEnabled);
+        var stages = pipelines.Should().ContainSingle().Which.Stages;
+        stages.Single(s => s.Slug == "color").IsEnabled.Should().Be(colorEnabled);
+        stages.Single(s => s.Slug == "ink").IsApprovalGate.Should().Be(!colorEnabled);
+        stages.Single(s => s.Slug == "letter").IsApprovalGate.Should().BeTrue();
     }
 
     [Fact]
@@ -143,6 +149,8 @@ public class SeriesCommandTests
         stages.Single(s => s.Slug == "review").Track.Should().BeNull();
         stages.Single(s => s.Slug == "review").AllowedRole.Should().Be(WorkspaceRole.Editor);
         stages.Single(s => s.Slug == "review").IsApprovalGate.Should().BeTrue();
+        // Quyết định 2026-11-28: chỉ Gate 2 theo trang + Gate 3 chốt chương; Review cấp chương tắt mặc định
+        stages.Single(s => s.Slug == "review").IsEnabled.Should().BeFalse();
         // Gate 2 theo trang: bước cuối mỗi nhánh (Ink ở truyện trắng đen, Letter) có cổng duyệt
         stages.Where(s => s.Slug is "ink" or "letter").Should().OnlyContain(s => s.IsApprovalGate);
         stages.Single(s => s.Slug == "pencil").IsApprovalGate.Should().BeFalse();

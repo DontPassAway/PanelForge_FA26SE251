@@ -58,12 +58,7 @@ public sealed class UpdatePipelineStageCommandHandler : IRequestHandler<UpdatePi
             return Result<SeriesPipelineDto>.Failure(ex.Message);
         }
 
-        // Gate 2 theo trang: tắt bước cuối có cổng của một nhánh (vd. Color) thì cổng chuyển sang bước còn bật liền trước cùng nhánh
-        // (Ink), để nhánh vẫn qua Editor duyệt. Bật lại không tự gỡ: Producer tự chỉnh nếu muốn.
-        if (cmd.IsEnabled == false && stage.IsApprovalGate && stage.Track is { } track &&
-            pipeline.Stages.Where(s => s.IsEnabled && s.Track == track && s.StageOrder < stage.StageOrder)
-                .MaxBy(s => s.StageOrder) is { IsApprovalGate: false } previous)
-            previous.UpdateDetails(previous.Name, previous.ColorCode, previous.AllowedRole, true, previous.EstimatedDurationDays);
+        if (cmd.IsEnabled == false) pipeline.MoveGateOffDisabledStage(stage);
 
         // Tắt stage: huỷ luôn các ô chưa giao của nó, nếu không cổng duyệt chương đếm chúng là "chưa duyệt" và kẹt mãi.
         // Bật lại thì lần "Sinh / Đồng bộ ô" sau hồi sinh các ô này.
