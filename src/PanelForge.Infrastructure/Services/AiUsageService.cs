@@ -43,20 +43,24 @@ public sealed class AiUsageService : IAiUsageService
         return AiAvailability.Available();
     }
 
-    public async Task<bool> TryReserveTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default)
+    public async Task<AiAvailability> TryStartRequestAsync(Guid workspaceId, long reserveTokens, CancellationToken cancellationToken = default)
     {
         for (var attempt = 0; ; attempt++)
         {
             var config = await _dbContext.WorkspaceAiConfigs
                 .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId, cancellationToken);
-            if (config is null) return false;
+            if (config is null)
+                return AiAvailability.Blocked(AiUsageStatus.Disabled, "Tính năng AI chưa được bật cho Workspace này.");
 
             ResetIfNewMonth(config);
-            if (!config.TryReserveTokens(tokens)) return false;
+            var now = DateTime.UtcNow;
+            var decision = config.TryStartRequest(reserveTokens, now);
+            if (decision != AiRequestDecision.Accepted)
+                return AiAvailability.Blocked(AiUsageStatus.QuotaExceeded, RefusalMessage(config, decision, now));
             try
             {
                 await _dbContext.SaveChangesAsync(cancellationToken);
-                return true;
+                return AiAvailability.Available();
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < MaxConcurrencyRetries)
             {
@@ -64,6 +68,15 @@ public sealed class AiUsageService : IAiUsageService
             }
         }
     }
+
+    private static string RefusalMessage(WorkspaceAiConfig config, AiRequestDecision decision, DateTime now) => decision switch
+    {
+        AiRequestDecision.MonthlyRequestQuotaExceeded =>
+            $"Studio đã dùng hết {config.MonthlyRequestQuota:N0} lượt gọi AI của tháng. Vui lòng tiếp tục bằng thao tác thủ công.",
+        AiRequestDecision.RateLimited =>
+            $"Studio đã gọi AI {config.RequestsInRateWindow} lần trong 1 phút (giới hạn {config.RequestsPerMinuteLimit}). Thử lại sau {config.SecondsUntilRateWindowResets(now)} giây.",
+        _ => "Workspace không còn đủ hạn mức token AI cho lượt này. Vui lòng tiếp tục bằng thao tác thủ công."
+    };
 
     public async Task ReleaseReservedTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default)
     {

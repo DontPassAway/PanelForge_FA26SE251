@@ -774,7 +774,8 @@ public class AdminController : ControllerBase
         if (CurrentUserId() is not { } adminId) return Unauthorized();
         var result = await _mediator.Send(new UpdateQuotaPolicyCommand(
             adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
-            request.AiEnabledByDefault, request.WarningThresholdPercent), cancellationToken);
+            request.AiEnabledByDefault, request.WarningThresholdPercent,
+            request.MonthlyRequestQuota, request.RequestsPerMinute), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 
@@ -834,7 +835,8 @@ public class AdminController : ControllerBase
         if (CurrentUserId() is not { } adminId) return Unauthorized();
         var result = await _mediator.Send(new UpdateWorkspaceResourcesCommand(
             id, adminId, request.StorageQuotaBytes, request.MonthlyTokenQuota, request.MonthlyImageQuota,
-            request.AiEnabled, request.Reason ?? string.Empty), cancellationToken);
+            request.AiEnabled, request.Reason ?? string.Empty,
+            request.MonthlyRequestQuota, request.RequestsPerMinute), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToError(result);
     }
 

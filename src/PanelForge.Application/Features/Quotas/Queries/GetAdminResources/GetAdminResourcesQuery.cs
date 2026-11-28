@@ -36,7 +36,8 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db, Works
             ExhaustedStudios: studios.Count(s => s.Health == ResourceHealth.Exhausted),
             PendingRequests: studios.Sum(s => s.PendingRequestCount),
             WarningThresholdPercent: policy.WarningThresholdPercent,
-            Studios: studios));
+            Studios: studios,
+            TotalRequestsThisMonth: studios.Sum(s => s.AiRequests?.Used ?? 0)));
     }
 
     internal static async Task<List<AdminWorkspaceResourceDto>> LoadAsync(
@@ -59,7 +60,8 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db, Works
                 w.StorageQuotaBytes,
                 w.UsedStorageBytes,
                 Ai = db.WorkspaceAiConfigs.Where(c => c.WorkspaceId == w.Id)
-                    .Select(c => new { c.IsEnabled, c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.MonthlyImageQuota, c.UsedImagesCurrentMonth, c.LastResetAt, c.CreatedAt })
+                    .Select(c => new { c.IsEnabled, c.MonthlyTokenQuota, c.UsedTokensCurrentMonth, c.MonthlyImageQuota, c.UsedImagesCurrentMonth,
+                        c.MonthlyRequestQuota, c.UsedRequestsCurrentMonth, c.RequestsPerMinuteLimit, c.LastResetAt, c.CreatedAt })
                     .FirstOrDefault(),
                 Pending = db.QuotaIncreaseRequests.Count(r => r.WorkspaceId == w.Id && r.Status == QuotaIncreaseRequestStatus.Pending)
             })
@@ -74,10 +76,12 @@ public sealed class GetAdminResourcesQueryHandler(IPanelForgeDbContext db, Works
             var storage = Meter(r.UsedStorageBytes, r.StorageQuotaBytes);
             var tokens = r.Ai is null ? null : Meter(counted ? r.Ai.UsedTokensCurrentMonth : 0, r.Ai.MonthlyTokenQuota);
             var images = r.Ai is null ? null : Meter(counted ? r.Ai.UsedImagesCurrentMonth : 0, r.Ai.MonthlyImageQuota);
+            var requests = r.Ai is null ? null : Meter(counted ? r.Ai.UsedRequestsCurrentMonth : 0, r.Ai.MonthlyRequestQuota);
             return new AdminWorkspaceResourceDto(
                 r.Id, r.Name, r.OwnerName, r.OwnerEmail, r.Members, r.Series, r.CreatedAt,
                 storage, r.Ai?.IsEnabled ?? false, tokens, images, nextReset, r.Pending,
-                Health(warningPercent, storage.PercentUsed, tokens?.PercentUsed, images?.PercentUsed));
+                Health(warningPercent, storage.PercentUsed, tokens?.PercentUsed, images?.PercentUsed, requests?.PercentUsed),
+                requests, r.Ai?.RequestsPerMinuteLimit);
         }).ToList();
     }
 

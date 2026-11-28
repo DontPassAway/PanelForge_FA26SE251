@@ -13,10 +13,12 @@ public interface IAiUsageService
     Task<AiAvailability> CheckAvailabilityAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// OPS-03: giữ chỗ <paramref name="tokens"/> token ước lượng ngay trước khi gọi provider (khoá xmin, thử lại khi đụng nhau).
-    /// false = không đủ hạn mức. Lần <see cref="RecordAsync"/> sau đó phải truyền cùng số trong <see cref="AiUsageEntry.ReservedTokens"/>.
+    /// OPS-03/OPS-24: mở một lượt gọi AI ngay trước khi gọi provider: giữ chỗ <paramref name="reserveTokens"/> token ước lượng
+    /// (0 = không giữ chỗ, vd sinh ảnh) và đếm lượt theo tháng và theo phút của Studio, cùng một lần lưu có khoá xmin
+    /// (thử lại khi đụng nhau). Bị từ chối thì trả lý do và không ghi gì. Đã giữ token thì lần <see cref="RecordAsync"/>
+    /// sau đó phải truyền cùng số trong <see cref="AiUsageEntry.ReservedTokens"/>.
     /// </summary>
-    Task<bool> TryReserveTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default);
+    Task<AiAvailability> TryStartRequestAsync(Guid workspaceId, long reserveTokens, CancellationToken cancellationToken = default);
 
     /// <summary>OPS-03: trả lại token đã giữ chỗ khi lượt gọi không xảy ra hoặc run kết thúc mà chưa chốt (không tạo AiUsageRecord).</summary>
     Task ReleaseReservedTokensAsync(Guid workspaceId, long tokens, CancellationToken cancellationToken = default);

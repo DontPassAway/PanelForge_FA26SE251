@@ -62,14 +62,14 @@ internal static class CopilotGate
                 $"Series đã dùng {recent} lượt Copilot trong 1 phút qua (giới hạn {settings.CopilotCallsPerMinutePerSeries}). Thử lại sau ít giây.",
                 ResultErrorCodes.AiQuotaExceeded);
 
-        // OPS-03: giữ chỗ sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không giữ token
+        // OPS-03/OPS-24: giữ chỗ token và đếm lượt sau cùng, khi mọi cổng khác đã qua, để lượt bị từ chối không tốn gì
         var reserved = settings.CopilotReservedTokens;
-        if (!await usage.TryReserveTokensAsync(workspaceId, reserved, ct))
+        var started = await usage.TryStartRequestAsync(workspaceId, reserved, ct);
+        if (!started.IsAvailable)
         {
-            const string message = "Workspace không còn đủ hạn mức token AI cho lượt này. Vui lòng tiếp tục bằng thao tác thủ công.";
-            await usage.RecordAsync(new AiUsageEntry(workspaceId, feature, AiUsageStatus.QuotaExceeded,
-                ErrorMessage: message, UserId: userId), ct);
-            return Result<CopilotProvider>.Failure(message, ResultErrorCodes.AiQuotaExceeded);
+            await usage.RecordAsync(new AiUsageEntry(workspaceId, feature, started.BlockedReason!.Value,
+                ErrorMessage: started.Message, UserId: userId), ct);
+            return Result<CopilotProvider>.Failure(started.Message!, ResultErrorCodes.AiQuotaExceeded);
         }
 
         return Result<CopilotProvider>.Success(new CopilotProvider(provider, model, config, cred.ApiKey, cred.AccountId, reserved));

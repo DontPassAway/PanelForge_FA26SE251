@@ -23,6 +23,16 @@ public class WorkspaceAiConfig : BaseEntity
     /// <summary>V1.2: quota ảnh sinh ra mỗi tháng, cùng bộ giới hạn và cùng chu kỳ reset với token. 0 = không giới hạn (giống token).</summary>
     public long MonthlyImageQuota { get; private set; } = 0;
     public long UsedImagesCurrentMonth { get; private set; } = 0;
+
+    /// <summary>Số lượt gọi AI tối đa mỗi tháng (cùng chu kỳ reset với token). 0 = không giới hạn.</summary>
+    public long MonthlyRequestQuota { get; private set; } = 0;
+    public long UsedRequestsCurrentMonth { get; private set; } = 0;
+    /// <summary>Số lượt gọi AI tối đa trong một phút (cửa sổ cố định 60 giây). 0 = không giới hạn.</summary>
+    public int RequestsPerMinuteLimit { get; private set; } = 0;
+    public DateTime? RateWindowStartedAt { get; private set; }
+    public int RequestsInRateWindow { get; private set; } = 0;
+
+    public static readonly TimeSpan RateWindow = TimeSpan.FromMinutes(1);
     /// <summary>
     /// Model mặc định phải gồm model văn bản và ảnh mà AI service đang chạy, nếu không mọi lượt chạy bị chặn.
     /// Dòng 3.x đứng đầu: key của project Google mới bị từ chối dòng 2.5 ("no longer available to new users");
@@ -113,12 +123,62 @@ public class WorkspaceAiConfig : BaseEntity
     /// </summary>
     public bool TryReserveTokens(long tokens)
     {
-        if (!HasQuotaRemaining()) return false;
+        if (!HasTokensFor(tokens)) return false;
         if (tokens <= 0) return true;
-        if (MonthlyTokenQuota > 0 && UsedTokensCurrentMonth + tokens > MonthlyTokenQuota) return false;
         UsedTokensCurrentMonth += tokens;
         UpdatedAt = DateTime.UtcNow;
         return true;
+    }
+
+    private bool HasTokensFor(long tokens)
+        => HasQuotaRemaining() && (tokens <= 0 || MonthlyTokenQuota <= 0 || UsedTokensCurrentMonth + tokens <= MonthlyTokenQuota);
+
+    /// <summary>
+    /// Mở một lượt gọi AI: kiểm token, lượt/tháng và lượt/phút rồi mới ghi cả ba cùng lúc, nên lượt bị từ chối
+    /// không tốn gì. Gọi trong cùng lần lưu có khoá xmin để hai lượt song song không cùng lọt ngưỡng.
+    /// </summary>
+    public AiRequestDecision TryStartRequest(long reserveTokens, DateTime utcNow)
+    {
+        if (!HasTokensFor(reserveTokens)) return AiRequestDecision.TokenQuotaExceeded;
+        if (MonthlyRequestQuota > 0 && UsedRequestsCurrentMonth >= MonthlyRequestQuota)
+            return AiRequestDecision.MonthlyRequestQuotaExceeded;
+
+        var windowOpen = RateWindowStartedAt is { } start && utcNow - start < RateWindow && utcNow >= start;
+        if (RequestsPerMinuteLimit > 0 && windowOpen && RequestsInRateWindow >= RequestsPerMinuteLimit)
+            return AiRequestDecision.RateLimited;
+
+        if (!windowOpen)
+        {
+            RateWindowStartedAt = utcNow;
+            RequestsInRateWindow = 0;
+        }
+        RequestsInRateWindow++;
+        UsedRequestsCurrentMonth++;
+        if (reserveTokens > 0) UsedTokensCurrentMonth += reserveTokens;
+        UpdatedAt = utcNow;
+        return AiRequestDecision.Accepted;
+    }
+
+    /// <summary>Giây còn lại tới khi cửa sổ lượt/phút đang mở kết thúc (để báo "thử lại sau").</summary>
+    public int SecondsUntilRateWindowResets(DateTime utcNow)
+        => RateWindowStartedAt is { } start
+            ? Math.Max(1, (int)Math.Ceiling((start + RateWindow - utcNow).TotalSeconds))
+            : 1;
+
+    /// <summary>Admin đặt giới hạn lượt gọi AI (màn Tài nguyên). 0 = không giới hạn.</summary>
+    public void SetRequestLimits(long? monthlyRequestQuota, int? requestsPerMinute)
+    {
+        if (monthlyRequestQuota is { } monthly)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(monthly);
+            MonthlyRequestQuota = monthly;
+        }
+        if (requestsPerMinute is { } perMinute)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(perMinute);
+            RequestsPerMinuteLimit = perMinute;
+        }
+        UpdatedAt = DateTime.UtcNow;
     }
 
     /// <summary>Chốt lần gọi đã giữ chỗ: trừ phần đã giữ, cộng số token thật (0 nếu gọi lỗi).</summary>
@@ -174,6 +234,7 @@ public class WorkspaceAiConfig : BaseEntity
     {
         UsedTokensCurrentMonth = 0;
         UsedImagesCurrentMonth = 0;
+        UsedRequestsCurrentMonth = 0;
         LastResetAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
@@ -184,4 +245,12 @@ public class WorkspaceAiConfig : BaseEntity
         if (MonthlyTokenQuota <= 0) return true; // unlimited
         return UsedTokensCurrentMonth < MonthlyTokenQuota;
     }
+}
+
+public enum AiRequestDecision
+{
+    Accepted = 0,
+    TokenQuotaExceeded = 1,
+    MonthlyRequestQuotaExceeded = 2,
+    RateLimited = 3
 }

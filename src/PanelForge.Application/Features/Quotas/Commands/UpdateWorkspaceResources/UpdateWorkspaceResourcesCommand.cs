@@ -20,7 +20,7 @@ namespace PanelForge.Application.Features.Quotas.Commands.UpdateWorkspaceResourc
 /// </summary>
 public sealed record UpdateWorkspaceResourcesCommand(
     Guid WorkspaceId, Guid AdminId, long? StorageQuotaBytes, long? MonthlyTokenQuota, long? MonthlyImageQuota,
-    bool? AiEnabled, string Reason)
+    bool? AiEnabled, string Reason, long? MonthlyRequestQuota = null, int? RequestsPerMinute = null)
     : IRequest<Result<AdminWorkspaceResourceDto>>;
 
 public sealed class UpdateWorkspaceResourcesCommandHandler(IPanelForgeDbContext db, WorkspaceDefaultsSettings defaults)
@@ -30,7 +30,8 @@ public sealed class UpdateWorkspaceResourcesCommandHandler(IPanelForgeDbContext 
 
     public async Task<Result<AdminWorkspaceResourceDto>> Handle(UpdateWorkspaceResourcesCommand command, CancellationToken ct)
     {
-        if (command.StorageQuotaBytes < 0 || command.MonthlyTokenQuota < 0 || command.MonthlyImageQuota < 0)
+        if (command.StorageQuotaBytes < 0 || command.MonthlyTokenQuota < 0 || command.MonthlyImageQuota < 0
+            || command.MonthlyRequestQuota < 0 || command.RequestsPerMinute < 0)
             return Fail("Hạn mức không được là số âm.", ResultErrorCodes.Validation);
         var reason = command.Reason?.Trim() ?? string.Empty;
         if (reason.Length == 0)
@@ -51,6 +52,15 @@ public sealed class UpdateWorkspaceResourcesCommandHandler(IPanelForgeDbContext 
             ai = WorkspaceQuotas.Apply(db, QuotaResourceType.AiTokens, tokens, workspace, ai);
         if (command.MonthlyImageQuota is { } images)
             ai = WorkspaceQuotas.Apply(db, QuotaResourceType.AiImages, images, workspace, ai);
+        if (command.MonthlyRequestQuota is not null || command.RequestsPerMinute is not null)
+        {
+            if (ai is null)
+            {
+                ai = WorkspaceAiConfig.Create(workspace.Id);
+                db.WorkspaceAiConfigs.Add(ai);
+            }
+            ai.SetRequestLimits(command.MonthlyRequestQuota, command.RequestsPerMinute);
+        }
         if (command.AiEnabled is { } enabled)
         {
             if (ai is null)
@@ -85,6 +95,8 @@ public sealed class UpdateWorkspaceResourcesCommandHandler(IPanelForgeDbContext 
         w.StorageQuotaBytes,
         MonthlyTokenQuota = ai?.MonthlyTokenQuota,
         MonthlyImageQuota = ai?.MonthlyImageQuota,
+        MonthlyRequestQuota = ai?.MonthlyRequestQuota,
+        RequestsPerMinute = ai?.RequestsPerMinuteLimit,
         AiEnabled = ai?.IsEnabled
     };
 

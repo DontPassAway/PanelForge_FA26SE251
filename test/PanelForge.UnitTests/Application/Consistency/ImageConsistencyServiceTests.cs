@@ -88,6 +88,8 @@ public class ImageConsistencyServiceTests
                 .ReturnsAsync(() => new MemoryStream(new byte[] { 1, 2, 3 }));
             UsageServiceMock.Setup(u => u.CheckAvailabilityAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AiAvailability.Available());
+            UsageServiceMock.Setup(u => u.TryStartRequestAsync(It.IsAny<Guid>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(AiAvailability.Available());
             KeyProtectorMock.Setup(k => k.Unprotect("encrypted-workspace-key")).Returns("decrypted-workspace-key");
             AiClientMock.Setup(c => c.CompareImagesAsync(It.IsAny<VisionCompareRequest>(), It.IsAny<CancellationToken>()))
                 .Callback((VisionCompareRequest r, CancellationToken _) => LastRequest = r)

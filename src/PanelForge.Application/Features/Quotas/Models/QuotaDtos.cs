@@ -12,14 +12,24 @@ public sealed record QuotaPolicyDto(
     int WarningThresholdPercent,
     bool IsFromSettings,
     DateTime? UpdatedAt,
-    string? UpdatedByName);
+    string? UpdatedByName,
+    long MonthlyRequestQuota = 0,
+    int RequestsPerMinute = 0);
 
 public sealed record UpdateQuotaPolicyRequest(
     long StorageQuotaBytes,
     long MonthlyTokenQuota,
     long MonthlyImageQuota,
     bool AiEnabledByDefault = true,
-    int WarningThresholdPercent = 80);
+    int WarningThresholdPercent = 80,
+    long MonthlyRequestQuota = QuotaPolicyDefaults.MonthlyRequestQuota,
+    int RequestsPerMinute = QuotaPolicyDefaults.RequestsPerMinute);
+
+internal static class QuotaPolicyDefaults
+{
+    public const long MonthlyRequestQuota = PanelForge.Domain.Entities.Workspaces.QuotaPolicy.DefaultMonthlyRequestQuota;
+    public const int RequestsPerMinute = PanelForge.Domain.Entities.Workspaces.QuotaPolicy.DefaultRequestsPerMinute;
+}
 
 /// <param name="RequestedQuota">Mức mới muốn có (giá trị tuyệt đối).</param>
 public sealed record SubmitQuotaIncreaseRequestBody(QuotaResourceType ResourceType, long RequestedQuota, string Reason);
@@ -68,7 +78,9 @@ public sealed record AdminWorkspaceResourceDto(
     UsageMeterDto? AiImages,
     DateTime AiNextResetAt,
     int PendingRequestCount,
-    ResourceHealth Health);
+    ResourceHealth Health,
+    UsageMeterDto? AiRequests = null,
+    int? RequestsPerMinuteLimit = null);
 
 /// <summary>GET /api/admin/resources: số liệu tổng cho Overview + từng Studio. Đọc thẳng bộ đếm, không ước tính.</summary>
 public sealed record AdminResourceOverviewDto(
@@ -81,7 +93,8 @@ public sealed record AdminResourceOverviewDto(
     int ExhaustedStudios,
     int PendingRequests,
     int WarningThresholdPercent,
-    IReadOnlyList<AdminWorkspaceResourceDto> Studios);
+    IReadOnlyList<AdminWorkspaceResourceDto> Studios,
+    long TotalRequestsThisMonth = 0);
 
 /// <summary>
 /// Admin chỉnh cấp phát một Studio. null = giữ nguyên; 0 = không giới hạn. Reason bắt buộc, ghi vào Nhật ký hệ thống.
@@ -92,7 +105,9 @@ public sealed record UpdateWorkspaceResourcesRequest(
     long? MonthlyTokenQuota,
     long? MonthlyImageQuota,
     bool? AiEnabled,
-    string? Reason);
+    string? Reason,
+    long? MonthlyRequestQuota = null,
+    int? RequestsPerMinute = null);
 
 /// <summary>
 /// Kết quả đối soát kho file (OPS-22). Không xoá file nào: chỉ so dung lượng đang ghi với dung lượng file còn được dùng,

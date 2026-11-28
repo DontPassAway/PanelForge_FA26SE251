@@ -154,7 +154,7 @@ public class AiUsageServiceTests
     {
         var config = await AddConfigAsync(quota: 10_000);
 
-        (await _service.TryReserveTokensAsync(_workspaceId, 4_000)).Should().BeTrue();
+        (await _service.TryStartRequestAsync(_workspaceId, 4_000)).IsAvailable.Should().BeTrue();
         config.UsedTokensCurrentMonth.Should().Be(4_000);
 
         await _service.RecordAsync(new AiUsageEntry(_workspaceId, "AiAgents.Copilot.test", AiUsageStatus.Succeeded,
@@ -170,7 +170,7 @@ public class AiUsageServiceTests
         config.RecordUsage(2_000);
         await _db.SaveChangesAsync();
 
-        (await _service.TryReserveTokensAsync(_workspaceId, 4_000)).Should().BeFalse();
+        (await _service.TryStartRequestAsync(_workspaceId, 4_000)).IsAvailable.Should().BeFalse();
         config.UsedTokensCurrentMonth.Should().Be(2_000);
     }
 
@@ -178,11 +178,72 @@ public class AiUsageServiceTests
     public async Task FailedCall_ShouldReleaseReservation_OPS03()
     {
         var config = await AddConfigAsync(quota: 10_000);
-        await _service.TryReserveTokensAsync(_workspaceId, 4_000);
+        await _service.TryStartRequestAsync(_workspaceId, 4_000);
 
         await _service.RecordAsync(new AiUsageEntry(_workspaceId, "AiAgents.Copilot.test", AiUsageStatus.Failed,
             PromptTokens: 700, ReservedTokens: 4_000));
 
         config.UsedTokensCurrentMonth.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task StartRequest_CountsMonthlyRequests_AndRefusesPastQuota_OPS24()
+    {
+        var config = await AddConfigAsync(quota: 0);
+        config.SetRequestLimits(monthlyRequestQuota: 2, requestsPerMinute: 0);
+        await _db.SaveChangesAsync();
+
+        (await _service.TryStartRequestAsync(_workspaceId, 100)).IsAvailable.Should().BeTrue();
+        (await _service.TryStartRequestAsync(_workspaceId, 100)).IsAvailable.Should().BeTrue();
+        var third = await _service.TryStartRequestAsync(_workspaceId, 100);
+
+        third.IsAvailable.Should().BeFalse();
+        third.BlockedReason.Should().Be(AiUsageStatus.QuotaExceeded);
+        third.Message.Should().Contain("lượt gọi AI của tháng");
+        config.UsedRequestsCurrentMonth.Should().Be(2);
+        config.UsedTokensCurrentMonth.Should().Be(200, "lượt bị từ chối không giữ chỗ token");
+    }
+
+    [Fact]
+    public async Task StartRequest_PerMinuteLimit_RefusesInsideWindow_AndOpensNewWindowAfter_OPS24()
+    {
+        var config = await AddConfigAsync(quota: 0);
+        config.SetRequestLimits(monthlyRequestQuota: 0, requestsPerMinute: 1);
+        await _db.SaveChangesAsync();
+
+        (await _service.TryStartRequestAsync(_workspaceId, 0)).IsAvailable.Should().BeTrue();
+        var limited = await _service.TryStartRequestAsync(_workspaceId, 0);
+        limited.IsAvailable.Should().BeFalse();
+        limited.Message.Should().Contain("1 phút");
+
+        // Cửa sổ 60 giây đã qua
+        typeof(WorkspaceAiConfig).GetProperty(nameof(WorkspaceAiConfig.RateWindowStartedAt))!
+            .SetValue(config, DateTime.UtcNow.AddSeconds(-61));
+        (await _service.TryStartRequestAsync(_workspaceId, 0)).IsAvailable.Should().BeTrue();
+        config.RequestsInRateWindow.Should().Be(1);
+        config.UsedRequestsCurrentMonth.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task StartRequest_WhenTokensRunOut_DoesNotCountRequest_OPS24()
+    {
+        var config = await AddConfigAsync(quota: 1_000);
+        config.SetRequestLimits(monthlyRequestQuota: 10, requestsPerMinute: 10);
+        await _db.SaveChangesAsync();
+
+        (await _service.TryStartRequestAsync(_workspaceId, 4_000)).IsAvailable.Should().BeFalse();
+        config.UsedRequestsCurrentMonth.Should().Be(0);
+        config.RequestsInRateWindow.Should().Be(0);
+    }
+
+    [Fact]
+    public void MonthlyReset_ClearsRequestCounter_OPS24()
+    {
+        var config = WorkspaceAiConfig.Create(_workspaceId);
+        config.TryStartRequest(0, DateTime.UtcNow);
+
+        config.ResetMonthlyUsage();
+
+        config.UsedRequestsCurrentMonth.Should().Be(0);
     }
 }

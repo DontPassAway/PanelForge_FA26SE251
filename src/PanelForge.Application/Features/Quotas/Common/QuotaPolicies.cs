@@ -18,6 +18,8 @@ public static class QuotaPolicies
                 p.StorageQuotaBytes,
                 p.MonthlyTokenQuota,
                 p.MonthlyImageQuota,
+                p.MonthlyRequestQuota,
+                p.RequestsPerMinute,
                 p.AiEnabledByDefault,
                 p.WarningThresholdPercent,
                 p.CreatedAt,
@@ -27,8 +29,10 @@ public static class QuotaPolicies
 
         return latest is null
             ? new QuotaPolicyDto(defaults.StorageQuotaBytes, defaults.MonthlyTokenQuota, defaults.MonthlyImageQuota,
-                defaults.AiEnabled, defaults.WarningThresholdPercent, true, null, null)
+                defaults.AiEnabled, defaults.WarningThresholdPercent, true, null, null,
+                defaults.MonthlyRequestQuota, defaults.RequestsPerMinute)
             : new QuotaPolicyDto(latest.StorageQuotaBytes, latest.MonthlyTokenQuota, latest.MonthlyImageQuota,
-                latest.AiEnabledByDefault, latest.WarningThresholdPercent, false, latest.CreatedAt, latest.UpdatedByName);
+                latest.AiEnabledByDefault, latest.WarningThresholdPercent, false, latest.CreatedAt, latest.UpdatedByName,
+                latest.MonthlyRequestQuota, latest.RequestsPerMinute);
     }
 }

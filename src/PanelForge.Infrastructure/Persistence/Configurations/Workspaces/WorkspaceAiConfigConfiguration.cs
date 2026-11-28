@@ -81,6 +81,33 @@ internal sealed class WorkspaceAiConfigConfiguration : IEntityTypeConfiguration<
                .HasDefaultValue(0L)
                .IsRequired();
 
+        // OPS-24: 0 = không giới hạn; Studio có từ trước giữ không giới hạn cho tới khi Admin đặt
+        builder.Property(c => c.MonthlyRequestQuota)
+               .HasColumnName("monthly_request_quota")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
+        builder.Property(c => c.UsedRequestsCurrentMonth)
+               .HasColumnName("used_requests_current_month")
+               .HasColumnType("bigint")
+               .HasDefaultValue(0L)
+               .IsRequired();
+
+        builder.Property(c => c.RequestsPerMinuteLimit)
+               .HasColumnName("requests_per_minute_limit")
+               .HasDefaultValue(0)
+               .IsRequired();
+
+        builder.Property(c => c.RateWindowStartedAt)
+               .HasColumnName("rate_window_started_at")
+               .HasColumnType("timestamptz");
+
+        builder.Property(c => c.RequestsInRateWindow)
+               .HasColumnName("requests_in_rate_window")
+               .HasDefaultValue(0)
+               .IsRequired();
+
         builder.Property(c => c.AllowedModelsJson)
                .HasColumnName("allowed_models_json")
                .HasColumnType("jsonb")

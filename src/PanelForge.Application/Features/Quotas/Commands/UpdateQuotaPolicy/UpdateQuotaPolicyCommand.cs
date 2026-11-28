@@ -14,7 +14,9 @@ namespace PanelForge.Application.Features.Quotas.Commands.UpdateQuotaPolicy;
 /// </summary>
 public sealed record UpdateQuotaPolicyCommand(
     Guid AdminId, long StorageQuotaBytes, long MonthlyTokenQuota, long MonthlyImageQuota,
-    bool AiEnabledByDefault = true, int WarningThresholdPercent = QuotaPolicyEntity.DefaultWarningThresholdPercent)
+    bool AiEnabledByDefault = true, int WarningThresholdPercent = QuotaPolicyEntity.DefaultWarningThresholdPercent,
+    long MonthlyRequestQuota = QuotaPolicyEntity.DefaultMonthlyRequestQuota,
+    int RequestsPerMinute = QuotaPolicyEntity.DefaultRequestsPerMinute)
     : IRequest<Result<QuotaPolicyDto>>;
 
 public sealed class UpdateQuotaPolicyCommandHandler(IPanelForgeDbContext db, WorkspaceDefaultsSettings defaults)
@@ -22,7 +24,8 @@ public sealed class UpdateQuotaPolicyCommandHandler(IPanelForgeDbContext db, Wor
 {
     public async Task<Result<QuotaPolicyDto>> Handle(UpdateQuotaPolicyCommand command, CancellationToken ct)
     {
-        if (command.StorageQuotaBytes <= 0 || command.MonthlyTokenQuota <= 0 || command.MonthlyImageQuota <= 0)
+        if (command.StorageQuotaBytes <= 0 || command.MonthlyTokenQuota <= 0 || command.MonthlyImageQuota <= 0
+            || command.MonthlyRequestQuota <= 0 || command.RequestsPerMinute <= 0)
             return Result<QuotaPolicyDto>.Failure(
                 "Mọi mức trong chính sách phải lớn hơn 0. Muốn bỏ giới hạn thì sửa riêng từng Studio.",
                 ResultErrorCodes.Validation);
@@ -31,7 +34,8 @@ public sealed class UpdateQuotaPolicyCommandHandler(IPanelForgeDbContext db, Wor
 
         db.QuotaPolicies.Add(QuotaPolicyEntity.Create(
             command.StorageQuotaBytes, command.MonthlyTokenQuota, command.MonthlyImageQuota, command.AdminId,
-            command.AiEnabledByDefault, command.WarningThresholdPercent));
+            command.AiEnabledByDefault, command.WarningThresholdPercent,
+            command.MonthlyRequestQuota, command.RequestsPerMinute));
         await db.SaveChangesAsync(ct);
 
         return Result<QuotaPolicyDto>.Success(await QuotaPolicies.GetEffectiveAsync(db, defaults, ct));
