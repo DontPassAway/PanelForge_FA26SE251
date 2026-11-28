@@ -51,13 +51,24 @@ public sealed class SetChapterCoverCommandHandler : IRequestHandler<SetChapterCo
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            var workspaceId = await _db.Series.AsNoTracking()
+                .Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstOrDefaultAsync(ct);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, workspaceId, StorageKey(chapter.Id, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(chapter.Id, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = "chapter-cover" }), ct);
         }
 
         chapter.SetCover(sha);
         chapter.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(CoverUrl(chapter.Id, sha));
     }
 }

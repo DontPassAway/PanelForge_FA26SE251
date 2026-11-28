@@ -4,6 +4,7 @@ using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Services;
 using PanelForge.Application.Features.Series.Commands.SetSeriesImage;
 using PanelForge.Application.Features.Series.Queries.GetSeriesImage;
+using PanelForge.Domain.Entities.Workspaces;
 using PanelForge.Domain.Enums;
 using PanelForge.Infrastructure.Persistence;
 using PanelForge.UnitTests.Common;
@@ -20,7 +21,9 @@ public class SeriesImageTests
     private static (PanelForgeDbContext db, SeriesEntity series) Seed()
     {
         var db = InMemoryDb.Create();
-        var series = SeriesEntity.Create(Guid.NewGuid(), "Thành phố mưa", ReadingDirection.RightToLeft);
+        var studio = StudioWorkspace.Create("Studio Mưa", Guid.NewGuid());
+        db.StudioWorkspaces.Add(studio);
+        var series = SeriesEntity.Create(studio.Id, "Thành phố mưa", ReadingDirection.RightToLeft);
         series.SetCover(new string('c', 64));
         db.Series.Add(series);
         db.SaveChanges();

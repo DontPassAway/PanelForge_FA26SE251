@@ -49,13 +49,22 @@ public sealed class SetWorkspaceCoverCommandHandler : IRequestHandler<SetWorkspa
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, workspace.Id, StorageKey(workspace.Id, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(workspace.Id, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = "workspace-cover" }), ct);
         }
 
         workspace.SetCover(sha);
         workspace.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(CoverUrl(workspace.Id, sha));
     }
 }

@@ -62,6 +62,8 @@ public sealed class SetSeriesImageCommandHandler : IRequestHandler<SetSeriesImag
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, series.WorkspaceId, StorageKey(series.Id, cmd.Kind, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(series.Id, cmd.Kind, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = $"series-{Segment(cmd.Kind)}" }), ct);
         }
@@ -71,7 +73,14 @@ public sealed class SetSeriesImageCommandHandler : IRequestHandler<SetSeriesImag
         else
             series.SetBanner(sha);
         series.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(ImageUrl(series.Id, cmd.Kind, sha));
     }
 }

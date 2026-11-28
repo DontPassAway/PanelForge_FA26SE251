@@ -49,13 +49,22 @@ public sealed class SetSeriesCoverCommandHandler : IRequestHandler<SetSeriesCove
                 return Result<string?>.Failure("Chỉ nhận ảnh PNG, JPEG hoặc WebP.", ResultErrorCodes.Validation);
 
             sha = AssetRules.ComputeSha256(cmd.Content);
+            if (!await StorageQuota.TryReserveAsync(_db, _storage, series.WorkspaceId, StorageKey(series.Id, sha), cmd.Content.Length, ct))
+                return Result<string?>.Failure(StorageQuota.ExceededMessage, ResultErrorCodes.Conflict);
             await _storage.SaveAsync(StorageKey(series.Id, sha), cmd.Content,
                 new AssetObjectInfo(contentType, new Dictionary<string, string> { ["kind"] = "series-cover" }), ct);
         }
 
         series.SetCover(sha);
         series.UpdatedBy = cmd.UserId.ToString();
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<string?>.Failure(StorageQuota.ConcurrentMessage, ResultErrorCodes.Conflict);
+        }
         return Result<string?>.Success(CoverUrl(series.Id, sha));
     }
 }

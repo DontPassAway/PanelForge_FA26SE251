@@ -28,6 +28,7 @@ public sealed record RunThumbnailCommand(Guid SeriesId, Guid PanelId, Guid UserI
 public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCommand, Result<AiSuggestionDto>>
 {
     private const int MaxReferences = 3, MaxReferenceBytes = 4 * 1024 * 1024, MaxPromptChars = 3500;
+    private const long EstimatedImageBytes = 2 * 1024 * 1024;
     private const string Feature = "AiAgents.Thumbnail";
 
     private readonly IPanelForgeDbContext _db;
@@ -104,6 +105,13 @@ public sealed class RunThumbnailCommandHandler : IRequestHandler<RunThumbnailCom
         if (!config.HasImageQuotaFor(1))
             return Fail($"Workspace đã dùng hết quota ảnh tháng này ({config.UsedImagesCurrentMonth}/{config.MonthlyImageQuota}).",
                 ResultErrorCodes.AiQuotaExceeded);
+
+        // OPS-02: kiểm dung lượng TRƯỚC khi gọi AI (chưa biết cỡ ảnh nên dùng mức ước lượng); giữ chỗ thật khi lưu ảnh bên dưới
+        var hasRoom = await _db.StudioWorkspaces.AsNoTracking().Where(w => w.Id == series.WorkspaceId)
+            .Select(w => w.StorageQuotaBytes == 0 || w.UsedStorageBytes + EstimatedImageBytes <= w.StorageQuotaBytes)
+            .FirstOrDefaultAsync(ct);
+        if (!hasRoom)
+            return Fail("Vượt quota dung lượng của Workspace, không đủ chỗ lưu ảnh AI.", ResultErrorCodes.Conflict);
 
         var (provider, model) = ThumbnailRules.ResolveProvider(_settings);
         if (provider is null)
