@@ -1,18 +1,19 @@
-# FE ghép URL SignalR thành <VITE_API_URL>/hubs/... = /api/hubs/..., còn hub của API nằm ở /hubs/...
-(hubs) {
-	uri replace /api/hubs/ /hubs/ 1
+# API nội bộ cho service AI (/internal/ai/*) chỉ dùng trong mạng Docker (ai-* gọi thẳng api-*:8080).
+# Chặn ở Caddy để không ai từ bên ngoài gọi được, kể cả khi có X-Service-Key.
+(block-internal) {
+	respond /internal/* 404
 }
 
 # Bản chính thức (nhánh main)
 {$MAIN_SITE} {
 	encode zstd gzip
-	import hubs
+	import block-internal
 	reverse_proxy api-main:8080
 }
 
 # Bản test (nhánh dev)
 {$DEV_SITE} {
 	encode zstd gzip
-	import hubs
+	import block-internal
 	reverse_proxy api-dev:8080
 }
