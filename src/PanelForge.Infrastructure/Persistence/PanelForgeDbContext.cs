@@ -16,6 +16,7 @@ using PanelForge.Domain.Entities.Content;
 using PanelForge.Domain.Entities.MasterData;
 using PanelForge.Domain.Entities.Workflow;
 using PanelForge.Domain.Entities.Payments;
+using PanelForge.Domain.Enums;
 
 namespace PanelForge.Infrastructure.Persistence;
 
@@ -115,6 +116,9 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // Chặn trước mọi bước khác: sau đó soft-delete đổi Deleted→Modified và audit mới được ghi.
+        EnforceAppendOnly();
+
         var now = DateTime.UtcNow;
         var actorId = _currentUser?.UserId?.ToString();
 
@@ -148,7 +152,8 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
                 switch (entry.State)
                 {
                     case EntityState.Added:
-                        auditable.CreatedAt = now;
+                        // BibleRevisionEvent băm chính CreatedAt lúc Create (xem EventHash), không ghi đè thời điểm lưu.
+                        if (entry.Entity is not BibleRevisionEvent) auditable.CreatedAt = now;
                         if (string.IsNullOrEmpty(auditable.CreatedBy)) auditable.CreatedBy = actorId;
                         break;
                     case EntityState.Modified:
@@ -203,6 +208,62 @@ public sealed class PanelForgeDbContext : DbContext, IPanelForgeDbContext
 
         return await base.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Các entity lịch sử append-only (Module 4, BR-01) và các cột nghiệp vụ được phép đổi sau khi tạo.
+    /// Cột audit (UpdatedAt/UpdatedBy) do SaveChanges tự gán nên không liệt kê ở đây (xem TechnicalColumns).
+    /// </summary>
+    private static readonly Dictionary<Type, HashSet<string>> AppendOnlyEntities = new()
+    {
+        // MarkSubmitted: gửi duyệt ghi thời điểm và người gửi. Gửi lại nội dung trùng dùng lại bản cũ (CommitAsync) nên cho phép đổi.
+        [typeof(ScriptVersion)] = [nameof(ScriptVersion.SubmittedAt), nameof(ScriptVersion.SubmittedById)],
+        // ReassignPanel: bố cục trang đổi làm khung cũ bị thay (PageLayoutReplacer). Tạm giữ, xem ghi chú ở AssetReference.ReassignPanel.
+        [typeof(AssetReference)] = [nameof(AssetReference.PanelId)],
+        [typeof(ChapterSnapshot)] = [],
+        [typeof(AuditLog)] = [],
+        [typeof(BibleRevisionEvent)] = [],
+    };
+
+    // SaveChanges đồng bộ không đi qua SaveChangesAsync: vẫn phải chạy guard, nếu không lịch sử bị sửa được.
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnforceAppendOnly();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <summary>
+    /// Chặn xoá (kể cả soft-delete) và sửa cột nghiệp vụ trên lịch sử append-only.
+    /// Ngoại lệ: sự kiện nháp (Created/DraftOverwritten) bị xoá theo nháp Bible chưa có lịch sử duyệt.
+    /// </summary>
+    private void EnforceAppendOnly()
+    {
+        foreach (var entry in ChangeTracker.Entries().ToList())
+        {
+            if (entry.State is not (EntityState.Deleted or EntityState.Modified)) continue;
+            if (!AppendOnlyEntities.TryGetValue(entry.Metadata.ClrType, out var allowed)) continue;
+
+            var entityName = entry.Metadata.ClrType.Name;
+            var id = entry.Property("Id").CurrentValue;
+            if (entry.State == EntityState.Deleted)
+            {
+                if (entry.Entity is BibleRevisionEvent ev && IsDraftEventOfDeletedRevision(ev)) continue;
+                throw new InvalidOperationException($"Không được xoá {entityName} (ID: {id}): lịch sử append-only (BR-01).");
+            }
+
+            foreach (var property in entry.Properties.Where(p => p.IsModified))
+            {
+                var name = property.Metadata.Name;
+                if (allowed.Contains(name) || TechnicalColumns.Contains(name)) continue;
+                throw new InvalidOperationException($"Không được sửa {entityName}.{name} (ID: {id}): lịch sử append-only (BR-01).");
+            }
+        }
+    }
+
+    /// <summary>Sự kiện nháp của revision đang bị xoá (cascade). Revision đã có lịch sử duyệt được handler chặn trước.</summary>
+    private bool IsDraftEventOfDeletedRevision(BibleRevisionEvent ev) =>
+        ev.Type is BibleRevisionEventType.Created or BibleRevisionEventType.DraftOverwritten
+        && ChangeTracker.Entries<BibleEntryRevision>()
+            .Any(r => r.Entity.Id == ev.BibleEntryRevisionId && r.State == EntityState.Deleted);
 
     // Cột kỹ thuật: đổi riêng chúng (chạm UpdatedAt, tăng Version concurrency) không phải thao tác nghiệp vụ.
     private static readonly HashSet<string> TechnicalColumns = ["UpdatedAt", "UpdatedBy", "Version"];

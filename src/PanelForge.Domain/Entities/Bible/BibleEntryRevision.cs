@@ -280,6 +280,7 @@ public class BibleEntryRevision : BaseEntity
     public void UpdateDraft(string summary, string snapshotJson, string contentHash, Guid authorId, string? stageName = null)
     {
         if (IsLocked) throw new InvalidOperationException("Revision đã được khoá; muốn đổi thiết kế phải dùng /supersede.");
+        if (HasReviewHistory) throw new InvalidOperationException("Không thể sửa nháp đã có lịch sử kiểm duyệt; hãy tạo revision mới.");
         Summary = summary.Trim();
         SnapshotJson = string.IsNullOrWhiteSpace(snapshotJson) ? "{}" : snapshotJson.Trim();
         ContentHash = contentHash.Trim();

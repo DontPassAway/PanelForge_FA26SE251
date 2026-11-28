@@ -122,10 +122,10 @@ public class ExportJobTests
     }
 
     /// <summary>Snapshot bản duyệt như ApproveChapter tạo (manifest + SHA-256).</summary>
-    private ChapterSnapshot AddSnapshot()
+    private ChapterSnapshot AddSnapshot(string? storedManifest = null)
     {
         var manifest = $$"""{"chapterId":"{{_chapter.Id}}","pages":[{"pageNumber":1},{"pageNumber":2}]}""";
-        var snapshot = ChapterSnapshot.Create(_chapter.Id, 1, _chapter.VersionVector, _producerId, manifest, Sha256(manifest));
+        var snapshot = ChapterSnapshot.Create(_chapter.Id, 1, _chapter.VersionVector, _producerId, storedManifest ?? manifest, Sha256(manifest));
         _db.ChapterSnapshots.Add(snapshot);
         _db.SaveChanges();
         return snapshot;
@@ -315,19 +315,20 @@ public class ExportJobTests
     }
 
     [Fact]
-    public async Task OpenJson_TamperedManifest_OrRequesterLostAccess_FailsWithReason()
+    public async Task OpenJson_TamperedManifest_FailsHashCheck()
     {
-        var snapshot = AddSnapshot();
+        // Manifest lưu trong DB không khớp hash đã lưu (giả lập sửa tay DB, tạo sẵn vì guard BR-01 chặn sửa qua EF)
+        AddSnapshot(storedManifest: """{"pages":[]}""");
         await Create("OPEN_JSON");
-        typeof(ChapterSnapshot).GetProperty(nameof(ChapterSnapshot.ManifestJson))!.SetValue(snapshot, """{"pages":[]}""");
-        await _db.SaveChangesAsync();
 
         await ProcessNext();
         _db.ExportJobs.Single().Error.Should().Contain("không khớp hash");
+    }
 
-        typeof(ChapterSnapshot).GetProperty(nameof(ChapterSnapshot.ManifestJson))!
-            .SetValue(snapshot, $$"""{"chapterId":"{{_chapter.Id}}","pages":[{"pageNumber":1},{"pageNumber":2}]}""");
-        await _db.SaveChangesAsync();
+    [Fact]
+    public async Task OpenJson_RequesterLostAccess_FailsWithReason()
+    {
+        AddSnapshot();
         _auth.Reset(); // người yêu cầu không còn là Producer/Editor lúc job chạy (BR-07)
         _db.ExportJobs.Add(PanelForge.Domain.Entities.Publishing.ExportJob.Create(
             _chapter.Id, Guid.NewGuid(), Guid.NewGuid(), "OPEN_JSON", _producerId, _chapter.VersionVector, [Guid.NewGuid()]));

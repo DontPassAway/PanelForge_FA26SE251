@@ -46,5 +46,9 @@ public class AssetReference : BaseEntity
         };
     }
 
+    /// <summary>
+    /// Ngoại lệ có chủ đích của append-only: PageLayoutReplacer gán lại khung khi bố cục trang đổi. Chỉ đổi PanelId,
+    /// không đổi ảnh, phiên bản hay người tải lên. Nên tách liên kết khung sang bảng riêng ở đợt sau (follow-up).
+    /// </summary>
     public void ReassignPanel(Guid? panelId) => PanelId = panelId;
 }
