@@ -3,11 +3,9 @@ using PanelForge.Domain.Common;
 namespace PanelForge.Domain.Entities.Content;
 
 /// <summary>
-/// Dedicated Chapter Script Artifact.
-/// Strictly encapsulated INSIDE a Chapter (1 Chapter : 1 Script).
-/// When in Scripting status, only the assigned Writer (and Producer) can edit.
-/// When Writer submits for review and Producer marks Approved, the script is LOCKED (IsLocked = true)
-/// to freeze the narrative baseline for the Artist's storyboard phase.
+/// MODEL CŨ (legacy, chưa dùng): mô hình 1 Chapter : 1 Script có Version/IsLocked mutable. Kịch bản thực tế hiện nằm ở
+/// <see cref="ScriptVersion"/> (commit bất biến) + ScriptLine, trạng thái khoá ở Chapter.ScriptStatus / IsScriptFrozen.
+/// Không có nơi nào tạo hay đọc entity này ngoài cấu hình EF; giữ lại vì bảng cần migration và quyết định của team để xoá.
 /// </summary>
 public class ChapterScript : BaseEntity
 {

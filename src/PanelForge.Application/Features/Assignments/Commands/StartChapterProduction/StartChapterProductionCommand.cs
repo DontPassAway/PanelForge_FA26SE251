@@ -25,7 +25,8 @@ public sealed record StartChapterProductionCommand(
     Guid UserId,
     IReadOnlyList<ProductionPageAssignmentRequest> PageAssignments,
     IReadOnlyList<ProductionPageAssignmentRequest>? LettererAssignments = null,
-    bool FirstStageOnly = false)
+    bool FirstStageOnly = false,
+    Guid? ExpectedSubmittedVersionId = null)
     : IRequest<Result<StartChapterProductionResultDto>>;
 
 /// <summary>
@@ -80,6 +81,24 @@ public sealed class StartChapterProductionCommandHandler
                     return Fail(
                         "Chương đã bắt đầu sản xuất. Vui lòng sử dụng quy trình khóa lại kịch bản (Refreeze).",
                         ResultErrorCodes.Conflict);
+
+                // Q26: Producer phải chốt đúng bản đang xem. Kiểm trước mọi ghi DB (freeze, lưới, giao lô).
+                if (cmd.ExpectedSubmittedVersionId is { } expectedVersionId &&
+                    expectedVersionId != chapter.LastSubmittedVersionId)
+                {
+                    var current = chapter.LastSubmittedVersionId is { } currentId
+                        ? await _db.ScriptVersions.AsNoTracking()
+                            .Where(v => v.Id == currentId)
+                            .Select(v => (int?)v.VersionNumber)
+                            .FirstOrDefaultAsync(tct)
+                        : null;
+                    return Fail(
+                        current is { } n
+                            ? $"Writer đã nộp kịch bản mới v{n}. Vui lòng xem lại thay đổi và xác nhận bắt đầu sản xuất lại."
+                            : "Kịch bản đã thay đổi so với bản bạn đang xem. Vui lòng tải lại và xác nhận lại.",
+                        ResultErrorCodes.ScriptVersionOutdated,
+                        new ScriptVersionOutdatedDto(expectedVersionId, chapter.LastSubmittedVersionId, current));
+                }
 
                 // Gate 1 starts with the single authoritative Bible check. Script comments are deliberately not queried.
                 var bibleGate = await _castGate.EvaluateStartAsync(chapter.Id, tct);

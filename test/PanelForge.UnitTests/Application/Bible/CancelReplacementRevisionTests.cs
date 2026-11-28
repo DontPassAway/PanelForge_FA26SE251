@@ -45,7 +45,7 @@ public class CancelReplacementRevisionTests
     [Fact]
     public async Task Supersede_DifferentVariant_ShouldReturnConflict()
     {
-        var handler = new AddBibleEntryRevisionCommandHandler(_db);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var cmd = new AddBibleEntryRevisionCommand(
             SeriesId: _seriesId,
             BibleEntryId: _entry.Id,
@@ -68,7 +68,7 @@ public class CancelReplacementRevisionTests
     [Fact]
     public async Task Supersede_WithChapterId_BindsToChapterN_AndDoesNotMarkSupersededEarly()
     {
-        var handler = new AddBibleEntryRevisionCommandHandler(_db);
+        var handler = new AddBibleEntryRevisionCommandHandler(_db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var cmd = new AddBibleEntryRevisionCommand(
             SeriesId: _seriesId,
             BibleEntryId: _entry.Id,
@@ -107,7 +107,7 @@ public class CancelReplacementRevisionTests
     public async Task CancelReplacementRevision_ValidDraftReplacement_RevertsBindingAndDeletesRevision()
     {
         // Tạo bản v2 thay thế v1 và gắn vào chapter
-        var addHandler = new AddBibleEntryRevisionCommandHandler(_db);
+        var addHandler = new AddBibleEntryRevisionCommandHandler(_db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var addCmd = new AddBibleEntryRevisionCommand(
             SeriesId: _seriesId,
             BibleEntryId: _entry.Id,
@@ -160,7 +160,7 @@ public class CancelReplacementRevisionTests
     [Fact]
     public async Task CancelReplacementRevision_HasReviewHistory_ShouldReturnConflict()
     {
-        var addHandler = new AddBibleEntryRevisionCommandHandler(_db);
+        var addHandler = new AddBibleEntryRevisionCommandHandler(_db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var addResult = await addHandler.Handle(new AddBibleEntryRevisionCommand(
             SeriesId: _seriesId,
             BibleEntryId: _entry.Id,

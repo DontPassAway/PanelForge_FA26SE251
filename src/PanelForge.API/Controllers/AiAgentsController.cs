@@ -40,10 +40,8 @@ public sealed class AiAgentsController : ControllerBase
     /// POST /api/series/{seriesId}/ai/workflows/run — chạy một nhiệm vụ AI (body.workflowType: FullScene | Script | Storyboard | Artist |
     /// Letterer | Editor | Producer). 202 + runId sau khi lưu run và AI service xác nhận nhận job.
     /// Quyền theo loại nhiệm vụ do Backend xác định (membership + vai trò + assignment + trạng thái khoá); filter chỉ yêu cầu là thành viên.
-    /// Route /workflows/demo/run giữ để tương thích: không gửi workflowType = FullScene (hành vi cũ).
     /// </summary>
     [HttpPost("api/series/{seriesId:guid}/ai/workflows/run")]
-    [HttpPost("api/series/{seriesId:guid}/ai/workflows/demo/run")]
     [RequireWorkspaceRole]
     [ProducesResponseType(typeof(RunWorkflowResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

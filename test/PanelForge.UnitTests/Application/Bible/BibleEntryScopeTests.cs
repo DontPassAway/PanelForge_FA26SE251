@@ -38,7 +38,7 @@ public class BibleEntryScopeTests
     [Fact]
     public async Task AddRevision_WhenEntryBelongsToAnotherSeries_ShouldFail_AndNotSave()
     {
-        var handler = new AddBibleEntryRevisionCommandHandler(_dbContextMock.Object);
+        var handler = new AddBibleEntryRevisionCommandHandler(_dbContextMock.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var command = new AddBibleEntryRevisionCommand(
             SeriesId: _ownSeriesId,
             BibleEntryId: _foreignEntry.Id,

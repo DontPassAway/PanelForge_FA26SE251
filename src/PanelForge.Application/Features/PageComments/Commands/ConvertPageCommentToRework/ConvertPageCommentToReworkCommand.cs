@@ -6,6 +6,7 @@ using PanelForge.Application.Features.PageComments.Common;
 using PanelForge.Application.Features.PageComments.Models;
 using PanelForge.Application.Features.TaskGrid.Commands.ReopenStageTask;
 using PanelForge.Application.Features.TaskGrid.Commands.RequestStageTaskChanges;
+using PanelForge.Application.Features.TaskGrid.Common;
 using PanelForge.Domain.Enums;
 
 namespace PanelForge.Application.Features.PageComments.Commands.ConvertPageCommentToRework;
@@ -60,13 +61,15 @@ public sealed class ConvertPageCommentToReworkCommandHandler
             return Fail("Ô công việc không thuộc trang của góp ý này.", ResultErrorCodes.Validation);
 
         var trimmedReason = cmd.Reason.Trim();
+        // Q27/REV-09: góp ý ghim trên Panel → chỉ Panel đó cần sửa, Panel khác giữ ảnh đã duyệt; không ghim Panel → cả trang
+        IReadOnlyList<Guid>? panelIds = comment.PanelId is { } panelId ? [panelId] : null;
 
         switch (task.Status)
         {
             case StageTaskStatus.Approved:
             {
                 var reopened = await new ReopenStageTaskCommandHandler(_db)
-                    .Handle(new ReopenStageTaskCommand(cmd.ChapterId, task.Id, cmd.UserId, trimmedReason), ct);
+                    .Handle(new ReopenStageTaskCommand(cmd.ChapterId, task.Id, cmd.UserId, trimmedReason, panelIds), ct);
                 if (!reopened.IsSuccess)
                     return Fail(reopened.ErrorMessage!, reopened.ErrorCode ?? ResultErrorCodes.Conflict);
                 break;
@@ -74,14 +77,29 @@ public sealed class ConvertPageCommentToReworkCommandHandler
             case StageTaskStatus.Submitted or StageTaskStatus.UnderReview:
             {
                 var requested = await new RequestStageTaskChangesCommandHandler(_db)
-                    .Handle(new RequestStageTaskChangesCommand(cmd.ChapterId, task.Id, cmd.UserId, trimmedReason), ct);
+                    .Handle(new RequestStageTaskChangesCommand(cmd.ChapterId, task.Id, cmd.UserId, trimmedReason, panelIds), ct);
                 if (!requested.IsSuccess)
                     return Fail(requested.ErrorMessage!, requested.ErrorCode ?? ResultErrorCodes.Conflict);
                 break;
             }
+            case StageTaskStatus.ReworkRequired:
+            {
+                // Ô đã về sửa từ góp ý trước: thêm Panel của góp ý này vào phạm vi cần sửa và báo người làm
+                task.ExtendRework(panelIds);
+                task.UpdatedBy = cmd.UserId.ToString();
+                if (task.LotId is { } lotId &&
+                    await _db.StageTaskLots.AsNoTracking().Where(l => l.Id == lotId).Select(l => (Guid?)l.AssigneeUserId)
+                        .FirstOrDefaultAsync(ct) is { } assignee)
+                {
+                    var stageName = await _db.PipelineStages.AsNoTracking().Where(s => s.Id == task.PipelineStageId)
+                        .Select(s => s.Name).FirstOrDefaultAsync(ct) ?? "?";
+                    _db.Notifications.Add(TaskGridNotifications.ChangesRequested(assignee, chapter.Id, stageName, trimmedReason));
+                }
+                break;
+            }
             default:
                 return Fail(
-                    $"Chỉ có thể chuyển yêu cầu sửa cho ô ở trạng thái Approved, Submitted hoặc UnderReview (hiện tại: {task.Status}).",
+                    $"Chỉ có thể chuyển yêu cầu sửa cho ô ở trạng thái Approved, Submitted, UnderReview hoặc ReworkRequired (hiện tại: {task.Status}).",
                     ResultErrorCodes.Conflict);
         }
 

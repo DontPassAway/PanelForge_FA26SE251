@@ -101,7 +101,7 @@ builder.Services.AddAuthentication(options =>
             var request = context.HttpContext.Request;
             var accessToken = request.Query["access_token"];
             var path = request.Path;
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api/hubs"))
             {
                 context.Token = accessToken;
                 return Task.CompletedTask;
@@ -276,6 +276,7 @@ app.UseAuthorization();
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
-app.MapHub<AiStreamHub>("/hubs/ai-stream");
+// Nằm dưới /api: cookie pf_access có Path=/api nên mới được gửi kèm, và khớp FE (VITE_API_URL đã có /api).
+app.MapHub<AiStreamHub>("/api/hubs/ai-stream");
 
 app.Run();

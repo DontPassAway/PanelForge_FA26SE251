@@ -325,7 +325,7 @@ public sealed class GetPublicPageImageQueryHandler : IRequestHandler<GetPublicPa
         if (refIds.Count == 0) return null;
 
         var image = await PageImageBuilder.BuildAsync(
-            db, storage, pages, compositor, pageId, refIds, ct, language, canvasVersion);
+            db, storage, pages, compositor, pageId, refIds, ct, language, canvasVersion, pinned: snapPage);
         return image is null
             ? null
             : new AssetDownloadDto(new MemoryStream(image.Content), image.ContentType, $"trang-{image.PageNumber}-{language}.png");

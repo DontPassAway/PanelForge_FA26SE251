@@ -118,10 +118,10 @@ public sealed class TaskGridController : ControllerBase
 
     /// <summary>POST /tasks/{taskId}/reopen — Producer/Editor mở lại ô đã duyệt; ô hạ nguồn đã bắt đầu bị gắn cờ lỗi thời.</summary>
     [HttpPost("tasks/{taskId:guid}/reopen")]
-    [RequireWorkspaceRole(WorkspaceRole.Producer)]
+    [RequireWorkspaceRole(WorkspaceRole.Editor, WorkspaceRole.Producer)] // REV-09 (Q27): Editor chính, Producer dự phòng
     [ProducesResponseType(typeof(ReopenStageTaskResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Reopen(Guid chapterId, Guid taskId, [FromBody] ReopenStageTaskRequest body, CancellationToken ct) =>
-        ToResult(await _mediator.Send(new ReopenStageTaskCommand(chapterId, taskId, CurrentUserId, body.Reason), ct));
+        ToResult(await _mediator.Send(new ReopenStageTaskCommand(chapterId, taskId, CurrentUserId, body.Reason, body.PanelIds), ct));
 
     /// <summary>POST /tasks/{taskId}/rollback-to-pencil — Artist giữ ô Pencil tự quay lại sửa khi trang chưa vào duyệt (BR-27.1).</summary>
     [HttpPost("tasks/{taskId:guid}/rollback-to-pencil")]

@@ -1,8 +1,10 @@
 using MediatR;
+using PanelForge.AI.Contracts;
 using Microsoft.EntityFrameworkCore;
 using PanelForge.Application.Common;
 using PanelForge.Application.Common.Interfaces.Persistence;
 using PanelForge.Application.Common.Interfaces.Services;
+using PanelForge.Application.Features.AiAgents.Common;
 using PanelForge.Application.Features.Chapters.Common;
 using PanelForge.Application.Features.Exports.Common;
 using PanelForge.Application.Features.Exports.Models;
@@ -45,25 +47,52 @@ public sealed class CreateExportJobCommandHandler : IRequestHandler<CreateExport
         if (chapter.Status is not (ChapterStatus.ChapterApproved or ChapterStatus.HandedOffAndPublished))
             return Fail("Chỉ xuất được chương đã duyệt (Approved) hoặc đã phát hành.", ResultErrorCodes.Conflict);
 
-        var artwork = await FinalArtwork.SelectAsync(_db, chapter.Id, ct);
-        var missing = await _db.Pages.AsNoTracking()
-            .Where(p => p.ChapterId == chapter.Id).Select(p => new { p.Id, p.PageNumber }).ToListAsync(ct);
-        var missingNumbers = missing.Where(p => artwork.All(a => a.PageId != p.Id)).Select(p => p.PageNumber).OrderBy(n => n).ToList();
-        if (artwork.Count == 0 || missingNumbers.Count > 0)
+        // CF4 / BR-01: bản xuất lấy đúng artwork đã chốt trong ChapterSnapshot lúc duyệt Gate 3, không chọn lại từ ảnh hiện tại
+        // (ảnh tải lên sau lúc duyệt không lọt vào file). Chương duyệt trước CF4 chưa có snapshot thì mới chọn theo FinalArtwork.
+        var snapshot = await OpenJsonExport.SnapshotOfAsync(_db, chapter.Id, chapter.VersionVector, ct);
+        if (snapshot is not null && AiContentValidator.Sha256(snapshot.ManifestJson) != snapshot.ManifestHash)
+            return Fail("Manifest của bản duyệt không khớp hash đã lưu, không xuất được.", ResultErrorCodes.Conflict);
+        // CF4 4.6: JSON mang manifest của bản duyệt nên phải có snapshot
+        if (openJson && snapshot is null)
+            return Fail("Chương chưa có bản duyệt (snapshot) nên chưa xuất JSON được.", ResultErrorCodes.Conflict);
+
+        var pages = snapshot is null
+            ? await LiveArtworkAsync(chapter.Id, ct)
+            : SnapshotArtwork(snapshot.ManifestJson);
+        var missingNumbers = pages.Where(p => p.RefIds.Count == 0).Select(p => p.PageNumber).ToList();
+        if (pages.Count == 0 || missingNumbers.Count > 0)
             return Fail(missingNumbers.Count > 0
                 ? $"Trang {string.Join(", ", missingNumbers)} chưa có artwork (cả trang hoặc theo khung) ở bản đã duyệt, chưa xuất được."
                 : "Chương chưa có trang nào có artwork.", ResultErrorCodes.Conflict);
-        // CF4 4.6: JSON mang manifest của bản duyệt nên phải có snapshot
-        if (openJson && await OpenJsonExport.SnapshotOfAsync(_db, chapter.Id, chapter.VersionVector, ct) is null)
-            return Fail("Chương chưa có bản duyệt (snapshot) nên chưa xuất JSON được.", ResultErrorCodes.Conflict);
 
         var workspaceId = await _db.Series.AsNoTracking().Where(s => s.Id == chapter.SeriesId).Select(s => s.WorkspaceId).FirstAsync(ct);
         var job = ExportJob.Create(chapter.Id, workspaceId, preset.Id, preset.Code, cmd.UserId, chapter.VersionVector,
-            artwork.SelectMany(a => a.AssetReferenceIds));
+            pages.SelectMany(p => p.RefIds));
         job.CreatedBy = cmd.UserId.ToString();
         _db.ExportJobs.Add(job);
         await _db.SaveChangesAsync(ct);
 
-        return Result<ExportJobDto>.Success(ExportJobDto.From(job, artwork.Count));
+        return Result<ExportJobDto>.Success(ExportJobDto.From(job, pages.Count));
+    }
+
+    private sealed record PageArtwork(int PageNumber, IReadOnlyList<Guid> RefIds);
+
+    private static List<PageArtwork> SnapshotArtwork(string manifestJson) =>
+        (AiJson.Deserialize<SnapshotManifest>(manifestJson)?.Pages ?? [])
+        .OrderBy(p => p.PageNumber)
+        .Select(p => new PageArtwork(p.PageNumber, p.ArtworkReferenceId is { } whole
+            ? [whole]
+            : p.PanelArtworks?.Select(a => a.ArtworkReferenceId).ToList() ?? []))
+        .ToList();
+
+    private async Task<List<PageArtwork>> LiveArtworkAsync(Guid chapterId, CancellationToken ct)
+    {
+        var artwork = await FinalArtwork.SelectAsync(_db, chapterId, ct);
+        var pages = await _db.Pages.AsNoTracking().Where(p => p.ChapterId == chapterId)
+            .Select(p => new { p.Id, p.PageNumber }).ToListAsync(ct);
+        return pages.OrderBy(p => p.PageNumber)
+            .Select(p => new PageArtwork(p.PageNumber,
+                artwork.FirstOrDefault(a => a.PageId == p.Id)?.AssetReferenceIds.ToList() ?? []))
+            .ToList();
     }
 }

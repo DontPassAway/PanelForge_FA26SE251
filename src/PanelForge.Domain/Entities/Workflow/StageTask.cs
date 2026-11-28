@@ -23,6 +23,12 @@ public class StageTask : BaseEntity
     public string? OutdatedReason { get; private set; }
     /// <summary>Lý do Producer/hệ thống mở lại ô đã duyệt; xoá khi nộp lại.</summary>
     public string? ReopenReason { get; private set; }
+    /// <summary>
+    /// Panel của trang cần xem/sửa lại ở lần gắn cờ hiện tại (đầu vào lỗi thời do kịch bản đổi, hoặc mở lại / yêu cầu sửa từ
+    /// góp ý ghim trên Panel — Q27). Rỗng = cả trang. Ô vẫn là một việc cấp trang; danh sách chỉ khoanh phạm vi cho người làm,
+    /// Panel ngoài danh sách giữ nguyên ảnh đã duyệt. Xoá khi nộp lại, Impact Review giữ nguyên, giao lại, bỏ gán hoặc huỷ.
+    /// </summary>
+    public List<Guid> FlaggedPanelIds { get; private set; } = [];
     public Guid? ReviewerUserId { get; private set; }
     public Guid? CurrentSubmissionId { get; private set; }
     public DateTime? StartedAt { get; private set; }
@@ -61,6 +67,7 @@ public class StageTask : BaseEntity
         LotId = lotId;
         Status = StageTaskStatus.Assigned;
         ClearOutdated();
+        FlaggedPanelIds = [];
         ReadyAt = prerequisitesApproved ? DateTime.UtcNow : null;
         Touch();
     }
@@ -93,6 +100,7 @@ public class StageTask : BaseEntity
         ReviewerUserId = null;
         ReadyAt = null;
         ClearOutdated();
+        FlaggedPanelIds = [];
         Touch();
     }
 
@@ -118,6 +126,7 @@ public class StageTask : BaseEntity
 
         CurrentSubmissionId = submissionId;
         ReopenReason = null;
+        FlaggedPanelIds = []; // đã sửa xong phạm vi được khoanh, người duyệt xem lại cả trang
         ReviewerUserId = null; // N5: gợi ý người duyệt của lần nộp trước không còn đúng
         Status = isApprovalGate ? StageTaskStatus.Submitted : StageTaskStatus.Approved;
         Touch();
@@ -171,7 +180,8 @@ public class StageTask : BaseEntity
     /// Editor yêu cầu sửa. Nếu tiền đề đã duyệt lại thì gỡ cờ lỗi thời luôn, để người làm Start lại được
     /// (nếu không, ô kẹt ở ReworkRequired mãi vì Start đòi cờ tắt).
     /// </summary>
-    public void RequestChanges(bool prerequisitesApproved)
+    /// <param name="panelIds">Panel cần sửa (góp ý ghim trên Panel); null/rỗng = cả trang.</param>
+    public void RequestChanges(bool prerequisitesApproved, IEnumerable<Guid>? panelIds = null)
     {
         if (Status != StageTaskStatus.UnderReview) throw Invalid("yêu cầu sửa");
         Status = StageTaskStatus.ReworkRequired;
@@ -180,18 +190,32 @@ public class StageTask : BaseEntity
             ClearOutdated();
             ReadyAt = DateTime.UtcNow;
         }
+        FlagPanels(panelIds, alreadyFlagged: IsInputOutdated);
         Touch();
     }
 
     /// <summary>Mở lại ô đã duyệt (thay cho ReturnWork). Không cho mở khi đầu vào đang lỗi thời: phải qua Impact Review.</summary>
-    public void Reopen(string? reason = null)
+    /// <param name="panelIds">Q27/REV-09: chỉ các Panel lỗi cần sửa, Panel khác giữ ảnh đã duyệt; null/rỗng = cả trang.</param>
+    public void Reopen(string? reason = null, IEnumerable<Guid>? panelIds = null)
     {
         if (Status != StageTaskStatus.Approved) throw Invalid("mở lại");
         EnsureInputCurrent();
         var trimmed = reason?.Trim();
         ReopenReason = string.IsNullOrEmpty(trimmed) ? null : trimmed.Length <= MaxOutdatedReasonLength ? trimmed : trimmed[..MaxOutdatedReasonLength];
+        FlagPanels(panelIds, alreadyFlagged: false);
         Status = StageTaskStatus.ReworkRequired;
         ReadyAt = DateTime.UtcNow; // ô đã duyệt nên tiền đề đã đủ (đầu vào lỗi thời bị chặn ở trên)
+        Touch();
+    }
+
+    /// <summary>
+    /// Ô đang sửa nhận thêm một lỗi (vd. Editor ghim góp ý thứ hai lên Panel khác): nới phạm vi Panel, không đổi trạng thái.
+    /// Lỗi không gắn Panel (null/rỗng) → cả trang.
+    /// </summary>
+    public void ExtendRework(IEnumerable<Guid>? panelIds)
+    {
+        if (Status != StageTaskStatus.ReworkRequired) throw Invalid("thêm lỗi cần sửa vào");
+        FlagPanels(panelIds, alreadyFlagged: true);
         Touch();
     }
 
@@ -209,10 +233,12 @@ public class StageTask : BaseEntity
     }
 
     /// <summary>Công đoạn tiền đề bị mở lại. Chỉ gắn cờ cho ô đã bắt đầu; ô chưa bắt đầu vẫn bị chặn Start bởi tiền đề.</summary>
-    public void MarkInputOutdated(string reason)
+    /// <param name="panelIds">Panel bị ảnh hưởng (vd. dòng kịch bản đổi nằm ở Panel nào); null/rỗng = cả trang.</param>
+    public void MarkInputOutdated(string reason, IEnumerable<Guid>? panelIds = null)
     {
         if (!HasStarted) return;
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        FlagPanels(panelIds, alreadyFlagged: IsInputOutdated || Status == StageTaskStatus.ReworkRequired);
         var trimmed = reason.Trim();
         IsInputOutdated = true;
         OutdatedReason = trimmed.Length <= MaxOutdatedReasonLength ? trimmed : trimmed[..MaxOutdatedReasonLength];
@@ -234,8 +260,12 @@ public class StageTask : BaseEntity
 
         if (!keep)
         {
-            Status = StageTaskStatus.ReworkRequired;
+            Status = StageTaskStatus.ReworkRequired; // giữ FlaggedPanelIds: người làm biết sửa Panel nào
             ReadyAt = DateTime.UtcNow;
+        }
+        else if (Status != StageTaskStatus.ReworkRequired)
+        {
+            FlaggedPanelIds = [];
         }
         ClearOutdated();
         Touch();
@@ -248,6 +278,7 @@ public class StageTask : BaseEntity
         Status = StageTaskStatus.Cancelled;
         ReadyAt = null;
         ClearOutdated();
+        FlaggedPanelIds = [];
         Touch();
     }
 
@@ -284,6 +315,7 @@ public class StageTask : BaseEntity
         LotId = null;
         ReviewerUserId = null;
         CurrentSubmissionId = null;
+        FlaggedPanelIds = [];
         Status = StageTaskStatus.Unassigned;
         Touch();
     }
@@ -292,6 +324,18 @@ public class StageTask : BaseEntity
     {
         if (IsInputOutdated)
             throw new InvalidOperationException("Đầu vào của ô này đã lỗi thời, cần xử lý Impact Review trước.");
+    }
+
+    /// <summary>
+    /// Khoanh phạm vi Panel. Cờ đang bật (lỗi thời hoặc đang sửa) thì gộp với phạm vi cũ: một trong hai là cả trang → cả trang,
+    /// ngược lại hợp hai danh sách. Cờ mới hoàn toàn thì lấy đúng danh sách mới.
+    /// </summary>
+    private void FlagPanels(IEnumerable<Guid>? panelIds, bool alreadyFlagged)
+    {
+        var wanted = panelIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [];
+        FlaggedPanelIds = !alreadyFlagged ? wanted
+            : FlaggedPanelIds.Count == 0 || wanted.Count == 0 ? []
+            : FlaggedPanelIds.Union(wanted).ToList();
     }
 
     private void ClearOutdated()

@@ -90,6 +90,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         if (apiKey is "")
         {
             run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.");
+            AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             await _db.SaveChangesAsync(ct);
             return Fail("Studio chưa có API key dùng được. Admin hãy nhập key ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
         }
@@ -111,6 +112,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
         if (payload is null)
         {
             run.MarkFailed(response.ErrorCode ?? ResultErrorCodes.AiUnavailable, response.ErrorMessage);
+            AiRunHelpers.NotifyRequesterOfFinish(_db, run);
             await _db.SaveChangesAsync(ct);
             return Fail(response.ErrorMessage ?? "AI không trả được kết quả.", CopilotGate.FailureCode(response));
         }
@@ -122,6 +124,7 @@ public sealed class RunPublisherMetadataCommandHandler : IRequestHandler<RunPubl
             Truncate($"Gợi ý phát hành: {payload.Metadata.Logline}", 1000), chapter.VersionVector, null, run.BibleRevisionIdsJson, null, false);
         _db.AiSuggestions.Add(suggestion);
         run.MarkCompleted();
+        AiRunHelpers.NotifyRequesterOfFinish(_db, run);
         await _db.SaveChangesAsync(ct);
 
         return Result<AiSuggestionDto>.Success(AiRunHelpers.ToDto(suggestion, [], role));

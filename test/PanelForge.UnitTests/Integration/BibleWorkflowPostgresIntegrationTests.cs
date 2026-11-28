@@ -82,7 +82,7 @@ public class BibleWorkflowPostgresIntegrationTests
 
             // Draft -> ConceptSubmitted
             var senderMock = new Mock<ISender>();
-            var submitHandler = new SubmitBibleConceptCommandHandler(db, senderMock.Object);
+            var submitHandler = new SubmitBibleConceptCommandHandler(db, senderMock.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
             var submitResult = await submitHandler.Handle(
                 new SubmitBibleConceptCommand(series.Id, stub.Id, artist.Id,
                     new SubmitConceptArtRequest(ReferenceImageUrl: "https://cdn.panelforge.local/kenji-v1.png")),

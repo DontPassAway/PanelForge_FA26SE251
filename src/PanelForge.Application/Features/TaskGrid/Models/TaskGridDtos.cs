@@ -26,13 +26,14 @@ public sealed record StageTaskDto(
     Guid Id, Guid PipelineStageId, Guid? PageId, StageTaskStatus Status, Guid? LotId, Guid? AssigneeUserId,
     bool IsInputOutdated, string? OutdatedReason, Guid? ReviewerUserId, bool IsStartable, DateTime? StartedAt, uint RowVersion,
     string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null,
-    bool HasScriptImpact = false)
+    bool HasScriptImpact = false, IReadOnlyList<Guid>? FlaggedPanelIds = null)
 {
     public static StageTaskDto From(StageTask t, Guid? assigneeUserId, bool isStartable) => new(
         t.Id, t.PipelineStageId, t.PageId, t.Status, t.LotId, assigneeUserId,
         t.IsInputOutdated, t.OutdatedReason, t.ReviewerUserId, isStartable, t.StartedAt, t.RowVersion,
         ReopenReason: t.ReopenReason,
-        HasScriptImpact: t.IsInputOutdated && t.OutdatedReason == StageTask.ScriptChangedReason);
+        HasScriptImpact: t.IsInputOutdated && t.OutdatedReason == StageTask.ScriptChangedReason,
+        FlaggedPanelIds: t.FlaggedPanelIds);
 }
 
 public sealed record StageTaskLotDto(
@@ -76,7 +77,8 @@ public sealed record StageTaskSubmissionDto(Guid Id, int AttemptNumber, string S
 public sealed record UnassignStageTasksRequest(IReadOnlyList<Guid> TaskIds);
 
 /// <summary>Reason bắt buộc; ghi vào OutdatedReason của các ô hạ nguồn bị gắn cờ.</summary>
-public sealed record ReopenStageTaskRequest(string Reason);
+/// <param name="PanelIds">Q27/REV-09: chỉ các Panel lỗi của trang cần sửa; bỏ trống = cả trang.</param>
+public sealed record ReopenStageTaskRequest(string Reason, IReadOnlyList<Guid>? PanelIds = null);
 
 /// <summary>Keep = giữ bài hiện tại; false = đưa ô về ReworkRequired.</summary>
 public sealed record ResolveStageTaskImpactRequest(bool Keep);
@@ -121,9 +123,11 @@ public sealed record MyTaskLotDto(
     string? Brief, DateTime? DueDate, StageTaskLotStatus Status, bool IsOverdue, IReadOnlyList<MyTaskCellDto> Tasks);
 
 /// <param name="PageNumber">null = ô cấp Chương.</param>
+/// <param name="FlaggedPanelIds">Panel cần xem/sửa lại của lần gắn cờ hiện tại; rỗng = cả trang.</param>
 public sealed record MyTaskCellDto(
     Guid Id, Guid? PageId, int? PageNumber, StageTaskStatus Status, bool IsStartable, bool IsInputOutdated, string? OutdatedReason,
-    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null);
+    string? LastDecisionComment = null, int AttemptCount = 0, string? ReopenReason = null,
+    IReadOnlyList<Guid>? FlaggedPanelIds = null);
 
 /// <summary>Ô đang chờ duyệt (Submitted) hoặc đang được duyệt (UnderReview).</summary>
 public sealed record TaskGridReviewItemDto(

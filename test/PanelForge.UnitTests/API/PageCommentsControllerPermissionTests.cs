@@ -9,7 +9,7 @@ namespace PanelForge.UnitTests.API;
 
 /// <summary>
 /// Góp ý ghim trên trang (Read Series): Writer được xem và tạo góp ý (quyết định 2026-11-28);
-/// đóng, mở lại góp ý vẫn chỉ Producer/Editor; chuyển thành yêu cầu làm lại chỉ Producer.
+/// đóng, mở lại góp ý và chuyển thành yêu cầu làm lại chỉ Producer/Editor (REV-09).
 /// </summary>
 public class PageCommentsControllerPermissionTests
 {
@@ -44,9 +44,10 @@ public class PageCommentsControllerPermissionTests
     }
 
     [Fact]
-    public void ConvertToRework_StaysProducerOnly()
+    public void ConvertToRework_AllowsEditorAndProducer_Only()
     {
+        // REV-09 (Q27): Editor mở lại trang đã duyệt trước Gate 3, Producer dự phòng; Writer không được
         GetAllowedRoles(nameof(PageCommentsController.ConvertToRework))
-            .Should().ContainSingle().Which.Should().Be(WorkspaceRole.Producer);
+            .Should().BeEquivalentTo(new[] { WorkspaceRole.Editor, WorkspaceRole.Producer });
     }
 }

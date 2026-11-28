@@ -30,7 +30,7 @@ Authorization: Bearer {{token}}
 
 ### 4. Chạy workflow demo -> 202 Accepted + runId (đổi chapterVersion / baseScriptRevisionId theo bước 2-3 nếu đã Accept trước đó)
 # @name run
-POST {{host}}/api/series/{{series}}/ai/workflows/demo/run
+POST {{host}}/api/series/{{series}}/ai/workflows/run
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -85,7 +85,7 @@ Content-Type: application/json
 { "reason": "Viết lại phần mở đầu" }
 
 ### 9. Kịch bản dừng ở WaitingForHuman: brief chứa [mock:stubborn] -> Writer không sửa nên còn finding chặn sau 2 lượt
-POST {{host}}/api/series/{{series}}/ai/workflows/demo/run
+POST {{host}}/api/series/{{series}}/ai/workflows/run
 Authorization: Bearer {{token}}
 Content-Type: application/json
 

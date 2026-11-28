@@ -92,7 +92,7 @@ public class BibleWorkflowSafeguardsTests
         rev.WriterEndorsedAt.Should().NotBeNull();
 
         var senderMock = new Mock<ISender>();
-        var submitConceptHandler = new SubmitBibleConceptCommandHandler(db, senderMock.Object);
+        var submitConceptHandler = new SubmitBibleConceptCommandHandler(db, senderMock.Object, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var resubmit = await submitConceptHandler.Handle(
             new SubmitBibleConceptCommand(seriesId, entry.Id, artistId,
                 new SubmitConceptArtRequest(ReferenceImageUrl: "https://assets.local/kaito-v2.png")),
@@ -299,7 +299,7 @@ public class BibleWorkflowSafeguardsTests
         await db.SaveChangesAsync();
 
         // Rename typo before lock succeeds
-        var addRevHandler = new AddBibleEntryRevisionCommandHandler(db);
+        var addRevHandler = new AddBibleEntryRevisionCommandHandler(db, Moq.Mock.Of<PanelForge.Application.Common.Interfaces.Services.IAssetStorage>());
         var renameRes = await addRevHandler.Handle(
             new AddBibleEntryRevisionCommand(
                 SeriesId: seriesId,

@@ -191,13 +191,15 @@ public sealed class FreezeChapterScriptCommandHandler : IRequestHandler<FreezeCh
             sp.FlagScriptImpact(lineId);
         }
 
-        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review.
+        // Lưới V3: ô cấp Trang (đã bắt đầu) của trang có dòng vừa sửa mang cờ đầu vào lỗi thời → Impact Review, kèm các Panel
+        // bị ảnh hưởng của trang đó (không khớp Panel nào còn sống → cả trang).
         // Không gắn ô cấp Chương: ô Script chính là phần vừa sửa, gắn cờ sẽ khoá mọi ô sau nó.
         foreach (var task in await _dbContext.StageTasks
                      .Where(t => t.ChapterId == chapterId && t.Status != StageTaskStatus.Cancelled &&
                                  artworkStageIds.Contains(t.PipelineStageId) && t.PageId != null &&
                                  affectedPageIds.Contains(t.PageId.Value)).ToListAsync(ct))
-            task.MarkInputOutdated(StageTask.ScriptChangedReason);
+            task.MarkInputOutdated(StageTask.ScriptChangedReason,
+                currentPanels.Where(p => p.PageId == task.PageId && affectedPanelIds.Contains(p.Id)).Select(p => p.Id));
     }
 }
 
@@ -239,13 +241,9 @@ public sealed class ScriptLifecycleCommandHandler :
         if (version.LineCount == 0)
             return Result<ChapterDetailDto>.Failure("Kịch bản còn trống, chưa gửi duyệt được.", ResultErrorCodes.Validation);
 
-        // Cho phép nộp kịch bản trước khi hoàn thành series bible (submitGate ghi nhận thông tin, không chặn)
-        var submitGate = await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
-        if (!submitGate.CanSubmit)
-        {
-            var blockerSummary = string.Join("; ", submitGate.Blockers.Select(b => $"{b.EntryName}: {b.Reason}"));
-            // Ghi nhận cảnh báo nhưng cho phép nộp kịch bản sang Editor
-        }
+        // Nộp KHÔNG chặn theo cổng Bible (Gate 1 mới chặn, xem StartChapterProduction). Vẫn gọi EvaluateSubmitAsync
+        // vì nó cập nhật cast (RecomputeAsync) trước khi nộp; kết quả blocker không dùng để chặn.
+        await _castGate.EvaluateSubmitAsync(chapter.Id, ct);
 
         if (await ScriptSubmitRules.ApplySubmitAsync(_db, chapter, version, cmd.UserId, workspaceId, ct) is { } submitError)
             return Result<ChapterDetailDto>.Failure(submitError, ResultErrorCodes.Conflict);

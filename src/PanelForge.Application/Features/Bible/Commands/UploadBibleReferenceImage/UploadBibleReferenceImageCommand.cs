@@ -24,6 +24,27 @@ public sealed class UploadBibleReferenceImageCommandHandler : IRequestHandler<Up
 
     public static string StorageKey(Guid seriesId, string sha256) => $"bible/{seriesId:N}/{sha256}";
 
+    /// <summary>
+    /// Q20 / BR-04: SHA-256 của ảnh concept do server lấy, không tin giá trị client gửi. Ảnh tải lên kho Bible của series có URL
+    /// khoá theo SHA server tính lúc tải lên (file không bị ghi đè) → lấy SHA từ URL và kiểm file còn trong kho.
+    /// URL ngoài kho của series → (true, null): không có SHA. URL đúng dạng kho nhưng không có file → (false, null).
+    /// </summary>
+    public static async Task<(bool Found, string? Sha256)> ResolveShaAsync(
+        IAssetStorage storage, Guid seriesId, string imageUrl, CancellationToken ct)
+    {
+        var path = imageUrl.Trim().Split('?', '#')[0];
+        var prefix = $"/api/series/{seriesId}/bible/assets/";
+        var at = path.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return (true, null);
+
+        var sha = path[(at + prefix.Length)..].ToLowerInvariant();
+        if (sha.Length != 64 || !sha.All(Uri.IsHexDigit)) return (false, null);
+        await using var file = await storage.OpenReadAsync(StorageKey(seriesId, sha), ct);
+        return file is null ? (false, null) : (true, sha);
+    }
+
+    public const string ConceptImageNotFound = "Ảnh concept không có trong kho Bible của series, hãy tải ảnh lên lại.";
+
     public async Task<Result<BibleReferenceImageDto>> Handle(UploadBibleReferenceImageCommand cmd, CancellationToken ct)
     {
         if (cmd.Content.Length == 0 || cmd.Content.Length > MaxBytes)

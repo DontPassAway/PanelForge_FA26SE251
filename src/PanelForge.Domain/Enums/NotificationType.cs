@@ -40,5 +40,23 @@ public enum NotificationType
     /// <summary>Gửi người nhận khi mọi việc tiền đề của việc họ giữ đã được duyệt: đến lượt bắt đầu.</summary>
     AssignmentReady = 18,
     /// <summary>Gửi Publisher khi Producer bàn giao chương để phát hành.</summary>
-    ChapterHandedOff = 19
+    ChapterHandedOff = 19,
+    /// <summary>Gửi Writer của Series (và Writer đã gửi duyệt) khi có góp ý mới trên kịch bản. D12.</summary>
+    ScriptCommentAdded = 20,
+    /// <summary>Gửi Editor, Writer của Series và Producer của Studio khi có góp ý mới ghim trên trang. Q31.</summary>
+    PageCommentAdded = 21,
+    /// <summary>Gửi người viết góp ý trang khi góp ý được đánh dấu đã xử lý. Q31.</summary>
+    PageCommentResolved = 22,
+    /// <summary>Gửi người viết góp ý trang khi góp ý được mở lại. Q31.</summary>
+    PageCommentReopened = 23,
+    /// <summary>Gửi Artist đã nộp concept khi có góp ý mới trên concept Bible. Q20.</summary>
+    ConceptCommentAdded = 24,
+    /// <summary>Gửi Artist và những người đã tham gia luồng góp ý concept khi có trả lời. Q20.</summary>
+    ConceptCommentReplied = 25,
+    /// <summary>Gửi người yêu cầu workflow AI khi run hoàn tất. BR-02, UC-14.</summary>
+    AiRunCompleted = 26,
+    /// <summary>Gửi người yêu cầu workflow AI khi run lỗi. BR-02, UC-14.</summary>
+    AiRunFailed = 27,
+    /// <summary>Gửi người yêu cầu workflow AI khi run dừng chờ con người quyết định. BR-02, UC-14.</summary>
+    AiRunWaitingForHuman = 28
 }

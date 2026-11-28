@@ -23,7 +23,11 @@ public static class PanelOverlap
     {
         var width = Math.Max(0, Math.Min(error.X + error.Width, panel.X + panel.Width) - Math.Max(error.X, panel.X));
         var height = Math.Max(0, Math.Min(error.Y + error.Height, panel.Y + panel.Height) - Math.Max(error.Y, panel.Y));
-        return width * height / (error.Width * error.Height);
+        // D8: mẫu số là diện tích nhỏ hơn giữa vùng lỗi và Panel, để vùng lỗi lớn phủ trọn Panel nhỏ vẫn đạt ngưỡng.
+        // Box có diện tích 0 không giao với gì (tránh chia cho 0).
+        var minArea = Math.Min(error.Width * error.Height, panel.Width * panel.Height);
+        if (minArea <= 0) return 0;
+        return width * height / minArea;
     }
 
     private static bool TryParseRegion(string json, out Box box)

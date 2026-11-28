@@ -127,6 +127,7 @@ public sealed class RunNextLineCommandHandler(
         if (apiKey is "")
         {
             run.MarkFailed(ResultErrorCodes.AiUnavailable, "Studio chưa có API key dùng được. Admin hãy chọn API ở mục Cấu hình AI.");
+            AiRunHelpers.NotifyRequesterOfFinish(db, run);
             await db.SaveChangesAsync(ct);
             return Fail("Studio chưa có API key dùng được. Admin hãy chọn API ở mục Cấu hình AI.", ResultErrorCodes.AiUnavailable);
         }
@@ -152,6 +153,7 @@ public sealed class RunNextLineCommandHandler(
         {
             // Lỗi: không ghi đề xuất nào, run Failed giữ lại để truy vết
             run.MarkFailed(response.ErrorCode ?? ResultErrorCodes.AiUnavailable, response.ErrorMessage);
+            AiRunHelpers.NotifyRequesterOfFinish(db, run);
             await db.SaveChangesAsync(ct);
             return Fail(response.ErrorMessage ?? "AI không trả được kết quả.", CopilotGate.FailureCode(response));
         }
@@ -168,6 +170,7 @@ public sealed class RunNextLineCommandHandler(
             chapter.VersionVector, latestScriptRevisionId, run.BibleRevisionIdsJson, null, false);
         db.AiSuggestions.Add(suggestion);
         run.MarkCompleted();
+        AiRunHelpers.NotifyRequesterOfFinish(db, run);
         await db.SaveChangesAsync(ct);
 
         return Result<AiSuggestionDto>.Success(AiRunHelpers.ToDto(suggestion, [], role));
