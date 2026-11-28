@@ -62,6 +62,20 @@ public sealed record UnlockChapterRequest(
     int? ExpectedPriceVnd = null
 );
 
+// ─── Gói mở Studio (D11) ─────────────────────────────────────────────────────
+
+/// <summary>Gói mở Studio đang bán: <c>PriceVnd</c> null khi Admin chưa đặt giá (chưa bán).</summary>
+public sealed record StudioPackageDto(bool IsOnSale, int? PriceVnd);
+
+public sealed record PurchaseStudioPackageRequest(int ExpectedPriceVnd);
+
+public sealed record PurchaseStudioPackageResponse(
+    int PriceVnd,
+    int RemainingBalanceVnd,
+    string OrderCode,
+    bool CanCreateStudio
+);
+
 public sealed record UnlockChapterResponse(
     string ChapterId,
     bool Success,

@@ -7,10 +7,12 @@ using PanelForge.Application.Features.Admin.Commands.AssignUserRole;
 using PanelForge.Application.Features.Admin.Commands.CreateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.DeactivateUser;
 using PanelForge.Application.Features.Admin.Commands.ResetUserPasswordByAdmin;
+using PanelForge.Application.Features.Admin.Commands.SetStudioPackagePrice;
 using PanelForge.Application.Features.Admin.Commands.ToggleUserStatus;
 using PanelForge.Application.Features.Admin.Commands.UpdateUserByAdmin;
 using PanelForge.Application.Features.Admin.Commands.UpdateWorkspaceQuota;
 using PanelForge.Application.Features.Admin.Models;
+using PanelForge.Application.Features.Admin.Queries.GetAdminStudioPackage;
 using PanelForge.Application.Features.Admin.Queries.GetAdminUsers;
 using PanelForge.Application.Features.Admin.Queries.GetAdminWorkspaces;
 using PanelForge.Application.Features.Admin.Queries.GetSystemStats;
@@ -605,6 +607,32 @@ public class AdminController : ControllerBase
             result.Value.Email,
             result.Value.CanCreateStudio
         });
+    }
+
+    // ─── D11: Gói mở Studio ────────────────────────────────────────────────────
+
+    /// <summary>GET /api/admin/studio-package — giá gói mở Studio hiện hành và số lượt đã mua.</summary>
+    [HttpGet("studio-package")]
+    [ProducesResponseType(typeof(AdminStudioPackageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStudioPackage(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAdminStudioPackageQuery(), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>PUT /api/admin/studio-package/price — đặt giá gói mở Studio (append-only, có audit).</summary>
+    [HttpPut("studio-package/price")]
+    [ProducesResponseType(typeof(AdminStudioPackageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetStudioPackagePrice(
+        [FromBody] SetStudioPackagePriceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized(new { message = "Chưa xác thực người dùng." });
+
+        var result = await _mediator.Send(new SetStudioPackagePriceCommand(adminId.Value, request.PriceVnd), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.ErrorMessage });
     }
 
     // ─── Element Type Master Data ──────────────────────────────────────────────
