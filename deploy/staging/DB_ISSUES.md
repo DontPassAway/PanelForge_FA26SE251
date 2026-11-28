@@ -71,6 +71,34 @@ API chạy `db.Database.MigrateAsync()` khi khởi động (`Program.cs`), nên 
 - **Đề xuất:** cấu hình connection string hoặc mật khẩu Postgres cho test trên máy dev (theo hướng dẫn test của repo), hoặc bảo đảm CI có Postgres service và chạy các test này trước khi merge vào `dev`.
 - **Ai quyết:** người phụ trách CI / môi trường dev.
 
+## 7. Kiểm tra migration trên nhánh `deploy` (sau khi gộp `trungkien`)
+
+Nhánh `deploy` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkien` (5 commit "feat(review)"). Các bước dưới đây chỉ kiểm tra trên code, không đụng DB nào.
+
+- **Gộp:** `git merge --no-ff origin/trungkien` tự gộp sạch, kể cả `PanelForgeDbContextModelSnapshot.cs`. Không có xung đột.
+- **Build:** `dotnet build PanelForge.slnx`: 0 lỗi.
+- **Unit test** (bỏ các test cần Postgres, xem mục 6): 1820/1820 pass.
+- **Số migration:** 113. So với `origin/dev`, có thêm đúng 1 migration là `20261128060626_AddStageTaskChangeRequests` (từ `trungkien`) và không thiếu migration nào của `dev` (`trungkien` vốn thiếu `BackfillBibleConceptEventPointers` của `dev`, nay đã có sau khi gộp). So với `origin/main`, có thêm 15 migration.
+- **Snapshot khớp model:** chạy thử `dotnet ef migrations add DeployCheck` (connection string mẫu, không kết nối DB) ra **migration rỗng**. Mình đã xoá migration thử này và không commit.
+- **Timestamp và tên:** không trùng timestamp, không trùng tên lớp.
+- **Designer:** 7 migration không có file `.Designer.cs`: `BackfillSeriesMembersFromAssignments`, `SyncSeriesMemberRolesWithWorkspace`, `AddReviewerNameToPreviewFeedback`, `AddSeriesIsCompleted`, `AddChapterViews`, `AddScriptLineKindAndPanelDirection`, `MoveMangaColorGateToInk`. Cả 7 đều là migration viết tay và đã có sẵn `[DbContext]` + `[Migration("…")]` trong file `.cs`, nên EF vẫn nhận. Không phải lỗi, chỉ cần biết khi review.
+- **Thao tác có thể mất dữ liệu** trong 15 migration mới so với `main` (chỉ tính phần `Up`):
+
+| Migration | Thao tác | Ghi chú |
+|---|---|---|
+| `20261126095525_SimplifyBibleEntrySchema` | `DropColumn` ×6 (`bible_entries`: `aliases`, `code`, `is_active`, `priority`, `strict_check`, `subtitle`), `DropIndex`, `Sql` | **Mất dữ liệu** các cột này trên DB thật. Kiểm tra / export trước khi promote lên `main`. |
+| `20261126175800_VariantScopedBibleVersioning` | `DropIndex`, `Sql` ×2 | Đổi index và chuyển dữ liệu bằng SQL tay |
+| `20261125065631_MoveStudioAiKeysToSharedCredentials` | `Sql` | Chuyển AI key của Studio sang bảng dùng chung |
+| `20261126134429_AssignAutomationFoundation` | `Sql` | Backfill dữ liệu |
+| `20261128050000_MoveMangaColorGateToInk` | `Sql` | Cập nhật dữ liệu gate |
+| `20261128063022_BackfillBibleConceptEventPointers` | `Sql` ×2 | Backfill dữ liệu |
+
+  `20261128060626_AddStageTaskChangeRequests` (từ `trungkien`) chỉ thêm, không xoá hay sửa dữ liệu.
+- **Đề xuất:**
+  - Trước khi promote `deploy` / `dev` lên `main`, chạy thử 15 migration này trên một bản sao DB chính thức (restore từ bản `pg_dump` mới nhất) và xem log migration.
+  - Riêng `SimplifyBibleEntrySchema`: xác nhận không còn cần dữ liệu 6 cột trên. Nếu cần thì export ra trước.
+- **Ai quyết:** người duyệt deploy `main`.
+
 ---
 
 ## Ghi chú deploy
