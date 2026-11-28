@@ -71,9 +71,9 @@ API chạy `db.Database.MigrateAsync()` khi khởi động (`Program.cs`), nên 
 - **Đề xuất:** cấu hình connection string hoặc mật khẩu Postgres cho test trên máy dev (theo hướng dẫn test của repo), hoặc bảo đảm CI có Postgres service và chạy các test này trước khi merge vào `dev`.
 - **Ai quyết:** người phụ trách CI / môi trường dev.
 
-## 7. Kiểm tra migration trên nhánh `deploy` (sau khi gộp `trungkien`)
+## 7. Kiểm tra migration trên nhánh `deploy-b2b` (sau khi gộp `trungkien`)
 
-Nhánh `deploy` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkien` (5 commit "feat(review)"). Các bước dưới đây chỉ kiểm tra trên code, không đụng DB nào.
+Nhánh `deploy-b2b` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkien` (5 commit "feat(review)"). Các bước dưới đây chỉ kiểm tra trên code, không đụng DB nào.
 
 - **Gộp:** `git merge --no-ff origin/trungkien` tự gộp sạch, kể cả `PanelForgeDbContextModelSnapshot.cs`. Không có xung đột.
 - **Build:** `dotnet build PanelForge.slnx`: 0 lỗi.
@@ -95,7 +95,7 @@ Nhánh `deploy` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkien` (
 
   `20261128060626_AddStageTaskChangeRequests` (từ `trungkien`) chỉ thêm, không xoá hay sửa dữ liệu.
 - **Đề xuất:**
-  - Trước khi promote `deploy` / `dev` lên `main`, chạy thử 15 migration này trên một bản sao DB chính thức (restore từ bản `pg_dump` mới nhất) và xem log migration.
+  - Trước khi promote `deploy-b2b` / `dev` lên `main`, chạy thử 15 migration này trên một bản sao DB chính thức (restore từ bản `pg_dump` mới nhất) và xem log migration.
   - Riêng `SimplifyBibleEntrySchema`: xác nhận không còn cần dữ liệu 6 cột trên. Nếu cần thì export ra trước.
 - **Ai quyết:** người duyệt deploy `main`.
 
@@ -103,5 +103,5 @@ Nhánh `deploy` = `origin/dev` + PR #40 (backup/rollback) + `origin/trungkien` (
 
 ## Ghi chú deploy
 
-- PR #41 (Caddyfile: bỏ rewrite `/api/hubs/` → `/hubs/`, chặn `/internal/*`) **không** có trong nhánh `deploy` này. Nó phải đi cùng PR #35 (`feature/assign-automation`), nơi hub đã chuyển sang `/api/hubs/ai-stream`. Trên `dev`, hub vẫn ở `/hubs/ai-stream`; bỏ rewrite lúc này sẽ làm hỏng SignalR.
+- PR #41 (Caddyfile: bỏ rewrite `/api/hubs/` → `/hubs/`, chặn `/internal/*`) **không** có trong nhánh `deploy-b2b` này. Nó phải đi cùng PR #35 (`feature/assign-automation`), nơi hub đã chuyển sang `/api/hubs/ai-stream`. Trên `dev`, hub vẫn ở `/hubs/ai-stream`; bỏ rewrite lúc này sẽ làm hỏng SignalR.
 - Phần chặn `/internal/*` có thể tách ra làm sớm hơn nếu cần, vì nó không phụ thuộc đường dẫn hub.
